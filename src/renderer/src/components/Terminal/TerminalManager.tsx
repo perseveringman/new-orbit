@@ -10,6 +10,11 @@ import { nanoid } from 'nanoid';
 import { TerminalPane } from './TerminalPane';
 import type { TerminalPaneHandle } from './TerminalPane';
 import { disposeSession } from './sessionRegistry';
+import {
+  getLeafWrapperStyle,
+  getPrimarySplitSectionStyle,
+  getSecondarySplitSectionStyle
+} from './terminalLayout';
 
 // ─── Data model ─────────────────────────────────────────────────────────────
 
@@ -181,9 +186,7 @@ function LeafPane({ node, projectUid, cwd, dark, env, focusedLeafId, zoomedLeafI
     paneRefs.current.set(sessionKey, { current: null });
   }
 
-  const wrapperStyle: React.CSSProperties = isZoomed
-    ? { position: 'absolute', inset: 0, zIndex: 10, display: 'flex', flexDirection: 'column' }
-    : { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 };
+  const wrapperStyle = getLeafWrapperStyle(isZoomed);
 
   return (
     <div
@@ -251,12 +254,18 @@ function SplitPane({ node, onNodeChange, onPersist, ...shared }: SplitPaneProps)
   return (
     <div
       ref={containerRef}
-      style={{ display: 'flex', flexDirection: isRow ? 'row' : 'column', flex: 1, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: isRow ? 'row' : 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0
+      }}
     >
-      <div style={{ flexBasis: `${localRatio * 100}%`, flexShrink: 0, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+      <div style={getPrimarySplitSectionStyle(localRatio)}>
         <SplitNode
           node={node.a}
-          onNodeChange={(newA) => onNodeChange({ ...node, ratio: latestRatio.current, a: newA })}
+          onNodeChange={(newA) => onNodeChange({ ...node, a: newA })}
           onPersist={onPersist}
           {...shared}
         />
@@ -271,10 +280,10 @@ function SplitPane({ node, onNodeChange, onPersist, ...shared }: SplitPaneProps)
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       />
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+      <div style={getSecondarySplitSectionStyle()}>
         <SplitNode
           node={node.b}
-          onNodeChange={(newB) => onNodeChange({ ...node, ratio: latestRatio.current, b: newB })}
+          onNodeChange={(newB) => onNodeChange({ ...node, b: newB })}
           onPersist={onPersist}
           {...shared}
         />
@@ -625,7 +634,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
         data-orbit-term-manager
         tabIndex={0}
         onKeyDown={handleKey}
-        className="flex flex-1 flex-col min-h-0 outline-none"
+        className="flex flex-1 min-h-0 min-w-0 flex-col outline-none"
       >
         {/* Tab bar */}
         <div className="flex shrink-0 items-center border-b border-neutral-200 dark:border-neutral-800 text-xs overflow-x-auto bg-neutral-50 dark:bg-neutral-900">
@@ -683,12 +692,12 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
         </div>
 
         {/* Pane area — all tabs kept in DOM, inactive hidden */}
-        <div className="flex-1 relative min-h-0">
+        <div className="relative flex-1 min-h-0 min-w-0">
           {state.tabs.map((tab) => (
             <div
               key={tab.id}
               style={{ display: tab.id === state.activeTabId ? 'flex' : 'none' }}
-              className="absolute inset-0 flex min-h-0"
+              className="absolute inset-0 flex min-h-0 min-w-0"
             >
               <SplitNode
                 node={tab.root}

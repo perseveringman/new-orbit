@@ -24,6 +24,7 @@ import type {
   CostTodayResult,
   DailyReportResult,
   DetectResult,
+  ReattachResult,
   RunSummary,
   StartTaskArgs,
   StartTaskResult,
@@ -32,6 +33,7 @@ import type {
 import type { BudgetSettings } from './schemas';
 import type {
   CheckReport,
+  DiffResult,
   EnvQueueStatus,
   GitStatusSummary,
   InstallResult,
@@ -116,6 +118,7 @@ export const IPC = {
     commit: 'git:commit',
     createWorktree: 'git:createWorktree',
     listWorktrees: 'git:listWorktrees',
+    getDiff: 'git:getDiff',
     removeWorktree: 'git:removeWorktree',
     resetAll: 'git:resetAll',
     ghostCommit: 'git:ghostCommit',
@@ -132,6 +135,7 @@ export const IPC = {
     stop: 'agent:stop',
     list: 'agent:list',
     tail: 'agent:tail',
+    reattach: 'agent:reattach',
     costToday: 'agent:costToday',
     costRun: 'agent:costRun',
     costDailyReport: 'agent:cost:dailyReport',
@@ -512,6 +516,7 @@ export interface OrbitApi {
     commit(message: string): Promise<unknown>;
     createWorktree(opts?: { taskId?: string }): Promise<WorktreeRecord>;
     listWorktrees(): Promise<WorktreeRecord[]>;
+    getDiff(args: { worktreeId: string; base?: string }): Promise<DiffResult>;
     removeWorktree(id: string, opts?: { force?: boolean }): Promise<void>;
     resetAll(): Promise<ResetAllResult>;
     ghostCommit(args: {
@@ -535,6 +540,7 @@ export interface OrbitApi {
     stop(runId: string): Promise<void>;
     list(): Promise<RunSummary[]>;
     tail(runId: string, q?: TailQuery): Promise<AgentEvent[]>;
+    reattach(runId: string, sinceIdx?: number): Promise<ReattachResult>;
     costToday(): Promise<CostTodayResult>;
     costRun(runId: string): Promise<CostSummary>;
     costDailyReport(args?: { date?: string }): Promise<DailyReportResult>;

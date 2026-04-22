@@ -22,6 +22,7 @@ import { getSettings } from './settings';
 import { detectClaude } from './agent/cli';
 import { getPool } from './agent/pool';
 import { loadPersona, composePrompt } from './agent/persona';
+import { getHookRuntimeConfig } from './agent/ipc';
 
 function broadcast(channel: string, payload: unknown): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -158,6 +159,7 @@ export function registerR6Ipc(): void {
             taskId: args.taskUid,
             title: `night:${args.taskUid}`,
             vaultPath: args.vaultPath,
+            hookConfig: await getHookRuntimeConfig(args.taskUid),
             idleTimeoutMs: 30 * 60_000
           });
           return {

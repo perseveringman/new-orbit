@@ -122,8 +122,8 @@ export function VaultView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!active && rightTab === 'backlinks') setRightTab('files');
-  }, [active, rightTab]);
+    if (rightTab === 'backlinks' && (!active || view.kind !== 'editor')) setRightTab('files');
+  }, [active, rightTab, view.kind]);
 
   async function onOpenWikilink(target: string): Promise<void> {
     const hits = await window.orbit.fs.search(target, { limit: 10 });
@@ -227,7 +227,7 @@ export function VaultView(): JSX.Element {
 
       <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
         <div className="flex shrink-0 border-b border-neutral-200 text-xs dark:border-neutral-800">
-          {(['files', 'backlinks', 'agent', 'worktrees'] as const).map((tab) => (
+          {(['files', 'backlinks', 'agent', 'worktrees'] as const).filter((tab) => tab !== 'backlinks' || view.kind === 'editor').map((tab) => (
             <button
               key={tab}
               onClick={() => setRightTab(tab)}

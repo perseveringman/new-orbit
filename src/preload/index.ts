@@ -136,6 +136,8 @@ const api: OrbitApi = {
     createWorktree: (opts?: { taskId?: string }) =>
       ipcRenderer.invoke(IPC.git.createWorktree, opts),
     listWorktrees: () => ipcRenderer.invoke(IPC.git.listWorktrees),
+    getDiff: (args: { worktreeId: string; base?: string }) =>
+      ipcRenderer.invoke(IPC.git.getDiff, args),
     removeWorktree: (id: string, opts?: { force?: boolean }) =>
       ipcRenderer.invoke(IPC.git.removeWorktree, id, opts),
     resetAll: () => ipcRenderer.invoke(IPC.git.resetAll),
@@ -160,6 +162,8 @@ const api: OrbitApi = {
     stop: (id: string) => ipcRenderer.invoke(IPC.agent.stop, id),
     list: () => ipcRenderer.invoke(IPC.agent.list),
     tail: (id: string, q?: TailQuery) => ipcRenderer.invoke(IPC.agent.tail, id, q),
+    reattach: (id: string, sinceIdx?: number) =>
+      ipcRenderer.invoke(IPC.agent.reattach, id, sinceIdx),
     costToday: () => ipcRenderer.invoke(IPC.agent.costToday),
     costRun: (id: string) => ipcRenderer.invoke(IPC.agent.costRun, id),
     costDailyReport: (args?: { date?: string }) =>

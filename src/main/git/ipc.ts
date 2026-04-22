@@ -21,6 +21,7 @@ import { runPreMergeCheck } from './checks';
 import { getGitQueue } from './queue';
 import { getInstallLock } from '../env/install_lock';
 import { CheckCache } from './check_cache';
+import { computeMergeBaseDiff } from './diff';
 
 let wired = false;
 let manager: WorktreeManager | null = null;
@@ -87,6 +88,20 @@ export function registerGitIpc(): void {
     if (!sess) return [];
     return requireManager(sess.vault).list();
   });
+
+  ipcMain.handle(
+    IPC.git.getDiff,
+    async (_e, args: { worktreeId: string; base?: string }) => {
+      const sess = currentSession();
+      if (!sess) throw new Error('no vault');
+      const rec = await requireManager(sess.vault).get(args.worktreeId);
+      if (!rec) throw new Error(`worktree not found: ${args.worktreeId}`);
+      return computeMergeBaseDiff({
+        worktreePath: rec.path,
+        base: args.base
+      });
+    }
+  );
 
   ipcMain.handle(
     IPC.git.removeWorktree,

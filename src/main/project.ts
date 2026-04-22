@@ -24,6 +24,8 @@ export interface ProjectConfig {
   template: string;
   created_at: string;
   vision_linked?: boolean;
+  setup?: string[];
+  teardown?: string[];
 }
 
 export interface ProjectSummary {

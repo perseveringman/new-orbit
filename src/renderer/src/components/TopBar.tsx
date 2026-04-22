@@ -2,18 +2,13 @@ import { useEffect, useState } from 'react';
 import { useWorkspace } from '../store/workspace';
 import { useAgent } from '../store/agent';
 import { useWorktrees } from '../store/worktrees';
-import { usePara } from '../store/para';
 import { useNightShift } from '../store/nightShift';
 import { AboutModal } from './AboutModal';
-import { NewProjectModal } from './Modals/NewProjectModal';
 import { MigrationDialog } from './Modals/MigrationDialog';
 
 export function TopBar(): JSX.Element {
   const { vault, settings, setTheme, closeVault } = useWorkspace();
   const projects = useWorkspace((s) => s.projects);
-  const activeProjectUid = useWorkspace((s) => s.activeProjectUid);
-  const view = usePara((s) => s.view);
-  const setView = usePara((s) => s.setView);
   const nextTheme = settings.theme === 'dark' ? 'light' : 'dark';
   const costToday = useAgent((s) => s.costToday);
   const runs = useAgent((s) => s.runs);
@@ -23,7 +18,6 @@ export function TopBar(): JSX.Element {
   const env = useWorktrees((s) => s.env);
   const activeWt = worktrees.filter((w) => w.status === 'active').length;
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [newProjOpen, setNewProjOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
   const nightShiftRun = useNightShift((s) => s.run);
   const subscribeNightShift = useNightShift((s) => s.subscribe);
@@ -48,58 +42,28 @@ export function TopBar(): JSX.Element {
 
   return (
     <>
-      <header className="drag flex h-11 items-center justify-between border-b border-neutral-200 bg-white/80 pl-20 pr-4 text-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/80">
-        <div className="flex items-center gap-3">
-          <div className="flex h-5 w-5 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-semibold dark:border-neutral-500">
+      <header className="flex min-h-14 items-center justify-between border-b border-neutral-200 bg-white/85 pr-4 text-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/85">
+        <div className="drag flex min-w-0 flex-1 items-center gap-3 py-2 pl-20 pr-6">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-300 bg-white/70 text-xs font-semibold text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-200">
             O
           </div>
-          <span className="font-semibold tracking-tight">Orbit</span>
-          {vault && (
-            <span className="no-drag ml-4 truncate text-neutral-500 dark:text-neutral-400">
-              {vault.path}
-            </span>
-          )}
+          <span className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+            Orbit
+          </span>
         </div>
 
-        <div className="no-drag flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 py-2">
           {vault && (
-            <nav className="flex items-center gap-1 rounded-md border border-neutral-200 p-0.5 text-[11px] dark:border-neutral-700">
-              <TabBtn
-                active={view.kind === 'inbox'}
-                onClick={() => setView({ kind: 'inbox' })}
-              >
-                Inbox
-              </TabBtn>
-              <TabBtn
-                active={view.kind === 'today'}
-                onClick={() => setView({ kind: 'today' })}
-              >
-                Today
-              </TabBtn>
-              <TabBtn
-                active={view.kind === 'dashboard'}
-                onClick={() => setView({ kind: 'dashboard' })}
-              >
-                Dashboard
-              </TabBtn>
-              <TabBtn
-                active={view.kind === 'journals'}
-                onClick={() => setView({ kind: 'journals' })}
-                title="Past Daily Reviews"
-              >
-                Journals
-              </TabBtn>
-              <TabBtn
-                active={view.kind === 'project'}
-                disabled={!activeProjectUid}
-                onClick={() => {
-                  if (activeProjectUid)
-                    setView({ kind: 'project', projectUid: activeProjectUid });
-                }}
-              >
-                Project
-              </TabBtn>
-            </nav>
+            <span
+              className="rounded-full border border-neutral-200 bg-white/70 px-2.5 py-1 text-[11px] text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400"
+              title={`install: ${env.active ? `running ${env.active}` : 'idle'}, queued=${env.queued}`}
+            >
+              {env.active ? `Install ${env.active}` : `${activeWt} worktrees`}
+            </span>
+          )}
+          {vault && costToday && <BudgetMeter onClick={openSettings} />}
+          {nightShiftRun && nightShiftRun.status === 'running' && (
+            <NightShiftPill />
           )}
           {vault && (
             <button
@@ -113,29 +77,8 @@ export function TopBar(): JSX.Element {
               className={btn}
               title="Night Shift history"
             >
-              🌙 History
+              History
             </button>
-          )}
-          {vault && (
-            <button
-              onClick={() => setNewProjOpen(true)}
-              className="rounded-md bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-500"
-              title="Create new project"
-            >
-              + New Project
-            </button>
-          )}
-          {vault && (
-            <span
-              className="text-[11px] text-neutral-500 dark:text-neutral-400"
-              title={`install: ${env.active ? `running ${env.active}` : 'idle'}, queued=${env.queued}`}
-            >
-              worktrees: {activeWt} active
-            </span>
-          )}
-          {vault && costToday && <BudgetMeter onClick={openSettings} />}
-          {nightShiftRun && nightShiftRun.status === 'running' && (
-            <NightShiftPill />
           )}
           <button
             onClick={() => setAboutOpen(true)}
@@ -162,7 +105,7 @@ export function TopBar(): JSX.Element {
               onClick={() => void closeVault()}
               className={btn}
             >
-              Switch vault
+              Open another vault
             </button>
           )}
         </div>
@@ -176,37 +119,8 @@ export function TopBar(): JSX.Element {
           发现 {legacyCount} 个旧格式项目，点击迁移 → folder-based projects
         </button>
       )}
-      <NewProjectModal
-        open={newProjOpen}
-        onClose={() => setNewProjOpen(false)}
-      />
       <MigrationDialog open={migrateOpen} onClose={() => setMigrateOpen(false)} />
     </>
-  );
-}
-
-function TabBtn({
-  active,
-  disabled,
-  onClick,
-  title,
-  children
-}: {
-  active: boolean;
-  disabled?: boolean;
-  onClick(): void;
-  title?: string;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={`rounded px-2 py-0.5 ${active ? 'bg-neutral-200 dark:bg-neutral-800' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'} ${disabled ? 'opacity-40' : ''}`}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -279,3 +193,4 @@ function NightShiftPill(): JSX.Element | null {
     </button>
   );
 }
+

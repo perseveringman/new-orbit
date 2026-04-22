@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { getSession, setSession as regSetSession, clearSession } from './sessionRegistry';
+import { syncTerminalSize } from './terminalSizing';
 
 export interface TerminalPaneHandle {
   refit(): void;
@@ -28,29 +29,42 @@ export interface TerminalPaneProps {
 
 export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
   function TerminalPane({ cwd, sessionKey, dark, env, onExit, onFocus }, ref) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
-  const sessionRef = useRef<import('@shared/ipc').TerminalSessionInfoDTO | null>(null);
-  const [session, setSession] = useState<import('@shared/ipc').TerminalSessionInfoDTO | null>(
-    getSession(sessionKey)
-  );
-  const [exitState, setExitState] = useState<{ exitCode: number; signal?: number } | null>(
-    null
-  );
+    const hostRef = useRef<HTMLDivElement | null>(null);
+    const termRef = useRef<Terminal | null>(null);
+    const fitRef = useRef<FitAddon | null>(null);
+    const sessionRef = useRef<import('@shared/ipc').TerminalSessionInfoDTO | null>(null);
+    const lastGridRef = useRef<{ cols: number; rows: number } | null>(null);
+    const [session, setSession] = useState<import('@shared/ipc').TerminalSessionInfoDTO | null>(
+      getSession(sessionKey)
+    );
+    const [exitState, setExitState] = useState<{ exitCode: number; signal?: number } | null>(
+      null
+    );
 
-  useImperativeHandle(ref, () => ({
-    refit() {
-      try {
-        fitRef.current?.fit();
-      } catch {
-        /* ignore */
-      }
-    },
-    focus() {
-      termRef.current?.focus();
+    function syncNow(): void {
+      const host = hostRef.current;
+      const term = termRef.current;
+      const fit = fitRef.current;
+      if (!host || !term || !fit) return;
+      void syncTerminalSize({
+        host,
+        fit,
+        term,
+        sessionId: sessionRef.current?.id,
+        previousGrid: lastGridRef.current,
+        resize: (id, cols, rows) => window.orbit.terminal.resize(id, cols, rows)
+      });
+      lastGridRef.current = { cols: term.cols, rows: term.rows };
     }
-  }));
+
+    useImperativeHandle(ref, () => ({
+      refit() {
+        syncNow();
+      },
+      focus() {
+        termRef.current?.focus();
+      }
+    }));
 
   useEffect(() => {
     let cancelled = false;
@@ -77,17 +91,13 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
             selectionBackground: '#c7e0ff'
           }
     });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon());
-    term.open(host);
-    try {
-      fit.fit();
-    } catch {
-      /* not laid out yet */
-    }
-    termRef.current = term;
-    fitRef.current = fit;
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.loadAddon(new WebLinksAddon());
+      term.open(host);
+      termRef.current = term;
+      fitRef.current = fit;
+      syncNow();
 
     const welcome = (info: import('@shared/ipc').TerminalSessionInfoDTO): void => {
       term.writeln(`\x1b[2m# Orbit Terminal · ${info.shell} · cwd=${info.cwd}\x1b[0m`);
@@ -114,6 +124,10 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         if (cancelled) return;
         sessionRef.current = info;
         setSession(info);
+        lastGridRef.current = null;
+        requestAnimationFrame(() => {
+          if (!cancelled) syncNow();
+        });
       } catch (e) {
         term.writeln(`\x1b[31mFailed to open terminal: ${(e as Error).message}\x1b[0m`);
       }
@@ -136,43 +150,42 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         setSession(null);
         clearSession(sessionKey);
         sessionRef.current = null;
+        lastGridRef.current = null;
         onExit?.({ exitCode: ev.exitCode, signal: ev.signal });
       }
     });
 
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const ro = new ResizeObserver(() => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
+      let resizeFrame: number | null = null;
+      const scheduleSync = (): void => {
+        if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = null;
+          syncNow();
+        });
+      };
+      const ro = new ResizeObserver(() => {
+        scheduleSync();
+      });
+      ro.observe(host);
+
+      return () => {
+        cancelled = true;
+        ro.disconnect();
+        if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+        offData();
+        offExit();
+        dataDisp.dispose();
         try {
-          fit.fit();
+          term.dispose();
         } catch {
           /* ignore */
         }
-        const s = sessionRef.current;
-        if (s) void window.orbit.terminal.resize(s.id, term.cols, term.rows);
-      }, 100);
-    });
-    ro.observe(host);
-
-    return () => {
-      cancelled = true;
-      ro.disconnect();
-      if (resizeTimer) clearTimeout(resizeTimer);
-      offData();
-      offExit();
-      dataDisp.dispose();
-      try {
-        term.dispose();
-      } catch {
-        /* ignore */
-      }
-      termRef.current = null;
-      fitRef.current = null;
-      // Pty session intentionally preserved.
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, cwd]);
+        termRef.current = null;
+        fitRef.current = null;
+        // Pty session intentionally preserved.
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionKey, cwd]);
 
   async function handleKill(): Promise<void> {
     const s = sessionRef.current;
@@ -180,8 +193,9 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
     await window.orbit.terminal.kill(s.id);
     clearSession(sessionKey);
     sessionRef.current = null;
-    setSession(null);
-  }
+        setSession(null);
+        lastGridRef.current = null;
+      }
 
   async function handleRestart(): Promise<void> {
     const term = termRef.current;
@@ -198,6 +212,7 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
       regSetSession(sessionKey, info);
       sessionRef.current = info;
       setSession(info);
+      lastGridRef.current = null;
       term.writeln(`\x1b[2m# Restarted · pid=${info.pid}\x1b[0m`);
     } catch (e) {
       term.writeln(`\x1b[31mRestart failed: ${(e as Error).message}\x1b[0m`);
@@ -220,7 +235,7 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
   return (
     <div
       data-orbit-terminal
-      className={`flex h-full min-h-0 flex-col ${dark ? 'bg-neutral-950' : 'bg-white'}`}
+      className={`flex h-full min-h-0 min-w-0 flex-col ${dark ? 'bg-neutral-950' : 'bg-white'}`}
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-800">
         <span className="font-mono">
@@ -261,7 +276,12 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
           </button>
         )}
       </header>
-      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden" style={{ padding: 4 }} onFocus={onFocus} />
+      <div
+        ref={hostRef}
+        className="min-h-0 min-w-0 flex-1 overflow-hidden"
+        style={{ padding: 4 }}
+        onFocus={onFocus}
+      />
     </div>
   );
 });

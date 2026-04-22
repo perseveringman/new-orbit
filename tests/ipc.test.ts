@@ -44,6 +44,7 @@ describe('IPC contract', () => {
         'event',
         'installInWorktree',
         'list',
+        'reattach',
         'startTask',
         'stop',
         'tail'
@@ -59,6 +60,7 @@ describe('IPC contract', () => {
       [
         'commit',
         'createWorktree',
+        'getDiff',
         'ghostCommit',
         'listWorktrees',
         'mergeGhost',

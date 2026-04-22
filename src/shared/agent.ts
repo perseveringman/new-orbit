@@ -84,6 +84,13 @@ export interface TailQuery {
   sinceEventIdx?: number;
 }
 
+export interface ReattachResult {
+  runId: string;
+  events: AgentEvent[];
+  terminated: boolean;
+  logPath: string;
+}
+
 export interface CostSummary {
   runs: number;
   tokens: {

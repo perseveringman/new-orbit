@@ -9,12 +9,14 @@ import type {
   CostTodayResult,
   DailyReportResult,
   DetectResult,
+  ReattachResult,
   RunSummary,
   StartTaskArgs,
   StartTaskResult,
   TailQuery
 } from '@shared/agent';
 import type { BudgetSettings } from '@shared/schemas';
+import { LIMITS } from '@shared/limits';
 import { detectClaude } from './cli';
 import { getPool, type PoolEvent } from './pool';
 import { loadPersona, composePrompt } from './persona';
@@ -45,8 +47,14 @@ import {
   recordInjection,
   suggestExperience
 } from '../distill/wakeup';
+import { attachEventRouter } from './eventRouter';
+import { startHookServer, type HookServer } from './hooks/server';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
+const reattachedRuns = new Map<string, { summary: RunSummary; events: AgentEvent[] }>();
+let hookServer: HookServer | null = null;
+let hookRouter: ReturnType<typeof attachEventRouter> | null = null;
+let hookSeq = 0;
 
 function broadcastPool(): void {
   const pool = getPool();
@@ -55,6 +63,50 @@ function broadcastPool(): void {
       if (!w.isDestroyed()) w.webContents.send(AGENT_EVENT_CHANNEL, ev);
     }
   });
+}
+
+function broadcastAgentEvent(runId: string, event: AgentEvent): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(AGENT_EVENT_CHANNEL, { runId, event });
+  }
+}
+
+async function ensureHookRuntime(): Promise<HookServer> {
+  if (!hookServer) {
+    hookServer = await startHookServer();
+    hookRouter = attachEventRouter(hookServer, {
+      dedupTtlMs: LIMITS.HOOK_DEDUP_TTL_MS
+    });
+    hookRouter.events.on('event', (routed) => {
+      const event: AgentEvent = {
+        idx: -(++hookSeq),
+        at: routed.ts,
+        kind: 'text',
+        text: `[hook] ${routed.eventType}`,
+        data: {
+          hookEventType: routed.eventType,
+          payload: routed.payload,
+          worktreeId: routed.worktreeId,
+          seq: routed.seq
+        }
+      };
+      broadcastAgentEvent(routed.runId, event);
+    });
+  }
+  return hookServer;
+}
+
+export async function getHookRuntimeConfig(
+  worktreeId?: string
+): Promise<NonNullable<import('./runner').SpawnOpts['hookConfig']>> {
+  const server = await ensureHookRuntime();
+  return {
+    port: server.port,
+    token: server.token,
+    version: server.version,
+    vendor: 'claude',
+    worktreeId
+  };
 }
 
 let wired = false;
@@ -77,17 +129,50 @@ export function registerAgentIpc(): void {
   );
 
   ipcMain.handle(IPC.agent.stop, async (_e, runId: string): Promise<void> => {
+    if (reattachedRuns.has(runId)) {
+      reattachedRuns.delete(runId);
+      return;
+    }
     await getPool().kill(runId, 'user_stop');
   });
 
-  ipcMain.handle(IPC.agent.list, (): RunSummary[] => getPool().list());
+  ipcMain.handle(IPC.agent.list, (): RunSummary[] => [
+    ...reattachedRuns.values().map((run) => run.summary),
+    ...getPool().list()
+  ]);
 
   ipcMain.handle(
     IPC.agent.tail,
     (_e, runId: string, q?: TailQuery): AgentEvent[] => {
       const r = getPool().get(runId);
-      if (!r) return [];
-      return r.tail(q?.sinceEventIdx);
+      if (r) return r.tail(q?.sinceEventIdx);
+      const snap = reattachedRuns.get(runId);
+      if (!snap) return [];
+      return typeof q?.sinceEventIdx === 'number'
+        ? snap.events.filter((event) => event.idx > q.sinceEventIdx)
+        : [...snap.events];
+    }
+  );
+
+  ipcMain.handle(
+    IPC.agent.reattach,
+    async (_e, runId: string, sinceIdx?: number): Promise<ReattachResult> => {
+      const sess = currentSession();
+      if (!sess) throw new Error('no vault');
+      const snap = reattachedRuns.get(runId);
+      if (snap) {
+        return {
+          runId,
+          events:
+            typeof sinceIdx === 'number'
+              ? snap.events.filter((event) => event.idx > sinceIdx)
+              : [...snap.events],
+          terminated: snap.summary.status !== 'running',
+          logPath: path.join(sess.vault, ORBIT_DIR, ORBIT_LOGS_DIR, `${runId}.ndjson`)
+        };
+      }
+      const { readLogForReattach } = await import('./reattach');
+      return readLogForReattach({ vaultPath: sess.vault, runId, sinceIdx });
     }
   );
 
@@ -144,6 +229,8 @@ export function registerAgentIpc(): void {
   // Kill all runners on app quit so no subprocesses are left behind.
   app.on('before-quit', () => {
     void getPool().killAll('app_quit');
+    hookRouter?.stop();
+    if (hookServer) void hookServer.close();
   });
 }
 
@@ -299,6 +386,7 @@ async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       taskId: task.id,
       title: task.title,
       vaultPath: sess.vault,
+      hookConfig: await getHookRuntimeConfig(),
       extraEnv,
       hydrate: async (query: string): Promise<string> => {
         const s = currentSession();
@@ -363,7 +451,14 @@ async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
  */
 export async function reconcileOnStart(vaultPath: string): Promise<void> {
   try {
-    await reconcileOrphans(vaultPath);
+    reattachedRuns.clear();
+    const snapshots = await reconcileOrphans(vaultPath);
+    for (const snap of snapshots) {
+      reattachedRuns.set(snap.summary.runId, {
+        summary: snap.summary,
+        events: snap.events
+      });
+    }
   } catch {
     // Non-fatal.
   }

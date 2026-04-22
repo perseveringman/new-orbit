@@ -49,7 +49,9 @@ export const BASE_CONFIG_JSON = `{
   "name": "{{name}}",
   "template": "{{template}}",
   "created_at": "{{created_at}}",
-  "vision_linked": true
+  "vision_linked": true,
+  "setup": [],
+  "teardown": []
 }
 `;
 

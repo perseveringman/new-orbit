@@ -2,8 +2,17 @@ import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { promises as fs, createWriteStream, WriteStream } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { randomBytes } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { ORBIT_DIR, ORBIT_LOGS_DIR } from '@shared/constants';
+import {
+  ORBIT_HOOK_PORT_ENV,
+  ORBIT_HOOK_TOKEN_ENV,
+  ORBIT_HOOK_VERSION_ENV,
+  ORBIT_RUN_ID_ENV,
+  ORBIT_VENDOR_ENV,
+  ORBIT_WORKTREE_ID_ENV
+} from '@shared/protocol';
 import type {
   AgentCostTally,
   AgentEvent,
@@ -12,6 +21,10 @@ import type {
   RunSummary
 } from '@shared/agent';
 import { parseHydrationLine, parseToolInvocationLine } from './context';
+import { LIMITS } from '@shared/limits';
+import { renderClaudeSettingsJson, renderNotifyShTemplate } from './hooks/template';
+import { createRingBufferStore } from './ringBuffer';
+import { readLogForReattach } from './reattach';
 
 export interface SpawnOpts {
   /** Absolute path to the `claude` binary. */
@@ -24,6 +37,14 @@ export interface SpawnOpts {
   apiKey?: string;
   /** Extra env vars merged into the child process env. */
   extraEnv?: Record<string, string>;
+  /** Optional hook server config for lifecycle callbacks. */
+  hookConfig?: {
+    port: number;
+    token: string;
+    version: number;
+    vendor?: 'claude' | 'codex' | 'generic';
+    worktreeId?: string;
+  };
   /** Logical task ID for bookkeeping. `null` for free-form runs. */
   taskId: string | null;
   /** Short display title surfaced in the renderer. */
@@ -54,8 +75,25 @@ export interface RunnerSnapshot {
   tally: AgentCostTally;
 }
 
+interface ActiveRunMeta {
+  pid: number;
+  cwd: string;
+  taskId: string | null;
+  title?: string;
+  startedAt: string;
+}
+
+export interface ReattachedRunSnapshot {
+  summary: RunSummary;
+  events: AgentEvent[];
+  pid: number | null;
+  terminated: boolean;
+  logPath: string;
+}
+
 const MAX_EVENTS = 500;
 const DEFAULT_IDLE_MS = 10 * 60 * 1000;
+const ringStore = createRingBufferStore(LIMITS.AGENT_EVENT_RING_CAPACITY);
 
 // --- active pid bookkeeping (kill-reconcile) ---------------------------------
 
@@ -63,11 +101,34 @@ function activeFile(vaultPath: string): string {
   return path.join(vaultPath, ORBIT_DIR, ORBIT_LOGS_DIR, '_active.json');
 }
 
-async function readActive(vaultPath: string): Promise<Record<string, number>> {
+async function readActive(vaultPath: string): Promise<Record<string, ActiveRunMeta>> {
   try {
     const raw = await fs.readFile(activeFile(vaultPath), 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, number>;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    const parsed = JSON.parse(raw) as Record<string, number | ActiveRunMeta>;
+    if (!parsed || typeof parsed !== 'object') return {};
+    const out: Record<string, ActiveRunMeta> = {};
+    for (const [runId, value] of Object.entries(parsed)) {
+      if (typeof value === 'number') {
+        out[runId] = {
+          pid: value,
+          cwd: vaultPath,
+          taskId: null,
+          startedAt: new Date().toISOString()
+        };
+        continue;
+      }
+      if (value && typeof value === 'object' && typeof value.pid === 'number') {
+        out[runId] = {
+          pid: value.pid,
+          cwd: typeof value.cwd === 'string' ? value.cwd : vaultPath,
+          taskId: typeof value.taskId === 'string' ? value.taskId : null,
+          title: typeof value.title === 'string' ? value.title : undefined,
+          startedAt:
+            typeof value.startedAt === 'string' ? value.startedAt : new Date().toISOString()
+        };
+      }
+    }
+    return out;
   } catch {
     return {};
   }
@@ -75,7 +136,7 @@ async function readActive(vaultPath: string): Promise<Record<string, number>> {
 
 async function writeActive(
   vaultPath: string,
-  map: Record<string, number>
+  map: Record<string, ActiveRunMeta>
 ): Promise<void> {
   const f = activeFile(vaultPath);
   await fs.mkdir(path.dirname(f), { recursive: true });
@@ -94,27 +155,107 @@ function isAlive(pid: number): boolean {
 }
 
 /**
- * On app startup, kill any processes listed in `_active.json` that are
- * still alive (orphans from a crashed main process), then reset the file.
+ * On app startup, reconcile `_active.json` against the event logs. Runs with a
+ * terminal event are kept as historical snapshots; runs without a terminal
+ * event are surfaced as `running` while the pid is still alive, otherwise
+ * `error` with reason `interrupted`.
  */
-export async function reconcileOrphans(vaultPath: string): Promise<number> {
+export async function reconcileOrphans(vaultPath: string): Promise<ReattachedRunSnapshot[]> {
   const map = await readActive(vaultPath);
-  let killed = 0;
-  for (const pid of Object.values(map)) {
-    if (isAlive(pid)) {
-      try {
-        process.kill(pid, 'SIGTERM');
-        killed += 1;
-      } catch {
-        // ignore
-      }
+  const snapshots: ReattachedRunSnapshot[] = [];
+  const next: Record<string, ActiveRunMeta> = {};
+  for (const [runId, meta] of Object.entries(map)) {
+    const alive = isAlive(meta.pid);
+    const reattached = await readLogForReattach({ vaultPath, runId });
+    const last = reattached.events[reattached.events.length - 1];
+    const terminated = reattached.terminated || !alive;
+    const summary: RunSummary = {
+      runId,
+      taskId: meta.taskId,
+      status: reattached.terminated ? (last?.kind === 'error' ? 'error' : 'done') : alive ? 'running' : 'error',
+      startedAt: meta.startedAt,
+      cwd: meta.cwd,
+      title: meta.title
+    };
+    if (terminated) {
+      summary.endedAt = last?.at ?? new Date().toISOString();
+      summary.reason = reattached.terminated ? last?.text : 'interrupted';
+    } else {
+      next[runId] = meta;
     }
+    snapshots.push({
+      summary,
+      events: reattached.events,
+      pid: alive ? meta.pid : null,
+      terminated,
+      logPath: reattached.logPath
+    });
   }
-  await writeActive(vaultPath, {});
-  return killed;
+  await writeActive(vaultPath, next);
+  return snapshots;
 }
 
 // --- stream-JSON parsing -----------------------------------------------------
+
+async function ensureClaudeHookFiles(
+  cwd: string,
+  runId: string,
+  hookConfig: NonNullable<SpawnOpts['hookConfig']>
+): Promise<void> {
+  if (hookConfig.vendor && hookConfig.vendor !== 'claude') return;
+  const hookRoot = path.join(cwd, ORBIT_DIR, 'hooks', runId);
+  await fs.mkdir(hookRoot, { recursive: true });
+  const scriptPath = path.join(hookRoot, 'notify.sh');
+  await fs.writeFile(
+    scriptPath,
+    renderNotifyShTemplate({
+      hookPort: hookConfig.port,
+      hookToken: hookConfig.token,
+      hookVersion: hookConfig.version,
+      runId,
+      worktreeId: hookConfig.worktreeId,
+      vendor: hookConfig.vendor ?? 'claude'
+    }),
+    'utf8'
+  );
+  await fs.chmod(scriptPath, 0o700);
+
+  const claudeDir = path.join(cwd, '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+  await fs.mkdir(claudeDir, { recursive: true });
+
+  const generated = JSON.parse(
+    renderClaudeSettingsJson({
+      hookPort: hookConfig.port,
+      hookToken: hookConfig.token,
+      hookVersion: hookConfig.version,
+      runId,
+      worktreeId: hookConfig.worktreeId,
+      vendor: hookConfig.vendor ?? 'claude',
+      scriptPath
+    })
+  ) as { hooks?: Record<string, unknown[]> };
+
+  let existing: Record<string, unknown> = {};
+  try {
+    existing = JSON.parse(await fs.readFile(settingsPath, 'utf8')) as Record<string, unknown>;
+  } catch {
+    existing = {};
+  }
+  const existingHooks =
+    existing.hooks && typeof existing.hooks === 'object'
+      ? (existing.hooks as Record<string, unknown[]>)
+      : {};
+  const nextHooks: Record<string, unknown[]> = { ...existingHooks };
+  for (const [name, entries] of Object.entries(generated.hooks ?? {})) {
+    nextHooks[name] = Array.isArray(entries) ? entries : [];
+  }
+  await fs.writeFile(
+    settingsPath,
+    JSON.stringify({ ...existing, hooks: nextHooks }, null, 2) + '\n',
+    'utf8'
+  );
+}
 
 interface RawEventShape {
   type?: string;
@@ -226,6 +367,7 @@ export class AgentRunner extends EventEmitter {
   private reason?: string;
   private idleTimer: NodeJS.Timeout | null = null;
   private logStream: WriteStream | null = null;
+  private eventLogStream: WriteStream | null = null;
   private eventIdx = 0;
   private fallbackPlain = false;
 
@@ -255,8 +397,8 @@ export class AgentRunner extends EventEmitter {
   }
 
   tail(sinceIdx?: number): AgentEvent[] {
-    if (typeof sinceIdx !== 'number') return [...this.events];
-    return this.events.filter((e) => e.idx > sinceIdx);
+    if (typeof sinceIdx !== 'number') return ringStore.get(this.runId).since(-1);
+    return ringStore.get(this.runId).since(sinceIdx);
   }
 
   /**
@@ -267,6 +409,17 @@ export class AgentRunner extends EventEmitter {
     const spawner = this.opts.spawner ?? spawn;
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (this.opts.apiKey) env['ANTHROPIC_API_KEY'] = this.opts.apiKey;
+    if (this.opts.hookConfig) {
+      await ensureClaudeHookFiles(this.opts.cwd, this.runId, this.opts.hookConfig);
+      env[ORBIT_HOOK_PORT_ENV] = String(this.opts.hookConfig.port);
+      env[ORBIT_HOOK_TOKEN_ENV] = this.opts.hookConfig.token;
+      env[ORBIT_HOOK_VERSION_ENV] = String(this.opts.hookConfig.version);
+      env[ORBIT_RUN_ID_ENV] = this.runId;
+      env[ORBIT_VENDOR_ENV] = this.opts.hookConfig.vendor ?? 'claude';
+      if (this.opts.hookConfig.worktreeId) {
+        env[ORBIT_WORKTREE_ID_ENV] = this.opts.hookConfig.worktreeId;
+      }
+    }
     if (this.opts.extraEnv) {
       for (const [k, v] of Object.entries(this.opts.extraEnv)) env[k] = v;
     }
@@ -482,6 +635,8 @@ export class AgentRunner extends EventEmitter {
     if (this.events.length > MAX_EVENTS) {
       this.events.splice(0, this.events.length - MAX_EVENTS);
     }
+    ringStore.get(this.runId).push(ev);
+    this.eventLogStream?.write(JSON.stringify(ev) + '\n');
     this.emit('event', ev);
   }
 
@@ -515,7 +670,7 @@ export class AgentRunner extends EventEmitter {
       } catch {
         // ignore
       }
-      // Escalate if still alive after 2s.
+      // Escalate if still alive after the configured timeout.
       setTimeout(() => {
         if (this.child && !this.child.killed) {
           try {
@@ -524,7 +679,7 @@ export class AgentRunner extends EventEmitter {
             // ignore
           }
         }
-      }, 2000).unref?.();
+      }, LIMITS.KILL_TIMEOUT_MS).unref?.();
     }
     // Note: `finish` will be called by the close handler.
   }
@@ -569,6 +724,9 @@ export class AgentRunner extends EventEmitter {
     this.logStream = createWriteStream(path.join(dir, `${this.runId}.log`), {
       flags: 'a'
     });
+    this.eventLogStream = createWriteStream(path.join(dir, `${this.runId}.ndjson`), {
+      flags: 'a'
+    });
   }
 
   private logRaw(line: string): void {
@@ -581,17 +739,26 @@ export class AgentRunner extends EventEmitter {
     const s = this.logStream;
     this.logStream = null;
     s?.end();
+    const ev = this.eventLogStream;
+    this.eventLogStream = null;
+    ev?.end();
   }
 
   private async registerPid(pid: number): Promise<void> {
     const map = await readActive(this.opts.vaultPath);
-    map[this.runId] = pid;
+    map[this.runId] = {
+      pid,
+      cwd: this.opts.cwd,
+      taskId: this.opts.taskId,
+      title: this.opts.title,
+      startedAt: this.startedAt
+    };
     await writeActive(this.opts.vaultPath, map);
   }
 
   private async unregisterPid(): Promise<void> {
     const map = await readActive(this.opts.vaultPath);
-    if (map[this.runId]) {
+    if (this.runId in map) {
       delete map[this.runId];
       await writeActive(this.opts.vaultPath, map);
     }

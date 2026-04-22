@@ -62,3 +62,22 @@ export interface EnvQueueStatus {
 export interface InstallResult {
   logPath: string;
 }
+
+export interface DiffFile {
+  path: string;
+  oldPath?: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
+  additions: number;
+  deletions: number;
+  patch: string;
+  binary?: boolean;
+}
+
+export interface DiffResult {
+  base: string;
+  head: string;
+  mergeBase: string;
+  files: DiffFile[];
+  totalAdditions: number;
+  totalDeletions: number;
+}

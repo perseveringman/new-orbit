@@ -125,6 +125,16 @@ describe('AgentRunner stream parsing', () => {
       // Log file was created
       const logs = await fs.readdir(path.join(vault, '.orbit', 'logs'));
       expect(logs.some((f) => f.endsWith('.log'))).toBe(true);
+      const ndjson = logs.find((f) => f.endsWith('.ndjson'));
+      expect(ndjson).toBeTruthy();
+      const raw = await fs.readFile(path.join(vault, '.orbit', 'logs', ndjson!), 'utf8');
+      const parsed = raw
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { kind: string });
+      expect(parsed.some((ev) => ev.kind === 'message')).toBe(true);
+      expect(parsed.some((ev) => ev.kind === 'cost')).toBe(true);
+      expect(parsed.some((ev) => ev.kind === 'done')).toBe(true);
     } finally {
       await fs.rm(vault, { recursive: true, force: true });
     }
