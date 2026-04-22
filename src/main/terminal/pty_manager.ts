@@ -83,6 +83,53 @@ function loadPty(): typeof import('node-pty') {
   return require('node-pty');
 }
 
+function normalizeNodePtyAssetPath(p: string): string {
+  return p
+    .replace('app.asar', 'app.asar.unpacked')
+    .replace('node_modules.asar', 'node_modules.asar.unpacked');
+}
+
+function nodePtySpawnHelperCandidates(): string[] {
+  const out = new Set<string>();
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const { loadNativeModule } = require('node-pty/lib/utils') as {
+      loadNativeModule(name: string): { dir: string };
+    };
+    const native = loadNativeModule('pty');
+    const unixTerminalDir = path.dirname(require.resolve('node-pty/lib/unixTerminal.js'));
+    out.add(normalizeNodePtyAssetPath(path.resolve(unixTerminalDir, native.dir, 'spawn-helper')));
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const pkgRoot = path.dirname(require.resolve('node-pty/package.json'));
+    out.add(normalizeNodePtyAssetPath(path.join(pkgRoot, 'build', 'Release', 'spawn-helper')));
+    out.add(
+      normalizeNodePtyAssetPath(
+        path.join(pkgRoot, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper')
+      )
+    );
+  } catch {
+    /* ignore */
+  }
+
+  return Array.from(out);
+}
+
+function ensureNodePtySpawnHelperExecutable(): void {
+  if (process.platform === 'win32') return;
+  for (const helperPath of nodePtySpawnHelperCandidates()) {
+    if (!fs.existsSync(helperPath)) continue;
+    const stat = fs.statSync(helperPath);
+    if (!stat.isFile()) continue;
+    if ((stat.mode & 0o111) === 0o111) continue;
+    fs.chmodSync(helperPath, stat.mode | 0o111);
+  }
+}
+
 function defaultShell(): string {
   if (process.platform === 'win32') return process.env['COMSPEC'] || 'powershell.exe';
   return process.env['SHELL'] || '/bin/zsh';
@@ -159,14 +206,21 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
   };
 
   const id = nanoid(10);
+  ensureNodePtySpawnHelperExecutable();
   const pty = loadPty();
-  const proc = pty.spawn(shell, [], {
-    name: 'xterm-256color',
-    cwd: absCwd,
-    env: mergedEnv,
-    cols,
-    rows
-  }) as unknown as PtyProcess;
+  let proc: PtyProcess;
+  try {
+    proc = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cwd: absCwd,
+      env: mergedEnv,
+      cols,
+      rows
+    }) as unknown as PtyProcess;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`failed to spawn terminal shell ${shell}: ${message}`);
+  }
 
   const root = vaultRootGuard ?? absCwd;
   ensureDir(logDir(root));

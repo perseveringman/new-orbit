@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /Users/ryanbzhou/Developer/new-orbit/node_modules/.bin/electron*)",
+      "Bash(node -e \"console.log\\(require\\('electron'\\)\\)\")",
+      "Bash(pnpm store:*)",
+      "Bash(pnpm rebuild:*)",
+      "Bash(rm -rf node_modules/.pnpm/electron@31.7.7)",
+      "Bash(pnpm install:*)",
+      "Bash(node install.js)",
+      "Bash(pnpm dev:*)"
+    ]
+  }
+}
