@@ -21,6 +21,7 @@ import * as frontmatter from './frontmatter';
 import { ensureUid } from './uid';
 import { walkMarkdown } from './walk';
 import { toPosix, vaultRel } from './pathGuard';
+import { ensureProjectAgentContext, readProjectAgentContextMeta } from './project_agent_context';
 import { renderTemplate } from './templates';
 import { BASE_AGENT_MD, BASE_CONFIG_JSON } from './templates/common';
 
@@ -63,6 +64,7 @@ export const LATEST_SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1]?.
 
 const V2_SCHEMA_VERSION = 2;
 const V3_SCHEMA_VERSION = 3;
+const V4_SCHEMA_VERSION = 4;
 
 // --- v3: projectsFilesToFolders ---
 
@@ -285,6 +287,15 @@ export async function migrateProjectsToFolders(
         `node_modules/\ndist/\n.DS_Store\n`,
         'utf8'
       );
+      await ensureProjectAgentContext(c.toDir, {
+        uid,
+        slug: c.slug,
+        name,
+        template: 'blank',
+        ...(typeof data['description'] === 'string'
+          ? { description: data['description'] as string }
+          : {})
+      });
 
       // Injected deps are expected to propagate errors (tests rely on this
       // to exercise the partial-failure path). The built-in default is
@@ -345,6 +356,23 @@ async function applyV3VaultMigration(vault: string): Promise<void> {
     changed = true;
   }
   if (changed) await fs.writeFile(p, next, 'utf8');
+}
+
+async function applyV4ProjectAgentContextMigration(vault: string): Promise<void> {
+  const projectsDir = path.join(vault, PROJECTS_DIR);
+  let entries: Dirent[] = [];
+  try {
+    entries = (await fs.readdir(projectsDir, { withFileTypes: true })) as Dirent[];
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const projectDir = path.join(projectsDir, entry.name);
+    const meta = await readProjectAgentContextMeta(projectDir);
+    if (!meta || !meta.uid) continue;
+    await ensureProjectAgentContext(projectDir, meta);
+  }
 }
 
 /**
@@ -429,7 +457,8 @@ export async function runMigrations(vault: string): Promise<{
   const to = Math.max(
     LATEST_SCHEMA_VERSION,
     V2_SCHEMA_VERSION,
-    V3_SCHEMA_VERSION
+    V3_SCHEMA_VERSION,
+    V4_SCHEMA_VERSION
   );
   if (from >= to) {
     if (typeof cfg.schemaVersion !== 'number') {
@@ -468,6 +497,9 @@ export async function runMigrations(vault: string): Promise<{
     // Note: we *do not* auto-run migrateProjectsToFolders here — the task
     // migration is destructive and requires user confirmation via the UI
     // (see `migrations:runV3` IPC in R2). The .gitignore patch is safe.
+  }
+  if (from < V4_SCHEMA_VERSION) {
+    await applyV4ProjectAgentContextMigration(vault);
   }
   await writeConfig(vault, { ...cfg, schemaVersion: to });
   return { from, to, touched };

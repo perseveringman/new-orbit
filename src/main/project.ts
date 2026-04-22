@@ -15,6 +15,7 @@ import * as frontmatter from './frontmatter';
 import { assertInsideVault, toPosix, vaultRel } from './pathGuard';
 import { renderTaskMarkdown, scaffoldProject } from './templates';
 import { ensureMcpConfig } from './mcp_config';
+import { ensureProjectAgentContext } from './project_agent_context';
 import { walkMarkdown } from './walk';
 
 export interface ProjectConfig {
@@ -167,6 +168,13 @@ export async function createProject(
     vision_ref: '[[Vision]]'
   };
   await scaffoldProject(dir, args.template, vars);
+  await ensureProjectAgentContext(dir, {
+    uid,
+    slug: args.slug,
+    name: args.name,
+    template: args.template,
+    ...(args.description ? { description: args.description } : {})
+  });
 
   // Patch README frontmatter with optional area_uid / tags if supplied.
   if (args.area_uid || (args.tags && args.tags.length > 0)) {

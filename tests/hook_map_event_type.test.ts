@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapEventType } from '../src/main/agent/hooks/mapEventType';
+import { mapEventType, mapTerminalEventType } from '../src/main/agent/hooks/mapEventType';
 
 describe('mapEventType', () => {
   it('maps claude Stop', () => {
@@ -28,5 +28,25 @@ describe('mapEventType', () => {
   it('defaults unknown to Progress', () => {
     expect(mapEventType('claude', { hook_event_name: 'Unknown' })).toBe('Progress');
     expect(mapEventType(undefined, {})).toBe('Progress');
+  });
+});
+
+describe('mapTerminalEventType', () => {
+  it('maps terminal start-family hook names', () => {
+    expect(mapTerminalEventType('UserPromptSubmit')).toBe('Start');
+    expect(mapTerminalEventType('SessionStart')).toBe('Start');
+    expect(mapTerminalEventType('PostToolUse')).toBe('Start');
+  });
+
+  it('maps terminal permission hook names', () => {
+    expect(mapTerminalEventType('PermissionRequest')).toBe('PermissionRequest');
+    expect(mapTerminalEventType('PreToolUse')).toBe('PermissionRequest');
+    expect(mapTerminalEventType('exec_approval_request')).toBe('PermissionRequest');
+  });
+
+  it('maps terminal stop-family hook names and ignores unknown names', () => {
+    expect(mapTerminalEventType('Stop')).toBe('Stop');
+    expect(mapTerminalEventType('session_end')).toBe('Stop');
+    expect(mapTerminalEventType('unknown')).toBeNull();
   });
 });

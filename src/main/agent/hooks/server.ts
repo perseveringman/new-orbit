@@ -2,13 +2,21 @@ import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import type { OrbitHookEventType } from './mapEventType';
+import { mapTerminalEventType, type OrbitHookEventType } from './mapEventType';
 
 export interface HookEnvelope {
   runId: string;
   worktreeId?: string;
   eventType: OrbitHookEventType;
   payload: Record<string, unknown>;
+  ts: string;
+}
+
+export interface TerminalHookEnvelope {
+  eventType: OrbitHookEventType;
+  rawEventType: string;
+  paneId?: string;
+  projectUid?: string;
   ts: string;
 }
 
@@ -49,10 +57,31 @@ export async function startHookServer(opts: StartHookServerOpts = {}): Promise<H
   const events = new EventEmitter();
 
   const server = http.createServer((req, res) => {
-    const url = req.url ?? '';
-    if (!url.startsWith('/hook')) {
+    const url = new URL(req.url ?? '', 'http://127.0.0.1');
+    if (!url.pathname.startsWith('/hook')) {
       res.writeHead(404);
       res.end();
+      return;
+    }
+    if (url.pathname === '/hook/event' && req.method === 'GET') {
+      const rawEventType = url.searchParams.get('eventType') ?? '';
+      const eventType = mapTerminalEventType(rawEventType);
+      if (!eventType) {
+        writeJson(res, 200, { ignored: true });
+        return;
+      }
+      const paneId = url.searchParams.get('paneId') ?? undefined;
+      const projectUid = url.searchParams.get('projectUid') ?? undefined;
+      const ts = url.searchParams.get('ts') ?? new Date().toISOString();
+      const envelope: TerminalHookEnvelope = {
+        eventType,
+        rawEventType,
+        ...(paneId ? { paneId } : {}),
+        ...(projectUid ? { projectUid } : {}),
+        ts
+      };
+      events.emit('terminal-event', envelope);
+      writeJson(res, 200, { ok: true });
       return;
     }
     if (req.method !== 'POST') {

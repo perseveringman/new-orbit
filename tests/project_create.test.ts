@@ -68,6 +68,42 @@ describe('project.create (R1)', () => {
     const memStat = await fs.stat(path.join(res.projectPath, '.agent', 'memories'));
     expect(memStat.isDirectory()).toBe(true);
 
+    const skillsDir = path.join(res.projectPath, '.agent', 'skills');
+    expect((await fs.stat(skillsDir)).isDirectory()).toBe(true);
+    const logsDir = path.join(res.projectPath, '.agent', 'logs');
+    expect((await fs.stat(logsDir)).isDirectory()).toBe(true);
+
+    const skillFiles = [
+      '_index.md',
+      'orbit-world.md',
+      'task-workflow.md',
+      'project-understanding.md',
+      'tooling-commands.md',
+      'worktree-workflow.md',
+      'safety-rules.md',
+      'mcp-tools.md'
+    ];
+    for (const name of skillFiles) {
+      const raw = await fs.readFile(path.join(skillsDir, name), 'utf8');
+      expect(raw.length).toBeGreaterThan(20);
+    }
+
+    const claude = await fs.readFile(path.join(res.projectPath, 'CLAUDE.md'), 'utf8');
+    expect(claude).toContain('.agent/skills/_index.md');
+    expect(claude).toContain('.agent/logs/TIMELINE.md');
+
+    const codex = await fs.readFile(path.join(res.projectPath, 'CODEX.md'), 'utf8');
+    expect(codex).toContain('.agent/skills/_index.md');
+
+    const gemini = await fs.readFile(path.join(res.projectPath, 'GEMINI.md'), 'utf8');
+    expect(gemini).toContain('.agent/skills/_index.md');
+
+    const timeline = await fs.readFile(
+      path.join(res.projectPath, '.agent', 'logs', 'TIMELINE.md'),
+      'utf8'
+    );
+    expect(timeline).toContain('# 操作时间线');
+
     // Git repo initialized
     const gitDir = await fs.stat(path.join(res.projectPath, '.git'));
     expect(gitDir.isDirectory()).toBe(true);

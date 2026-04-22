@@ -29,6 +29,7 @@ import {
   PROJECT_TASKS_DIR
 } from '@shared/constants';
 import type { ToolCallResult, ToolDefinition } from './protocol';
+import { readAllOperationLogEntries, writeOpLog } from './oplog';
 
 export interface ToolContext {
   vault: string;
@@ -382,6 +383,160 @@ export async function checkpointCommitTool(
   });
 }
 
+async function listTaskRecords(ctx: ToolContext): Promise<
+  Array<{ uid: string; title: string; status: string; path: string; created_at?: string }>
+> {
+  const dir = projectTasksDir(ctx);
+  let entries: string[] = [];
+  try {
+    entries = (await fs.readdir(dir)).sort();
+  } catch {
+    return [];
+  }
+  const tasks: Array<{
+    uid: string;
+    title: string;
+    status: string;
+    path: string;
+    created_at?: string;
+  }> = [];
+  for (const name of entries) {
+    if (!name.toLowerCase().endsWith('.md')) continue;
+    const abs = path.join(dir, name);
+    try {
+      const raw = await fs.readFile(abs, 'utf8');
+      const { data } = frontmatter.read(raw);
+      const uid = typeof data['uid'] === 'string' ? (data['uid'] as string) : '';
+      const title = typeof data['title'] === 'string' ? (data['title'] as string) : name;
+      const status =
+        typeof data['status'] === 'string' ? (data['status'] as string) : 'inbox';
+      const created_at =
+        typeof data['created_at'] === 'string' ? (data['created_at'] as string) : undefined;
+      tasks.push({ uid, title, status, path: abs, ...(created_at ? { created_at } : {}) });
+    } catch {
+      // ignore unreadable task files
+    }
+  }
+  return tasks;
+}
+
+export async function listTasksTool(
+  ctx: ToolContext,
+  _args: Record<string, unknown>
+): Promise<ToolCallResult> {
+  void _args;
+  const tasks = await listTaskRecords(ctx);
+  return jsonResult({ count: tasks.length, tasks });
+}
+
+function countStatusLines(lines: string[]): {
+  dirty: boolean;
+  staged: number;
+  unstaged: number;
+  untracked: number;
+} {
+  let staged = 0;
+  let unstaged = 0;
+  let untracked = 0;
+  for (const line of lines) {
+    if (!line || line.startsWith('##')) continue;
+    if (line.startsWith('??')) {
+      untracked++;
+      continue;
+    }
+    if (line[0] && line[0] !== ' ') staged++;
+    if (line[1] && line[1] !== ' ') unstaged++;
+  }
+  return {
+    dirty: lines.some((line) => line.trim().length > 0 && !line.startsWith('##')),
+    staged,
+    unstaged,
+    untracked
+  };
+}
+
+export async function getProjectStateTool(
+  ctx: ToolContext,
+  _args: Record<string, unknown>
+): Promise<ToolCallResult> {
+  void _args;
+  const cwd = projectDir(ctx);
+  const git = ctx.git ?? defaultGit;
+  const isRepo = await exists(path.join(cwd, '.git'));
+  const tasks = await listTaskRecords(ctx);
+  const activeTasks = tasks
+    .filter((task) => task.status !== 'done')
+    .map((task) => ({ uid: task.uid, title: task.title, status: task.status }));
+  if (!isRepo) {
+    return jsonResult({
+      git: { isRepo: false, dirty: false, staged: 0, unstaged: 0, untracked: 0 },
+      activeTasks
+    });
+  }
+
+  const [branchRes, statusRes, headRes] = await Promise.all([
+    git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd),
+    git(['status', '--short', '--branch'], cwd),
+    git(['rev-parse', 'HEAD'], cwd)
+  ]);
+  const statusLines = statusRes.stdout.split(/\r?\n/).filter(Boolean);
+  const counts = countStatusLines(statusLines);
+
+  return jsonResult({
+    git: {
+      isRepo: true,
+      branch: branchRes.code === 0 ? branchRes.stdout.trim() : '',
+      head: headRes.code === 0 ? headRes.stdout.trim() : '',
+      ...counts
+    },
+    activeTasks
+  });
+}
+
+function parseLimit(value: unknown, fallback = 50): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(200, Math.max(1, Math.floor(value)));
+}
+
+export async function readOperationLogTool(
+  ctx: ToolContext,
+  args: Record<string, unknown>
+): Promise<ToolCallResult> {
+  const limit = parseLimit(args['limit'], 50);
+  const entries = await readAllOperationLogEntries(ctx);
+  return jsonResult({ entries: entries.slice(-limit).reverse(), count: entries.length });
+}
+
+export async function queryOperationLogTool(
+  ctx: ToolContext,
+  args: Record<string, unknown>
+): Promise<ToolCallResult> {
+  const date = typeof args['date'] === 'string' ? args['date'] : undefined;
+  const sessionPid =
+    typeof args['sessionPid'] === 'number' && Number.isFinite(args['sessionPid'])
+      ? Math.floor(args['sessionPid'] as number)
+      : undefined;
+  const tool = typeof args['tool'] === 'string' ? args['tool'] : undefined;
+  const taskUid = typeof args['taskUid'] === 'string' ? args['taskUid'] : undefined;
+  const limit = parseLimit(args['limit'], 50);
+  const offset =
+    typeof args['offset'] === 'number' && Number.isFinite(args['offset'])
+      ? Math.max(0, Math.floor(args['offset'] as number))
+      : 0;
+  let entries = await readAllOperationLogEntries(ctx);
+  if (date) entries = entries.filter((entry) => entry.date === date);
+  if (sessionPid !== undefined) {
+    entries = entries.filter((entry) => entry.sessionPid === sessionPid);
+  }
+  if (tool) entries = entries.filter((entry) => entry.tool === tool);
+  if (taskUid) entries = entries.filter((entry) => entry.taskUid === taskUid);
+  const newestFirst = entries.reverse();
+  return jsonResult({
+    entries: newestFirst.slice(offset, offset + limit),
+    count: newestFirst.length
+  });
+}
+
 // --- registry --------------------------------------------------------------
 
 export const TOOLS: ToolDefinition[] = [
@@ -446,6 +601,12 @@ export const TOOLS: ToolDefinition[] = [
     }
   },
   {
+    name: 'list_tasks',
+    description:
+      'List every task in the current project with uid, title, status and absolute path.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
     name: 'get_vision',
     description:
       'Read the vault-level Vision.md body (frontmatter stripped). Returns an empty string when no Vision.md exists.',
@@ -476,12 +637,70 @@ export const TOOLS: ToolDefinition[] = [
       },
       required: ['message']
     }
+  },
+  {
+    name: 'get_project_state',
+    description:
+      'Return git status and active task summary for the current project.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'read_operation_log',
+    description:
+      'Read the most recent operation log entries for this project, newest first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', minimum: 1, maximum: 200 }
+      }
+    }
+  },
+  {
+    name: 'query_operation_log',
+    description:
+      'Query operation logs for this project by date, sessionPid, tool or taskUid.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string' },
+        sessionPid: { type: 'number' },
+        tool: { type: 'string' },
+        taskUid: { type: 'string' },
+        limit: { type: 'number', minimum: 1, maximum: 200 },
+        offset: { type: 'number', minimum: 0 }
+      }
+    }
   }
 ];
 
 export type ToolName = (typeof TOOLS)[number]['name'];
 
 export async function callTool(
+  ctx: ToolContext,
+  name: string,
+  args: Record<string, unknown>
+): Promise<ToolCallResult> {
+  const startedAt = Date.now();
+  try {
+    const result = await callToolInner(ctx, name, args);
+    try {
+      await writeOpLog(ctx, name, args, result, Date.now() - startedAt);
+    } catch {
+      // best-effort logging only
+    }
+    return result;
+  } catch (error) {
+    const errResult = errorResult((error as Error).message ?? String(error));
+    try {
+      await writeOpLog(ctx, name, args, errResult, Date.now() - startedAt);
+    } catch {
+      // best-effort logging only
+    }
+    throw error;
+  }
+}
+
+async function callToolInner(
   ctx: ToolContext,
   name: string,
   args: Record<string, unknown>
@@ -495,12 +714,20 @@ export async function callTool(
       return appendExecutionLogTool(ctx, args);
     case 'log_thinking':
       return logThinkingTool(ctx, args);
+    case 'list_tasks':
+      return listTasksTool(ctx, args);
     case 'get_vision':
       return getVisionTool(ctx, args);
     case 'search_global_context':
       return searchGlobalContextTool(ctx, args);
     case 'checkpoint_commit':
       return checkpointCommitTool(ctx, args);
+    case 'get_project_state':
+      return getProjectStateTool(ctx, args);
+    case 'read_operation_log':
+      return readOperationLogTool(ctx, args);
+    case 'query_operation_log':
+      return queryOperationLogTool(ctx, args);
     default:
       return errorResult(`unknown tool: ${name}`);
   }

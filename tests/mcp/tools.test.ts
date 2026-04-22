@@ -10,6 +10,7 @@ import { callTool, type ToolContext } from '../../src/mcp/tools';
 import * as frontmatter from '../../src/main/frontmatter';
 import { VectorStore } from '../../src/main/vector';
 import { getEmbedder } from '../../src/main/vector/embed';
+import { PROJECT_OPERATION_LOG, PROJECT_TIMELINE } from '../../src/shared/constants';
 
 async function tmpVault(): Promise<string> {
   const d = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-mcp-tools-'));
@@ -344,6 +345,137 @@ describe('mcp/tools — checkpoint_commit', () => {
     });
     const payload = (await readJsonResult(r.content)) as { committed: boolean };
     expect(payload.committed).toBe(false);
+  });
+});
+
+describe('mcp/tools — scheme D agent context', () => {
+  let vault: string;
+  beforeEach(async () => {
+    vault = await tmpVault();
+  });
+  afterEach(async () => {
+    await fs.rm(vault, { recursive: true, force: true });
+  });
+
+  it('records tool calls into operations.jsonl and TIMELINE.md', async () => {
+    const proj = await createProject(vault, {
+      slug: 'logs',
+      template: 'blank',
+      name: 'Logs'
+    });
+    const c = ctx(vault, 'logs', proj.uid);
+    const created = (await readJsonResult(
+      (await callTool(c, 'create_task', { title: 'Track me', priority: 'high' })).content
+    )) as { uid: string };
+    await callTool(c, 'update_task_status', {
+      task_uid: created.uid,
+      status: 'doing'
+    });
+
+    const rawLog = await fs.readFile(
+      path.join(proj.projectPath, '.agent', 'logs', PROJECT_OPERATION_LOG),
+      'utf8'
+    );
+    const entries = rawLog
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { tool: string; taskUid?: string; sessionPid: number });
+    expect(entries.map((e) => e.tool)).toEqual(['create_task', 'update_task_status']);
+    expect(entries[1]!.taskUid).toBe(created.uid);
+    expect(entries[0]!.sessionPid).toBeGreaterThan(0);
+
+    const timeline = await fs.readFile(
+      path.join(proj.projectPath, '.agent', 'logs', PROJECT_TIMELINE),
+      'utf8'
+    );
+    expect(timeline).toContain('# 操作时间线');
+    expect(timeline).toContain('创建任务');
+    expect(timeline).toContain(created.uid);
+  });
+
+  it('list_tasks returns structured tasks for the current project only', async () => {
+    const alpha = await createProject(vault, {
+      slug: 'alpha',
+      template: 'blank',
+      name: 'Alpha'
+    });
+    const beta = await createProject(vault, {
+      slug: 'beta',
+      template: 'blank',
+      name: 'Beta'
+    });
+    const alphaCtx = ctx(vault, 'alpha', alpha.uid);
+    const betaCtx = ctx(vault, 'beta', beta.uid);
+    await callTool(alphaCtx, 'create_task', { title: 'Alpha one' });
+    await callTool(alphaCtx, 'create_task', { title: 'Alpha two' });
+    await callTool(betaCtx, 'create_task', { title: 'Beta only' });
+
+    const payload = (await readJsonResult(
+      (await callTool(alphaCtx, 'list_tasks', {})).content
+    )) as {
+      tasks: { title: string }[];
+      count: number;
+    };
+    expect(payload.count).toBe(2);
+    expect(payload.tasks.map((task) => task.title)).toEqual(['Alpha one', 'Alpha two']);
+  });
+
+  it('get_project_state returns git + active task summary', async () => {
+    const proj = await createProject(vault, {
+      slug: 'stateful',
+      template: 'blank',
+      name: 'Stateful'
+    });
+    const c = ctx(vault, 'stateful', proj.uid);
+    const created = (await readJsonResult(
+      (await callTool(c, 'create_task', { title: 'Active task' })).content
+    )) as { uid: string };
+    await callTool(c, 'update_task_status', { task_uid: created.uid, status: 'doing' });
+    await fs.writeFile(path.join(proj.projectPath, 'scratch.txt'), 'dirty\n', 'utf8');
+
+    const payload = (await readJsonResult(
+      (await callTool(c, 'get_project_state', {})).content
+    )) as {
+      git: { isRepo: boolean; dirty: boolean };
+      activeTasks: { uid: string; title: string; status: string }[];
+    };
+    expect(payload.git.isRepo).toBe(true);
+    expect(payload.git.dirty).toBe(true);
+    expect(payload.activeTasks).toEqual([
+      { uid: created.uid, title: 'Active task', status: 'doing' }
+    ]);
+  });
+
+  it('read_operation_log and query_operation_log expose recent structured entries', async () => {
+    const proj = await createProject(vault, {
+      slug: 'query',
+      template: 'blank',
+      name: 'Query'
+    });
+    const c = ctx(vault, 'query', proj.uid);
+    const created = (await readJsonResult(
+      (await callTool(c, 'create_task', { title: 'Find me' })).content
+    )) as { uid: string };
+    await callTool(c, 'update_task_status', { task_uid: created.uid, status: 'doing' });
+
+    const recent = (await readJsonResult(
+      (await callTool(c, 'read_operation_log', { limit: 1 })).content
+    )) as { entries: { tool: string }[] };
+    expect(recent.entries).toHaveLength(1);
+    expect(recent.entries[0]!.tool).toBe('update_task_status');
+
+    const filtered = (await readJsonResult(
+      (
+        await callTool(c, 'query_operation_log', {
+          taskUid: created.uid,
+          tool: 'update_task_status'
+        })
+      ).content
+    )) as { entries: { taskUid?: string; tool: string }[] };
+    expect(filtered.entries).toHaveLength(1);
+    expect(filtered.entries[0]!.tool).toBe('update_task_status');
+    expect(filtered.entries[0]!.taskUid).toBe(created.uid);
   });
 });
 

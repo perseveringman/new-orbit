@@ -1,6 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
-import { startHookServer, type HookServer, type HookEnvelope } from '../src/main/agent/hooks/server';
+import {
+  startHookServer,
+  type HookServer,
+  type HookEnvelope,
+  type TerminalHookEnvelope
+} from '../src/main/agent/hooks/server';
 
 interface PostResult {
   status: number;
@@ -117,5 +122,30 @@ describe('hook server', () => {
       'POST'
     );
     expect(res.status).toBe(404);
+  });
+
+  it('accepts terminal GET hook events without auth and emits terminal-event', async () => {
+    server = await startHookServer();
+    const received: TerminalHookEnvelope[] = [];
+    server.events.on('terminal-event', (env: TerminalHookEnvelope) => received.push(env));
+
+    const res = await post(
+      server.port,
+      '/hook/event?eventType=UserPromptSubmit&paneId=pane-1&projectUid=proj-1&ts=2026-04-22T10:00:00Z',
+      {},
+      '',
+      'GET'
+    );
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ ok: true });
+    expect(received).toEqual([
+      {
+        eventType: 'Start',
+        rawEventType: 'UserPromptSubmit',
+        paneId: 'pane-1',
+        projectUid: 'proj-1',
+        ts: '2026-04-22T10:00:00Z'
+      }
+    ]);
   });
 });

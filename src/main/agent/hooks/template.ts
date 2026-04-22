@@ -7,6 +7,16 @@ export interface HookTemplateOpts {
   vendor?: string;
 }
 
+type ClaudeHookEntry = {
+  hooks?: Array<{
+    type: 'command';
+    command: string;
+    env?: Record<string, string>;
+    matcher?: string;
+  }>;
+  matcher?: string;
+};
+
 /** Returns a portable bash script that reads stdin JSON and POSTs to the
  *  local Orbit hook server. curl is assumed available on macOS. */
 export function renderNotifyShTemplate(opts: HookTemplateOpts): string {
@@ -65,6 +75,28 @@ curl -fsS --max-time 3 \\
 `;
 }
 
+export function renderTerminalNotifyShTemplate(): string {
+  return `#!/usr/bin/env bash
+set -eu
+
+HOOK_PORT="\${ORBIT_HOOK_PORT:-}"
+PANE_ID="\${ORBIT_PANE_ID:-}"
+PROJECT_UID="\${ORBIT_PROJECT_UID:-}"
+
+if [ -z "\${HOOK_PORT}" ]; then
+  exit 0
+fi
+
+EVENT_TYPE="\${CLAUDE_HOOK_EVENT_TYPE:-\${ORBIT_HOOK_EVENT_TYPE:-Stop}}"
+ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+curl -fsS --max-time 3 \\
+  -X GET \\
+  "http://127.0.0.1:\${HOOK_PORT}/hook/event?eventType=\${EVENT_TYPE}&paneId=\${PANE_ID}&projectUid=\${PROJECT_UID}&ts=\${ts}" \\
+  >/dev/null 2>&1 || true
+`;
+}
+
 interface ClaudeSettingsOpts extends HookTemplateOpts {
   scriptPath: string;
 }
@@ -109,4 +141,56 @@ export function renderClaudeSettingsJson(opts: ClaudeSettingsOpts): string {
     }
   };
   return JSON.stringify(settings, null, 2);
+}
+
+function isManagedHookCommand(command: unknown, scriptPath: string): boolean {
+  return typeof command === 'string' && command === scriptPath;
+}
+
+function managedClaudeHooks(scriptPath: string): Record<string, ClaudeHookEntry[]> {
+  const entry = (eventType: string, matcher?: string): ClaudeHookEntry => ({
+    ...(matcher ? { matcher } : {}),
+    hooks: [
+      {
+        type: 'command',
+        command: scriptPath,
+        env: { ORBIT_HOOK_EVENT_TYPE: eventType }
+      }
+    ]
+  });
+
+  return {
+    UserPromptSubmit: [entry('UserPromptSubmit')],
+    Stop: [entry('Stop')],
+    PreToolUse: [entry('PreToolUse', '*')]
+  };
+}
+
+export function mergeClaudeHooks(
+  existing: Record<string, unknown>,
+  scriptPath: string
+): Record<string, unknown> {
+  const currentHooks =
+    existing['hooks'] && typeof existing['hooks'] === 'object'
+      ? (existing['hooks'] as Record<string, unknown[]>)
+      : {};
+  const managed = managedClaudeHooks(scriptPath);
+  const nextHooks: Record<string, unknown[]> = { ...currentHooks };
+
+  for (const [eventName, entries] of Object.entries(managed)) {
+    const existingEntries = Array.isArray(currentHooks[eventName]) ? currentHooks[eventName]! : [];
+    nextHooks[eventName] = existingEntries.filter((entry) => {
+      if (!entry || typeof entry !== 'object') return true;
+      const hooks = Array.isArray((entry as { hooks?: unknown[] }).hooks)
+        ? ((entry as { hooks?: unknown[] }).hooks as unknown[])
+        : [];
+      return !hooks.some((hook) => {
+        if (!hook || typeof hook !== 'object') return false;
+        return isManagedHookCommand((hook as { command?: unknown }).command, scriptPath);
+      });
+    });
+    nextHooks[eventName] = [...nextHooks[eventName], ...entries];
+  }
+
+  return { ...existing, hooks: nextHooks };
 }

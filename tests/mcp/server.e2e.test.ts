@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { promises as fs, existsSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -70,21 +70,15 @@ function exchange(
   });
 }
 
-const HAVE_BUILD = existsSync(SERVER_PATH);
-
 beforeAll(() => {
-  if (!HAVE_BUILD) {
-    // The standalone bundle must exist for these e2e tests. The build
-    // script is `npm run build:mcp` and is part of `npm run build` so
-    // CI normally has it in place; if missing we attempt a one-shot
-    // build to avoid spurious failures during local `npm test`.
-    const r = spawnSync('npm', ['run', 'build:mcp'], {
-      cwd: path.resolve(__dirname, '../..'),
-      stdio: 'inherit'
-    });
-    if (r.status !== 0) {
-      throw new Error('mcp e2e: build:mcp failed; cannot run server.cjs');
-    }
+  // Rebuild the MCP bundle so end-to-end tests always exercise the current
+  // tool registry instead of a stale out/mcp/server.cjs from an earlier run.
+  const r = spawnSync('npm', ['run', 'build:mcp'], {
+    cwd: path.resolve(__dirname, '../..'),
+    stdio: 'inherit'
+  });
+  if (r.status !== 0) {
+    throw new Error('mcp e2e: build:mcp failed; cannot run server.cjs');
   }
 });
 
@@ -98,7 +92,7 @@ describe('mcp server.cjs — end-to-end', () => {
     await fs.rm(vault, { recursive: true, force: true });
   });
 
-  it('answers initialize + tools/list with all seven Orbit tools', async () => {
+  it('answers initialize + tools/list with the full Orbit toolset', async () => {
     const proj = await createProject(vault, {
       slug: 'demo',
       template: 'blank',
@@ -130,8 +124,12 @@ describe('mcp server.cjs — end-to-end', () => {
         'append_execution_log',
         'checkpoint_commit',
         'create_task',
+        'get_project_state',
         'get_vision',
+        'list_tasks',
         'log_thinking',
+        'query_operation_log',
+        'read_operation_log',
         'search_global_context',
         'update_task_status'
       ].sort()

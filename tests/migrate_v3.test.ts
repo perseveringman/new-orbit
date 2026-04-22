@@ -3,7 +3,9 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createVault } from '../src/main/vault';
+import { createProject } from '../src/main/project';
 import { migrateProjectsToFolders, extractAgentSection } from '../src/main/migrations';
+import { runMigrations } from '../src/main/migrations';
 
 async function tmpVault(): Promise<string> {
   const d = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-mig-v3-'));
@@ -84,6 +86,11 @@ describe('migrate v3: projectsFilesToFolders', () => {
     expect(await exists(path.join(dir, '.gitignore'))).toBe(true);
     expect(await exists(path.join(dir, '.agent', 'tasks'))).toBe(true);
     expect(await exists(path.join(dir, '.agent', 'memories'))).toBe(true);
+    expect(await exists(path.join(dir, '.agent', 'skills', '_index.md'))).toBe(true);
+    expect(await exists(path.join(dir, '.agent', 'logs', 'TIMELINE.md'))).toBe(true);
+    expect(await exists(path.join(dir, 'CLAUDE.md'))).toBe(true);
+    expect(await exists(path.join(dir, 'CODEX.md'))).toBe(true);
+    expect(await exists(path.join(dir, 'GEMINI.md'))).toBe(true);
   });
 
   it('is idempotent: re-running on a vault that already has a folder skips the slug', async () => {
@@ -194,5 +201,32 @@ describe('migrate v3: projectsFilesToFolders', () => {
     });
     expect(r.snapshotSha).toBe('cafef00dcafef00dcafef00dcafef00dcafef00d');
     expect(r.migrated).toEqual(['snap']);
+  });
+
+  it('runMigrations backfills agent context files into existing folder projects', async () => {
+    const proj = await createProject(vault, {
+      slug: 'context-me',
+      template: 'blank',
+      name: 'Context Me'
+    });
+    await fs.rm(path.join(proj.projectPath, '.agent', 'skills'), {
+      recursive: true,
+      force: true
+    });
+    await fs.rm(path.join(proj.projectPath, '.agent', 'logs'), {
+      recursive: true,
+      force: true
+    });
+    await fs.rm(path.join(proj.projectPath, 'CLAUDE.md'), { force: true });
+
+    await runMigrations(vault);
+
+    expect(await exists(path.join(proj.projectPath, '.agent', 'skills', '_index.md'))).toBe(
+      true
+    );
+    expect(await exists(path.join(proj.projectPath, '.agent', 'logs', 'TIMELINE.md'))).toBe(
+      true
+    );
+    expect(await exists(path.join(proj.projectPath, 'CLAUDE.md'))).toBe(true);
   });
 });
