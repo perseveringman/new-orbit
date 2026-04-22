@@ -51,10 +51,10 @@ process.stdout.write(JSON.stringify({
 }));
 ' 2>/dev/null) || body=$(printf '{"version":%s,"runId":%s,"worktreeId":%s,"eventType":%s,"payload":{},"ts":%s}' \\
   "\${ORBIT_HOOK_VERSION}" \\
-  "\"\${ORBIT_RUN_ID}\"" \\
-  "\"\${ORBIT_WORKTREE_ID}\"" \\
-  "\"\${ORBIT_EVENT_TYPE}\"" \\
-  "\"\${ts}\"")
+  '"\${ORBIT_RUN_ID}"' \\
+  '"\${ORBIT_WORKTREE_ID}"' \\
+  '"\${ORBIT_EVENT_TYPE}"' \\
+  '"\${ts}"')
 
 curl -fsS --max-time 3 \\
   -X POST \\

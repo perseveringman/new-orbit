@@ -111,6 +111,24 @@ describe.skipIf(!PTY_OK || !!process.env['CI_SKIP_PTY'])('pty_manager', () => {
     expect(got).toBe(true);
     expect(list().some((s) => s.id === info.id)).toBe(false);
   });
+
+  it('runs initialCommand after shell-ready output arrives', async () => {
+    const collected: string[] = [];
+    const info = await openSession({
+      cwd: vault,
+      shell: '/bin/bash',
+      env: { PS1: '\u001b]133;A\u0007$ ' },
+      initialCommand: 'echo gated-ready'
+    });
+    const { on } = await import('../src/main/terminal/pty_manager');
+    const off = on('data', (id, payload) => {
+      if (id === info.id) collected.push(payload);
+    });
+
+    const ok = await waitUntil(() => collected.join('').includes('gated-ready'), 4000);
+    off();
+    expect(ok).toBe(true);
+  });
 });
 
 describe('pty_manager gating', () => {

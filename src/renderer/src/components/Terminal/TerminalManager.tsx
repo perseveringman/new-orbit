@@ -10,17 +10,23 @@ import { nanoid } from 'nanoid';
 import { TerminalPane } from './TerminalPane';
 import type { TerminalPaneHandle } from './TerminalPane';
 import { disposeSession } from './sessionRegistry';
+import { getTerminalShortcutAction } from './terminalHotkeys';
 import {
   getLeafWrapperStyle,
   getPrimarySplitSectionStyle,
   getSecondarySplitSectionStyle
 } from './terminalLayout';
+import {
+  type PaneNode,
+  findPath,
+  firstLeaf,
+  getAllLeafIds,
+  insertSplit,
+  lastLeaf,
+  deriveClosePaneResult
+} from './terminalTree';
 
 // ─── Data model ─────────────────────────────────────────────────────────────
-
-type PaneNode =
-  | { kind: 'leaf'; id: string }
-  | { kind: 'split'; dir: 'row' | 'col'; ratio: number; a: PaneNode; b: PaneNode };
 
 interface TabState {
   id: string;
@@ -33,72 +39,6 @@ interface TabState {
 interface ManagerState {
   tabs: TabState[];
   activeTabId: string;
-}
-
-// ─── Tree helpers ────────────────────────────────────────────────────────────
-
-type PathEntry = { split: Extract<PaneNode, { kind: 'split' }>; branch: 'a' | 'b' };
-
-function findPath(node: PaneNode, targetId: string): PathEntry[] | null {
-  if (node.kind === 'leaf') {
-    return node.id === targetId ? [] : null;
-  }
-  const inA = findPath(node.a, targetId);
-  if (inA !== null) return [{ split: node, branch: 'a' }, ...inA];
-  const inB = findPath(node.b, targetId);
-  if (inB !== null) return [{ split: node, branch: 'b' }, ...inB];
-  return null;
-}
-
-function firstLeaf(node: PaneNode): string {
-  if (node.kind === 'leaf') return node.id;
-  return firstLeaf(node.a);
-}
-
-function lastLeaf(node: PaneNode): string {
-  if (node.kind === 'leaf') return node.id;
-  return lastLeaf(node.b);
-}
-
-function getAllLeafIds(node: PaneNode): string[] {
-  if (node.kind === 'leaf') return [node.id];
-  return [...getAllLeafIds(node.a), ...getAllLeafIds(node.b)];
-}
-
-/** Insert a split at the target leaf, creating a new leaf as the 'b' sibling. */
-function insertSplit(
-  root: PaneNode,
-  targetId: string,
-  dir: 'row' | 'col',
-  newLeafId: string
-): PaneNode {
-  if (root.kind === 'leaf') {
-    if (root.id === targetId) {
-      return { kind: 'split', dir, ratio: 0.5, a: root, b: { kind: 'leaf', id: newLeafId } };
-    }
-    return root;
-  }
-  return { ...root, a: insertSplit(root.a, targetId, dir, newLeafId), b: insertSplit(root.b, targetId, dir, newLeafId) };
-}
-
-/** Remove a leaf; returns null if the node itself was the leaf. Collapses parents. */
-function removeLeaf(root: PaneNode, leafId: string): PaneNode | null {
-  if (root.kind === 'leaf') {
-    return root.id === leafId ? null : root;
-  }
-  const newA = removeLeaf(root.a, leafId);
-  const newB = removeLeaf(root.b, leafId);
-  if (newA === null) return newB;
-  if (newB === null) return newA;
-  return { ...root, a: newA, b: newB };
-}
-
-/** Find the leaf adjacent to targetId (sibling in the immediate parent split). */
-function findAdjacentLeaf(root: PaneNode, leafId: string): string | null {
-  const path = findPath(root, leafId);
-  if (!path || path.length === 0) return null;
-  const immediate = path[path.length - 1];
-  return immediate.branch === 'a' ? firstLeaf(immediate.split.b) : lastLeaf(immediate.split.a);
 }
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -460,27 +400,28 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       if (!tab) return;
 
       void disposeSession(`${projectUid}::${leafId}`);
+      const result = deriveClosePaneResult(tab.root, leafId, tab.zoomedLeafId);
 
-      const adjacent = findAdjacentLeaf(tab.root, leafId);
-      const newRoot = removeLeaf(tab.root, leafId);
-
-      if (newRoot === null) {
+      if (result.root === null || result.focusedLeafId === null) {
         // Last leaf — close the tab
         closeTab(tab.id);
         return;
       }
-
-      const newFocused = adjacent ?? firstLeaf(newRoot);
+      const nextRoot = result.root;
+      const nextFocusedLeafId = result.focusedLeafId;
       setState((prev) => {
         const next = updateTab(prev, tab.id, {
-          root: newRoot,
-          focusedLeafId: newFocused,
-          zoomedLeafId: tab.zoomedLeafId === leafId ? null : tab.zoomedLeafId
+          root: nextRoot,
+          focusedLeafId: nextFocusedLeafId,
+          zoomedLeafId: result.zoomedLeafId
         });
         stateRef.current = next;
         return next;
       });
       persist();
+      requestAnimationFrame(() => {
+        paneRefs.current.get(`${projectUid}::${nextFocusedLeafId}`)?.current?.focus();
+      });
     }
 
     function renameTab(tabId: string, title: string): void {
@@ -551,63 +492,57 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
     function handleKey(e: React.KeyboardEvent): void {
       const root = managerRootRef.current;
       if (!root || !root.contains(document.activeElement)) return;
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
 
       const cur = stateRef.current;
       const activeTab = cur.tabs.find((t) => t.id === cur.activeTabId);
       if (!activeTab) return;
+      const action = getTerminalShortcutAction(e);
+      if (!action) return;
 
-      if (e.key === 't' && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        newTab();
-      } else if (e.key === 'w' && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        closePane(activeTab.focusedLeafId);
-      } else if (e.key === 'd' && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        splitPane(activeTab.focusedLeafId, 'row');
-      } else if (e.key === 'D' && e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        splitPane(activeTab.focusedLeafId, 'col');
-      } else if (e.altKey && e.key === 'ArrowLeft') {
-        e.preventDefault();
-        e.stopPropagation();
-        focusDirection(activeTab.id, 'left');
-      } else if (e.altKey && e.key === 'ArrowRight') {
-        e.preventDefault();
-        e.stopPropagation();
-        focusDirection(activeTab.id, 'right');
-      } else if (e.altKey && e.key === 'ArrowUp') {
-        e.preventDefault();
-        e.stopPropagation();
-        focusDirection(activeTab.id, 'up');
-      } else if (e.altKey && e.key === 'ArrowDown') {
-        e.preventDefault();
-        e.stopPropagation();
-        focusDirection(activeTab.id, 'down');
-      } else if ((e.key === 'Enter' || e.key === 'Return') && e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleZoom(activeTab.id);
-      } else if (e.key === '[' && e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        prevTab();
-      } else if (e.key === ']' && e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        nextTab();
-      } else if (!e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9') {
-        const idx = parseInt(e.key) - 1;
-        if (idx < cur.tabs.length) {
-          e.preventDefault();
-          e.stopPropagation();
-          setActiveTabState(cur.tabs[idx].id);
+      e.preventDefault();
+      e.stopPropagation();
+
+      switch (action) {
+        case 'new-tab':
+          newTab();
+          return;
+        case 'close-pane':
+          closePane(activeTab.focusedLeafId);
+          return;
+        case 'split-right':
+          splitPane(activeTab.focusedLeafId, 'row');
+          return;
+        case 'split-down':
+          splitPane(activeTab.focusedLeafId, 'col');
+          return;
+        case 'focus-left':
+          focusDirection(activeTab.id, 'left');
+          return;
+        case 'focus-right':
+          focusDirection(activeTab.id, 'right');
+          return;
+        case 'focus-up':
+          focusDirection(activeTab.id, 'up');
+          return;
+        case 'focus-down':
+          focusDirection(activeTab.id, 'down');
+          return;
+        case 'toggle-zoom':
+          toggleZoom(activeTab.id);
+          return;
+        case 'prev-tab':
+          prevTab();
+          return;
+        case 'next-tab':
+          nextTab();
+          return;
+        default: {
+          if (action.startsWith('switch-tab-')) {
+            const idx = parseInt(action.slice('switch-tab-'.length), 10) - 1;
+            if (idx < cur.tabs.length) {
+              setActiveTabState(cur.tabs[idx].id);
+            }
+          }
         }
       }
     }

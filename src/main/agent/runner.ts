@@ -2,7 +2,6 @@ import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { promises as fs, createWriteStream, WriteStream } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { randomBytes } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { ORBIT_DIR, ORBIT_LOGS_DIR } from '@shared/constants';
 import {

@@ -4,7 +4,7 @@ import { runPhases, type PhaseName, type PhaseStep } from "../src/main/util/phas
 describe("runPhases", () => {
   it("runs all phases in order and commits on success", async () => {
     const order: PhaseName[] = [];
-    const steps: PhaseStep<{}>[] = [
+    const steps: PhaseStep<Record<string, never>>[] = [
       { name: "preflight", run: () => void order.push("preflight") },
       { name: "teardown", run: () => void order.push("teardown") },
       { name: "commit", run: () => void order.push("commit") },
@@ -23,7 +23,7 @@ describe("runPhases", () => {
   });
 
   it("aborts when a pre-commit phase fails", async () => {
-    const steps: PhaseStep<{}>[] = [
+    const steps: PhaseStep<Record<string, never>>[] = [
       {
         name: "preflight",
         run: () => {
@@ -42,7 +42,7 @@ describe("runPhases", () => {
 
   it("aborts when the commit phase fails", async () => {
     let cleanupRan = false;
-    const steps: PhaseStep<{}>[] = [
+    const steps: PhaseStep<Record<string, never>>[] = [
       { name: "preflight", run: () => {} },
       {
         name: "commit",
@@ -65,7 +65,7 @@ describe("runPhases", () => {
   });
 
   it("captures post-commit errors as warnings", async () => {
-    const steps: PhaseStep<{}>[] = [
+    const steps: PhaseStep<Record<string, never>>[] = [
       { name: "commit", run: () => {} },
       {
         name: "cleanup",

@@ -58,12 +58,24 @@ export function NightShiftHistoryDrawer({ open, onClose }: Props): JSX.Element |
       <div className={panel} onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
           <h2 className="text-sm font-semibold">Night Shift history</h2>
-          <button
-            onClick={onClose}
-            className="rounded border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('orbit:open-right-tab', { detail: 'review' })
+                )
+              }
+              className="rounded border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            >
+              Open review
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            >
+              ✕
+            </button>
+          </div>
         </header>
         <div className="h-[calc(100vh-48px)] overflow-auto p-3 text-xs">
           {loading && <p className="text-neutral-500">Loading…</p>}

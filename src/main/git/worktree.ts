@@ -11,6 +11,8 @@ import {
 import type { ResetAllResult, WorktreeRecord } from '@shared/git';
 import { getGitQueue, type GitQueue } from './queue';
 import { appendGitLog } from './log';
+import { runProjectLifecycle } from '../project_lifecycle';
+import { runPhases } from '../util/phase';
 
 /**
  * Pure policy check: a ghost branch is one we created ourselves under the
@@ -114,6 +116,12 @@ export class WorktreeManager {
       try {
         // `git worktree add -b <branch> <path> <base>` creates branch + checkout.
         await g.raw(['worktree', 'add', '-b', branch, absPath, base]);
+        await runProjectLifecycle('setup', {
+          projectPath: this.vault,
+          vaultPath: this.vault,
+          worktreeId: id,
+          cwd: absPath
+        });
       } catch (e) {
         // cleanup partial directory
         try {
@@ -182,35 +190,73 @@ export class WorktreeManager {
       const rec = idx.worktrees.find((w) => w.id === id);
       if (!rec) throw new Error(`worktree not found: ${id}`);
       const g = this.root();
-      try {
-        await g.raw(['worktree', 'remove', rec.path]);
-      } catch (e) {
-        if (opts.force) {
-          await g.raw(['worktree', 'remove', '--force', rec.path]);
-        } else {
-          await appendGitLog(this.vault, {
-            op: 'worktree.remove.error',
-            id,
-            error: (e as Error).message
-          });
-          throw e;
+      const result = await runPhases(
+        { id, rec, g, idx },
+        [
+          {
+            name: 'preflight',
+            run: async () => undefined
+          },
+          {
+            name: 'teardown',
+            run: async () => {
+              await runProjectLifecycle('teardown', {
+                projectPath: this.vault,
+                vaultPath: this.vault,
+                worktreeId: id,
+                cwd: rec.path
+              });
+            }
+          },
+          {
+            name: 'commit',
+            run: async () => {
+              try {
+                await g.raw(['worktree', 'remove', rec.path]);
+              } catch (e) {
+                if (opts.force) {
+                  await g.raw(['worktree', 'remove', '--force', rec.path]);
+                } else {
+                  throw e;
+                }
+              }
+              if (opts.force && rec.branch.startsWith(ORBIT_GHOST_BRANCH_PREFIX)) {
+                try {
+                  await g.raw(['branch', '-D', rec.branch]);
+                } catch {
+                  // ignore — branch may already be gone
+                }
+              }
+            }
+          },
+          {
+            name: 'cleanup',
+            run: async () => {
+              idx.worktrees = idx.worktrees.filter((w) => w.id !== id);
+              await writeIndex(this.vault, idx);
+              await appendGitLog(this.vault, { op: 'worktree.remove', id, force: !!opts.force });
+            }
+          }
+        ],
+        (phase, status) => {
+          if (status === 'fail') {
+            void appendGitLog(this.vault, {
+              op: 'worktree.remove.phase',
+              id,
+              phase,
+              force: !!opts.force
+            });
+          }
         }
+      );
+      if (!result.committed && result.error) {
+        await appendGitLog(this.vault, {
+          op: 'worktree.remove.error',
+          id,
+          error: result.error.message
+        });
+        throw result.error;
       }
-      if (
-        opts.force &&
-        rec.branch.startsWith(ORBIT_GHOST_BRANCH_PREFIX)
-      ) {
-        // Delete the unmerged ghost branch. `-D` forces; we only allow this
-        // for ghost-prefixed branches, which matches the M5 policy.
-        try {
-          await g.raw(['branch', '-D', rec.branch]);
-        } catch {
-          // ignore — branch may already be gone
-        }
-      }
-      idx.worktrees = idx.worktrees.filter((w) => w.id !== id);
-      await writeIndex(this.vault, idx);
-      await appendGitLog(this.vault, { op: 'worktree.remove', id, force: !!opts.force });
     });
   }
 

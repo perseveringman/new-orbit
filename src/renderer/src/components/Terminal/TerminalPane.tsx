@@ -3,7 +3,12 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
-import { getSession, setSession as regSetSession, clearSession } from './sessionRegistry';
+import {
+  getSession,
+  getOrCreateSession,
+  setSession as regSetSession,
+  clearSession
+} from './sessionRegistry';
 import { syncTerminalSize } from './terminalSizing';
 
 export interface TerminalPaneHandle {
@@ -110,8 +115,9 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         if (!info) {
           const cols = term.cols || 80;
           const rows = term.rows || 24;
-          info = await window.orbit.terminal.open({ cwd, cols, rows, ...(env ? { env } : {}) });
-          regSetSession(sessionKey, info);
+          info = await getOrCreateSession(sessionKey, () =>
+            window.orbit.terminal.open({ cwd, cols, rows, ...(env ? { env } : {}) })
+          );
           // Give the welcome message after ~1s so users notice.
           setTimeout(() => {
             if (!cancelled && termRef.current === term) welcome(info!);
@@ -197,19 +203,19 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         lastGridRef.current = null;
       }
 
-  async function handleRestart(): Promise<void> {
+    async function handleRestart(): Promise<void> {
     const term = termRef.current;
     if (!term) return;
     await handleKill();
     setExitState(null);
-    try {
-      const info = await window.orbit.terminal.open({
-        cwd,
+      try {
+        const info = await window.orbit.terminal.open({
+          cwd,
         cols: term.cols || 80,
         rows: term.rows || 24,
         ...(env ? { env } : {})
       });
-      regSetSession(sessionKey, info);
+        regSetSession(sessionKey, info);
       sessionRef.current = info;
       setSession(info);
       lastGridRef.current = null;

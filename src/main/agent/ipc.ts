@@ -137,7 +137,7 @@ export function registerAgentIpc(): void {
   });
 
   ipcMain.handle(IPC.agent.list, (): RunSummary[] => [
-    ...reattachedRuns.values().map((run) => run.summary),
+    ...Array.from(reattachedRuns.values(), (run) => run.summary),
     ...getPool().list()
   ]);
 
@@ -148,8 +148,9 @@ export function registerAgentIpc(): void {
       if (r) return r.tail(q?.sinceEventIdx);
       const snap = reattachedRuns.get(runId);
       if (!snap) return [];
-      return typeof q?.sinceEventIdx === 'number'
-        ? snap.events.filter((event) => event.idx > q.sinceEventIdx)
+      const sinceEventIdx = q?.sinceEventIdx;
+      return typeof sinceEventIdx === 'number'
+        ? snap.events.filter((event) => event.idx > sinceEventIdx)
         : [...snap.events];
     }
   );

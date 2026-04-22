@@ -50,8 +50,7 @@ import {
   createProject,
   createTask,
   listProjectTaskPaths,
-  listProjects,
-  type ProjectSummary
+  listProjects
 } from './project';
 import { ensureMcpConfig } from './mcp_config';
 import { getMcpServerPath } from './mcp_path';

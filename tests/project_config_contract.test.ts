@@ -24,8 +24,8 @@ describe('project config contract', () => {
       });
       expect(cfg).toHaveProperty('setup');
       expect(cfg).toHaveProperty('teardown');
-      expect(Array.isArray((cfg as Record<string, unknown>).setup)).toBe(true);
-      expect(Array.isArray((cfg as Record<string, unknown>).teardown)).toBe(true);
+      expect(Array.isArray(cfg?.setup)).toBe(true);
+      expect(Array.isArray(cfg?.teardown)).toBe(true);
     } finally {
       await fs.rm(vault, { recursive: true, force: true });
     }

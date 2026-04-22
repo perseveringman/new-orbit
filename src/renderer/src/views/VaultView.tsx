@@ -21,6 +21,21 @@ import { JournalHistoryView } from './JournalHistoryView';
 import { NightShiftHistoryDrawer } from '../components/NightShiftHistoryDrawer';
 import { NewProjectModal } from '../components/Modals/NewProjectModal';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
+import { ReviewInboxView } from './ReviewInboxView';
+import { RunLogPane } from '../components/RunLogPane';
+import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
+import { usePanesStore } from '../lib/panes/store';
+
+const RIGHT_PANE_LEAF_ID = 'vault-right-sidebar';
+const RIGHT_PANE_TABS = [
+  { id: 'files', kind: 'files', title: 'Files' },
+  { id: 'backlinks', kind: 'backlinks', title: 'Backlinks' },
+  { id: 'agent', kind: 'agent', title: 'Agent' },
+  { id: 'worktrees', kind: 'worktrees', title: 'Worktrees' },
+  { id: 'review', kind: 'review-inbox', title: 'Review' },
+  { id: 'runlog', kind: 'run-log', title: 'Run Log' },
+  { id: 'diff', kind: 'diff', title: 'Diff' }
+] as const;
 
 export function VaultView(): JSX.Element {
   const { vault, settings } = useWorkspace();
@@ -35,8 +50,16 @@ export function VaultView(): JSX.Element {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [rightTab, setRightTab] = useState<'files' | 'backlinks' | 'agent' | 'worktrees'>('backlinks');
   const [closeOpen, setCloseOpen] = useState(false);
+  const rightLayout = usePanesStore((s) => s.layout);
+  const replaceRightLayout = usePanesStore((s) => s.replaceLayout);
+  const activateRightTab = usePanesStore((s) => s.activateTab);
+
+  const rightLeaf =
+    rightLayout.root.type === 'leaf' && rightLayout.root.id === RIGHT_PANE_LEAF_ID
+      ? rightLayout.root
+      : null;
+  const rightTab = rightLeaf?.activeTabId ?? 'backlinks';
 
   const vaultPath = vault?.path;
   useEffect(() => {
@@ -101,6 +124,23 @@ export function VaultView(): JSX.Element {
   }, [view.kind]);
 
   useEffect(() => {
+    if (rightLeaf) return;
+    replaceRightLayout({
+      root: {
+        type: 'leaf',
+        id: RIGHT_PANE_LEAF_ID,
+        activeTabId: 'backlinks',
+        tabs: RIGHT_PANE_TABS.map((tab) => ({
+          ...tab,
+          data: {},
+          lastActiveAt: new Date().toISOString()
+        }))
+      },
+      focusedLeafId: RIGHT_PANE_LEAF_ID
+    });
+  }, [replaceRightLayout, rightLeaf]);
+
+  useEffect(() => {
     function onOpenDrawer(e: Event): void {
       const detail = (e as CustomEvent<string>).detail;
       if (detail === 'night-shift-history') setNsHistoryOpen(true);
@@ -114,6 +154,28 @@ export function VaultView(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    function onOpenRightTab(e: Event): void {
+      const detail = (e as CustomEvent<
+        | 'files'
+        | 'backlinks'
+        | 'agent'
+        | 'worktrees'
+        | 'review'
+        | 'runlog'
+        | 'diff'
+        | { tab: 'files' | 'backlinks' | 'agent' | 'worktrees' | 'review' | 'runlog' | 'diff' }
+      >).detail;
+      activateRightTab(typeof detail === 'string' ? detail : detail.tab);
+    }
+    window.addEventListener('orbit:open-right-tab', onOpenRightTab as EventListener);
+    return () =>
+      window.removeEventListener(
+        'orbit:open-right-tab',
+        onOpenRightTab as EventListener
+      );
+  }, [activateRightTab]);
+
+  useEffect(() => {
     function onOpenNewProject(): void {
       setNewProjectOpen(true);
     }
@@ -122,8 +184,8 @@ export function VaultView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (rightTab === 'backlinks' && (!active || view.kind !== 'editor')) setRightTab('files');
-  }, [active, rightTab, view.kind]);
+    if (rightTab === 'backlinks' && (!active || view.kind !== 'editor')) activateRightTab('files');
+  }, [active, activateRightTab, rightTab, view.kind]);
 
   async function onOpenWikilink(target: string): Promise<void> {
     const hits = await window.orbit.fs.search(target, { limit: 10 });
@@ -152,7 +214,7 @@ export function VaultView(): JSX.Element {
       await openPath(res.newPath);
       if (opts.distill) {
         toast('Distilling project…');
-        setRightTab('agent');
+        activateRightTab('agent');
         try {
           const out = await window.orbit.distill.project(res.uid);
           toast(`Distilled → ${out.resourceRelPath}`);
@@ -227,18 +289,18 @@ export function VaultView(): JSX.Element {
 
       <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
         <div className="flex shrink-0 border-b border-neutral-200 text-xs dark:border-neutral-800">
-          {(['files', 'backlinks', 'agent', 'worktrees'] as const).filter((tab) => tab !== 'backlinks' || view.kind === 'editor').map((tab) => (
+          {RIGHT_PANE_TABS.filter((tab) => tab.id !== 'backlinks' || view.kind === 'editor').map((tab) => (
             <button
-              key={tab}
-              onClick={() => setRightTab(tab)}
+              key={tab.id}
+              onClick={() => activateRightTab(tab.id)}
               className={
                 'flex-1 px-3 py-2 capitalize ' +
-                (rightTab === tab
+                (rightTab === tab.id
                   ? 'bg-neutral-200/60 dark:bg-neutral-800/60'
                   : 'hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30')
               }
             >
-              {tab === 'files' ? 'Files' : tab === 'backlinks' ? 'Backlinks' : tab === 'agent' ? 'Agent' : 'Worktrees'}
+              {tab.title}
             </button>
           ))}
         </div>
@@ -253,6 +315,12 @@ export function VaultView(): JSX.Element {
             <BacklinksPanel />
           ) : rightTab === 'agent' ? (
             <AgentPanel />
+          ) : rightTab === 'review' ? (
+            <ReviewInboxView />
+          ) : rightTab === 'runlog' ? (
+            <RunLogPane />
+          ) : rightTab === 'diff' ? (
+            <DiffWorkspacePane />
           ) : (
             <WorktreesPanel />
           )}

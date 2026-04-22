@@ -2,6 +2,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { nanoid } from 'nanoid';
+import { LIMITS } from '@shared/limits';
+import { createShellReadyScanner } from '../agent/shell/osc133';
 
 export interface OpenSessionArgs {
   cwd: string;
@@ -9,6 +11,7 @@ export interface OpenSessionArgs {
   env?: Record<string, string>;
   cols?: number;
   rows?: number;
+  initialCommand?: string;
 }
 
 export interface SessionInfo {
@@ -100,6 +103,10 @@ function logFilePath(root: string, id: string): string {
   return path.join(logDir(root), `term-${id}-${yyyy}${mm}${dd}.log`);
 }
 
+function normalizeInitialCommand(command: string): string {
+  return command.endsWith('\n') ? command : `${command}\n`;
+}
+
 function rotateIfNeeded(entry: SessionEntry): void {
   if (entry.logBytes < LOG_ROTATE_BYTES) return;
   try {
@@ -119,6 +126,9 @@ function rotateIfNeeded(entry: SessionEntry): void {
 }
 
 export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
+  if (sessions.size >= LIMITS.MAX_CONCURRENT_PTYS) {
+    throw new Error(`too many terminal sessions (limit ${LIMITS.MAX_CONCURRENT_PTYS})`);
+  }
   const absCwd = path.resolve(args.cwd);
   if (!fs.existsSync(absCwd)) throw new Error(`cwd does not exist: ${absCwd}`);
   const stat = await fsp.stat(absCwd);
@@ -178,6 +188,11 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
   };
   sessions.set(id, entry);
 
+  const shellReady =
+    args.initialCommand?.trim()
+      ? createShellReadyScanner(LIMITS.SHELL_READY_TIMEOUT_MS)
+      : null;
+
   proc.onData((data: string) => {
     // If the session has already been reaped (kill, exit, or test cleanup)
     // silently drop stragglers — the pty process may still emit a few bytes.
@@ -191,6 +206,7 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
     } catch {
       /* ignore */
     }
+    shellReady?.push(data);
     for (const l of dataListeners) {
       try {
         l(id, data);
@@ -201,6 +217,7 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
   });
 
   proc.onExit(({ exitCode, signal }) => {
+    shellReady?.cancel();
     for (const l of exitListeners) {
       try {
         l(id, { exitCode, signal });
@@ -218,6 +235,13 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
       sessions.delete(id);
     }
   });
+
+  if (shellReady && args.initialCommand) {
+    void shellReady.ready.then(() => {
+      if (!sessions.has(id)) return;
+      proc.write(normalizeInitialCommand(args.initialCommand!));
+    });
+  }
 
   return info;
 }

@@ -6,10 +6,12 @@ export interface PaneRenderer<TData = unknown> {
   defaultTitle?: (data: TData) => string;
 }
 
-const registry = new Map<PaneKind, PaneRenderer<any>>();
+type StoredPaneRenderer = PaneRenderer<unknown>;
+
+const registry = new Map<PaneKind, StoredPaneRenderer>();
 
 export function registerPane<T>(renderer: PaneRenderer<T>): void {
-  registry.set(renderer.kind, renderer);
+  registry.set(renderer.kind, renderer as unknown as StoredPaneRenderer);
 }
 
 export function getPane(kind: PaneKind): PaneRenderer | undefined {

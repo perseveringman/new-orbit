@@ -9,9 +9,11 @@ import { ORBIT_DIR } from '@shared/constants';
 import type { CheckReport } from '@shared/git';
 import { listProjects, listProjectTaskPaths } from '../project';
 import * as frontmatter from '../frontmatter';
-import { parseTaskSections, appendToSection, serializeTaskSections } from '../task_sections';
+import { parseTaskSections, appendToSection } from '../task_sections';
 import { runPreMergeCheck } from '../git/checks';
 import { hasGhCli } from '../env/gh';
+import { runProjectLifecycle } from '../project_lifecycle';
+import { LIMITS } from '@shared/limits';
 
 export type NightShiftTaskPhase =
   | 'pending'
@@ -93,7 +95,7 @@ export interface NightShiftDeps {
   now?: () => Date;
 }
 
-const MAX_CONCURRENCY_CAP = 4;
+const MAX_CONCURRENCY_CAP = LIMITS.MAX_CONCURRENT_AGENT_RUNS;
 
 // --- DAG sort ---------------------------------------------------------------
 
@@ -157,12 +159,24 @@ async function defaultCreateWorktree(
   await fs.mkdir(path.dirname(worktreePath), { recursive: true });
   const g = simpleGit(projectPath);
   await g.raw(['worktree', 'add', '-b', branch, worktreePath]);
+  await runProjectLifecycle('setup', {
+    projectPath,
+    vaultPath: projectPath,
+    worktreeId: path.basename(worktreePath),
+    cwd: worktreePath
+  });
 }
 
 async function defaultRemoveWorktree(
   projectPath: string,
   worktreePath: string
 ): Promise<void> {
+  await runProjectLifecycle('teardown', {
+    projectPath,
+    vaultPath: projectPath,
+    worktreeId: path.basename(worktreePath),
+    cwd: worktreePath
+  }).catch(() => undefined);
   try {
     const g = simpleGit(projectPath);
     await g.raw(['worktree', 'remove', '--force', worktreePath]);

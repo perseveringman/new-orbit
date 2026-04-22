@@ -1,4 +1,13 @@
-export type PaneKind = 'terminal' | 'diff' | 'run-log' | 'vault-file' | 'review-inbox';
+export type PaneKind =
+  | 'terminal'
+  | 'diff'
+  | 'run-log'
+  | 'vault-file'
+  | 'review-inbox'
+  | 'files'
+  | 'backlinks'
+  | 'agent'
+  | 'worktrees';
 
 export type SplitDirection = 'row' | 'column';
 

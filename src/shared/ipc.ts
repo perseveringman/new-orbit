@@ -186,6 +186,7 @@ export interface TerminalOpenArgsDTO {
   env?: Record<string, string>;
   cols?: number;
   rows?: number;
+  initialCommand?: string;
 }
 
 export interface TerminalSessionInfoDTO {
