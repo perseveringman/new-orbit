@@ -1,0 +1,47 @@
+appId: dev.orbit.app
+productName: Orbit
+asar: true
+artifactName: "${productName}-${version}-${arch}.${ext}"
+
+npmRebuild: true
+buildDependenciesFromSource: false
+
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - "out/**/*"
+  - "package.json"
+  - "!**/node_modules/*/{README.md,readme.md,CHANGELOG.md,changelog.md}"
+  - "!**/node_modules/.cache"
+  - "!**/.DS_Store"
+
+extraResources:
+  - from: "out/mcp"
+    to: "mcp"
+    filter:
+      - "**/*"
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.png
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+
+dmg:
+  sign: false
+  writeUpdateInfo: false

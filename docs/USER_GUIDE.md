@@ -1,0 +1,192 @@
+# Orbit 用户手册 / User Guide (v1.0)
+
+Orbit 是一个"项目即文件夹 + AI 协作"的本地工作台。本指南用一个完整的日常流程，带你从 0 走到 1。
+
+## 1. 首次打开 / Pick or create a vault
+
+首次启动看到 Welcome 界面：
+
+- **Create vault**: 选一个空文件夹，Orbit 会帮你 scaffold `01_Projects / 02_Areas / 03_Resources / 04_Archives` + `.orbit/` 控制目录 + 一份空的 `Vision.md`。
+- **Open vault**: 指向一个已经存在的 Orbit vault（含 `.orbit/config.json`）。
+- **Last vault**: 默认会在启动时自动重开上次的 vault（Settings → General 可关）。
+
+顶部拉到最右可以随时 `Switch vault` 切换工作库。
+
+## 2. 写下你的 Vision.md
+
+Dashboard 顶部有 **Vision** 卡片。第一件事就是把它写出来——Orbit 会把这段文字塞进每个 Agent 的 system prompt，让所有 AI 都知道"你到底想成为谁"。
+
+支持：
+- 使用任何 Markdown 格式
+- 通过 `[[]]` 链接到 Project / Resource / Area 的 README
+- 在 Project Room 里再看一次 Vision 摘要
+
+## 3. 新建项目 / + New Project
+
+顶栏按 **+ New Project** 或按 `⌘N`。
+
+弹窗会问你：
+
+- **Template**: `blank` / `web-app` / `research` / `writing`
+- **Slug**: 会成为文件夹名（`01_Projects/<slug>/`）
+- **Name** + **Description**
+- 可选 area, tags
+
+确认后 Orbit：
+1. 创建 `01_Projects/<slug>/` 文件夹
+2. 初始化独立 git 仓库（`cd` 进去就是一个干净的 repo）
+3. 按模板渲染 `README.md`, `AGENT.md`, `.agent/config.json`
+4. 写入 `.mcp.json`（指向 Orbit 的 MCP server），这样在项目根跑 `claude` 时，CLI 就能调用 Orbit 的工具
+5. 在 Dashboard 上新增一张卡片
+
+## 4. 进入 Project Room
+
+点 Dashboard 卡片或顶栏 **Project** tab 进入 Project Room：
+
+- **左半**：Kanban（inbox / today / doing / blocked / done 五列）
+- **右半上**：四段式 Task Editor
+- **右半下**：嵌入式终端，cwd 就是项目根
+
+Kanban 顶部：
+- 拖拽卡片换列会立即写回 frontmatter 的 `status`
+- 卡片右上角 ▶ 一键发起**单次 headless Agent run**（会走 worktree + ghost-commit 流程）
+- 如果 task 被 Daily Review 选为 "Recommended today"，会有 🌟 徽章
+
+## 5. 在终端里跑 Claude（或 Codex / Gemini）
+
+Project Room 底部终端直接敲：
+
+```bash
+claude
+# or any other MCP-aware CLI
+```
+
+MCP-capable CLI 会读取 `.mcp.json` 并自动连接到 **Orbit Hooks** 服务端。你可以让它调：
+
+| 工具 | 作用 |
+| --- | --- |
+| `search_vault` | 跨整个 vault 全文搜索 |
+| `get_file` | 读任意 `.md`（by UID 或相对路径）|
+| `create_task` | 生成一个四段式 task 到当前项目 |
+| `update_task` | 更新 task 的 frontmatter 或四段内容 |
+| `search_memories` | 读项目 `.agent/memories/` |
+| `save_memory` | 写一条项目级记忆 |
+| `query_project_graph` | 获取项目的 task 列表 + 链接关系 |
+
+让它 "根据 README，生成 3 个 task"——它就会直接调 `create_task` 把任务写进 Kanban。
+
+快捷键：`` ⌘` `` 把焦点扔回终端。
+
+## 6. 四段式任务编辑
+
+每个 task 文件是一份 Markdown：
+
+```md
+---
+uid: XXXXXXXX
+type: task
+project_uid: <project-uid>
+title: ...
+status: doing
+priority: high
+git_branch: orbit/ghost/ABC12345
+---
+
+## Description
+用户视角、目标、验收标准。
+
+## Thinking
+AI 在干活前自己发散出的计划。
+
+## Execution Log
+每一条操作、每一次 `git commit`、每一次 `claude` 调用的时间轴。
+
+## Summary
+收尾时填，会喂给 Daily Review。
+```
+
+编辑器特性：
+- 每段独立保存（去抖 300ms）
+- `## Execution Log` 默认以时间线形式只读展示，勾 "Raw edit" 切换到原文编辑
+- Frontmatter 有专门的表单，也允许你直接 free-form 编辑 description 字段
+- 顶部 "Try rescue" 按钮用于找回孤儿任务（见 §12）
+
+## 7. 拖拽换列 / 单次 Agent run
+
+- 拖卡片：实时改 `status`，`fs:watcher` 会广播事件让 Backlinks / Today / Inbox 同步
+- 点卡片 ▶：发起一个单次 headless 运行
+  - 创建新 worktree → 起 `claude --print` → ghost branch 提交结果
+  - 需人工 preMergeCheck 通过后才能 squash 回 main
+  - 跑完如果超预算会被 budget gate 拦下（顶栏红色 Today pill）
+
+## 8. Night Shift —— 夜间批处理
+
+晚上睡觉前：
+1. Dashboard → **Start Night Shift**
+2. 勾选你要今晚跑的 task、设定并发数 + 是否自动开 PR
+3. 每个 task 会在独立 `.orbit/night-worktrees/<runId>/<taskUid>/` 里执行
+4. 顶栏 🌙 pill 滚动显示进度，点它可随时取消并终止全部子进程
+
+## 9. 次日早晨 / Daily Review
+
+Dashboard → **Today's Journal**：
+- 已有：`02_Areas/Journal/YYYY-MM-DD.md` 直接读
+- 没有：点 **Generate** 让 LLM（或 fallback 模板）生成
+- 生成后会把被推荐的 task 标 🌟 Recommended today
+- 顶栏点 **Journals** 或 **🌙 History** 回看所有历史
+
+## 10. 归档项目
+
+当项目完成：
+- 打开 README，点标题栏的 **结项 / Close project**
+- 可选勾 "Distill"：Orbit 跑一次 LLM distillation 生成一份 Resource 摘要
+- 整个 `01_Projects/<slug>/` 文件夹会被搬到 `04_Archives/YYYY/<slug>/`
+- UID 保持不变，所有 `[[wikilink]]` 依然有效
+
+## 11. 从旧版迁移
+
+如果你的 vault 里还有旧式单文件项目（`01_Projects/<slug>.md`），顶部会出现黄色提示条。点击进入 Migration Dialog：
+
+1. 先做 dryRun 展示将要迁移的项目列表
+2. 确认后，Orbit 在 vault 根做 `git add -A && git commit -m "orbit: pre-v3 migration snapshot"`（如果 vault 根已经是 git repo 的话）
+3. 显示 snapshot 的 SHA；如出问题可 `git reset --hard <sha>` 回滚
+4. 每个项目独立迁移，部分失败会继续处理其它项目并在最终报告里列出失败列表
+5. 再跑一次无变化（幂等）
+
+详见 [MIGRATION.md](./MIGRATION.md)。
+
+## 12. Relink —— 找回跑丢的 task
+
+如果一个 task 文件被意外挪动或项目被改 slug 导致孤儿：
+
+1. 打开那个 task（任意方式）
+2. TaskEditor 顶部 **Try rescue**
+3. 下拉选要挂到哪个项目
+4. 点 **Relink**：后台 IPC `task.relink(path, newProjectUid)` 改 frontmatter + 文件搬到目标项目的 `.agent/tasks/`
+
+## 13. 快捷键
+
+| 键 | 作用 |
+| --- | --- |
+| `⌘K` | Command palette（fuzzy 搜 projects / tasks / vision） |
+| `⌘N` | 新项目 |
+| `⌘⇧N` | 新任务（在 Project Room 内） |
+| `⌘B` | 折叠 / 展开左侧 Sidebar |
+| `` ⌘` `` | 把焦点切到嵌入式终端 |
+| `⌘S` | 强制保存当前编辑器 |
+| `Esc` | 关 Modal / Drawer / Palette |
+
+## 14. Settings 要点
+
+- **Budget**: 每次 run + 每日的 token / USD 上限；Hard stop 打开时超限直接中断
+- **API / CLI**: 自定义 `claude` binary 路径（留空则走 PATH）
+- **Vectors**: 调 wake-up 阈值（0–1，默认 0.2）
+- **Worktree GC**: `worktreeGcEnabled` / `worktreeGcDays`（默认 7 天）
+- **Daily Review**: 定时自动生成 Daily Review 的时间
+
+## 15. 常见问题
+
+- **Claude not found** → Settings → API / CLI 里填 binary 路径
+- **预算耗尽** → Settings → Budget 提高上限或关掉 Hard stop
+- **Worktree 清理不掉** → Settings → Advanced → "Reset all unmerged worktrees"
+- **崩了不启动** → 看 `<vault>/.orbit/crash/YYYY-MM-DD.log` 或 userData 的 crash 目录

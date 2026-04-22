@@ -1,0 +1,129 @@
+import { describe, expect, it } from 'vitest';
+import { IPC, type OrbitApi } from '../src/shared/ipc';
+import { DEFAULT_BUDGET } from '../src/shared/schemas';
+
+describe('IPC contract', () => {
+  it('exposes the required namespaces', () => {
+    expect(Object.keys(IPC).sort()).toEqual(
+      [
+        'agent',
+        'distill',
+        'env',
+        'envExt',
+        'fs',
+        'git',
+        'migrations',
+        'nightShift',
+        'para',
+        'project',
+        'review',
+        'settings',
+        'task',
+        'terminal',
+        'vision',
+        'workspace'
+      ].sort()
+    );
+  });
+
+  it('workspace + settings channels are typed strings', () => {
+    expect(typeof IPC.workspace.pickAndOpen).toBe('string');
+    expect(typeof IPC.settings.setTheme).toBe('string');
+  });
+
+  it('agent namespace declares the M4 + M5 + M6 channels', () => {
+    const keys = Object.keys(IPC.agent).sort();
+    expect(keys).toEqual(
+      [
+        'budgetGet',
+        'budgetUpdate',
+        'costDailyReport',
+        'costRun',
+        'costToday',
+        'detect',
+        'event',
+        'installInWorktree',
+        'list',
+        'startTask',
+        'stop',
+        'tail'
+      ].sort()
+    );
+    // All channel values start with their namespace so main-side registration can't collide.
+    for (const v of Object.values(IPC.agent)) expect(v.startsWith('agent:')).toBe(true);
+  });
+
+  it('git namespace declares M5 worktree + merge channels', () => {
+    const keys = Object.keys(IPC.git).sort();
+    expect(keys).toEqual(
+      [
+        'commit',
+        'createWorktree',
+        'ghostCommit',
+        'listWorktrees',
+        'mergeGhost',
+        'preMergeCheck',
+        'removeWorktree',
+        'resetAll',
+        'status'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.git)) expect(v.startsWith('git:')).toBe(true);
+  });
+
+  it('terminal namespace declares R4 pty channels + events', () => {
+    const keys = Object.keys(IPC.terminal).sort();
+    expect(keys).toEqual(
+      ['data', 'exit', 'kill', 'list', 'open', 'resize', 'write'].sort()
+    );
+    for (const v of Object.values(IPC.terminal)) expect(v.startsWith('terminal:')).toBe(true);
+  });
+
+  it('OrbitApi type shape is assignable', () => {
+    const defSettings = {
+      lastVaultPath: null,
+      theme: 'dark' as const,
+      budget: { ...DEFAULT_BUDGET },
+      reopenLastVault: true,
+      claudePath: '',
+      anthropicApiKey: '',
+      vectorWakeThreshold: 0.2,
+      worktreeGcEnabled: true,
+      worktreeGcDays: 7
+    };
+    // Compile-time test: this block will fail typecheck if the shape drifts.
+    const shape: Pick<OrbitApi, 'workspace' | 'settings'> = {
+      workspace: {
+        pickAndOpen: async () => ({ ok: false, reason: 'cancelled' }),
+        createNew: async () => ({ ok: false, reason: 'cancelled' }),
+        openPath: async (_p: string) => ({ ok: false, reason: 'cancelled' }),
+        current: async () => null,
+        close: async () => undefined,
+        crashLogPath: async () => '/tmp/does-not-matter.log',
+        reportCrash: async () => '/tmp/does-not-matter.log',
+        revealUserData: async () => undefined,
+        revealVaultOrbit: async () => undefined,
+        diagnostics: async () => ({
+          version: '0.0.0',
+          os: 'test',
+          arch: 'x64',
+          electron: '0.0.0',
+          node: '0.0.0',
+          vaultPath: null,
+          claudePath: null,
+          claudeVersion: null,
+          crashLogPath: '/tmp/none.log',
+          userDataPath: '/tmp/userData'
+        })
+      },
+      settings: {
+        get: async () => defSettings,
+        setTheme: async (t) => ({ ...defSettings, theme: t }),
+        update: async (partial) => ({ ...defSettings, ...partial }),
+        detectClaude: async () => ({ available: false, error: 'test' })
+      }
+    };
+    expect(shape.workspace).toBeDefined();
+    expect(shape.settings).toBeDefined();
+  });
+});

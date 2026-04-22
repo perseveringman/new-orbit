@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { loadPersona, composePrompt, HYDRATION_FOOTER } from '../src/main/agent/persona';
+import { buildTaskContext } from '../src/main/agent/context';
+import type { TaskRecord, EntitySummary } from '../src/shared/schemas';
+
+describe('agent persona composition', () => {
+  it('loads AGENT.md body, strips frontmatter, builds a prompt containing persona + task UIDs', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-persona-'));
+    try {
+      await fs.writeFile(
+        path.join(vault, 'AGENT.md'),
+        '---\ntitle: Agent\n---\nYou are Orbit, meticulous and kind.\n',
+        'utf8'
+      );
+      const persona = await loadPersona(vault);
+      expect(persona).toContain('meticulous and kind');
+      expect(persona).not.toContain('title: Agent');
+
+      const task: TaskRecord = {
+        id: 'file:01_Projects/P1.md',
+        source: 'file',
+        status: 'today',
+        title: 'Ship vessel',
+        filePath: '/tmp/fake',
+        relPath: '01_Projects/P1.md',
+        uid: 'TASKUID00001',
+        project_uid: 'PROJUID00001'
+      };
+      const entities: EntitySummary[] = [
+        {
+          type: 'project',
+          uid: 'PROJUID00001',
+          title: 'Orbit M4',
+          relPath: '01_Projects/Orbit.md',
+          path: '/tmp/fake'
+        }
+      ];
+      const ctx = buildTaskContext({ task, entities });
+      const prompt = composePrompt({
+        persona,
+        taskContext: ctx,
+        userAsk: 'Draft a plan.'
+      });
+      expect(prompt).toContain('# Persona');
+      expect(prompt).toContain('meticulous and kind');
+      expect(prompt).toContain('Ship vessel');
+      expect(prompt).toContain('TASKUID00001');
+      expect(prompt).toContain('PROJUID00001');
+      expect(prompt).toContain('Orbit M4');
+      expect(prompt).toContain(HYDRATION_FOOTER);
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to a default persona when AGENT.md is missing', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-persona-'));
+    try {
+      const p = await loadPersona(dir);
+      expect(p.length).toBeGreaterThan(0);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});

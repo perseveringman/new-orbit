@@ -1,0 +1,144 @@
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createVault } from '../src/main/vault';
+import { createProject, listProjects } from '../src/main/project';
+import { listTemplates } from '../src/main/templates';
+
+async function tmpVault(): Promise<string> {
+  const d = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-proj-create-'));
+  await createVault(d);
+  return d;
+}
+
+describe('project.create (R1)', () => {
+  let vault: string;
+  beforeEach(async () => {
+    vault = await tmpVault();
+  });
+  afterEach(async () => {
+    await fs.rm(vault, { recursive: true, force: true });
+  });
+
+  it('listTemplates exposes blank, web-app, research, writing', () => {
+    const ids = listTemplates().map((t) => t.id).sort();
+    expect(ids).toEqual(['blank', 'research', 'web-app', 'writing']);
+  });
+
+  it('scaffolds a folder-backed project with .agent, AGENT.md, README.md, .gitignore and a git repo', async () => {
+    const res = await createProject(vault, {
+      slug: 'my-demo',
+      template: 'blank',
+      name: 'My Demo',
+      description: 'R1 smoke project'
+    });
+    expect(res.slug).toBe('my-demo');
+    expect(res.uid).toMatch(/^[A-Za-z0-9_-]{12}$/);
+    expect(res.projectPath).toBe(path.join(vault, '01_Projects', 'my-demo'));
+
+    // Expected files
+    const agent = await fs.readFile(path.join(res.projectPath, 'AGENT.md'), 'utf8');
+    expect(agent).toContain('My Demo');
+    expect(agent).not.toContain('{{');
+
+    const readme = await fs.readFile(path.join(res.projectPath, 'README.md'), 'utf8');
+    expect(readme).toContain(`uid: ${res.uid}`);
+    expect(readme).toContain('type: project');
+    expect(readme).toContain('slug: my-demo');
+    expect(readme).toContain('status: active');
+    expect(readme).toContain('template: blank');
+
+    const gi = await fs.readFile(path.join(res.projectPath, '.gitignore'), 'utf8');
+    expect(gi).toMatch(/node_modules/);
+    expect(gi).toMatch(/dist/);
+
+    const cfgRaw = await fs.readFile(
+      path.join(res.projectPath, '.agent', 'config.json'),
+      'utf8'
+    );
+    const cfg = JSON.parse(cfgRaw) as { uid: string; slug: string; template: string };
+    expect(cfg.uid).toBe(res.uid);
+    expect(cfg.slug).toBe('my-demo');
+    expect(cfg.template).toBe('blank');
+
+    // Empty dirs placeholded
+    const tasksStat = await fs.stat(path.join(res.projectPath, '.agent', 'tasks'));
+    expect(tasksStat.isDirectory()).toBe(true);
+    const memStat = await fs.stat(path.join(res.projectPath, '.agent', 'memories'));
+    expect(memStat.isDirectory()).toBe(true);
+
+    // Git repo initialized
+    const gitDir = await fs.stat(path.join(res.projectPath, '.git'));
+    expect(gitDir.isDirectory()).toBe(true);
+  });
+
+  it('web-app, research, writing templates add their distinctive directories', async () => {
+    const web = await createProject(vault, {
+      slug: 'web1',
+      template: 'web-app',
+      name: 'Web1'
+    });
+    await fs.stat(path.join(web.projectPath, 'src'));
+    await fs.stat(path.join(web.projectPath, 'docs'));
+
+    const research = await createProject(vault, {
+      slug: 'r1',
+      template: 'research',
+      name: 'R1'
+    });
+    await fs.stat(path.join(research.projectPath, 'docs'));
+    await fs.stat(path.join(research.projectPath, 'notes'));
+
+    const writing = await createProject(vault, {
+      slug: 'w1',
+      template: 'writing',
+      name: 'W1'
+    });
+    await fs.stat(path.join(writing.projectPath, 'drafts'));
+    await fs.stat(path.join(writing.projectPath, 'final'));
+  });
+
+  it('rejects existing slugs and invalid slugs', async () => {
+    await createProject(vault, { slug: 'dup', template: 'blank', name: 'Dup' });
+    await expect(
+      createProject(vault, { slug: 'dup', template: 'blank', name: 'Dup2' })
+    ).rejects.toThrow(/already exists/);
+
+    await expect(
+      createProject(vault, { slug: 'Not-Kebab', template: 'blank', name: 'x' })
+    ).rejects.toThrow(/invalid slug/);
+
+    await expect(
+      createProject(vault, { slug: '-leading', template: 'blank', name: 'x' })
+    ).rejects.toThrow(/invalid slug/);
+  });
+
+  it('listProjects surfaces the new folder-backed project as non-legacy', async () => {
+    const res = await createProject(vault, {
+      slug: 'alpha',
+      template: 'blank',
+      name: 'Alpha'
+    });
+    const list = await listProjects(vault);
+    const p = list.find((x) => x.slug === 'alpha');
+    expect(p).toBeTruthy();
+    expect(p!.uid).toBe(res.uid);
+    expect(p!.legacy).toBe(false);
+    expect(p!.status).toBe('active');
+    expect(p!.name).toBe('Alpha');
+  });
+
+  it('listProjects flags legacy single-file projects', async () => {
+    await fs.writeFile(
+      path.join(vault, '01_Projects', 'legacy-one.md'),
+      '---\nuid: LEGACYUID1234\ntype: project\ntitle: Legacy One\nstatus: active\n---\nbody\n',
+      'utf8'
+    );
+    const list = await listProjects(vault);
+    const p = list.find((x) => x.slug === 'legacy-one');
+    expect(p).toBeTruthy();
+    expect(p!.legacy).toBe(true);
+    expect(p!.uid).toBe('LEGACYUID1234');
+  });
+});

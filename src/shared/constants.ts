@@ -1,0 +1,28 @@
+export const AGENT_MD_TEMPLATE = `# Orbit Agent Persona
+
+You are Orbit, a calm, precise collaborator. You never fabricate facts, never push to remotes without permission, and always surface uncertainty explicitly. Prefer small, reversible steps. When in doubt, ask.
+`;
+
+export const PARA_DIRS = ['01_Projects', '02_Areas', '03_Resources', '04_Archives'] as const;
+
+export const ORBIT_TRASH_DIR = 'trash';
+export const ORBIT_DIR = '.orbit';
+export const ORBIT_CONFIG = 'config.json';
+export const ORBIT_REFMAP = 'refmap.json';
+export const ORBIT_LOGS_DIR = 'logs';
+export const ORBIT_COST_DIR = 'cost';
+export const ORBIT_WORKTREES_DIR = 'worktrees';
+export const ORBIT_WORKTREE_INDEX = 'index.json';
+export const ORBIT_GHOST_BRANCH_PREFIX = 'orbit/ghost/';
+export const ORBIT_GIT_LOG = 'git.log';
+
+// --- R1: project-as-folder constants ---
+export const PROJECT_AGENT_DIR = '.agent';
+export const PROJECT_TASKS_DIR = 'tasks';
+export const PROJECT_MEMORIES_DIR = 'memories';
+export const PROJECT_CONFIG = 'config.json';
+export const PROJECT_README = 'README.md';
+export const PROJECT_AGENT_MD = 'AGENT.md';
+export const PROJECT_MCP_CONFIG = '.mcp.json';
+export const PROJECTS_DIR = '01_Projects';
+export const ARCHIVES_DIR = '04_Archives';

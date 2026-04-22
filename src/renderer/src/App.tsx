@@ -1,0 +1,39 @@
+import { useEffect } from 'react';
+import { useWorkspace } from './store/workspace';
+import { TopBar } from './components/TopBar';
+import { WelcomeView } from './views/WelcomeView';
+import { VaultView } from './views/VaultView';
+import { Toasts } from './components/Toasts';
+import { SettingsModal } from './components/SettingsModal';
+
+export function App(): JSX.Element {
+  const { init, loading, vault, error } = useWorkspace();
+
+  useEffect(() => {
+    void init();
+  }, [init]);
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center bg-neutral-50 text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+        Loading Orbit…
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <TopBar />
+      {error && (
+        <div className="border-b border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-600 dark:text-red-300">
+          {error}
+        </div>
+      )}
+      <main className="flex flex-1 min-h-0">
+        {vault ? <VaultView /> : <WelcomeView />}
+      </main>
+      <Toasts />
+      <SettingsModal />
+    </div>
+  );
+}
