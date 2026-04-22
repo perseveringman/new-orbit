@@ -21,8 +21,10 @@ import {
   type OrphanRescueCandidate,
   type ProjectSummaryDTO,
   type SearchOpts,
-  type TemplateMetaDTO,
-  type TerminalDataEventDTO,
+    type TemplateMetaDTO,
+    type TerminalAgentEventDTO,
+    type TerminalAgentSessionDTO,
+    type TerminalDataEventDTO,
   type TerminalExitEventDTO,
   type TerminalOpenArgsDTO,
   type TerminalSessionInfoDTO,
@@ -211,6 +213,15 @@ const api: OrbitApi = {
       const listener = (_: unknown, ev: TerminalExitEventDTO): void => cb(ev);
       ipcRenderer.on(IPC.terminal.exit, listener);
       return () => ipcRenderer.removeListener(IPC.terminal.exit, listener);
+    }
+  },
+  terminalAgent: {
+    list: (projectUid: string): Promise<TerminalAgentSessionDTO[]> =>
+      ipcRenderer.invoke(IPC.terminalAgent.list, projectUid),
+    onEvent: (cb: (ev: TerminalAgentEventDTO) => void) => {
+      const listener = (_: unknown, ev: TerminalAgentEventDTO): void => cb(ev);
+      ipcRenderer.on(IPC.terminalAgent.event, listener);
+      return () => ipcRenderer.removeListener(IPC.terminalAgent.event, listener);
     }
   },
   review: {

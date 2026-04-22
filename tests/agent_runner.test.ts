@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { spawn as nodeSpawn } from 'node:child_process';
+import * as nodeFs from 'node:fs';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -136,6 +137,46 @@ describe('AgentRunner stream parsing', () => {
       expect(parsed.some((ev) => ev.kind === 'cost')).toBe(true);
       expect(parsed.some((ev) => ev.kind === 'done')).toBe(true);
     } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('does not leak an unhandled rejection when the active file disappears during shutdown', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-race-'));
+    const unhandled: unknown[] = [];
+    const onUnhandled = (error: unknown): void => {
+      unhandled.push(error);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, last } = fakeSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/true',
+        prompt: 'p',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000
+      });
+
+      await runner.start();
+      const child = last();
+      const renameSpy = vi
+        .spyOn(nodeFs.promises, 'rename')
+        .mockRejectedValueOnce(
+          Object.assign(new Error('missing active file'), { code: 'ENOENT' })
+        );
+
+      await runner.stop('test');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      renameSpy.mockRestore();
+
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
       await fs.rm(vault, { recursive: true, force: true });
     }
   });

@@ -7,10 +7,14 @@ import { usePara } from '../store/para';
 import { TaskEditor } from '../components/TaskEditor/TaskEditor';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { MigrationDialog } from '../components/Modals/MigrationDialog';
-import { MarkdownEditor } from '../components/Editor/MarkdownEditor';
+import { TaskDetailsModal } from '../components/Modals/TaskDetailsModal';
 import { TerminalManager } from '../components/Terminal/TerminalManager';
 import type { TerminalManagerHandle } from '../components/Terminal/TerminalManager';
 import { disposeByPrefix } from '../components/Terminal/sessionRegistry';
+import {
+  deriveProjectRoomKanbanModel,
+  resolveProjectRoomPaneHint
+} from './projectRoomModel';
 
 /**
  * ProjectRoomView — the "inside a project" mode.
@@ -21,7 +25,7 @@ import { disposeByPrefix } from '../components/Terminal/sessionRegistry';
  *   ├──────────────────────────────────────────────────────────┤
  *   │ [Kanban]  [Terminal]   ← outer tab bar                   │
  *   ├──────────────────────────────────────────────────────────┤
- *   │ Kanban tab: left 40% Kanban + right 60% Task/README/AGENT│
+ *   │ Kanban tab: full-width kanban + modal task details        │
  *   │ Terminal tab: TerminalManager (multi-tab + split panes)  │
  *   └──────────────────────────────────────────────────────────┘
  */
@@ -38,11 +42,9 @@ export function ProjectRoomView(): JSX.Element {
   const view = usePara((s) => s.view);
   const setView = usePara((s) => s.setView);
   const toast = useFiles((s) => s.toast);
-  const openFilePath = useFiles((s) => s.openPath);
 
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [rightPane, setRightPane] = useState<'task' | 'readme' | 'agent'>('task');
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
 
@@ -124,10 +126,7 @@ export function ProjectRoomView(): JSX.Element {
   // honor it once and ensure Kanban tab is active.
   useEffect(() => {
     if (view.kind !== 'project') return;
-    if (view.pane === 'readme' || view.pane === 'agent') {
-      setRightPane(view.pane);
-      setOuterTab('kanban');
-    } else if (view.pane === 'task') {
+    if (resolveProjectRoomPaneHint(view.pane as 'task' | 'readme' | 'agent' | undefined) === 'task') {
       setOuterTab('kanban');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,6 +135,14 @@ export function ProjectRoomView(): JSX.Element {
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) ?? null,
     [tasks, selectedTaskId]
+  );
+  const kanbanModel = useMemo(
+    () =>
+      deriveProjectRoomKanbanModel({
+        taskCount: tasks.length,
+        selectedTaskId: selectedTask?.id ?? null
+      }),
+    [selectedTask, tasks.length]
   );
 
   const columns = useMemo(() => {
@@ -169,22 +176,6 @@ export function ProjectRoomView(): JSX.Element {
     }
   }
 
-  async function openReadme(): Promise<void> {
-    if (!project) return;
-    setRightPane('readme');
-    await openFilePath(project.readmePath).catch(() => {
-      /* openPath handles its own errors */
-    });
-  }
-  async function openAgentMd(): Promise<void> {
-    if (!project) return;
-    const p = `${project.path}/AGENT.md`;
-    setRightPane('agent');
-    await openFilePath(p).catch(() => {
-      /* ignore */
-    });
-  }
-
   async function archive(): Promise<void> {
     if (!project) return;
     if (!window.confirm(`Archive project "${project.name}"?`)) return;
@@ -213,6 +204,15 @@ export function ProjectRoomView(): JSX.Element {
     }
   }
 
+  function openResumeSession(initialCommand?: string): void {
+    if (!initialCommand) return;
+    setOuterTab('terminal');
+    managerRef.current?.openTab({ initialCommand });
+    setTimeout(() => {
+      managerRef.current?.focusActive();
+    }, 0);
+  }
+
   // Listen for orbit:focus-terminal custom event (fired by ⌘` in VaultView)
   useEffect(() => {
     function onFocusTerminal(): void {
@@ -221,10 +221,25 @@ export function ProjectRoomView(): JSX.Element {
         managerRef.current?.focusActive();
       }, 0);
     }
+    function onResumeTerminalSession(e: Event): void {
+      const detail = (e as CustomEvent<{ projectUid?: string; initialCommand?: string }>).detail;
+      if (detail.projectUid && detail.projectUid !== activeProjectUid) return;
+      openResumeSession(detail.initialCommand);
+    }
     window.addEventListener('orbit:focus-terminal', onFocusTerminal);
-    return () => window.removeEventListener('orbit:focus-terminal', onFocusTerminal);
+    window.addEventListener(
+      'orbit:resume-terminal-session',
+      onResumeTerminalSession as EventListener
+    );
+    return () => {
+      window.removeEventListener('orbit:focus-terminal', onFocusTerminal);
+      window.removeEventListener(
+        'orbit:resume-terminal-session',
+        onResumeTerminalSession as EventListener
+      );
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeProjectUid]);
 
   // ⌘1 / ⌘2 switches outer tabs (only when focus is NOT inside TerminalManager)
   useEffect(() => {
@@ -285,36 +300,28 @@ export function ProjectRoomView(): JSX.Element {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-            onClick={() => void openAgentMd()}
-          >
-            Open AGENT.md
-          </button>
-          <button
-            className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-            onClick={() => void openReadme()}
-          >
-            Open README.md
-          </button>
-          <button
-            className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
-            onClick={() => void enableOrbitTools()}
-            disabled={isLegacy}
-            title={
-              isLegacy
-                ? 'Legacy project — migrate first'
-                : 'Write .mcp.json so Claude Code picks up the seven Orbit tools'
-            }
-          >
-            Enable Orbit Tools
-          </button>
-          <button
-            className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
-            onClick={() => void archive()}
-          >
-            Archive Project
-          </button>
+          {kanbanModel.headerActions.includes('enable-orbit-tools') && (
+            <button
+              className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
+              onClick={() => void enableOrbitTools()}
+              disabled={isLegacy}
+              title={
+                isLegacy
+                  ? 'Legacy project — migrate first'
+                  : 'Write .mcp.json so Claude Code picks up the seven Orbit tools'
+              }
+            >
+              Enable Orbit Tools
+            </button>
+          )}
+          {kanbanModel.headerActions.includes('archive-project') && (
+            <button
+              className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
+              onClick={() => void archive()}
+            >
+              Archive Project
+            </button>
+          )}
         </div>
       </header>
 
@@ -330,8 +337,7 @@ export function ProjectRoomView(): JSX.Element {
 
       {/* Kanban tab content */}
       <div className={`flex min-h-0 flex-1 ${outerTab === 'kanban' ? 'flex' : 'hidden'}`}>
-        {/* Left: Kanban (40%) */}
-        <section className="flex w-2/5 min-w-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
+        <section className={`flex min-w-0 flex-col ${kanbanModel.kanbanPaneClassName}`}>
           <div className="flex shrink-0 items-center justify-between px-4 py-2 text-xs text-neutral-500">
             <span>Kanban · {tasks.length} tasks</span>
             <button
@@ -364,68 +370,13 @@ export function ProjectRoomView(): JSX.Element {
                     status={s}
                     tasks={columns[s]}
                     selectedId={selectedTaskId}
-                    onSelect={(id) => {
-                      setSelectedTaskId(id);
-                      setRightPane('task');
-                    }}
+                    onSelect={(id) => setSelectedTaskId(id)}
                     onDrop={(taskId) => void onDropTask(taskId, s)}
                   />
                 ))}
               </div>
             </div>
           )}
-        </section>
-
-        {/* Right: Task/README/AGENT editor */}
-        <section className="flex w-3/5 min-w-0 flex-col">
-          <div className="flex shrink-0 items-center gap-1 border-b border-neutral-200 px-3 py-1 text-xs dark:border-neutral-800">
-            <PaneTab
-              active={rightPane === 'task'}
-              onClick={() => setRightPane('task')}
-            >
-              Task
-            </PaneTab>
-            <PaneTab
-              active={rightPane === 'readme'}
-              onClick={() => void openReadme()}
-            >
-              README
-            </PaneTab>
-            <PaneTab
-              active={rightPane === 'agent'}
-              onClick={() => void openAgentMd()}
-            >
-              AGENT.md
-            </PaneTab>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col">
-            {rightPane === 'task' ? (
-              selectedTask ? (
-                <TaskEditor
-                  key={selectedTask.filePath}
-                  task={selectedTask}
-                  siblings={tasks}
-                  onFrontmatterChanged={() => void refreshTasks()}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-xs text-neutral-500">
-                  {tasks.length === 0
-                    ? 'Create a task to begin.'
-                    : 'Select a task from the Kanban to edit.'}
-                </div>
-              )
-            ) : (
-              <MarkdownEditor
-                dark={dark}
-                onOpenWikilink={async (target) => {
-                  const hits = await window.orbit.fs.search(target, { limit: 5 });
-                  const first = hits[0];
-                  if (first) await openFilePath(first.path);
-                  else toast(`No file matches [[${target}]]`);
-                }}
-              />
-            )}
-          </div>
         </section>
       </div>
 
@@ -462,7 +413,6 @@ export function ProjectRoomView(): JSX.Element {
                 const next = cur.find((t) => t.uid === res.uid);
                 if (next) {
                   setSelectedTaskId(next.id);
-                  setRightPane('task');
                 }
                 return cur;
               });
@@ -470,6 +420,25 @@ export function ProjectRoomView(): JSX.Element {
           })();
         }}
       />
+      <TaskDetailsModal
+        open={kanbanModel.taskModal.open && selectedTask !== null}
+        title={selectedTask?.title ?? 'Task'}
+        detail={selectedTask?.relPath}
+        onClose={() => setSelectedTaskId(null)}
+      >
+        {selectedTask ? (
+          <TaskEditor
+            key={selectedTask.filePath}
+            task={selectedTask}
+            siblings={tasks}
+            onFrontmatterChanged={() => void refreshTasks()}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-neutral-500">
+            {kanbanModel.taskModal.emptyStateMessage}
+          </div>
+        )}
+      </TaskDetailsModal>
       <MigrationDialog
         open={migrateOpen}
         onClose={() => {
@@ -499,25 +468,6 @@ function OuterTabButton({
           ? 'border-sky-500 text-sky-600 dark:text-sky-400'
           : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
       }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PaneTab({
-  active,
-  onClick,
-  children
-}: {
-  active: boolean;
-  onClick(): void;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded px-2 py-0.5 ${active ? 'bg-neutral-200 dark:bg-neutral-800' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}
     >
       {children}
     </button>

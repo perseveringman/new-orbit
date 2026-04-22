@@ -7,7 +7,12 @@ import { createVault, isVault, openVault } from './vault';
 import { ensureVision, excerptFromBody, readVision, writeVision } from './vision';
 import { getSettings, setLastVaultPath, setTheme, updateSettings } from './settings';
 import { closeFsSession, openFsSession, registerFsIpc } from './fs';
-import { reconcileOnStart, registerAgentIpc } from './agent/ipc';
+import {
+  ensureTerminalAgentRuntimeForVault,
+  handleTerminalPaneExited,
+  reconcileOnStart,
+  registerAgentIpc
+} from './agent/ipc';
 import { registerGitIpc } from './git/ipc';
 import { registerEnvIpc } from './env/ipc';
 import { registerDistillIpc, ensureVectorStore, closeVectorStore } from './distill/ipc';
@@ -109,6 +114,7 @@ async function handlePickAndOpen(): Promise<VaultResult> {
     await ensureVision(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
+    await ensureTerminalAgentRuntimeForVault(dir);
     void ensureVectorStore(dir);
     void runWorktreeGc(dir).catch(() => undefined);
     return { ok: true, vault };
@@ -127,6 +133,7 @@ async function handleCreateNew(): Promise<VaultResult> {
     await setLastVaultPath(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
+    await ensureTerminalAgentRuntimeForVault(dir);
     void ensureVectorStore(dir);
     return { ok: true, vault };
   } catch (e) {
@@ -146,6 +153,7 @@ async function handleOpenPath(_: unknown, dir: string): Promise<VaultResult> {
     await ensureVision(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
+    await ensureTerminalAgentRuntimeForVault(dir);
     void ensureVectorStore(dir);
     return { ok: true, vault };
   } catch (e) {
@@ -156,7 +164,20 @@ async function handleOpenPath(_: unknown, dir: string): Promise<VaultResult> {
 function registerTerminalIpc(): void {
   ipcMain.handle(
     IPC.terminal.open,
-    async (_e, args: terminal.OpenSessionArgs) => terminal.openSession(args)
+    async (_e, args: terminal.OpenSessionArgs) => {
+      if (currentVault) {
+        const runtime = await ensureTerminalAgentRuntimeForVault(currentVault.path);
+        const nextArgs: terminal.OpenSessionArgs = {
+          ...args,
+          env: {
+            ...(args.env ?? {}),
+            ORBIT_HOOK_PORT: String(runtime.port)
+          }
+        };
+        return terminal.openSession(nextArgs);
+      }
+      return terminal.openSession(args);
+    }
   );
   ipcMain.handle(IPC.terminal.write, (_e, id: string, data: string) => {
     terminal.write(id, data);
@@ -183,7 +204,23 @@ function registerTerminalIpc(): void {
 
   terminal.on('data', (id, data) => broadcast(IPC.terminal.data, { id, data }));
   terminal.on('exit', (id, payload) =>
-    broadcast(IPC.terminal.exit, { id, exitCode: payload.exitCode, signal: payload.signal })
+    {
+      if (payload.paneId) {
+        void handleTerminalPaneExited(
+          payload.paneId,
+          payload.projectUid,
+          payload.projectSlug
+        );
+      }
+      broadcast(IPC.terminal.exit, {
+        id,
+        exitCode: payload.exitCode,
+        signal: payload.signal,
+        ...(payload.paneId ? { paneId: payload.paneId } : {}),
+        ...(payload.projectUid ? { projectUid: payload.projectUid } : {}),
+        ...(payload.projectSlug ? { projectSlug: payload.projectSlug } : {})
+      });
+    }
   );
 }
 
@@ -307,6 +344,7 @@ app.whenReady().then(async () => {
       await ensureVision(settings.lastVaultPath);
       await openFsSession(settings.lastVaultPath);
       await reconcileOnStart(settings.lastVaultPath);
+      await ensureTerminalAgentRuntimeForVault(settings.lastVaultPath);
       void ensureVectorStore(settings.lastVaultPath);
       void runWorktreeGc(settings.lastVaultPath).catch(() => undefined);
     }

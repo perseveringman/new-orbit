@@ -10,6 +10,12 @@ import {
   clearSession
 } from './sessionRegistry';
 import { syncTerminalSize } from './terminalSizing';
+import {
+  acknowledgeTerminalPaneStatus,
+  applyTerminalPaneEvent,
+  clearTerminalPaneStatus,
+  type TerminalPaneAgentStatus
+} from './terminalAgentStatus';
 
 export interface TerminalPaneHandle {
   refit(): void;
@@ -19,6 +25,10 @@ export interface TerminalPaneHandle {
 export interface TerminalPaneProps {
   cwd: string;
   sessionKey: string;
+  paneId?: string;
+  projectUid?: string;
+  isVisible?: boolean;
+  initialCommand?: string;
   dark?: boolean;
   /**
    * Extra environment variables injected into the pty session. R5 uses
@@ -30,10 +40,28 @@ export interface TerminalPaneProps {
   env?: Record<string, string>;
   onExit?: (info: { exitCode: number; signal?: number }) => void;
   onFocus?: () => void;
+  onInitialCommandConsumed?: () => void;
+  onStatusChange?: (status: TerminalPaneAgentStatus) => void;
 }
 
 export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
-  function TerminalPane({ cwd, sessionKey, dark, env, onExit, onFocus }, ref) {
+  function TerminalPane(
+    {
+      cwd,
+      sessionKey,
+      paneId,
+      projectUid,
+      isVisible = true,
+      initialCommand,
+      dark,
+      env,
+      onExit,
+      onFocus,
+      onInitialCommandConsumed,
+      onStatusChange
+    },
+    ref
+  ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const termRef = useRef<Terminal | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
@@ -45,6 +73,7 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
     const [exitState, setExitState] = useState<{ exitCode: number; signal?: number } | null>(
       null
     );
+    const [agentStatus, setAgentStatus] = useState<TerminalPaneAgentStatus>('idle');
 
     function syncNow(): void {
       const host = hostRef.current;
@@ -70,6 +99,14 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         termRef.current?.focus();
       }
     }));
+
+    useEffect(() => {
+      setAgentStatus((current) => acknowledgeTerminalPaneStatus(current, isVisible));
+    }, [isVisible]);
+
+    useEffect(() => {
+      onStatusChange?.(agentStatus);
+    }, [agentStatus, onStatusChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,9 +152,16 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         if (!info) {
           const cols = term.cols || 80;
           const rows = term.rows || 24;
-          info = await getOrCreateSession(sessionKey, () =>
-            window.orbit.terminal.open({ cwd, cols, rows, ...(env ? { env } : {}) })
+            info = await getOrCreateSession(sessionKey, () =>
+            window.orbit.terminal.open({
+              cwd,
+              cols,
+              rows,
+              ...(initialCommand ? { initialCommand } : {}),
+              ...(env ? { env } : {})
+            })
           );
+          if (initialCommand) onInitialCommandConsumed?.();
           // Give the welcome message after ~1s so users notice.
           setTimeout(() => {
             if (!cancelled && termRef.current === term) welcome(info!);
@@ -151,15 +195,23 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
     });
     const offExit = window.orbit.terminal.onExit((ev) => {
       const s = sessionRef.current;
-      if (s && ev.id === s.id) {
-        setExitState({ exitCode: ev.exitCode, signal: ev.signal });
-        setSession(null);
-        clearSession(sessionKey);
-        sessionRef.current = null;
-        lastGridRef.current = null;
-        onExit?.({ exitCode: ev.exitCode, signal: ev.signal });
-      }
-    });
+        if (s && ev.id === s.id) {
+          setExitState({ exitCode: ev.exitCode, signal: ev.signal });
+          setSession(null);
+          clearSession(sessionKey);
+          sessionRef.current = null;
+          lastGridRef.current = null;
+          setAgentStatus(clearTerminalPaneStatus());
+          onExit?.({ exitCode: ev.exitCode, signal: ev.signal });
+        }
+      });
+      const offAgent = window.orbit.terminalAgent.onEvent((ev) => {
+        if (!paneId || ev.paneId !== paneId) return;
+        if (projectUid && ev.projectUid && ev.projectUid !== projectUid) return;
+        setAgentStatus((current) =>
+          applyTerminalPaneEvent(current, ev.eventType, isVisible)
+        );
+      });
 
       let resizeFrame: number | null = null;
       const scheduleSync = (): void => {
@@ -180,6 +232,7 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
         offData();
         offExit();
+        offAgent();
         dataDisp.dispose();
         try {
           term.dispose();
@@ -191,7 +244,7 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         // Pty session intentionally preserved.
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionKey, cwd]);
+    }, [sessionKey, cwd, initialCommand, paneId, projectUid, isVisible]);
 
   async function handleKill(): Promise<void> {
     const s = sessionRef.current;
@@ -213,12 +266,14 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
           cwd,
         cols: term.cols || 80,
         rows: term.rows || 24,
+        ...(initialCommand ? { initialCommand } : {}),
         ...(env ? { env } : {})
       });
         regSetSession(sessionKey, info);
       sessionRef.current = info;
       setSession(info);
       lastGridRef.current = null;
+      setAgentStatus(clearTerminalPaneStatus());
       term.writeln(`\x1b[2m# Restarted · pid=${info.pid}\x1b[0m`);
     } catch (e) {
       term.writeln(`\x1b[31mRestart failed: ${(e as Error).message}\x1b[0m`);
@@ -244,6 +299,18 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
       className={`flex h-full min-h-0 min-w-0 flex-col ${dark ? 'bg-neutral-950' : 'bg-white'}`}
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-800">
+        <span
+          className={`inline-flex h-2.5 w-2.5 rounded-full ${
+            agentStatus === 'permission'
+              ? 'bg-red-500 animate-pulse'
+              : agentStatus === 'review'
+                ? 'bg-emerald-500'
+                : agentStatus === 'working'
+                  ? 'bg-amber-400 animate-pulse'
+                  : 'bg-transparent'
+          }`}
+          title={agentStatus}
+        />
         <span className="font-mono">
           Terminal{' '}
           {session ? (

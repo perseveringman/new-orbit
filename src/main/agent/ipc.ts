@@ -1,5 +1,6 @@
 import { BrowserWindow, app, ipcMain } from 'electron';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { ORBIT_DIR, ORBIT_LOGS_DIR } from '@shared/constants';
 import { IPC } from '@shared/ipc';
@@ -49,12 +50,23 @@ import {
 } from '../distill/wakeup';
 import { attachEventRouter } from './eventRouter';
 import { startHookServer, type HookServer } from './hooks/server';
+import { installTerminalAgentHooks } from './setup/terminal_hooks';
+import {
+  ingestTerminalHookEvent,
+  listTerminalAgentSessions,
+  markTerminalPaneExited,
+  reconcileTerminalAgentSessionsOnStart
+} from './terminal_sessions';
+import { findBestClaudeResumeTarget } from './claude_sessions';
+import { listProjects } from '../project';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
+const TERMINAL_AGENT_EVENT_CHANNEL = IPC.terminalAgent.event;
 const reattachedRuns = new Map<string, { summary: RunSummary; events: AgentEvent[] }>();
 let hookServer: HookServer | null = null;
 let hookRouter: ReturnType<typeof attachEventRouter> | null = null;
 let hookSeq = 0;
+const terminalHookInstalledVaults = new Set<string>();
 
 function broadcastPool(): void {
   const pool = getPool();
@@ -68,6 +80,12 @@ function broadcastPool(): void {
 function broadcastAgentEvent(runId: string, event: AgentEvent): void {
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) w.webContents.send(AGENT_EVENT_CHANNEL, { runId, event });
+  }
+}
+
+function broadcastTerminalAgentEvent(event: Record<string, unknown>): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(TERMINAL_AGENT_EVENT_CHANNEL, event);
   }
 }
 
@@ -92,8 +110,42 @@ async function ensureHookRuntime(): Promise<HookServer> {
       };
       broadcastAgentEvent(routed.runId, event);
     });
+    hookServer.events.on('terminal-event', (envelope) => {
+      const sess = currentSession();
+      if (!sess) return;
+      void ingestTerminalHookEvent(sess.vault, envelope)
+        .then((session) => {
+          broadcastTerminalAgentEvent({
+            ...envelope,
+            ...(session
+              ? {
+                  sessionId: session.sessionId,
+                  agentType: session.agentType,
+                  status: session.status
+                }
+              : {}),
+            reason: 'hook'
+          });
+        })
+        .catch(() => undefined);
+    });
   }
   return hookServer;
+}
+
+export async function ensureTerminalAgentRuntimeForVault(
+  vaultPath: string
+): Promise<{ port: number }> {
+  const server = await ensureHookRuntime();
+  if (!terminalHookInstalledVaults.has(vaultPath)) {
+    await installTerminalAgentHooks({
+      vaultPath,
+      hookPort: server.port,
+      homeDir: os.homedir()
+    });
+    terminalHookInstalledVaults.add(vaultPath);
+  }
+  return { port: server.port };
 }
 
 export async function getHookRuntimeConfig(
@@ -107,6 +159,30 @@ export async function getHookRuntimeConfig(
     vendor: 'claude',
     worktreeId
   };
+}
+
+export async function handleTerminalPaneExited(
+  paneId: string,
+  projectUid?: string,
+  projectSlug?: string,
+  ts: string = new Date().toISOString()
+): Promise<void> {
+  const sess = currentSession();
+  if (!sess) return;
+  const completed = await markTerminalPaneExited(sess.vault, paneId, ts);
+  if (!completed) return;
+  broadcastTerminalAgentEvent({
+    eventType: 'Stop',
+    rawEventType: 'terminal-exit',
+    paneId,
+    ...(projectUid ? { projectUid } : {}),
+    ...(projectSlug ? { projectSlug } : {}),
+    ts,
+    sessionId: completed.sessionId,
+    agentType: completed.agentType,
+    status: completed.status,
+    reason: 'exit'
+  });
 }
 
 let wired = false;
@@ -140,6 +216,32 @@ export function registerAgentIpc(): void {
     ...Array.from(reattachedRuns.values(), (run) => run.summary),
     ...getPool().list()
   ]);
+
+  ipcMain.handle(IPC.terminalAgent.list, async (_e, projectUid: string) => {
+    const sess = currentSession();
+    if (!sess) return [];
+    const sessions = await listTerminalAgentSessions(sess.vault, projectUid);
+    const projects = await listProjects(sess.vault);
+    const project = projects.find((item) => item.uid === projectUid);
+    if (!project) return sessions;
+    const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
+    return Promise.all(
+      sessions.map(async (session) => {
+        if (session.agentType !== 'claude') {
+          return { ...session, resumeSessionId: null, resumeCommand: null };
+        }
+        const target = await findBestClaudeResumeTarget(claudeRoot, project.path, {
+          startedAt: session.startedAt,
+          ...(session.endedAt ? { endedAt: session.endedAt } : {})
+        });
+        return {
+          ...session,
+          resumeSessionId: target?.sessionId ?? null,
+          resumeCommand: target ? `claude --resume ${target.sessionId}` : null
+        };
+      })
+    );
+  });
 
   ipcMain.handle(
     IPC.agent.tail,
@@ -452,6 +554,8 @@ async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
  */
 export async function reconcileOnStart(vaultPath: string): Promise<void> {
   try {
+    await reconcileTerminalAgentSessionsOnStart(vaultPath);
+    await ensureTerminalAgentRuntimeForVault(vaultPath);
     reattachedRuns.clear();
     const snapshots = await reconcileOrphans(vaultPath);
     for (const snap of snapshots) {

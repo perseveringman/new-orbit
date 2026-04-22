@@ -20,6 +20,7 @@ describe('IPC contract', () => {
         'settings',
         'task',
         'terminal',
+        'terminalAgent',
         'vision',
         'workspace'
       ].sort()
@@ -79,6 +80,14 @@ describe('IPC contract', () => {
       ['data', 'exit', 'kill', 'list', 'open', 'resize', 'write'].sort()
     );
     for (const v of Object.values(IPC.terminal)) expect(v.startsWith('terminal:')).toBe(true);
+  });
+
+  it('terminalAgent namespace declares session awareness channels', () => {
+    const keys = Object.keys(IPC.terminalAgent).sort();
+    expect(keys).toEqual(['event', 'list'].sort());
+    for (const v of Object.values(IPC.terminalAgent)) {
+      expect(v.startsWith('terminalAgent:')).toBe(true);
+    }
   });
 
   it('OrbitApi type shape is assignable', () => {

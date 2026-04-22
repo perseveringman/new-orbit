@@ -11,6 +11,8 @@ import { TerminalPane } from './TerminalPane';
 import type { TerminalPaneHandle } from './TerminalPane';
 import { disposeSession } from './sessionRegistry';
 import { getTerminalShortcutAction } from './terminalHotkeys';
+import type { TerminalPaneAgentStatus } from './terminalAgentStatus';
+import { upsertTerminalPaneStatus } from './terminalPaneStatusRegistry';
 import {
   getLeafWrapperStyle,
   getPrimarySplitSectionStyle,
@@ -101,11 +103,15 @@ interface SplitNodeSharedProps {
   cwd: string;
   dark?: boolean;
   env?: Record<string, string>;
+  isVisible: boolean;
   focusedLeafId: string;
   zoomedLeafId: string | null;
   onFocusLeaf(leafId: string): void;
   onPersist(): void;
   paneRefs: React.MutableRefObject<Map<string, React.RefObject<TerminalPaneHandle>>>;
+  initialCommandForLeaf(leafId: string): string | undefined;
+  onInitialCommandConsumed(leafId: string): void;
+  onPaneStatusChange(leafId: string, status: TerminalPaneAgentStatus): void;
 }
 
 interface SplitNodeProps extends SplitNodeSharedProps {
@@ -117,7 +123,21 @@ interface LeafPaneProps extends SplitNodeSharedProps {
   node: Extract<PaneNode, { kind: 'leaf' }>;
 }
 
-function LeafPane({ node, projectUid, cwd, dark, env, focusedLeafId, zoomedLeafId, onFocusLeaf, paneRefs }: LeafPaneProps): JSX.Element {
+function LeafPane({
+  node,
+  projectUid,
+  cwd,
+  dark,
+  env,
+  isVisible,
+  focusedLeafId,
+  zoomedLeafId,
+  onFocusLeaf,
+  paneRefs,
+  initialCommandForLeaf,
+  onInitialCommandConsumed,
+  onPaneStatusChange
+}: LeafPaneProps): JSX.Element {
   const sessionKey = `${projectUid}::${node.id}`;
   const isFocused = node.id === focusedLeafId;
   const isZoomed = node.id === zoomedLeafId;
@@ -127,6 +147,15 @@ function LeafPane({ node, projectUid, cwd, dark, env, focusedLeafId, zoomedLeafI
   }
 
   const wrapperStyle = getLeafWrapperStyle(isZoomed);
+  const handleInitialCommandConsumed = useCallback(() => {
+    onInitialCommandConsumed(node.id);
+  }, [node.id, onInitialCommandConsumed]);
+  const handleStatusChange = useCallback(
+    (status: TerminalPaneAgentStatus) => {
+      onPaneStatusChange(node.id, status);
+    },
+    [node.id, onPaneStatusChange]
+  );
 
   return (
     <div
@@ -139,9 +168,15 @@ function LeafPane({ node, projectUid, cwd, dark, env, focusedLeafId, zoomedLeafI
         ref={paneRefs.current.get(sessionKey)!}
         cwd={cwd}
         sessionKey={sessionKey}
+        paneId={node.id}
+        projectUid={projectUid}
+        isVisible={isVisible && (zoomedLeafId === null || zoomedLeafId === node.id)}
+        initialCommand={initialCommandForLeaf(node.id)}
         dark={dark}
-        env={env}
+        env={env ? { ...env, ORBIT_PANE_ID: node.id } : { ORBIT_PANE_ID: node.id }}
         onFocus={() => onFocusLeaf(node.id)}
+        onInitialCommandConsumed={handleInitialCommandConsumed}
+        onStatusChange={handleStatusChange}
       />
     </div>
   );
@@ -243,6 +278,7 @@ function SplitNode({ node, onNodeChange, ...shared }: SplitNodeProps): JSX.Eleme
 
 export interface TerminalManagerHandle {
   focusActive(): void;
+  openTab(opts?: { initialCommand?: string }): void;
 }
 
 interface TerminalManagerProps {
@@ -261,6 +297,9 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
     const [renameValue, setRenameValue] = useState('');
     const managerRootRef = useRef<HTMLDivElement>(null);
     const paneRefs = useRef<Map<string, React.RefObject<TerminalPaneHandle>>>(new Map());
+    const pendingInitialCommands = useRef<Map<string, string>>(new Map());
+    const paneStatusesRef = useRef<Map<string, TerminalPaneAgentStatus>>(new Map());
+    const [, setPaneStatusVersion] = useState(0);
     const stateRef = useRef(state);
     stateRef.current = state;
 
@@ -276,6 +315,8 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
     // Reload state when projectUid changes
     useEffect(() => {
       setState(loadState(projectUid) ?? defaultState());
+      paneStatusesRef.current.clear();
+      pendingInitialCommands.current.clear();
     }, [projectUid]);
 
     // ── Refit on tab switch ────────────────────────────────────────────────
@@ -300,12 +341,15 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
         if (!tab) return;
         const key = `${projectUid}::${tab.focusedLeafId}`;
         paneRefs.current.get(key)?.current?.focus();
+      },
+      openTab(opts) {
+        newTab(opts);
       }
     }));
 
     // ── Core operations ───────────────────────────────────────────────────
 
-    function newTab(): void {
+    function newTab(opts?: { initialCommand?: string }): void {
       const leafId = makeLeafId();
       const tabId = makeTabId();
       const count = stateRef.current.tabs.length + 1;
@@ -316,6 +360,9 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
         focusedLeafId: leafId,
         zoomedLeafId: null
       };
+      if (opts?.initialCommand) {
+        pendingInitialCommands.current.set(leafId, opts.initialCommand);
+      }
       setState((prev) => {
         const next = { tabs: [...prev.tabs, newTabState], activeTabId: tabId };
         stateRef.current = next;
@@ -330,6 +377,8 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       // Dispose all PTYs in this tab
       const leafIds = getAllLeafIds(tab.root);
       for (const leafId of leafIds) {
+        paneStatusesRef.current.delete(leafId);
+        pendingInitialCommands.current.delete(leafId);
         void disposeSession(`${projectUid}::${leafId}`);
       }
       setState((prev) => {
@@ -400,6 +449,8 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       if (!tab) return;
 
       void disposeSession(`${projectUid}::${leafId}`);
+      paneStatusesRef.current.delete(leafId);
+      pendingInitialCommands.current.delete(leafId);
       const result = deriveClosePaneResult(tab.root, leafId, tab.zoomedLeafId);
 
       if (result.root === null || result.focusedLeafId === null) {
@@ -560,6 +611,31 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       setRenamingTabId(null);
     }
 
+    const initialCommandForLeaf = useCallback((leafId: string): string | undefined => {
+      return pendingInitialCommands.current.get(leafId);
+    }, []);
+
+    const onInitialCommandConsumed = useCallback((leafId: string): void => {
+      pendingInitialCommands.current.delete(leafId);
+    }, []);
+
+    const onPaneStatusChange = useCallback((leafId: string, status: TerminalPaneAgentStatus): void => {
+      if (!upsertTerminalPaneStatus(paneStatusesRef.current, leafId, status)) {
+        return;
+      }
+      setPaneStatusVersion((value) => value + 1);
+    }, []);
+
+    function tabIndicatorStatus(tab: TabState): TerminalPaneAgentStatus | null {
+      const statuses = getAllLeafIds(tab.root).map(
+        (leafId) => paneStatusesRef.current.get(leafId) ?? 'idle'
+      );
+      if (statuses.some((status) => status === 'permission')) return 'permission';
+      if (statuses.some((status) => status === 'review')) return 'review';
+      if (statuses.some((status) => status === 'working')) return 'working';
+      return null;
+    }
+
     // ── Render ───────────────────────────────────────────────────────────────
     const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? state.tabs[0];
 
@@ -603,6 +679,17 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
                       : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                   }`}
                 >
+                  {tabIndicatorStatus(tab) && (
+                    <span
+                      className={`inline-flex h-2 w-2 rounded-full ${
+                        tabIndicatorStatus(tab) === 'permission'
+                          ? 'bg-red-500 animate-pulse'
+                          : tabIndicatorStatus(tab) === 'review'
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-400 animate-pulse'
+                      }`}
+                    />
+                  )}
                   <span>{idx + 1}. {tab.title}</span>
                   <span
                     role="button"
@@ -619,7 +706,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
             </div>
           ))}
           <button
-            onClick={newTab}
+            onClick={() => newTab()}
             className="px-3 py-1.5 shrink-0 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             +
@@ -647,6 +734,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
                 cwd={cwd}
                 dark={dark}
                 env={env}
+                isVisible={tab.id === state.activeTabId}
                 focusedLeafId={tab.focusedLeafId}
                 zoomedLeafId={tab.zoomedLeafId}
                 onFocusLeaf={(leafId) => {
@@ -657,6 +745,9 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
                 }}
                 onPersist={persist}
                 paneRefs={paneRefs}
+                initialCommandForLeaf={initialCommandForLeaf}
+                onInitialCommandConsumed={onInitialCommandConsumed}
+                onPaneStatusChange={onPaneStatusChange}
               />
             </div>
           ))}

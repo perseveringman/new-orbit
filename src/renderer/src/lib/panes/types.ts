@@ -1,5 +1,6 @@
 export type PaneKind =
   | 'terminal'
+  | 'terminal-history'
   | 'diff'
   | 'run-log'
   | 'vault-file'

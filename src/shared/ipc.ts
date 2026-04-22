@@ -160,6 +160,10 @@ export const IPC = {
     data: 'terminal:data',
     exit: 'terminal:exit'
   },
+  terminalAgent: {
+    list: 'terminalAgent:list',
+    event: 'terminalAgent:event'
+  },
   review: {
     generate: 'review:generate',
     get: 'review:get',
@@ -195,6 +199,9 @@ export interface TerminalSessionInfoDTO {
   cwd: string;
   shell: string;
   createdAt: string;
+  paneId?: string;
+  projectUid?: string;
+  projectSlug?: string;
 }
 
 export interface TerminalDataEventDTO {
@@ -206,6 +213,38 @@ export interface TerminalExitEventDTO {
   id: string;
   exitCode: number;
   signal?: number;
+  paneId?: string;
+  projectUid?: string;
+  projectSlug?: string;
+}
+
+export interface TerminalAgentSessionDTO {
+  sessionId: string;
+  paneId: string;
+  projectUid: string;
+  agentType: string;
+  status: 'active' | 'completed' | 'interrupted';
+  startedAt: string;
+  endedAt?: string;
+  lastActivityAt: string;
+  stats: {
+    promptCount: number;
+    permissionCount: number;
+  };
+  resumeSessionId?: string | null;
+  resumeCommand?: string | null;
+}
+
+export interface TerminalAgentEventDTO {
+  eventType: 'Start' | 'Stop' | 'PermissionRequest' | 'Progress';
+  rawEventType?: string;
+  paneId?: string;
+  projectUid?: string;
+  ts: string;
+  agentType?: string;
+  sessionId?: string;
+  status?: 'active' | 'completed' | 'interrupted';
+  reason?: 'hook' | 'exit';
 }
 
 export interface SearchOpts {
@@ -569,6 +608,10 @@ export interface OrbitApi {
     list(): Promise<TerminalSessionInfoDTO[]>;
     onData(cb: (ev: TerminalDataEventDTO) => void): () => void;
     onExit(cb: (ev: TerminalExitEventDTO) => void): () => void;
+  };
+  terminalAgent: {
+    list(projectUid: string): Promise<TerminalAgentSessionDTO[]>;
+    onEvent(cb: (ev: TerminalAgentEventDTO) => void): () => void;
   };
   review: {
     generate(date?: string): Promise<DailyReviewDTO>;

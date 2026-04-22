@@ -141,7 +141,21 @@ async function writeActive(
   await fs.mkdir(path.dirname(f), { recursive: true });
   const tmp = `${f}.tmp-${process.pid}-${Date.now()}`;
   await fs.writeFile(tmp, JSON.stringify(map, null, 2), 'utf8');
-  await fs.rename(tmp, f);
+  try {
+    await fs.rename(tmp, f);
+  } catch (error) {
+    if (isMissingPathError(error)) return;
+    throw error;
+  }
+}
+
+function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'ENOENT'
+  );
 }
 
 function isAlive(pid: number): boolean {

@@ -20,12 +20,18 @@ export interface SessionInfo {
   cwd: string;
   shell: string;
   createdAt: string;
+  paneId?: string;
+  projectUid?: string;
+  projectSlug?: string;
 }
 
 export type PtyEvent = 'data' | 'exit';
 export interface ExitPayload {
   exitCode: number;
   signal?: number;
+  paneId?: string;
+  projectUid?: string;
+  projectSlug?: string;
 }
 
 type DataListener = (id: string, payload: string) => void;
@@ -175,7 +181,16 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
     pid: proc.pid,
     cwd: absCwd,
     shell,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    ...(typeof args.env?.['ORBIT_PANE_ID'] === 'string'
+      ? { paneId: args.env['ORBIT_PANE_ID'] }
+      : {}),
+    ...(typeof args.env?.['ORBIT_PROJECT_UID'] === 'string'
+      ? { projectUid: args.env['ORBIT_PROJECT_UID'] }
+      : {}),
+    ...(typeof args.env?.['ORBIT_PROJECT_SLUG'] === 'string'
+      ? { projectSlug: args.env['ORBIT_PROJECT_SLUG'] }
+      : {})
   };
 
   const entry: SessionEntry = {
@@ -220,7 +235,13 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
     shellReady?.cancel();
     for (const l of exitListeners) {
       try {
-        l(id, { exitCode, signal });
+        l(id, {
+          exitCode,
+          signal,
+          ...(info.paneId ? { paneId: info.paneId } : {}),
+          ...(info.projectUid ? { projectUid: info.projectUid } : {}),
+          ...(info.projectSlug ? { projectSlug: info.projectSlug } : {})
+        });
       } catch {
         /* ignore */
       }

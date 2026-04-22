@@ -10,6 +10,7 @@ import { WorktreesPanel } from '../components/Sidebar/WorktreesPanel';
 import { MarkdownEditor } from '../components/Editor/MarkdownEditor';
 import { CommandPalette } from '../components/CommandPalette';
 import { ProjectsNav } from '../components/Sidebar/ProjectsNav';
+import { TerminalSessionsPanel } from '../components/Sidebar/TerminalSessionsPanel';
 import { CloseProjectDialog } from '../components/CloseProjectDialog';
 import { InboxView } from './InboxView';
 import { TodayView } from './TodayView';
@@ -25,17 +26,14 @@ import { ReviewInboxView } from './ReviewInboxView';
 import { RunLogPane } from '../components/RunLogPane';
 import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
 import { usePanesStore } from '../lib/panes/store';
+import {
+  RIGHT_PANE_TABS,
+  getVisibleRightPaneTabs,
+  resolveVisibleRightPaneTab,
+  type RightPaneTabId
+} from './vaultRightSidebarModel';
 
 const RIGHT_PANE_LEAF_ID = 'vault-right-sidebar';
-const RIGHT_PANE_TABS = [
-  { id: 'files', kind: 'files', title: 'Files' },
-  { id: 'backlinks', kind: 'backlinks', title: 'Backlinks' },
-  { id: 'agent', kind: 'agent', title: 'Agent' },
-  { id: 'worktrees', kind: 'worktrees', title: 'Worktrees' },
-  { id: 'review', kind: 'review-inbox', title: 'Review' },
-  { id: 'runlog', kind: 'run-log', title: 'Run Log' },
-  { id: 'diff', kind: 'diff', title: 'Diff' }
-] as const;
 
 export function VaultView(): JSX.Element {
   const { vault, settings } = useWorkspace();
@@ -59,7 +57,9 @@ export function VaultView(): JSX.Element {
     rightLayout.root.type === 'leaf' && rightLayout.root.id === RIGHT_PANE_LEAF_ID
       ? rightLayout.root
       : null;
-  const rightTab = rightLeaf?.activeTabId ?? 'backlinks';
+  const rightTab = rightLeaf?.activeTabId ?? 'files';
+  const visibleRightTabs = getVisibleRightPaneTabs(view.kind);
+  const visibleRightTab = resolveVisibleRightPaneTab(rightTab, view.kind);
 
   const vaultPath = vault?.path;
   useEffect(() => {
@@ -129,7 +129,7 @@ export function VaultView(): JSX.Element {
       root: {
         type: 'leaf',
         id: RIGHT_PANE_LEAF_ID,
-        activeTabId: 'backlinks',
+        activeTabId: 'files',
         tabs: RIGHT_PANE_TABS.map((tab) => ({
           ...tab,
           data: {},
@@ -155,17 +155,28 @@ export function VaultView(): JSX.Element {
 
   useEffect(() => {
     function onOpenRightTab(e: Event): void {
-      const detail = (e as CustomEvent<
-        | 'files'
-        | 'backlinks'
-        | 'agent'
-        | 'worktrees'
-        | 'review'
-        | 'runlog'
-        | 'diff'
-        | { tab: 'files' | 'backlinks' | 'agent' | 'worktrees' | 'review' | 'runlog' | 'diff' }
-      >).detail;
-      activateRightTab(typeof detail === 'string' ? detail : detail.tab);
+        const detail = (e as CustomEvent<
+          | 'files'
+          | 'backlinks'
+          | 'agent'
+          | 'worktrees'
+          | 'review'
+          | 'runlog'
+          | 'diff'
+          | 'sessions'
+          | {
+              tab:
+                | 'files'
+                | 'backlinks'
+                | 'agent'
+                | 'worktrees'
+                | 'review'
+                | 'runlog'
+                | 'diff'
+                | 'sessions'
+            }
+        >).detail;
+        activateRightTab(typeof detail === 'string' ? detail : detail.tab);
     }
     window.addEventListener('orbit:open-right-tab', onOpenRightTab as EventListener);
     return () =>
@@ -184,8 +195,8 @@ export function VaultView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (rightTab === 'backlinks' && (!active || view.kind !== 'editor')) activateRightTab('files');
-  }, [active, activateRightTab, rightTab, view.kind]);
+    if (rightTab !== visibleRightTab) activateRightTab(visibleRightTab);
+  }, [activateRightTab, rightTab, visibleRightTab]);
 
   async function onOpenWikilink(target: string): Promise<void> {
     const hits = await window.orbit.fs.search(target, { limit: 10 });
@@ -287,15 +298,15 @@ export function VaultView(): JSX.Element {
         )}
       </section>
 
-      <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
-        <div className="flex shrink-0 border-b border-neutral-200 text-xs dark:border-neutral-800">
-          {RIGHT_PANE_TABS.filter((tab) => tab.id !== 'backlinks' || view.kind === 'editor').map((tab) => (
+        <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
+        <div className="flex shrink-0 overflow-x-auto border-b border-neutral-200 text-xs dark:border-neutral-800">
+          {visibleRightTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => activateRightTab(tab.id)}
+              onClick={() => activateRightTab(tab.id as RightPaneTabId)}
               className={
-                'flex-1 px-3 py-2 capitalize ' +
-                (rightTab === tab.id
+                'shrink-0 px-3 py-2 capitalize ' +
+                (visibleRightTab === tab.id
                   ? 'bg-neutral-200/60 dark:bg-neutral-800/60'
                   : 'hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30')
               }
@@ -305,22 +316,24 @@ export function VaultView(): JSX.Element {
           ))}
         </div>
         <div className="flex-1 overflow-y-auto p-3">
-          {rightTab === 'files' ? (
+          {visibleRightTab === 'files' ? (
             tree ? (
               <FileTree root={tree} />
             ) : (
               <p className="text-xs text-neutral-500">Scanning…</p>
             )
-          ) : rightTab === 'backlinks' ? (
+          ) : visibleRightTab === 'backlinks' ? (
             <BacklinksPanel />
-          ) : rightTab === 'agent' ? (
+          ) : visibleRightTab === 'agent' ? (
             <AgentPanel />
-          ) : rightTab === 'review' ? (
+          ) : visibleRightTab === 'review' ? (
             <ReviewInboxView />
-          ) : rightTab === 'runlog' ? (
+          ) : visibleRightTab === 'runlog' ? (
             <RunLogPane />
-          ) : rightTab === 'diff' ? (
+          ) : visibleRightTab === 'diff' ? (
             <DiffWorkspacePane />
+          ) : visibleRightTab === 'sessions' ? (
+            <TerminalSessionsPanel />
           ) : (
             <WorktreesPanel />
           )}

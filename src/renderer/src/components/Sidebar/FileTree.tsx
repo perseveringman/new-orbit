@@ -3,6 +3,7 @@ import type { FileNode } from '@shared/types';
 import { useFiles } from '../../store/files';
 import { useWorkspace } from '../../store/workspace';
 import { usePara } from '../../store/para';
+import { resolveFileTreeActivation } from './fileTreeNavigation';
 
 interface Props {
   root: FileNode;
@@ -73,42 +74,21 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }): JSX.Eleme
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
   const setView = usePara((s) => s.setView);
 
-  /**
-   * Detect whether this node is a folder-backed project root or a descendant
-   * of one. Clicking either should activate the Project Room so the kanban
-   * + terminal slot show up instead of the generic vault editor.
-   */
-  function projectUidFor(relPath: string): string | null {
-    if (!relPath.startsWith('01_Projects/')) return null;
-    const parts = relPath.split('/');
-    if (parts.length < 2) return null;
-    const slug = parts[1];
-    if (!slug) return null;
-    const hit = projects.find((p) => p.slug === slug && !p.legacy);
-    return hit?.uid ?? null;
-  }
-
   function handleActivate(): void {
-    if (node.isDir) {
-      // Clicking the project folder itself: jump into the Project Room.
-      const uid = projectUidFor(node.relPath);
-      if (uid && node.relPath.split('/').length === 2) {
-        setActiveProjectUid(uid);
-        setView({ kind: 'project', projectUid: uid });
-        setOpen(true);
-        return;
-      }
+    const activation = resolveFileTreeActivation(node, projects);
+    if (activation.kind === 'toggle-dir') {
       setOpen((v) => !v);
       return;
     }
-    // File click: open it. If it lives inside a project, enter the Room too.
-    const uid = projectUidFor(node.relPath);
-    if (uid) {
-      setActiveProjectUid(uid);
-      setView({ kind: 'project', projectUid: uid, pane: 'readme' });
-    } else {
-      setView({ kind: 'editor' });
+    if (activation.projectUid) {
+      setActiveProjectUid(activation.projectUid);
     }
+    if (activation.kind === 'project-room') {
+      setView({ kind: 'project', projectUid: activation.projectUid });
+      setOpen(true);
+      return;
+    }
+    setView({ kind: 'editor' });
     void openPath(node.path);
   }
 
