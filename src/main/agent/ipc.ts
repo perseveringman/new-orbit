@@ -103,7 +103,8 @@ async function enrichTerminalAgentSession(
     return { ...session, resumeCommand: undefined };
   }
   const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
-  const target = await resolveClaudeSessionTarget(claudeRoot, projectPath, {
+  const claudeProjectPath = session.cwd ?? projectPath;
+  const target = await resolveClaudeSessionTarget(claudeRoot, claudeProjectPath, {
     vendorSessionId: session.vendorSessionId,
     startedAt: session.startedAt,
     ...(session.endedAt ? { endedAt: session.endedAt } : {})
@@ -297,13 +298,14 @@ export function registerAgentIpc(): void {
     }
 
     const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
-    const target = await resolveClaudeSessionTarget(claudeRoot, project.path, {
+    const claudeProjectPath = enriched.cwd ?? project.path;
+    const target = await resolveClaudeSessionTarget(claudeRoot, claudeProjectPath, {
       vendorSessionId: enriched.vendorSessionId,
       startedAt: enriched.startedAt,
       ...(enriched.endedAt ? { endedAt: enriched.endedAt } : {})
     });
     const detail = target
-      ? await readClaudeProjectSessionDetail(claudeRoot, project.path, target.sessionId)
+      ? await readClaudeProjectSessionDetail(claudeRoot, claudeProjectPath, target.sessionId)
       : null;
     return {
       ...enriched,

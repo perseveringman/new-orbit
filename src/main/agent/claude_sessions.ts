@@ -53,6 +53,22 @@ async function findProjectDir(root: string, projectPath: string): Promise<string
   return null;
 }
 
+async function findSessionById(root: string, sessionId: string): Promise<ClaudeProjectSession | null> {
+  let dirs: string[] = [];
+  try {
+    dirs = await fs.readdir(root);
+  } catch {
+    return null;
+  }
+
+  for (const dir of dirs) {
+    const summary = await readSessionSummary(path.join(root, dir, `${sessionId}.jsonl`));
+    if (summary?.sessionId === sessionId) return summary;
+  }
+
+  return null;
+}
+
 async function readSessionSummary(filePath: string): Promise<ClaudeProjectSession | null> {
   let raw = '';
   try {
@@ -87,26 +103,104 @@ async function readSessionSummary(filePath: string): Promise<ClaudeProjectSessio
   return { sessionId, filePath, cwd, startedAt, lastActivityAt };
 }
 
-function extractMessageText(row: {
+function readTextBlocks(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return '';
+      const text = (entry as { text?: unknown }).text;
+      return typeof text === 'string' ? text.trim() : '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function formatToolInput(input: unknown): string {
+  if (input == null) return '';
+  if (typeof input === 'string') return input.trim();
+  try {
+    return JSON.stringify(input, null, 2);
+  } catch {
+    return '';
+  }
+}
+
+function extractUserMessageText(content: unknown): string {
+  if (typeof content === 'string' && content.trim()) return content.trim();
+  if (!Array.isArray(content)) return '';
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const typed = block as { type?: unknown; text?: unknown; content?: unknown; tool_use_id?: unknown };
+    if (typed.type === 'text' && typeof typed.text === 'string' && typed.text.trim()) {
+      parts.push(typed.text.trim());
+      continue;
+    }
+    if (typed.type === 'tool_result') {
+      const toolText = readTextBlocks(typed.content);
+      if (!toolText) continue;
+      const toolUseId =
+        typeof typed.tool_use_id === 'string' && typed.tool_use_id
+          ? ` (${typed.tool_use_id.slice(0, 12)})`
+          : '';
+      parts.push(`Tool Result${toolUseId}\n${toolText}`);
+    }
+  }
+
+  const text = parts.join('\n\n').trim();
+  return text.startsWith('Tool Result') ? '' : text;
+}
+
+function extractAssistantMessageText(content: unknown): string {
+  if (typeof content === 'string' && content.trim()) return content.trim();
+  if (!Array.isArray(content)) return '';
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const typed = block as {
+      type?: unknown;
+      text?: unknown;
+      thinking?: unknown;
+      name?: unknown;
+      input?: unknown;
+    };
+    if (typed.type === 'text' && typeof typed.text === 'string' && typed.text.trim()) {
+      parts.push(typed.text.trim());
+      continue;
+    }
+    if (typed.type === 'thinking' && typeof typed.thinking === 'string' && typed.thinking.trim()) {
+      parts.push(`Thinking:\n${typed.thinking.trim()}`);
+      continue;
+    }
+    if (typed.type === 'tool_use' && typeof typed.name === 'string' && typed.name.trim()) {
+      const formattedInput = formatToolInput(typed.input);
+      parts.push(
+        formattedInput ? `Tool Use: ${typed.name}\n${formattedInput}` : `Tool Use: ${typed.name}`
+      );
+    }
+  }
+
+  return parts.join('\n\n').trim();
+}
+
+function extractMessageText(
+  row: {
   text?: unknown;
   message?: {
+    role?: unknown;
     content?: unknown;
   };
-}): string {
+  },
+  role: 'user' | 'assistant' | 'system' | null
+): string {
   if (typeof row.text === 'string' && row.text.trim()) return row.text.trim();
   const content = row.message?.content;
-  if (typeof content === 'string' && content.trim()) return content.trim();
-  if (Array.isArray(content)) {
-    const texts = content
-      .map((entry) => {
-        if (!entry || typeof entry !== 'object') return '';
-        const text = (entry as { text?: unknown }).text;
-        return typeof text === 'string' ? text.trim() : '';
-      })
-      .filter(Boolean);
-    if (texts.length > 0) return texts.join('\n\n');
-  }
-  return '';
+  if (role === 'user') return extractUserMessageText(content);
+  if (role === 'assistant') return extractAssistantMessageText(content);
+  return readTextBlocks(content);
 }
 
 function extractMessageRole(row: {
@@ -146,7 +240,7 @@ async function readClaudeSessionMessages(filePath: string): Promise<ClaudeProjec
         };
       };
       const role = extractMessageRole(row);
-      const text = extractMessageText(row);
+      const text = extractMessageText(row, role);
       if (!role || !text || typeof row.timestamp !== 'string' || !row.timestamp) continue;
       messages.push({
         id: `${row.sessionId ?? path.basename(filePath, '.jsonl')}:${index}`,
@@ -230,6 +324,8 @@ export async function resolveClaudeSessionTarget(
   if (sessionWindow.vendorSessionId) {
     const exact = sessions.find((session) => session.sessionId === sessionWindow.vendorSessionId);
     if (exact) return exact;
+    const globalExact = await findSessionById(root, sessionWindow.vendorSessionId);
+    if (globalExact) return globalExact;
   }
   return findBestClaudeResumeTarget(root, projectPath, sessionWindow);
 }
@@ -240,7 +336,7 @@ export async function readClaudeProjectSessionDetail(
   sessionId: string
 ): Promise<ClaudeProjectSessionDetail | null> {
   const sessions = await listClaudeProjectSessions(root, projectPath);
-  const target = sessions.find((session) => session.sessionId === sessionId);
+  const target = sessions.find((session) => session.sessionId === sessionId) ?? (await findSessionById(root, sessionId));
   if (!target) return null;
   return {
     ...target,

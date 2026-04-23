@@ -87,7 +87,7 @@ export function ProjectSessionsView({
   );
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3 text-xs dark:border-neutral-800">
         <div>
           <div className="font-medium text-neutral-700 dark:text-neutral-200">Project Sessions</div>
@@ -114,79 +114,11 @@ export function ProjectSessionsView({
             build a reusable history here.
           </div>
         ) : selected ? (
-          <>
-            <div className="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
-                    <span
-                      className={`rounded px-2 py-1 font-medium ${
-                        getTerminalSessionAgentMeta(selected.agentType).badgeClassName
-                      }`}
-                    >
-                      {getTerminalSessionAgentMeta(selected.agentType).title}
-                    </span>
-                    <span className={statusClasses(selected.status)}>{selected.status}</span>
-                    <span>Started {formatRelativeTs(selected.startedAt)}</span>
-                    <span>Last active {formatRelativeTs(selected.lastActivityAt)}</span>
-                  </div>
-                  <div className="mt-3 text-xl font-semibold text-neutral-900 dark:text-neutral-100">
-                    {getTerminalSessionDisplayTitle(selected)}
-                  </div>
-                  <div className="mt-2 max-w-3xl text-sm text-neutral-500">
-                    {getTerminalSessionSubtitle(selected)}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-neutral-500">
-                    <span className="rounded bg-neutral-100 px-2 py-1 font-mono dark:bg-neutral-800">
-                      {selected.sessionId}
-                    </span>
-                    <span>Pane {selected.paneId}</span>
-                    <span>Prompts {selected.stats.promptCount}</span>
-                    <span>Permissions {selected.stats.permissionCount}</span>
-                    {selected.vendorSessionId ? (
-                      <span className="rounded bg-neutral-100 px-2 py-1 font-mono dark:bg-neutral-800">
-                        Vendor {selected.vendorSessionId}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <button
-                  onClick={() => onOpenSession(getTerminalSessionAction(selected).navigation)}
-                  className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
-                >
-                  {getTerminalSessionAction(selected).hint}
-                </button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-              <div className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                Imported transcript
-              </div>
-              {detail?.messages.length ? (
-                <div className="space-y-3">
-                  {detail.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className="rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
-                    >
-                      <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wide text-neutral-500">
-                        <span>{message.role}</span>
-                        <span>{formatRelativeTs(message.at)}</span>
-                      </div>
-                      <div className="whitespace-pre-wrap text-sm text-neutral-800 dark:text-neutral-100">
-                        {message.text}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-xs text-neutral-500 dark:border-neutral-700">
-                  No imported transcript is available for this session yet.
-                </div>
-              )}
-            </div>
-          </>
+          <ProjectSessionsDetailPane
+            selected={selected}
+            detail={detail}
+            onOpenSession={() => onOpenSession(getTerminalSessionAction(selected).navigation)}
+          />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500">
             Pick a session from the right sidebar to inspect its history and jump back into work.
@@ -194,6 +126,92 @@ export function ProjectSessionsView({
         )}
       </div>
     </section>
+  );
+}
+
+export function ProjectSessionsDetailPane({
+  selected,
+  detail,
+  onOpenSession
+}: {
+  selected: TerminalAgentSessionDTO;
+  detail: TerminalAgentSessionDetailDTO | null;
+  onOpenSession(): void;
+}): JSX.Element {
+  return (
+    <div className="flex min-h-0 h-full flex-1 flex-col">
+      <div className="min-w-0 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+              <span
+                className={`rounded px-2 py-1 font-medium ${
+                  getTerminalSessionAgentMeta(selected.agentType).badgeClassName
+                }`}
+              >
+                {getTerminalSessionAgentMeta(selected.agentType).title}
+              </span>
+              <span className={statusClasses(selected.status)}>{selected.status}</span>
+              <span>Started {formatRelativeTs(selected.startedAt)}</span>
+              <span>Last active {formatRelativeTs(selected.lastActivityAt)}</span>
+            </div>
+            <div className="mt-3 text-xl font-semibold text-neutral-900 dark:text-neutral-100">
+              {getTerminalSessionDisplayTitle(selected)}
+            </div>
+            <div className="mt-2 max-w-3xl text-sm text-neutral-500">
+              {getTerminalSessionSubtitle(selected)}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-neutral-500">
+              <span className="rounded bg-neutral-100 px-2 py-1 font-mono dark:bg-neutral-800">
+                {selected.sessionId}
+              </span>
+              <span>Pane {selected.paneId}</span>
+              <span>Prompts {selected.stats.promptCount}</span>
+              <span>Permissions {selected.stats.permissionCount}</span>
+              {selected.vendorSessionId ? (
+                <span className="rounded bg-neutral-100 px-2 py-1 font-mono dark:bg-neutral-800">
+                  Vendor {selected.vendorSessionId}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <button
+            onClick={onOpenSession}
+            className="shrink-0 rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
+          >
+            {getTerminalSessionAction(selected).hint}
+          </button>
+        </div>
+      </div>
+
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
+        <div className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
+          Imported transcript
+        </div>
+        {detail?.messages.length ? (
+          <div className="min-w-0 space-y-3">
+            {detail.messages.map((message) => (
+              <div
+                key={message.id}
+                className="min-w-0 rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
+              >
+                <div className="mb-1 flex items-center justify-between gap-3 text-[10px] uppercase tracking-wide text-neutral-500">
+                  <span>{message.role}</span>
+                  <span className="shrink-0">{formatRelativeTs(message.at)}</span>
+                </div>
+                <div className="min-w-0 overflow-hidden break-all whitespace-pre-wrap text-sm text-neutral-800 dark:text-neutral-100">
+                  {message.text}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-xs text-neutral-500 dark:border-neutral-700">
+            No imported transcript is available for this session yet.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

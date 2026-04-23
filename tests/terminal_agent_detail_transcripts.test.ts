@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { IPC } from '../src/shared/ipc';
+import { getClaudeProjectDirName } from '../src/main/agent/claude_sessions';
 
 vi.mock('electron', () => ({
   app: { on: vi.fn() },
@@ -127,6 +128,106 @@ describe('terminalAgent detail transcript import', () => {
         {
           role: 'assistant',
           text: 'I found the missing import path and will patch it now.',
+          at: '2026-04-23T13:00:03.000Z'
+        }
+      ]
+    });
+
+    await closeFsSession();
+  });
+
+  it('returns imported claude transcript messages using the session cwd instead of the Orbit project path', async () => {
+    const { createVault } = await import('../src/main/vault');
+    const { createProject } = await import('../src/main/project');
+    const { openFsSession, closeFsSession } = await import('../src/main/fs');
+    const { ingestTerminalHookEvent } = await import('../src/main/agent/terminal_sessions');
+    const { registerAgentIpc } = await import('../src/main/agent/ipc');
+
+    await createVault(vault);
+    const project = await createProject(vault, {
+      slug: 'claude-transcript-test',
+      template: 'blank',
+      name: 'Claude Transcript Test'
+    });
+
+    const externalCwd = '/Users/ryanbzhou/ryanbvault/01_Projects/twitter';
+    const claudeProjectDir = path.join(
+      fakeHome,
+      '.claude',
+      'projects',
+      getClaudeProjectDirName(externalCwd)
+    );
+    await fs.mkdir(claudeProjectDir, { recursive: true });
+    await fs.writeFile(
+      path.join(claudeProjectDir, 'sessions-index.json'),
+      JSON.stringify({ version: 1, originalPath: externalCwd, entries: [] }, null, 2),
+      'utf8'
+    );
+    await fs.writeFile(
+      path.join(claudeProjectDir, 'claude-session-7.jsonl'),
+      [
+        JSON.stringify({
+          type: 'permission-mode',
+          permissionMode: 'default',
+          sessionId: 'claude-session-7'
+        }),
+        JSON.stringify({
+          sessionId: 'claude-session-7',
+          cwd: externalCwd,
+          timestamp: '2026-04-23T13:00:01.000Z',
+          type: 'user',
+          message: {
+            role: 'user',
+            content: '项目能做什么'
+          }
+        }),
+        JSON.stringify({
+          sessionId: 'claude-session-7',
+          cwd: externalCwd,
+          timestamp: '2026-04-23T13:00:03.000Z',
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: '我先检查项目文档，确认它当前支持的能力。' }]
+          }
+        })
+      ].join('\n') + '\n',
+      'utf8'
+    );
+
+    const recorded = await ingestTerminalHookEvent(vault, {
+      eventType: 'Start',
+      rawEventType: 'UserPromptSubmit',
+      paneId: 'pane-claude-1',
+      projectUid: project.uid,
+      ts: '2026-04-23T13:00:01.000Z',
+      payload: {
+        session_id: 'claude-session-7',
+        cwd: externalCwd
+      }
+    });
+
+    registerAgentIpc();
+    await openFsSession(vault);
+
+    const handlers = await getHandlers();
+    const detail = handlers.get(IPC.terminalAgent.detail)!;
+
+    const result = await detail({}, project.uid, recorded!.sessionId);
+
+    expect(result).toMatchObject({
+      sessionId: recorded!.sessionId,
+      resumeSessionId: 'claude-session-7',
+      resumeCommand: 'claude --resume claude-session-7',
+      messages: [
+        {
+          role: 'user',
+          text: '项目能做什么',
+          at: '2026-04-23T13:00:01.000Z'
+        },
+        {
+          role: 'assistant',
+          text: '我先检查项目文档，确认它当前支持的能力。',
           at: '2026-04-23T13:00:03.000Z'
         }
       ]

@@ -11,6 +11,7 @@ export interface TerminalAgentSession {
   projectUid: string;
   agentType: string;
   vendorSessionId?: string;
+  cwd?: string;
   status: 'active' | 'completed' | 'interrupted';
   startedAt: string;
   endedAt?: string;
@@ -106,7 +107,7 @@ function getPayloadString(
 function deriveSessionMetadata(
   envelope: TerminalHookEnvelope,
   agentType: string
-): Pick<TerminalAgentSession, 'vendorSessionId' | 'title' | 'summary' | 'resumeCommand'> {
+): Pick<TerminalAgentSession, 'vendorSessionId' | 'cwd' | 'title' | 'summary' | 'resumeCommand'> {
   const payload = envelope.payload;
   const vendorSessionId = getPayloadString(
     payload,
@@ -121,6 +122,7 @@ function deriveSessionMetadata(
 
   return {
     ...(vendorSessionId ? { vendorSessionId } : {}),
+    ...(getPayloadString(payload, 'cwd') ? { cwd: getPayloadString(payload, 'cwd') } : {}),
     ...(getPayloadString(payload, 'title') ? { title: getPayloadString(payload, 'title') } : {}),
     ...(getPayloadString(payload, 'summary', 'reason')
       ? { summary: getPayloadString(payload, 'summary', 'reason') }
@@ -143,9 +145,10 @@ function isSameVendorSession(
 
 function mergeSessionMetadata(
   session: TerminalAgentSession,
-  metadata: Pick<TerminalAgentSession, 'vendorSessionId' | 'title' | 'summary' | 'resumeCommand'>
+  metadata: Pick<TerminalAgentSession, 'vendorSessionId' | 'cwd' | 'title' | 'summary' | 'resumeCommand'>
 ): void {
   if (metadata.vendorSessionId) session.vendorSessionId = metadata.vendorSessionId;
+  if (metadata.cwd) session.cwd = metadata.cwd;
   if (metadata.title) session.title = metadata.title;
   if (metadata.summary) session.summary = metadata.summary;
   if (metadata.resumeCommand) session.resumeCommand = metadata.resumeCommand;
