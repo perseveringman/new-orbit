@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import type { ProjectSummaryDTO } from '@shared/ipc';
+import type { GitHubProjectState } from '@shared/github';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
@@ -54,6 +55,7 @@ export function ProjectRoomView(): JSX.Element {
   const openSidebarPanel = useSidebar((s) => s.openPanel);
 
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [githubState, setGitHubState] = useState<GitHubProjectState | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
@@ -113,6 +115,24 @@ export function ProjectRoomView(): JSX.Element {
   useEffect(() => {
     void refreshTasks();
   }, [refreshTasks]);
+
+  const refreshGitHubState = useCallback(async () => {
+    if (!activeProjectUid) {
+      setGitHubState(null);
+      return;
+    }
+    try {
+      const next = await window.orbit.github.getProjectState(activeProjectUid);
+      setGitHubState(next);
+    } catch (e) {
+      setGitHubState(null);
+      toast(`Load GitHub state failed: ${(e as Error).message}`);
+    }
+  }, [activeProjectUid, toast]);
+
+  useEffect(() => {
+    void refreshGitHubState();
+  }, [refreshGitHubState]);
 
   // Respond to fs events so drag-drops/external writes reflect promptly.
   useEffect(() => {
@@ -248,6 +268,54 @@ export function ProjectRoomView(): JSX.Element {
       );
     } catch (e) {
       toast(`Enable failed: ${(e as Error).message}`);
+    }
+  }
+
+  async function publishToGitHub(): Promise<void> {
+    if (!project) return;
+    const owner = window.prompt('GitHub owner / organization');
+    if (!owner) return;
+    const repo = window.prompt('Repository name', project.slug);
+    if (!repo) return;
+    const visibility = window.confirm('Create as private repository?') ? 'private' : 'public';
+    try {
+      const next = await window.orbit.github.publishProject({
+        projectUid: project.uid,
+        owner: owner.trim(),
+        repo: repo.trim(),
+        visibility
+      });
+      setGitHubState(next);
+      await refreshProjects();
+      toast(`Published ${owner}/${repo}`);
+    } catch (e) {
+      toast(`Publish failed: ${(e as Error).message}`);
+    }
+  }
+
+  async function createPullRequest(): Promise<void> {
+    if (!project) return;
+    const title = window.prompt('Pull request title', `Orbit: ${project.name}`);
+    if (!title) return;
+    const draft = window.confirm('Create as draft pull request?');
+    try {
+      const pr = await window.orbit.github.createPullRequest({
+        projectUid: project.uid,
+        title: title.trim(),
+        draft
+      });
+      setGitHubState((current) =>
+        current
+          ? {
+              ...current,
+              pullRequest: pr
+            }
+          : current
+      );
+      toast(`Created PR #${pr.number}`);
+      void refreshGitHubState();
+    } catch (e) {
+      toast(`Create PR failed: ${(e as Error).message}`);
     }
   }
 
@@ -394,8 +462,64 @@ export function ProjectRoomView(): JSX.Element {
               ))}
             </div>
           )}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+            {githubState?.binding ? (
+              <>
+                <span className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-700">
+                  GitHub · {githubState.binding.fullName}
+                </span>
+                {githubState.sync && (
+                  <span className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-700">
+                    {githubState.sync.branch} · ↑{githubState.sync.ahead} ↓{githubState.sync.behind}
+                  </span>
+                )}
+                {githubState.pullRequest && (
+                  <button
+                    className="rounded border border-sky-300 px-2 py-0.5 text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
+                    onClick={() => window.open(githubState.pullRequest?.url, '_blank', 'noopener')}
+                  >
+                    PR #{githubState.pullRequest.number} · {githubState.pullRequest.state}
+                  </button>
+                )}
+              </>
+            ) : (
+              <span className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-700">
+                GitHub · not linked
+              </span>
+            )}
+            {githubState?.connection?.authenticated === false && (
+              <button
+                className="rounded border border-amber-300 px-2 py-0.5 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                onClick={() => openResumeSession('gh auth login --web')}
+              >
+                Authenticate gh
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            onClick={() => void refreshGitHubState()}
+          >
+            Refresh GitHub
+          </button>
+          {githubState?.binding && !githubState.pullRequest && (
+            <button
+              className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              onClick={() => void createPullRequest()}
+            >
+              Create PR
+            </button>
+          )}
+          {!githubState?.binding && !isLegacy && (
+            <button
+              className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              onClick={() => void publishToGitHub()}
+            >
+              Publish to GitHub
+            </button>
+          )}
           {kanbanModel.headerActions.includes('enable-orbit-tools') && (
             <button
               className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"

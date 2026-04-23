@@ -8,13 +8,14 @@ import {
   ORBIT_LOGS_DIR,
   ORBIT_TRASH_DIR,
   ORBIT_WORKTREES_DIR,
-  PROJECTS_DIR,
-  PROJECT_AGENT_DIR,
   PROJECT_AGENT_MD,
-  PROJECT_CONFIG,
-  PROJECT_MEMORIES_DIR,
+  PROJECTS_DIR,
   PROJECT_README,
-  PROJECT_TASKS_DIR
+  PROJECT_ORBIT_AGENT_DIR,
+  PROJECT_ORBIT_CONFIG,
+  PROJECT_ORBIT_DIR,
+  PROJECT_ORBIT_MEMORIES_DIR,
+  PROJECT_ORBIT_TASKS_DIR
 } from '@shared/constants';
 import { inferTypeFromPath } from '@shared/schemas';
 import * as frontmatter from './frontmatter';
@@ -221,12 +222,23 @@ export async function migrateProjectsToFolders(
 
       const { agent, body: bodyWithoutAgent } = extractAgentSection(body);
 
-      await fs.mkdir(path.join(c.toDir, PROJECT_AGENT_DIR, PROJECT_TASKS_DIR), {
-        recursive: true
-      });
-      await fs.mkdir(path.join(c.toDir, PROJECT_AGENT_DIR, PROJECT_MEMORIES_DIR), {
-        recursive: true
-      });
+      await fs.mkdir(
+        path.join(c.toDir, PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_TASKS_DIR),
+        {
+          recursive: true
+        }
+      );
+      await fs.mkdir(
+        path.join(
+          c.toDir,
+          PROJECT_ORBIT_DIR,
+          PROJECT_ORBIT_AGENT_DIR,
+          PROJECT_ORBIT_MEMORIES_DIR
+        ),
+        {
+          recursive: true
+        }
+      );
 
       const patched = frontmatter.update(
         frontmatter.write(data, bodyWithoutAgent),
@@ -267,18 +279,30 @@ export async function migrateProjectsToFolders(
         created_at: createdAt
       });
       await fs.writeFile(
-        path.join(c.toDir, PROJECT_AGENT_DIR, PROJECT_CONFIG),
+        path.join(c.toDir, PROJECT_ORBIT_DIR, PROJECT_ORBIT_CONFIG),
         configJson,
         'utf8'
       );
 
       await fs.writeFile(
-        path.join(c.toDir, PROJECT_AGENT_DIR, PROJECT_TASKS_DIR, '.gitkeep'),
+        path.join(
+          c.toDir,
+          PROJECT_ORBIT_DIR,
+          PROJECT_ORBIT_AGENT_DIR,
+          PROJECT_ORBIT_TASKS_DIR,
+          '.gitkeep'
+        ),
         '',
         'utf8'
       );
       await fs.writeFile(
-        path.join(c.toDir, PROJECT_AGENT_DIR, PROJECT_MEMORIES_DIR, '.gitkeep'),
+        path.join(
+          c.toDir,
+          PROJECT_ORBIT_DIR,
+          PROJECT_ORBIT_AGENT_DIR,
+          PROJECT_ORBIT_MEMORIES_DIR,
+          '.gitkeep'
+        ),
         '',
         'utf8'
       );

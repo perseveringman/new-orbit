@@ -16,9 +16,9 @@ const webApp: TemplateDefinition = {
     'AGENT.md': BASE_AGENT_MD,
     'README.md': BASE_README_MD,
     '.gitignore': BASE_GITIGNORE,
-    '.agent/config.json': BASE_CONFIG_JSON,
-    '.agent/tasks/.gitkeep': '',
-    '.agent/memories/.gitkeep': '',
+    '.orbit/config.json': BASE_CONFIG_JSON,
+    '.orbit/agent/tasks/.gitkeep': '',
+    '.orbit/agent/memories/.gitkeep': '',
     'src/.gitkeep': '',
     'docs/.gitkeep': ''
   }

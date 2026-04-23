@@ -1,13 +1,17 @@
 import { promises as fs, type Dirent } from 'node:fs';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
+import type { GitHubRepoBinding } from '@shared/github';
 import {
   ARCHIVES_DIR,
   PROJECTS_DIR,
   PROJECT_AGENT_DIR,
-  PROJECT_CONFIG,
-  PROJECT_MEMORIES_DIR,
+  PROJECT_ORBIT_AGENT_DIR,
+  PROJECT_ORBIT_CONFIG,
+  PROJECT_ORBIT_DIR,
+  PROJECT_ORBIT_MEMORIES_DIR,
   PROJECT_README,
+  PROJECT_ORBIT_TASKS_DIR,
   PROJECT_TASKS_DIR
 } from '@shared/constants';
 import { newUid } from './uid';
@@ -17,17 +21,13 @@ import { renderTaskMarkdown, scaffoldProject } from './templates';
 import { ensureMcpConfig } from './mcp_config';
 import { ensureProjectAgentContext } from './project_agent_context';
 import { walkMarkdown } from './walk';
-
-export interface ProjectConfig {
-  uid: string;
-  slug: string;
-  name?: string;
-  template: string;
-  created_at: string;
-  vision_linked?: boolean;
-  setup?: string[];
-  teardown?: string[];
-}
+import {
+  defaultAgentExposureSettings,
+  readProjectConfig,
+  writeProjectConfig,
+  type AgentExposureSettings,
+  type ProjectConfig
+} from './project_config';
 
 export interface ProjectSummary {
   uid: string;
@@ -48,6 +48,7 @@ export interface ProjectSummary {
   relPath: string;
   /** Folder-mode projects have a `.agent/config.json`; legacy ones don't. */
   legacy: boolean;
+  github?: GitHubRepoBinding;
 }
 
 export interface CreateProjectArgs {
@@ -58,6 +59,7 @@ export interface CreateProjectArgs {
   uid?: string;
   area_uid?: string;
   tags?: string[];
+  agent_exposure?: Partial<AgentExposureSettings>;
 }
 
 export interface CreateProjectOptions {
@@ -101,19 +103,7 @@ export function projectDir(vault: string, slug: string): string {
 }
 
 export function projectConfigPath(vault: string, slug: string): string {
-  return path.join(projectDir(vault, slug), PROJECT_AGENT_DIR, PROJECT_CONFIG);
-}
-
-export async function readProjectConfig(dir: string): Promise<ProjectConfig | null> {
-  try {
-    const raw = await fs.readFile(
-      path.join(dir, PROJECT_AGENT_DIR, PROJECT_CONFIG),
-      'utf8'
-    );
-    return JSON.parse(raw) as ProjectConfig;
-  } catch {
-    return null;
-  }
+  return path.join(projectDir(vault, slug), PROJECT_ORBIT_DIR, PROJECT_ORBIT_CONFIG);
 }
 
 async function initProjectGitRepo(dir: string, slug: string): Promise<void> {
@@ -168,6 +158,20 @@ export async function createProject(
     vision_ref: '[[Vision]]'
   };
   await scaffoldProject(dir, args.template, vars);
+  await writeProjectConfig(dir, {
+    uid,
+    slug: args.slug,
+    name: args.name,
+    template: args.template,
+    created_at: createdAt,
+    vision_linked: true,
+    setup: [],
+    teardown: [],
+    agent_exposure: {
+      ...defaultAgentExposureSettings(args.agent_exposure?.mode),
+      ...(args.agent_exposure ?? {})
+    }
+  });
   await ensureProjectAgentContext(dir, {
     uid,
     slug: args.slug,
@@ -253,6 +257,7 @@ function parseReadmeSummary(
   else if (config?.template) summary.template = config.template;
   if (typeof data['area_uid'] === 'string')
     summary.area_uid = data['area_uid'] as string;
+  if (config?.github) summary.github = config.github;
   return summary;
 }
 
@@ -388,16 +393,21 @@ export async function archiveProjectByUid(
   };
 }
 
-/** Enumerate task markdown files stored under a project's `.agent/tasks/`. */
+/** Enumerate task markdown files stored under a project's task directories. */
 export async function listProjectTaskPaths(projectDir: string): Promise<string[]> {
-  const tasksDir = path.join(projectDir, PROJECT_AGENT_DIR, PROJECT_TASKS_DIR);
-  const out: string[] = [];
-  try {
-    for await (const abs of walkMarkdown(tasksDir)) out.push(abs);
-  } catch {
-    // no tasks dir
+  const taskDirs = [
+    path.join(projectDir, PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_TASKS_DIR),
+    path.join(projectDir, PROJECT_AGENT_DIR, PROJECT_TASKS_DIR)
+  ];
+  const out = new Set<string>();
+  for (const tasksDir of taskDirs) {
+    try {
+      for await (const abs of walkMarkdown(tasksDir)) out.add(abs);
+    } catch {
+      // no tasks dir
+    }
   }
-  return out.sort();
+  return Array.from(out).sort();
 }
 
 export interface CreateTaskArgs {
@@ -443,7 +453,12 @@ export async function createTask(
       `project "${target.slug}" is a legacy project; cannot create structured task inside it`
     );
   }
-  const tasksDir = path.join(target.path, PROJECT_AGENT_DIR, PROJECT_TASKS_DIR);
+  const tasksDir = path.join(
+    target.path,
+    PROJECT_ORBIT_DIR,
+    PROJECT_ORBIT_AGENT_DIR,
+    PROJECT_ORBIT_TASKS_DIR
+  );
   await fs.mkdir(tasksDir, { recursive: true });
   const now = new Date();
   const prefix = datePrefix(now);
@@ -492,7 +507,15 @@ export async function findProjectDirByUid(
 /** Async helper exposed to the task IPC layer. */
 export async function ensureMemoriesDir(projectPath: string): Promise<void> {
   await fs.mkdir(
-    path.join(projectPath, PROJECT_AGENT_DIR, PROJECT_MEMORIES_DIR),
+    path.join(
+      projectPath,
+      PROJECT_ORBIT_DIR,
+      PROJECT_ORBIT_AGENT_DIR,
+      PROJECT_ORBIT_MEMORIES_DIR
+    ),
     { recursive: true }
   );
 }
+
+export type { AgentExposureSettings, ProjectConfig } from './project_config';
+export { defaultAgentExposureSettings, readProjectConfig, writeProjectConfig } from './project_config';

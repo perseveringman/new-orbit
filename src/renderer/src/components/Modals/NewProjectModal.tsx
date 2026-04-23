@@ -29,10 +29,16 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
 
   const [step, setStep] = useState<1 | 2>(1);
+  const [creationMode, setCreationMode] = useState<'local' | 'github-import'>('local');
   const [name, setName] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [githubOwner, setGithubOwner] = useState('');
+  const [githubRepo, setGithubRepo] = useState('');
+  const [agentExposureMode, setAgentExposureMode] = useState<
+    'isolated' | 'bridge' | 'compatible'
+  >('isolated');
   const [templates, setTemplates] = useState<TemplateMetaDTO[]>([]);
   const [template, setTemplate] = useState('blank');
   const [areas, setAreas] = useState<EntitySummary[]>([]);
@@ -47,10 +53,14 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
   useEffect(() => {
     if (!open) return;
     setStep(1);
+    setCreationMode('local');
     setName('');
     setSlug('');
     setSlugTouched(false);
     setDescription('');
+    setGithubOwner('');
+    setGithubRepo('');
+    setAgentExposureMode('isolated');
     setTemplate('blank');
     setAreaUid('');
     setTags([]);
@@ -76,39 +86,65 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
 
   // Auto-derive slug from name unless user edited it
   useEffect(() => {
+    if (creationMode === 'github-import' && githubRepo.trim() && !slugTouched) {
+      setSlug(slugify(githubRepo));
+      return;
+    }
     if (!slugTouched) setSlug(slugify(name));
-  }, [name, slugTouched]);
+  }, [creationMode, githubRepo, name, slugTouched]);
 
   const slugValid = isValidSlug(slug);
   const slugConflict = useMemo(() => existingSlugs.includes(slug), [existingSlugs, slug]);
 
-  const canNext = name.trim().length > 0 && slugValid && !slugConflict && !!template;
+  const canNext =
+    creationMode === 'github-import'
+      ? githubOwner.trim().length > 0 && githubRepo.trim().length > 0 && slugValid && !slugConflict
+      : name.trim().length > 0 && slugValid && !slugConflict && !!template;
   const canCreate = canNext;
 
   async function submit(): Promise<void> {
     if (!canCreate) return;
     setBusy(true);
     setErr(null);
-    try {
+      try {
+      const effectiveName =
+        creationMode === 'github-import'
+          ? (name.trim() || githubRepo.trim())
+          : name.trim();
       const parsed = NewProjectForm.parse({
-        name: name.trim(),
+        name: effectiveName,
         description: description.trim(),
         template,
         slug,
         area_uid: areaUid || undefined,
-        tags: tags.length ? tags : undefined
+        tags: tags.length ? tags : undefined,
+        agent_exposure_mode: agentExposureMode
       });
-      const res = await window.orbit.project.create({
-        slug: parsed.slug,
-        template: parsed.template,
-        name: parsed.name,
-        description: parsed.description,
-        ...(parsed.area_uid ? { area_uid: parsed.area_uid } : {}),
-        ...(parsed.tags ? { tags: parsed.tags } : {})
-      });
+      const res =
+        creationMode === 'github-import'
+          ? await window.orbit.github.importRepository({
+              owner: githubOwner.trim(),
+              repo: githubRepo.trim(),
+              slug: parsed.slug,
+              name: parsed.name || githubRepo.trim(),
+              agent_exposure: { mode: agentExposureMode }
+            })
+          : await window.orbit.project.create({
+              slug: parsed.slug,
+              template: parsed.template,
+              name: parsed.name,
+              description: parsed.description,
+              ...(parsed.area_uid ? { area_uid: parsed.area_uid } : {}),
+              ...(parsed.tags ? { tags: parsed.tags } : {}),
+              agent_exposure: { mode: parsed.agent_exposure_mode }
+            });
       await refreshProjects();
       setActiveProjectUid(res.uid);
-      toast(`Created project ${res.slug}`);
+      toast(
+        creationMode === 'github-import'
+          ? `Imported ${githubOwner}/${githubRepo} → ${res.slug}`
+          : `Created project ${res.slug}`
+      );
       // Open README for instant editing (R3 will route to Project Room)
       const readmePath = `${res.projectPath}/README.md`;
       try {
@@ -149,14 +185,75 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
           {step === 1 && (
             <>
               <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Name</span>
-                <input
+                <span className="mb-1 block text-xs text-neutral-500">Source</span>
+                <select
                   className={input}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Orbit Docs Site"
-                  autoFocus
-                />
+                  value={creationMode}
+                  onChange={(e) => setCreationMode(e.target.value as 'local' | 'github-import')}
+                >
+                  <option value="local">Start local Orbit project</option>
+                  <option value="github-import">Import from GitHub repository</option>
+                </select>
+              </label>
+              {creationMode === 'github-import' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-neutral-500">GitHub owner</span>
+                    <input
+                      className={input}
+                      value={githubOwner}
+                      onChange={(e) => setGithubOwner(e.target.value)}
+                      placeholder="e.g. vercel"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-neutral-500">Repository</span>
+                    <input
+                      className={input}
+                      value={githubRepo}
+                      onChange={(e) => setGithubRepo(e.target.value)}
+                      placeholder="e.g. next.js"
+                    />
+                  </label>
+                </div>
+              ) : (
+                <label className="block">
+                  <span className="mb-1 block text-xs text-neutral-500">Name</span>
+                  <input
+                    className={input}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Orbit Docs Site"
+                    autoFocus
+                  />
+                </label>
+              )}
+              {creationMode === 'github-import' && (
+                <label className="block">
+                  <span className="mb-1 block text-xs text-neutral-500">Project name</span>
+                  <input
+                    className={input}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Optional display name override"
+                  />
+                </label>
+              )}
+              <label className="block">
+                <span className="mb-1 block text-xs text-neutral-500">Agent exposure</span>
+                <select
+                  className={input}
+                  value={agentExposureMode}
+                  onChange={(e) =>
+                    setAgentExposureMode(
+                      e.target.value as 'isolated' | 'bridge' | 'compatible'
+                    )
+                  }
+                >
+                  <option value="isolated">Orbit isolated (.orbit only)</option>
+                  <option value="bridge">Bridge root files when safe</option>
+                  <option value="compatible">Bridge + consume community agent files</option>
+                </select>
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs text-neutral-500">
@@ -188,29 +285,33 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                   </p>
                 )}
               </label>
-              <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Description</span>
-                <textarea
-                  className={input + ' min-h-[88px] resize-y'}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="One-liner or longer. Lands in README.md + AGENT.md."
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Template</span>
-                <select
-                  className={input}
-                  value={template}
-                  onChange={(e) => setTemplate(e.target.value)}
-                >
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label} — {t.description}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {creationMode === 'local' && (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-neutral-500">Description</span>
+                    <textarea
+                      className={input + ' min-h-[88px] resize-y'}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="One-liner or longer. Lands in README.md + AGENT.md."
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-neutral-500">Template</span>
+                    <select
+                      className={input}
+                      value={template}
+                      onChange={(e) => setTemplate(e.target.value)}
+                    >
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.label} — {t.description}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
             </>
           )}
 
@@ -267,10 +368,16 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                   <b>Slug:</b> {slug}
                 </div>
                 <div>
-                  <b>Template:</b> {template}
+                  <b>Source:</b>{' '}
+                  {creationMode === 'github-import'
+                    ? `${githubOwner || 'owner'}/${githubRepo || 'repo'}`
+                    : `template:${template}`}
                 </div>
                 <div>
                   <b>Path:</b> 01_Projects/{slug}/
+                </div>
+                <div>
+                  <b>Exposure:</b> {agentExposureMode}
                 </div>
               </div>
             </>
@@ -302,9 +409,9 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
               </button>
             ) : (
               <button className={btnPrimary} onClick={submit} disabled={!canCreate || busy}>
-                {busy ? 'Creating…' : 'Create project'}
-              </button>
-            )}
+                 {busy ? (creationMode === 'github-import' ? 'Importing…' : 'Creating…') : creationMode === 'github-import' ? 'Import project' : 'Create project'}
+               </button>
+             )}
           </div>
         </footer>
       </div>

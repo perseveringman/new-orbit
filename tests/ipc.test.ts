@@ -12,6 +12,7 @@ describe('IPC contract', () => {
         'envExt',
         'fs',
         'git',
+        'github',
         'migrations',
         'nightShift',
         'para',

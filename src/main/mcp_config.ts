@@ -26,8 +26,15 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import {
+  PROJECT_MCP_CONFIG,
+  PROJECT_ORBIT_DIR,
+  PROJECT_ORBIT_MCP_CONFIG
+} from '@shared/constants';
+import { syncProjectBridges } from './project_bridges';
+import { defaultAgentExposureSettings, readProjectConfig } from './project_config';
 
-export const MCP_CONFIG_FILENAME = '.mcp.json';
+export const MCP_CONFIG_FILENAME = PROJECT_ORBIT_MCP_CONFIG;
 export const ORBIT_MCP_SERVER_NAME = 'orbit';
 
 export interface OrbitMcpEntryArgs {
@@ -78,7 +85,7 @@ function entriesEqual(a: McpServerEntry, b: McpServerEntry): boolean {
 }
 
 /**
- * Make sure `<projectDir>/.mcp.json` registers the Orbit MCP server with
+ * Make sure `<projectDir>/.orbit/.mcp.json` registers the Orbit MCP server with
  * the env-locked args. Returns whether the file was written. Other
  * server entries (user-added) are preserved verbatim. Malformed JSON is
  * replaced wholesale (Claude Code would reject it anyway).
@@ -87,7 +94,7 @@ export async function ensureMcpConfig(
   projectDir: string,
   args: OrbitMcpEntryArgs
 ): Promise<{ path: string; written: boolean }> {
-  const file = path.join(projectDir, MCP_CONFIG_FILENAME);
+  const file = path.join(projectDir, PROJECT_ORBIT_DIR, MCP_CONFIG_FILENAME);
   let existing: McpConfigFile | null = null;
   try {
     const raw = await fs.readFile(file, 'utf8');
@@ -105,10 +112,21 @@ export async function ensureMcpConfig(
   const orbit = buildOrbitEntry(args);
   const cur = next.mcpServers[ORBIT_MCP_SERVER_NAME];
   const upToDate = cur ? entriesEqual(cur, orbit) : false;
-  if (existing && upToDate) return { path: file, written: false };
+  if (existing && upToDate) {
+    const json = JSON.stringify(next, null, 2) + '\n';
+    const config = await readProjectConfig(projectDir);
+    await syncProjectBridges(projectDir, config?.agent_exposure ?? defaultAgentExposureSettings(), {
+      [PROJECT_MCP_CONFIG]: json
+    });
+    return { path: file, written: false };
+  }
   next.mcpServers[ORBIT_MCP_SERVER_NAME] = orbit;
   const json = JSON.stringify(next, null, 2) + '\n';
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, json, 'utf8');
+  const config = await readProjectConfig(projectDir);
+  await syncProjectBridges(projectDir, config?.agent_exposure ?? defaultAgentExposureSettings(), {
+    [PROJECT_MCP_CONFIG]: json
+  });
   return { path: file, written: true };
 }

@@ -31,6 +31,20 @@ function fakeSpawner(): { spawn: typeof nodeSpawn; last: () => FakeChild } {
   return { spawn: s, last: () => last as FakeChild };
 }
 
+function delayedCloseSpawner(): { spawn: typeof nodeSpawn; last: () => FakeChild } {
+  let last: FakeChild | null = null;
+  const s = ((): FakeChild => {
+    last = new FakeChild();
+    last.kill = (): boolean => {
+      last!.killed = true;
+      setTimeout(() => last?.emit('close', 0), 0);
+      return true;
+    };
+    return last;
+  }) as unknown as typeof nodeSpawn;
+  return { spawn: s, last: () => last as FakeChild };
+}
+
 describe('mapStreamJson', () => {
   it('normalizes a cost/result event', () => {
     const ev = mapStreamJson(
@@ -177,6 +191,36 @@ describe('AgentRunner stream parsing', () => {
       expect(unhandled).toEqual([]);
     } finally {
       process.off('unhandledRejection', onUnhandled);
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for runner shutdown bookkeeping before stop resolves', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-stop-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn } = delayedCloseSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/true',
+        prompt: 'p',
+        cwd: vault,
+        taskId: 'file:foo',
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000
+      });
+
+      await runner.start();
+      await runner.stop('test');
+
+      expect(runner.summary.status).toBe('killed');
+
+      const activePath = path.join(vault, '.orbit', 'logs', '_active.json');
+      const activeRaw = await fs.readFile(activePath, 'utf8');
+      const active = JSON.parse(activeRaw) as Record<string, unknown>;
+      expect(active).not.toHaveProperty(runner.runId);
+    } finally {
       await fs.rm(vault, { recursive: true, force: true });
     }
   });

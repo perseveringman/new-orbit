@@ -42,6 +42,13 @@ import type {
   ResetAllResult,
   WorktreeRecord
 } from './git';
+import type {
+  GitHubConnection,
+  GitHubPullRequestSummary,
+  GitHubProjectState,
+  GitHubRepoBinding,
+  GitHubRepoVisibility
+} from './github';
 
 /**
  * Typed IPC contract shared between main and renderer.
@@ -180,6 +187,13 @@ export const IPC = {
   },
   envExt: {
     hasGhCli: 'env:hasGhCli'
+  },
+  github: {
+    getConnection: 'github:getConnection',
+    getProjectState: 'github:getProjectState',
+    publishProject: 'github:publishProject',
+    importRepository: 'github:importRepository',
+    createPullRequest: 'github:createPullRequest'
   }
 } as const;
 
@@ -303,6 +317,17 @@ export interface ProjectSummaryDTO {
   readmePath: string;
   relPath: string;
   legacy: boolean;
+  github?: GitHubRepoBinding;
+}
+
+export interface AgentExposureSettingsDTO {
+  mode: 'isolated' | 'bridge' | 'compatible';
+  exposeMcpBridge?: boolean;
+  exposeAgentMdBridge?: boolean;
+  exposeAgentsMdBridge?: boolean;
+  consumeCommunityAgentMd?: boolean;
+  consumeCommunityAgentsMd?: boolean;
+  consumeCommunityDotAgent?: boolean;
 }
 
 export interface CreateProjectArgsDTO {
@@ -313,6 +338,7 @@ export interface CreateProjectArgsDTO {
   uid?: string;
   area_uid?: string;
   tags?: string[];
+  agent_exposure?: AgentExposureSettingsDTO;
 }
 
 export interface CreateProjectResultDTO {
@@ -336,6 +362,37 @@ export interface EnsureMcpConfigResultDTO {
   configPath: string;
   written: boolean;
   mcpServerPath: string;
+}
+
+export interface PublishProjectToGitHubArgsDTO {
+  projectUid: string;
+  owner: string;
+  repo: string;
+  visibility: GitHubRepoVisibility;
+  defaultBranch?: string;
+}
+
+export interface ImportGitHubRepositoryArgsDTO {
+  owner: string;
+  repo: string;
+  slug?: string;
+  name?: string;
+  agent_exposure?: AgentExposureSettingsDTO;
+}
+
+export interface ImportGitHubRepositoryResultDTO {
+  projectPath: string;
+  uid: string;
+  slug: string;
+  binding: GitHubRepoBinding | null;
+}
+
+export interface CreateGitHubPullRequestArgsDTO {
+  projectUid: string;
+  title?: string;
+  body?: string;
+  baseBranch?: string;
+  draft?: boolean;
 }
 
 export interface CreateTaskArgsDTO {
@@ -645,5 +702,12 @@ export interface OrbitApi {
   };
   envExt: {
     hasGhCli(): Promise<boolean>;
+  };
+  github: {
+    getConnection(): Promise<GitHubConnection>;
+    getProjectState(projectUid: string): Promise<GitHubProjectState>;
+    publishProject(args: PublishProjectToGitHubArgsDTO): Promise<GitHubProjectState>;
+    importRepository(args: ImportGitHubRepositoryArgsDTO): Promise<ImportGitHubRepositoryResultDTO>;
+    createPullRequest(args: CreateGitHubPullRequestArgsDTO): Promise<GitHubPullRequestSummary>;
   };
 }

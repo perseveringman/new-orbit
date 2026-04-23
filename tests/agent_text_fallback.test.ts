@@ -65,6 +65,6 @@ describe('agent text-fallback dispatch routes through src/mcp/tools.ts', () => {
     const r = await callTool(ctx, inv!.name, inv!.args);
     expect(r.isError).toBeFalsy();
     const payload = JSON.parse(r.content[0]!.text) as { uid: string; path: string };
-    expect(payload.path).toContain(path.join('01_Projects', 'fb', '.agent', 'tasks'));
+    expect(payload.path).toContain(path.join('01_Projects', 'fb', '.orbit', 'agent', 'tasks'));
   });
 });

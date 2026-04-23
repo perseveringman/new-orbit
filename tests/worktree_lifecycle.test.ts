@@ -17,7 +17,7 @@ describe('worktree lifecycle hooks', () => {
         template: 'blank',
         name: 'Demo'
       });
-      const cfgPath = path.join(created.projectPath, '.agent', 'config.json');
+      const cfgPath = path.join(created.projectPath, '.orbit', 'config.json');
       const setupMarker = path.join(created.projectPath, 'setup.marker');
       const teardownMarker = path.join(created.projectPath, 'teardown.marker');
       await fs.writeFile(

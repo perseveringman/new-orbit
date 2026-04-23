@@ -136,23 +136,14 @@ Orbit 不再假设所有项目都应该把 Orbit 能力暴露到项目根目录�
 
 ## Target file layout
 
-建议的项目级 `.orbit/` 结构如下：
+当前已落地的项目级 `.orbit/` 结构如下：
 
 ```text
 <project>/
   .orbit/
-    project.json
+    config.json
+    .mcp.json
     agent/
-      config.json
-      context/
-        index.json
-        orbit-world.md
-        project-brief.md
-        runtime-state.md
-        tooling-commands.md
-        operating-rules.md
-        open-tasks.md
-        recent-activity.md
       tasks/
       memories/
       logs/
@@ -171,7 +162,7 @@ Orbit 不再假设所有项目都应该把 Orbit 能力暴露到项目根目录�
     bridge/
       AGENT.md
       AGENTS.md
-      mcp.json
+      .mcp.json
       manifest.json
 ```
 
@@ -184,6 +175,8 @@ Orbit 不再假设所有项目都应该把 Orbit 能力暴露到项目根目录�
 | `<project>/AGENT.md` | 用户仓库 / 可选桥接 | 仅在开启桥接时生成 |
 | `<project>/AGENTS.md` | 用户仓库 / 可选桥接 | 仅在开启桥接时生成 |
 | `<project>/.agent/**` | 社区 / 用户仓库 | Orbit 不再默认作为主存储写入 |
+
+补充说明：实际实现中，项目级主配置统一收敛到 `<project>/.orbit/config.json`，而不是拆成 `project.json` 与 `agent/config.json` 两份主配置。
 
 ---
 

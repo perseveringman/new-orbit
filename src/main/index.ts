@@ -14,6 +14,7 @@ import {
   registerAgentIpc
 } from './agent/ipc';
 import { registerGitIpc } from './git/ipc';
+import { registerGitHubIpc } from './github/ipc';
 import { registerEnvIpc } from './env/ipc';
 import { registerDistillIpc, ensureVectorStore, closeVectorStore } from './distill/ipc';
 import { registerR6Ipc, startDailyReviewScheduler } from './r6_ipc';
@@ -309,6 +310,7 @@ function registerIpc(): void {
   registerFsIpc();
   registerAgentIpc();
   registerGitIpc();
+  registerGitHubIpc();
   registerEnvIpc();
   registerDistillIpc();
   registerTerminalIpc();

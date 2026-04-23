@@ -40,7 +40,7 @@ describe('task.relink (R7)', () => {
     expect(frontmatter.read(raw).data['project_uid']).toBe(alpha.uid);
   });
 
-  it('moves the task file into the target project .agent/tasks/ and updates project_uid', async () => {
+  it('moves the task file into the target project .orbit/agent/tasks/ and updates project_uid', async () => {
     const alpha = await createProject(vault, {
       slug: 'alpha2',
       template: 'blank',
@@ -58,7 +58,7 @@ describe('task.relink (R7)', () => {
     const result = await relinkTask(vault, task.taskPath, beta.uid);
     expect(result.moved).toBe(true);
     expect(result.projectUid).toBe(beta.uid);
-    expect(result.taskPath).toContain(path.join('01_Projects', 'beta2', '.agent', 'tasks'));
+    expect(result.taskPath).toContain(path.join('01_Projects', 'beta2', '.orbit', 'agent', 'tasks'));
     expect(
       await fs
         .access(result.taskPath)
@@ -109,7 +109,8 @@ describe('task.relink (R7)', () => {
     // Plant a collision at the target with the same basename.
     const collisionPath = path.join(
       beta.projectPath,
-      '.agent',
+      '.orbit',
+      'agent',
       'tasks',
       path.basename(t1.taskPath)
     );

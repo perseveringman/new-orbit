@@ -88,25 +88,6 @@ export function ProjectSessionsView({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3 text-xs dark:border-neutral-800">
-        <div>
-          <div className="font-medium text-neutral-700 dark:text-neutral-200">Project Sessions</div>
-          <div className="text-neutral-500">
-            {loading ? 'Refreshing...' : `${sessions.length} project-linked sessions`}
-          </div>
-        </div>
-        <button
-          onClick={() => void refresh()}
-          className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div className="border-b border-neutral-200 px-5 py-3 text-xs text-neutral-500 dark:border-neutral-800">
-        Session selection lives in the right sidebar. Pick an agent session there to inspect its transcript here.
-      </div>
-
       <div className="min-h-0 flex-1">
         {sessions.length === 0 ? (
           <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500">

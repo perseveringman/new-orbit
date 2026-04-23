@@ -19,7 +19,7 @@ describe('project lifecycle hooks', () => {
         template: 'blank',
         name: 'Demo'
       });
-      const cfgPath = path.join(created.projectPath, '.agent', 'config.json');
+      const cfgPath = path.join(created.projectPath, '.orbit', 'config.json');
       await fs.writeFile(
         cfgPath,
         JSON.stringify(
@@ -56,7 +56,7 @@ describe('project lifecycle hooks', () => {
         name: 'Demo'
       });
       const marker = path.join(created.projectPath, 'marker.txt');
-      const cfgPath = path.join(created.projectPath, '.agent', 'config.json');
+      const cfgPath = path.join(created.projectPath, '.orbit', 'config.json');
       await fs.writeFile(
         cfgPath,
         JSON.stringify(

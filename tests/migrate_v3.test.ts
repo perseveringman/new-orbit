@@ -40,7 +40,7 @@ describe('migrate v3: projectsFilesToFolders', () => {
     expect(r.body).toContain('## Next');
   });
 
-  it('converts a single-file project into a folder project with uid preserved and .agent/config.json written', async () => {
+  it('converts a single-file project into a folder project with uid preserved and .orbit/config.json written', async () => {
     await fs.writeFile(
       path.join(vault, '01_Projects', 'legacy-alpha.md'),
       '---\nuid: LEGACYALPHA1\ntype: project\ntitle: Legacy Alpha\nstatus: active\n---\n# Legacy Alpha\n\n## Agent\nYou are the alpha agent.\n\n## Plan\ndo stuff\n',
@@ -68,7 +68,7 @@ describe('migrate v3: projectsFilesToFolders', () => {
     expect(await exists(dir)).toBe(true);
 
     const cfg = JSON.parse(
-      await fs.readFile(path.join(dir, '.agent', 'config.json'), 'utf8')
+      await fs.readFile(path.join(dir, '.orbit', 'config.json'), 'utf8')
     ) as { uid: string; slug: string };
     expect(cfg.uid).toBe('LEGACYALPHA1');
     expect(cfg.slug).toBe('legacy-alpha');
@@ -84,10 +84,10 @@ describe('migrate v3: projectsFilesToFolders', () => {
     expect(agent).toContain('alpha agent');
 
     expect(await exists(path.join(dir, '.gitignore'))).toBe(true);
-    expect(await exists(path.join(dir, '.agent', 'tasks'))).toBe(true);
-    expect(await exists(path.join(dir, '.agent', 'memories'))).toBe(true);
-    expect(await exists(path.join(dir, '.agent', 'skills', '_index.md'))).toBe(true);
-    expect(await exists(path.join(dir, '.agent', 'logs', 'TIMELINE.md'))).toBe(true);
+    expect(await exists(path.join(dir, '.orbit', 'agent', 'tasks'))).toBe(true);
+    expect(await exists(path.join(dir, '.orbit', 'agent', 'memories'))).toBe(true);
+    expect(await exists(path.join(dir, '.orbit', 'agent', 'skills', '_index.md'))).toBe(true);
+    expect(await exists(path.join(dir, '.orbit', 'agent', 'logs', 'TIMELINE.md'))).toBe(true);
     expect(await exists(path.join(dir, 'CLAUDE.md'))).toBe(true);
     expect(await exists(path.join(dir, 'CODEX.md'))).toBe(true);
     expect(await exists(path.join(dir, 'GEMINI.md'))).toBe(true);
@@ -164,7 +164,7 @@ describe('migrate v3: projectsFilesToFolders', () => {
     // The original legacy file is still in place so the user can retry.
     expect(await exists(path.join(vault, '01_Projects', 'ok-one.md'))).toBe(true);
     // The successful one gave us the expected folder.
-    expect(await exists(path.join(vault, '01_Projects', 'ok-two', '.agent', 'config.json'))).toBe(true);
+    expect(await exists(path.join(vault, '01_Projects', 'ok-two', '.orbit', 'config.json'))).toBe(true);
   });
 
   it('re-running after a clean migration is a zero-change no-op', async () => {
@@ -209,11 +209,11 @@ describe('migrate v3: projectsFilesToFolders', () => {
       template: 'blank',
       name: 'Context Me'
     });
-    await fs.rm(path.join(proj.projectPath, '.agent', 'skills'), {
+    await fs.rm(path.join(proj.projectPath, '.orbit', 'agent', 'skills'), {
       recursive: true,
       force: true
     });
-    await fs.rm(path.join(proj.projectPath, '.agent', 'logs'), {
+    await fs.rm(path.join(proj.projectPath, '.orbit', 'agent', 'logs'), {
       recursive: true,
       force: true
     });
@@ -221,10 +221,10 @@ describe('migrate v3: projectsFilesToFolders', () => {
 
     await runMigrations(vault);
 
-    expect(await exists(path.join(proj.projectPath, '.agent', 'skills', '_index.md'))).toBe(
+    expect(await exists(path.join(proj.projectPath, '.orbit', 'agent', 'skills', '_index.md'))).toBe(
       true
     );
-    expect(await exists(path.join(proj.projectPath, '.agent', 'logs', 'TIMELINE.md'))).toBe(
+    expect(await exists(path.join(proj.projectPath, '.orbit', 'agent', 'logs', 'TIMELINE.md'))).toBe(
       true
     );
     expect(await exists(path.join(proj.projectPath, 'CLAUDE.md'))).toBe(true);

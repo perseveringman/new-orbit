@@ -27,7 +27,8 @@ export async function* walkMarkdown(root: string): AsyncGenerator<string> {
     for (const e of entries) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (!isIgnoredDirName(e.name)) stack.push(p);
+        if (e.name === ORBIT_DIR && dir === root) continue;
+        if (!isIgnoredDirName(e.name) || e.name === ORBIT_DIR) stack.push(p);
       } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
         yield p;
       }
@@ -49,7 +50,8 @@ export async function* walkAll(root: string): AsyncGenerator<string> {
     for (const e of entries) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (!isIgnoredDirName(e.name)) stack.push(p);
+        if (e.name === ORBIT_DIR && dir === root) continue;
+        if (!isIgnoredDirName(e.name) || e.name === ORBIT_DIR) stack.push(p);
       } else if (e.isFile()) {
         yield p;
       }

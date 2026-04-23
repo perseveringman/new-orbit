@@ -26,7 +26,7 @@ describe('project.create (R1)', () => {
     expect(ids).toEqual(['blank', 'research', 'web-app', 'writing']);
   });
 
-  it('scaffolds a folder-backed project with .agent, AGENT.md, README.md, .gitignore and a git repo', async () => {
+  it('scaffolds a folder-backed project with .orbit, AGENT.md, README.md, .gitignore and a git repo', async () => {
     const res = await createProject(vault, {
       slug: 'my-demo',
       template: 'blank',
@@ -54,7 +54,7 @@ describe('project.create (R1)', () => {
     expect(gi).toMatch(/dist/);
 
     const cfgRaw = await fs.readFile(
-      path.join(res.projectPath, '.agent', 'config.json'),
+      path.join(res.projectPath, '.orbit', 'config.json'),
       'utf8'
     );
     const cfg = JSON.parse(cfgRaw) as { uid: string; slug: string; template: string };
@@ -63,14 +63,14 @@ describe('project.create (R1)', () => {
     expect(cfg.template).toBe('blank');
 
     // Empty dirs placeholded
-    const tasksStat = await fs.stat(path.join(res.projectPath, '.agent', 'tasks'));
+    const tasksStat = await fs.stat(path.join(res.projectPath, '.orbit', 'agent', 'tasks'));
     expect(tasksStat.isDirectory()).toBe(true);
-    const memStat = await fs.stat(path.join(res.projectPath, '.agent', 'memories'));
+    const memStat = await fs.stat(path.join(res.projectPath, '.orbit', 'agent', 'memories'));
     expect(memStat.isDirectory()).toBe(true);
 
-    const skillsDir = path.join(res.projectPath, '.agent', 'skills');
+    const skillsDir = path.join(res.projectPath, '.orbit', 'agent', 'skills');
     expect((await fs.stat(skillsDir)).isDirectory()).toBe(true);
-    const logsDir = path.join(res.projectPath, '.agent', 'logs');
+    const logsDir = path.join(res.projectPath, '.orbit', 'agent', 'logs');
     expect((await fs.stat(logsDir)).isDirectory()).toBe(true);
 
     const skillFiles = [
@@ -89,17 +89,17 @@ describe('project.create (R1)', () => {
     }
 
     const claude = await fs.readFile(path.join(res.projectPath, 'CLAUDE.md'), 'utf8');
-    expect(claude).toContain('.agent/skills/_index.md');
-    expect(claude).toContain('.agent/logs/TIMELINE.md');
+    expect(claude).toContain('.orbit/agent/skills/_index.md');
+    expect(claude).toContain('.orbit/agent/logs/TIMELINE.md');
 
     const codex = await fs.readFile(path.join(res.projectPath, 'CODEX.md'), 'utf8');
-    expect(codex).toContain('.agent/skills/_index.md');
+    expect(codex).toContain('.orbit/agent/skills/_index.md');
 
     const gemini = await fs.readFile(path.join(res.projectPath, 'GEMINI.md'), 'utf8');
-    expect(gemini).toContain('.agent/skills/_index.md');
+    expect(gemini).toContain('.orbit/agent/skills/_index.md');
 
     const timeline = await fs.readFile(
-      path.join(res.projectPath, '.agent', 'logs', 'TIMELINE.md'),
+      path.join(res.projectPath, '.orbit', 'agent', 'logs', 'TIMELINE.md'),
       'utf8'
     );
     expect(timeline).toContain('# 操作时间线');

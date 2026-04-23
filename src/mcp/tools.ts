@@ -25,8 +25,9 @@ import { VectorStore } from '../main/vector';
 import { getEmbedder } from '../main/vector/embed';
 import {
   PROJECTS_DIR,
-  PROJECT_AGENT_DIR,
-  PROJECT_TASKS_DIR
+  PROJECT_ORBIT_AGENT_DIR,
+  PROJECT_ORBIT_DIR,
+  PROJECT_ORBIT_TASKS_DIR
 } from '@shared/constants';
 import type { ToolCallResult, ToolDefinition } from './protocol';
 import { readAllOperationLogEntries, writeOpLog } from './oplog';
@@ -59,7 +60,12 @@ function projectDir(ctx: ToolContext): string {
 }
 
 function projectTasksDir(ctx: ToolContext): string {
-  return path.join(projectDir(ctx), PROJECT_AGENT_DIR, PROJECT_TASKS_DIR);
+  return path.join(
+    projectDir(ctx),
+    PROJECT_ORBIT_DIR,
+    PROJECT_ORBIT_AGENT_DIR,
+    PROJECT_ORBIT_TASKS_DIR
+  );
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -104,7 +110,7 @@ function errorResult(message: string): ToolCallResult {
 }
 
 /**
- * Walk the project's `.agent/tasks/` directory and return the absolute
+ * Walk the project's `.orbit/agent/tasks/` directory and return the absolute
  * path of the task whose frontmatter `uid` equals `taskUid`.
  *
  * Strict project scoping: only tasks under the **current** project are

@@ -3,6 +3,7 @@ import {
   IPC,
   type ArchiveProjectResultDTO,
   type CloseProjectResult,
+  type CreateGitHubPullRequestArgsDTO,
   type CreateProjectArgsDTO,
   type CreateProjectResultDTO,
   type CreateTaskArgsDTO,
@@ -12,6 +13,8 @@ import {
   type DistillSuggestHit,
   type EnsureMcpConfigResultDTO,
   type EntityFilter,
+  type ImportGitHubRepositoryArgsDTO,
+  type ImportGitHubRepositoryResultDTO,
   type JournalListItemDTO,
   type NightShiftDoneEventDTO,
   type NightShiftPlanDTO,
@@ -19,6 +22,7 @@ import {
   type NightShiftRunDTO,
   type OrbitApi,
   type OrphanRescueCandidate,
+  type PublishProjectToGitHubArgsDTO,
   type ProjectSummaryDTO,
   type SearchOpts,
   type TemplateMetaDTO,
@@ -31,6 +35,11 @@ import {
   type TerminalSessionInfoDTO,
   type V3MigrationReport
 } from '@shared/ipc';
+import type {
+  GitHubConnection,
+  GitHubProjectState,
+  GitHubPullRequestSummary
+} from '@shared/github';
 import type { FsEvent, Theme } from '@shared/types';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
@@ -255,6 +264,21 @@ const api: OrbitApi = {
   },
   envExt: {
     hasGhCli: (): Promise<boolean> => ipcRenderer.invoke(IPC.envExt.hasGhCli)
+  },
+  github: {
+    getConnection: (): Promise<GitHubConnection> => ipcRenderer.invoke(IPC.github.getConnection),
+    getProjectState: (projectUid: string): Promise<GitHubProjectState> =>
+      ipcRenderer.invoke(IPC.github.getProjectState, projectUid),
+    publishProject: (args: PublishProjectToGitHubArgsDTO): Promise<GitHubProjectState> =>
+      ipcRenderer.invoke(IPC.github.publishProject, args),
+    importRepository: (
+      args: ImportGitHubRepositoryArgsDTO
+    ): Promise<ImportGitHubRepositoryResultDTO> =>
+      ipcRenderer.invoke(IPC.github.importRepository, args),
+    createPullRequest: (
+      args: CreateGitHubPullRequestArgsDTO
+    ): Promise<GitHubPullRequestSummary> =>
+      ipcRenderer.invoke(IPC.github.createPullRequest, args)
   }
 };
 

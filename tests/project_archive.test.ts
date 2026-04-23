@@ -27,8 +27,9 @@ describe('project.archive (R1)', () => {
       name: 'To Archive'
     });
     // Leave a task file so we can assert history of sub-files move with it.
+    await fs.mkdir(path.join(res.projectPath, '.orbit', 'agent', 'tasks'), { recursive: true });
     await fs.writeFile(
-      path.join(res.projectPath, '.agent', 'tasks', 'T1.md'),
+      path.join(res.projectPath, '.orbit', 'agent', 'tasks', 'T1.md'),
       '---\nuid: TASKUID000001\ntype: task\ntitle: T1\nstatus: inbox\nproject_uid: ' +
         res.uid +
         '\n---\nbody\n',
@@ -46,7 +47,7 @@ describe('project.archive (R1)', () => {
     const stat = await fs.stat(r.newPath);
     expect(stat.isDirectory()).toBe(true);
     const movedTask = await fs.readFile(
-      path.join(r.newPath, '.agent', 'tasks', 'T1.md'),
+      path.join(r.newPath, '.orbit', 'agent', 'tasks', 'T1.md'),
       'utf8'
     );
     expect(movedTask).toContain('TASKUID000001');

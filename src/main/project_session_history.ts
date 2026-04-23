@@ -1,8 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
-  PROJECT_AGENT_DIR,
-  PROJECT_LOGS_DIR,
+  PROJECT_ORBIT_AGENT_DIR,
+  PROJECT_ORBIT_DIR,
+  PROJECT_ORBIT_LOGS_DIR,
   PROJECT_SESSION_HISTORY
 } from '@shared/constants';
 import { listProjects } from './project';
@@ -78,8 +79,9 @@ export async function writeProjectSessionHistory(
   if (!project || project.legacy) return;
   const filePath = path.join(
     project.path,
-    PROJECT_AGENT_DIR,
-    PROJECT_LOGS_DIR,
+    PROJECT_ORBIT_DIR,
+    PROJECT_ORBIT_AGENT_DIR,
+    PROJECT_ORBIT_LOGS_DIR,
     PROJECT_SESSION_HISTORY
   );
   await fs.mkdir(path.dirname(filePath), { recursive: true });
