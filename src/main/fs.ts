@@ -337,7 +337,7 @@ export async function closeFsSession(): Promise<void> {
 export function registerFsIpc(): void {
   ipcMain.handle(IPC.fs.listTree, async (_e, vault: string) => {
     const sess = getSession();
-    assertInsideVault(sess.vault, vault);
+    void vault;
     return buildTree(sess.vault);
   });
 

@@ -13,8 +13,7 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Today', view: { kind: 'today' }, icon: '☼' },
   { label: 'Journals', view: { kind: 'journals' }, icon: '📓' },
-  { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' },
-  { label: 'Area Overview', view: { kind: 'area', areaUid: null }, icon: '◇' }
+  { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
 ];
 
 export interface TopBarContext {
@@ -35,7 +34,7 @@ interface TopBarContextInput {
 }
 
 const WORKSPACE_DETAILS: Record<
-  'dashboard' | 'github' | 'inbox' | 'today' | 'journals' | 'kanban' | 'area',
+  'dashboard' | 'github' | 'inbox' | 'today' | 'journals' | 'kanban',
   string
 > = {
   dashboard: 'Vision, PARA health, and project activity.',
@@ -43,8 +42,7 @@ const WORKSPACE_DETAILS: Record<
   inbox: 'Capture and sort incoming work before it spreads.',
   today: 'Focus on the tasks scheduled for today.',
   journals: 'Review past daily notes and decisions.',
-  kanban: 'Track task flow across active projects.',
-  area: 'Review responsibilities and linked projects by area.'
+  kanban: 'Track task flow across active projects.'
 };
 
 export function deriveTopBarContext({
@@ -106,16 +104,24 @@ export function deriveTopBarContext({
     };
   }
 
+  if (view.kind === 'area') {
+    return {
+      eyebrow: 'Areas',
+      title: 'Areas',
+      detail: `${vaultLabel} · Browse and manage long-lived responsibilities by area.`,
+      stateLabel: null
+    };
+  }
+
   const title = WORKSPACE_DESTINATIONS.find((item) => item.view.kind === view.kind)?.label;
   const detail =
     view.kind === 'dashboard' ||
-    view.kind === 'github' ||
-    view.kind === 'inbox' ||
-    view.kind === 'today' ||
-    view.kind === 'journals' ||
-    view.kind === 'kanban' ||
-    view.kind === 'area'
-      ? WORKSPACE_DETAILS[view.kind]
+      view.kind === 'github' ||
+      view.kind === 'inbox' ||
+      view.kind === 'today' ||
+      view.kind === 'journals' ||
+      view.kind === 'kanban'
+        ? WORKSPACE_DETAILS[view.kind]
       : 'Move through your workbench from the sidebar.';
 
   return {

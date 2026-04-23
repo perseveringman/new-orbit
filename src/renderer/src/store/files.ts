@@ -30,6 +30,7 @@ interface FilesState {
 }
 
 let toastId = 0;
+let initToken = 0;
 
 export const useFiles = create<FilesState>((set, get) => ({
   tree: null,
@@ -40,9 +41,13 @@ export const useFiles = create<FilesState>((set, get) => ({
 
   async init(vaultPath: string) {
     get().teardown();
+    const token = ++initToken;
     await get().refreshTree(vaultPath);
+    if (token !== initToken) return;
     const off = window.orbit.fs.onEvent(async (ev: FsEvent) => {
+      if (token !== initToken) return;
       await get().refreshTree(vaultPath);
+      if (token !== initToken) return;
       if (ev.kind === 'rename' && ev.oldPath && get().active?.path === ev.oldPath) {
         set({
           active: {
@@ -67,10 +72,15 @@ export const useFiles = create<FilesState>((set, get) => ({
         set({ backlinks: bl });
       }
     });
+    if (token !== initToken) {
+      off();
+      return;
+    }
     set({ unsubscribe: off });
   },
 
   teardown() {
+    initToken += 1;
     get().unsubscribe?.();
     set({ unsubscribe: null, tree: null, active: null, backlinks: [] });
   },

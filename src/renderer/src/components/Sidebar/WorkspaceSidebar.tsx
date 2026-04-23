@@ -10,8 +10,7 @@ const ITEMS: Item[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Today', view: { kind: 'today' }, icon: '☼' },
-  { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' },
-  { label: 'Area Overview', view: { kind: 'area', areaUid: null }, icon: '◇' }
+  { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
 ];
 
 export function WorkspaceSidebar(): JSX.Element {

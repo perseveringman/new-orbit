@@ -10,9 +10,6 @@ function isQuickItemActive(view: WorkspaceView, it: WorkspaceDestination): boole
   if (it.view.kind === 'kanban') {
     return view.kind === 'kanban' && view.projectUid === null;
   }
-  if (it.view.kind === 'area') {
-    return view.kind === 'area' && view.areaUid === null;
-  }
   return true;
 }
 

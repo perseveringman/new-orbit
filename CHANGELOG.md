@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- **Vault 切换文件树竞态**：`fs:listTree` 不再因旧 session 与新 vault 路径短暂交错而抛出 `path escapes vault`；文件树订阅初始化也会主动丢弃过期 listener
 - **Session 详情页信息降噪**：精简 Project Session 详情头部，移除 sessionId / pane / prompt / permission / vendor 等内部字段；仅保留会话标题、状态、时间与入口动作，并将 transcript 文案调整为更面向用户的表述
 - **Inbox 终端审批同步**：terminal approval 卡片在终端里批准/继续执行后会及时清除待审批状态；`Notification` hook 统一按进度事件处理，避免审批消息卡住
 - **Area / Vision 用户旅程闭环**：补齐 Vision 冷启动、笔记接入、Area 级任务创建、Area Session 历史，以及 vault 创建后进入 Vision Room 的导航链路
@@ -18,6 +19,7 @@
 
 ### Changed
 
+- **Areas 左侧导航层级**：移除 Workspace 区的 `Area Overview` 入口，让 Areas 只作为和 Projects 平级的独立区块出现
 - **Areas 侧边栏**：改为 Vision 置顶、按 tag 分组展示，且新建 Area 后会直接进入对应 Area Room
 - **Area 创建流**：`NewAreaModal` 现在支持 blank / vision 模板与 GitHub 仓库导入；GitHub 导入内容会落入 Area 目录但不会保留独立 `.git`
 

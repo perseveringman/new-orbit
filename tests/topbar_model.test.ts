@@ -9,8 +9,7 @@ describe('top bar model', () => {
       'Inbox',
       'Today',
       'Journals',
-      'Kanban',
-      'Area Overview'
+      'Kanban'
     ]);
   });
 
