@@ -16,6 +16,10 @@ describe('vault right sidebar model', () => {
     expect(
       resolveSidebarSurface({ kind: 'project', projectUid: 'project-1' }, 'terminal')
     ).toBe('project.terminal');
+    expect(resolveSidebarSurface({ kind: 'github' })).toBe('github');
+    expect(
+      resolveSidebarSurface({ kind: 'project', projectUid: 'project-1' }, 'github')
+    ).toBe('project.github');
   });
 
   it('exposes top-level intents and shared panels per surface', () => {
@@ -41,6 +45,10 @@ describe('vault right sidebar model', () => {
       'sessions',
       'runlog',
       'diff'
+    ]);
+    expect(getSidebarPanelTabs('project.github', 'overview').map((tab) => tab.id)).toEqual([
+      'task-tree',
+      'worktrees'
     ]);
   });
 

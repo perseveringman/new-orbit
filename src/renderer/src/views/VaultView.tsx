@@ -20,6 +20,7 @@ import { TodayView } from './TodayView';
 import { KanbanView } from './KanbanView';
 import { AreaOverview } from './AreaOverview';
 import { DashboardView } from './DashboardView';
+import { GitHubWorkspaceView } from './GitHubWorkspaceView';
 import { ProjectRoomView } from './ProjectRoomView';
 import { JournalHistoryView } from './JournalHistoryView';
 import { NightShiftHistoryDrawer } from '../components/NightShiftHistoryDrawer';
@@ -346,6 +347,8 @@ export function VaultView(): JSX.Element {
           <InboxView />
         ) : view.kind === 'today' ? (
           <TodayView />
+        ) : view.kind === 'github' ? (
+          <GitHubWorkspaceView />
         ) : view.kind === 'dashboard' ? (
           <DashboardView />
         ) : view.kind === 'journals' ? (

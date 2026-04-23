@@ -5,6 +5,7 @@ describe('top bar model', () => {
   it('keeps workspace destinations in the sidebar navigation model', () => {
     expect(WORKSPACE_DESTINATIONS.map((item) => item.label)).toEqual([
       'Dashboard',
+      'GitHub',
       'Inbox',
       'Today',
       'Journals',
@@ -71,6 +72,23 @@ describe('top bar model', () => {
       title: 'README.md',
       detail: '01_Projects/Moonshot/README.md',
       stateLabel: 'Unsaved changes'
+    });
+  });
+
+  it('describes the workspace github control plane', () => {
+    expect(
+      deriveTopBarContext({
+        view: { kind: 'github' },
+        projects: [],
+        activeProjectUid: null,
+        activeFile: null,
+        vaultPath: '/Users/ryan/Orbit Vault'
+      })
+    ).toEqual({
+      eyebrow: 'Workspace',
+      title: 'GitHub',
+      detail: 'Orbit Vault · Connect accounts, import repos, and monitor GitHub delivery state.',
+      stateLabel: null
     });
   });
 });

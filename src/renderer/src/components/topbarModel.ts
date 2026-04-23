@@ -9,6 +9,7 @@ export interface WorkspaceDestination {
 
 export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
+  { label: 'GitHub', view: { kind: 'github' }, icon: '⌘' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Today', view: { kind: 'today' }, icon: '☼' },
   { label: 'Journals', view: { kind: 'journals' }, icon: '📓' },
@@ -34,10 +35,11 @@ interface TopBarContextInput {
 }
 
 const WORKSPACE_DETAILS: Record<
-  'dashboard' | 'inbox' | 'today' | 'journals' | 'kanban' | 'area',
+  'dashboard' | 'github' | 'inbox' | 'today' | 'journals' | 'kanban' | 'area',
   string
 > = {
   dashboard: 'Vision, PARA health, and project activity.',
+  github: 'Connect accounts, import repos, and monitor GitHub delivery state.',
   inbox: 'Capture and sort incoming work before it spreads.',
   today: 'Focus on the tasks scheduled for today.',
   journals: 'Review past daily notes and decisions.',
@@ -107,6 +109,7 @@ export function deriveTopBarContext({
   const title = WORKSPACE_DESTINATIONS.find((item) => item.view.kind === view.kind)?.label;
   const detail =
     view.kind === 'dashboard' ||
+    view.kind === 'github' ||
     view.kind === 'inbox' ||
     view.kind === 'today' ||
     view.kind === 'journals' ||

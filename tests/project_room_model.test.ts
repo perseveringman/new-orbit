@@ -23,4 +23,10 @@ describe('project room model', () => {
   it('routes the sessions outer tab to the sessions sidebar panel', () => {
     expect(resolveProjectRoomSidebarPanel('sessions')).toBe('sessions');
   });
+
+  it('adds a github outer tab with a dedicated sidebar surface', () => {
+    const outerTab: ProjectRoomOuterTab = 'github';
+    expect(resolveProjectRoomSidebarSurface(outerTab)).toBe('project.github');
+    expect(resolveProjectRoomPaneHint('github')).toBe('github');
+  });
 });

@@ -77,6 +77,9 @@ export const TaskFrontmatter = z.object({
   git_branch: z.string().optional(),
   worktree_path: z.string().optional(),
   pr_url: z.string().optional(),
+  github_issue_number: z.number().int().positive().optional(),
+  github_issue_title: z.string().optional(),
+  github_issue_url: z.string().optional(),
   execution_strategy: z.enum(['manual', 'autonomous']).optional(),
   /** UID list of tasks that must complete before this one (DAG parent refs). */
   pre_conditions: z.array(z.string()).optional(),

@@ -1,5 +1,6 @@
 export type VaultViewKind =
   | 'editor'
+  | 'github'
   | 'inbox'
   | 'today'
   | 'dashboard'
@@ -8,10 +9,11 @@ export type VaultViewKind =
   | 'kanban'
   | 'area';
 
-export type ProjectRoomMode = 'kanban' | 'terminal' | 'sessions';
+export type ProjectRoomMode = 'kanban' | 'terminal' | 'sessions' | 'github';
 
 export type SidebarSurfaceId =
   | 'editor'
+  | 'github'
   | 'inbox'
   | 'today'
   | 'dashboard'
@@ -20,7 +22,8 @@ export type SidebarSurfaceId =
   | 'area'
   | 'project.kanban'
   | 'project.terminal'
-  | 'project.sessions';
+  | 'project.sessions'
+  | 'project.github';
 
 export type SidebarIntentId = 'overview' | 'focus' | 'execution';
 
@@ -71,6 +74,12 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   editor: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks'] }]
   },
+  github: {
+    intents: [
+      { id: 'overview', title: 'Overview', panels: ['worktrees'] },
+      { id: 'execution', title: 'Execution', panels: ['review'] }
+    ]
+  },
   inbox: {
     intents: [{ id: 'focus', title: 'Focus', panels: ['task-detail'] }]
   },
@@ -115,6 +124,13 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
       { id: 'focus', title: 'Focus', panels: ['task-detail'] },
       { id: 'execution', title: 'Execution', panels: ['sessions', 'runlog', 'diff'] }
     ]
+  },
+  'project.github': {
+    intents: [
+      { id: 'overview', title: 'Overview', panels: ['task-tree', 'worktrees'] },
+      { id: 'focus', title: 'Focus', panels: ['task-detail'] },
+      { id: 'execution', title: 'Execution', panels: ['review', 'diff'] }
+    ]
   }
 };
 
@@ -123,7 +139,10 @@ export function resolveSidebarSurface(
   projectMode: ProjectRoomMode = 'kanban'
 ): SidebarSurfaceId {
   if (view.kind === 'project') {
-    return projectMode === 'terminal' ? 'project.terminal' : 'project.kanban';
+    if (projectMode === 'terminal') return 'project.terminal';
+    if (projectMode === 'sessions') return 'project.sessions';
+    if (projectMode === 'github') return 'project.github';
+    return 'project.kanban';
   }
 
   return view.kind;

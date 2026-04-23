@@ -5,15 +5,23 @@ import { useNightShift } from '../../store/nightShift';
 
 interface NightShiftModalProps {
   open: boolean;
+  projectUid?: string;
   onClose: () => void;
 }
 
-export function NightShiftModal({ open, onClose }: NightShiftModalProps): JSX.Element | null {
+export function NightShiftModal({
+  open,
+  projectUid,
+  onClose
+}: NightShiftModalProps): JSX.Element | null {
   const tasks = usePara((s) => s.tasks);
   const start = useNightShift((s) => s.start);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [concurrency, setConcurrency] = useState(2);
-  const [createPR, setCreatePR] = useState(false);
+  const [pushBranch, setPushBranch] = useState(false);
+  const [createDraftPr, setCreateDraftPr] = useState(false);
+  const [waitForChecks, setWaitForChecks] = useState(false);
+  const [baseBranch, setBaseBranch] = useState('main');
   const [ghAvailable, setGhAvailable] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -21,17 +29,22 @@ export function NightShiftModal({ open, onClose }: NightShiftModalProps): JSX.El
     if (!open) return;
     setSelected(new Set());
     setSubmitting(false);
+    setPushBranch(false);
+    setCreateDraftPr(false);
+    setWaitForChecks(false);
+    setBaseBranch('main');
     void window.orbit.envExt.hasGhCli().then((ok) => setGhAvailable(ok));
   }, [open]);
 
   const candidates = useMemo<TaskRecord[]>(
     () =>
-      tasks.filter(
-        (t) =>
-          (t.status === 'today' || t.status === 'inbox' || t.status === 'blocked') &&
-          t.uid
-      ),
-    [tasks]
+        tasks.filter(
+          (t) =>
+            (t.status === 'today' || t.status === 'inbox' || t.status === 'blocked') &&
+            (!projectUid || t.project_uid === projectUid) &&
+            t.uid
+        ),
+    [projectUid, tasks]
   );
 
   if (!open) return null;
@@ -47,7 +60,19 @@ export function NightShiftModal({ open, onClose }: NightShiftModalProps): JSX.El
     if (selected.size === 0) return;
     setSubmitting(true);
     try {
-      await start([...selected], concurrency, createPR && ghAvailable === true);
+      await start(
+        [...selected],
+        concurrency,
+        createDraftPr && ghAvailable === true,
+        ghAvailable === true
+          ? {
+              pushBranch,
+              createDraftPr,
+              baseBranch: baseBranch.trim() || 'main',
+              waitForChecks
+            }
+          : undefined
+      );
       onClose();
     } catch (e) {
       alert(`Night Shift failed: ${(e as Error).message}`);
@@ -106,17 +131,51 @@ export function NightShiftModal({ open, onClose }: NightShiftModalProps): JSX.El
 
         <div className="mb-4 flex items-center gap-2 text-xs">
           <input
-            id="ns-pr"
+            id="ns-push"
             type="checkbox"
-            checked={createPR}
-            onChange={(e) => setCreatePR(e.target.checked)}
+            checked={pushBranch}
+            onChange={(e) => setPushBranch(e.target.checked)}
             disabled={ghAvailable !== true}
           />
-          <label htmlFor="ns-pr" className={ghAvailable === true ? '' : 'opacity-50'}>
-            Create PRs on success{' '}
+          <label htmlFor="ns-push" className={ghAvailable === true ? '' : 'opacity-50'}>
+            Push branches after successful execution{' '}
             {ghAvailable === false && (
               <span className="text-amber-500">(gh CLI not found)</span>
             )}
+          </label>
+        </div>
+
+        <div className="mb-3 flex items-center gap-2 text-xs">
+          <input
+            id="ns-pr"
+            type="checkbox"
+            checked={createDraftPr}
+            onChange={(e) => setCreateDraftPr(e.target.checked)}
+            disabled={ghAvailable !== true}
+          />
+          <label htmlFor="ns-pr" className={ghAvailable === true ? '' : 'opacity-50'}>
+            Create draft PRs for successful tasks
+          </label>
+        </div>
+
+        <div className="mb-3 flex items-center gap-4 text-xs">
+          <label className="flex items-center gap-2">
+            Base branch:
+            <input
+              className="rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
+              value={baseBranch}
+              onChange={(event) => setBaseBranch(event.target.value)}
+              disabled={ghAvailable !== true}
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={waitForChecks}
+              onChange={(event) => setWaitForChecks(event.target.checked)}
+              disabled={ghAvailable !== true || createDraftPr !== true}
+            />
+            Wait for checks snapshot after PR creation
           </label>
         </div>
 

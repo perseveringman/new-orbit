@@ -1,7 +1,7 @@
 import type { SidebarPanelId, SidebarSurfaceId } from './vaultRightSidebarModel';
 
 export type ProjectRoomHeaderAction = 'enable-orbit-tools' | 'archive-project';
-export type ProjectRoomOuterTab = 'kanban' | 'terminal' | 'sessions';
+export type ProjectRoomOuterTab = 'kanban' | 'terminal' | 'sessions' | 'github';
 
 export interface ProjectRoomKanbanModel {
   headerActions: ProjectRoomHeaderAction[];
@@ -40,6 +40,7 @@ export function resolveProjectRoomSidebarSurface(
 ): SidebarSurfaceId {
   if (outerTab === 'terminal') return 'project.terminal';
   if (outerTab === 'sessions') return 'project.sessions';
+  if (outerTab === 'github') return 'project.github';
   return 'project.kanban';
 }
 
@@ -52,12 +53,13 @@ export function resolveProjectRoomSidebarPanel(
 
 export function resolveProjectRoomPaneHint(pane?: 'task'): 'task' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'sessions' | 'readme' | 'agent'
-): 'task' | 'sessions' | null;
+  pane?: 'task' | 'sessions' | 'github' | 'readme' | 'agent'
+): 'task' | 'sessions' | 'github' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'sessions' | 'readme' | 'agent'
-): 'task' | 'sessions' | null {
+  pane?: 'task' | 'sessions' | 'github' | 'readme' | 'agent'
+): 'task' | 'sessions' | 'github' | null {
   if (pane === 'task') return 'task';
   if (pane === 'sessions') return 'sessions';
+  if (pane === 'github') return 'github';
   return null;
 }

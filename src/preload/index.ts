@@ -13,6 +13,8 @@ import {
   type DistillSuggestHit,
   type EnsureMcpConfigResultDTO,
   type EntityFilter,
+  type GitHubRepositoryListArgsDTO,
+  type GitHubTaskIssueBindingArgsDTO,
   type ImportGitHubRepositoryArgsDTO,
   type ImportGitHubRepositoryResultDTO,
   type JournalListItemDTO,
@@ -37,8 +39,11 @@ import {
 } from '@shared/ipc';
 import type {
   GitHubConnection,
+  GitHubProjectDetails,
   GitHubProjectState,
-  GitHubPullRequestSummary
+  GitHubPullRequestSummary,
+  GitHubTaskBinding,
+  GitHubWorkspaceRepository
 } from '@shared/github';
 import type { FsEvent, Theme } from '@shared/types';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
@@ -267,8 +272,13 @@ const api: OrbitApi = {
   },
   github: {
     getConnection: (): Promise<GitHubConnection> => ipcRenderer.invoke(IPC.github.getConnection),
+    authenticate: (): Promise<GitHubConnection> => ipcRenderer.invoke(IPC.github.authenticate),
+    listRepositories: (args?: GitHubRepositoryListArgsDTO): Promise<GitHubWorkspaceRepository[]> =>
+      ipcRenderer.invoke(IPC.github.listRepositories, args),
     getProjectState: (projectUid: string): Promise<GitHubProjectState> =>
       ipcRenderer.invoke(IPC.github.getProjectState, projectUid),
+    getProjectDetails: (projectUid: string): Promise<GitHubProjectDetails> =>
+      ipcRenderer.invoke(IPC.github.getProjectDetails, projectUid),
     publishProject: (args: PublishProjectToGitHubArgsDTO): Promise<GitHubProjectState> =>
       ipcRenderer.invoke(IPC.github.publishProject, args),
     importRepository: (
@@ -278,7 +288,11 @@ const api: OrbitApi = {
     createPullRequest: (
       args: CreateGitHubPullRequestArgsDTO
     ): Promise<GitHubPullRequestSummary> =>
-      ipcRenderer.invoke(IPC.github.createPullRequest, args)
+      ipcRenderer.invoke(IPC.github.createPullRequest, args),
+    bindTaskIssue: (args: GitHubTaskIssueBindingArgsDTO): Promise<GitHubTaskBinding> =>
+      ipcRenderer.invoke(IPC.github.bindTaskIssue, args),
+    unbindTaskIssue: (taskPath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.github.unbindTaskIssue, taskPath)
   }
 };
 
