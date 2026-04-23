@@ -51,7 +51,7 @@ describe('ProjectSessionsDetailPane', () => {
       })
     );
 
-    expect(html).toContain('Imported transcript');
+    expect(html).toContain('Conversation');
     expect(html).toContain('min-w-0');
     expect(html).toContain('whitespace-pre-wrap');
     expect(html).toContain('overflow-hidden');
@@ -120,5 +120,28 @@ describe('ProjectSessionsDetailPane', () => {
     expect(html).not.toContain('Thinking:');
     expect(html).not.toContain('&quot;pattern&quot;');
     expect(html.match(/>assistant</g)?.length ?? 0).toBe(1);
+  });
+
+  it('hides internal session metadata and fallback subtitle noise from the header', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProjectSessionsDetailPane, {
+        selected: makeSession({
+          status: 'active',
+          summary: undefined,
+          vendorSessionId: 'vendor-1'
+        }),
+        detail: makeDetail(),
+        onOpenSession: vi.fn()
+      })
+    );
+
+    expect(html).not.toContain('tas_session_1');
+    expect(html).not.toContain('Pane pane-1');
+    expect(html).not.toContain('Prompts 2');
+    expect(html).not.toContain('Permissions 1');
+    expect(html).not.toContain('Vendor vendor-1');
+    expect(html).not.toContain('Claude Code · active');
+    expect(html).toContain('Started ');
+    expect(html).toContain('Last active ');
   });
 });

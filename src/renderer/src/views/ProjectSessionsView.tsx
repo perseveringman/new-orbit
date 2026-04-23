@@ -115,10 +115,13 @@ export function ProjectSessionsDetailPane({
   detail: TerminalAgentSessionDetailDTO | null;
   onOpenSession(): void;
 }): JSX.Element {
+  const agentMeta = getTerminalSessionAgentMeta(selected.agentType);
+  const action = getTerminalSessionAction(selected);
   const presentedMessages = useMemo(
     () => buildFriendlyTranscriptMessages(detail?.messages ?? []),
     [detail?.messages]
   );
+  const summary = getProjectSessionSummary(selected);
 
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
@@ -126,49 +129,37 @@ export function ProjectSessionsDetailPane({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
-              <span
-                className={`rounded px-2 py-1 font-medium ${
-                  getTerminalSessionAgentMeta(selected.agentType).badgeClassName
-                }`}
-              >
-                {getTerminalSessionAgentMeta(selected.agentType).title}
+              <span className={`rounded px-2 py-1 font-medium ${agentMeta.badgeClassName}`}>
+                {agentMeta.title}
               </span>
               <span className={statusClasses(selected.status)}>{selected.status}</span>
-              <span>Started {formatRelativeTs(selected.startedAt)}</span>
-              <span>Last active {formatRelativeTs(selected.lastActivityAt)}</span>
             </div>
             <div className="mt-3 text-xl font-semibold text-neutral-900 dark:text-neutral-100">
               {getTerminalSessionDisplayTitle(selected)}
             </div>
-            <div className="mt-2 max-w-3xl text-sm text-neutral-500">
-              {getTerminalSessionSubtitle(selected)}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-neutral-500">
-              <span className="rounded bg-neutral-100 px-2 py-1 font-mono dark:bg-neutral-800">
-                {selected.sessionId}
-              </span>
-              <span>Pane {selected.paneId}</span>
-              <span>Prompts {selected.stats.promptCount}</span>
-              <span>Permissions {selected.stats.permissionCount}</span>
-              {selected.vendorSessionId ? (
-                <span className="rounded bg-neutral-100 px-2 py-1 font-mono dark:bg-neutral-800">
-                  Vendor {selected.vendorSessionId}
-                </span>
-              ) : null}
+            {summary ? (
+              <div className="mt-2 max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
+                {summary}
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+              <span>Started {formatRelativeTs(selected.startedAt)}</span>
+              <span>Last active {formatRelativeTs(selected.lastActivityAt)}</span>
+              {presentedMessages.length ? <span>{presentedMessages.length} turns</span> : null}
             </div>
           </div>
           <button
             onClick={onOpenSession}
             className="shrink-0 rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
           >
-            {getTerminalSessionAction(selected).hint}
+            {action.hint}
           </button>
         </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
         <div className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          Imported transcript
+          Conversation
         </div>
         {presentedMessages.length ? (
           <div className="min-w-0 space-y-3">
@@ -189,12 +180,21 @@ export function ProjectSessionsDetailPane({
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-xs text-neutral-500 dark:border-neutral-700">
-            No imported transcript is available for this session yet.
+            No conversation has been imported for this session yet.
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function getProjectSessionSummary(session: TerminalAgentSessionDTO): string | null {
+  const title = getTerminalSessionDisplayTitle(session);
+  const subtitle = getTerminalSessionSubtitle(session).trim();
+  if (!subtitle || subtitle === title) return null;
+
+  const fallbackSubtitle = `${getTerminalSessionAgentMeta(session.agentType).title} · ${session.status}`;
+  return subtitle === fallbackSubtitle ? null : subtitle;
 }
 
 function buildFriendlyTranscriptMessages(
