@@ -1,3 +1,9 @@
+---
+status: completed
+created: 2026-04-23
+updated: 2026-04-23
+---
+
 # Orbit `.orbit`-First Agent Exposure Implementation Plan
 
 > 目标：把 Orbit 自有的 agent 能力、上下文、任务与桥接逻辑全部收敛到 `.orbit/`，并把“是否让 agent 感知 Orbit、感知到什么程度”做成用户可选的项目级策略，而不是硬编码到项目根目录规范文件中。

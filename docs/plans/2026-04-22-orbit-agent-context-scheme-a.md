@@ -1,3 +1,9 @@
+---
+status: draft
+created: 2026-04-22
+updated: 2026-04-22
+---
+
 # Orbit Agent Context Architecture — 方案 A 详细设计
 
 ## 1. 背景

@@ -1,3 +1,9 @@
+---
+status: completed
+created: 2026-04-23
+updated: 2026-04-23
+---
+
 # Orbit GitHub Integration & `.orbit` Exposure Implementation Report
 
 > 本文档记录 2026-04-23 两份实施计划的实际交付结果：`.orbit`-first agent exposure 与 GitHub integration blueprint。

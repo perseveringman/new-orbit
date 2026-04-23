@@ -1,3 +1,9 @@
+---
+status: draft
+created: 2026-04-23
+updated: 2026-04-23
+---
+
 # Orbit Capture & Content System 设计方案
 
 > 日期：2026-04-23

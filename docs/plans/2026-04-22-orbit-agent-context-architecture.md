@@ -1,3 +1,9 @@
+---
+status: draft
+created: 2026-04-22
+updated: 2026-04-22
+---
+
 下面是我给 Orbit 的**整体中文设计方案（第一版）**。目标不是只修“在终端里跑 `claude` 时不懂 Orbit”这个点，而是建立一套**长期可扩展的 Agent Context Architecture**：让所有终端型 agent 都能稳定、持续、低摩擦地理解 Orbit 的愿景、项目状态、工具能力和工作约束。
 
 ---

@@ -1,3 +1,9 @@
+---
+status: completed
+created: 2026-04-22
+updated: 2026-04-23
+---
+
 # Orbit 终端会话感知系统设计
 
 ## 1. 问题

@@ -1,3 +1,9 @@
+---
+status: completed
+created: 2026-04-23
+updated: 2026-04-23
+---
+
 # Contextual Right Sidebar Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

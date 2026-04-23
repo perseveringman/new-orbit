@@ -70,10 +70,13 @@ See [docs/architecture.md](docs/architecture.md) for internals and [docs/USER_GU
 
 ## Docs
 
-- [User guide](docs/USER_GUIDE.md) — walkthrough of the UI.
+- [Vision](docs/VISION.md) — product vision and long-term direction.
+- [Roadmap](docs/ROADMAP.md) — completed milestones and upcoming work.
 - [Architecture](docs/architecture.md) — process model, IPC surface, vault layout.
-- [Migration (legacy → v3)](docs/MIGRATION.md) — moving single-file projects to folders, rollback.
 - [Development](docs/DEVELOPMENT.md) — scripts, layout, testing notes.
+- [User guide](docs/USER_GUIDE.md) — walkthrough of the UI.
+- [Migration (legacy → v3)](docs/MIGRATION.md) — moving single-file projects to folders, rollback.
+- [Changelog](CHANGELOG.md) — change history.
 
 ## License
 

@@ -1,3 +1,9 @@
+---
+status: completed
+created: 2026-04-23
+updated: 2026-04-23
+---
+
 # Orbit GitHub 集成蓝图
 
 > 一个产品与架构蓝图，旨在将 GitHub 打造成 Orbit 的远程协作层，并对比 Superset 当前的 GitHub 集成方案。
