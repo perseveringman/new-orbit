@@ -6,6 +6,7 @@
 
 ### Added
 - **Area Room + Vision System 设计方案**：`docs/plans/2026-04-23-area-room-vision-system-design.md`（status: active）；设计 Area 升级为文件夹单元（含 Kanban + Terminal + Sessions）；内置 Vision 模板（基于 45 题访谈协议 + 笔记接入 + 迭代 review 流程）；vault 创建时自动 scaffold vision area
+- **Area Room 渲染层**：新增 `AreasNav` 侧边栏、`NewAreaModal`、`AreaRoomView`（Overview/Terminal/Sessions）、`VisionRoomContent`（冷态 + VISION.md 展示）；workspace store 加入 `areas` 状态与 `refreshAreas()`；`WorkspaceView` 新增 `areaRoom` 变体
 
 ---
 
