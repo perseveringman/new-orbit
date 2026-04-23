@@ -28,6 +28,51 @@ export function createShellReadyScanner(timeoutMs: number): ShellReadyScanner {
     resolve(value);
   };
 
+  const stripTerminalCodes = (value: string): string => {
+    let out = "";
+    for (let index = 0; index < value.length; index += 1) {
+      const ch = value[index];
+      if (ch !== "\u001b") {
+        if (ch !== "\r") out += ch;
+        continue;
+      }
+
+      const next = value[index + 1];
+      if (next === "]") {
+        index += 2;
+        while (index < value.length) {
+          if (value[index] === "\u0007") break;
+          if (value[index] === "\u001b" && value[index + 1] === "\\") {
+            index += 1;
+            break;
+          }
+          index += 1;
+        }
+        continue;
+      }
+
+      if (next === "[") {
+        index += 2;
+        while (index < value.length) {
+          const code = value.charCodeAt(index);
+          if (code >= 0x40 && code <= 0x7e) break;
+          index += 1;
+        }
+        continue;
+      }
+    }
+    return out;
+  };
+
+  const looksLikePlainPrompt = (value: string): boolean => {
+    const tail = stripTerminalCodes(value)
+      .split("\n")
+      .at(-1)
+      ?.trimEnd() ?? "";
+    if (!tail) return false;
+    return /(?:\$|#|%|>|❯|›)$/.test(tail);
+  };
+
   return {
     push(chunk: string) {
       if (resolved) return;
@@ -37,8 +82,13 @@ export function createShellReadyScanner(timeoutMs: number): ShellReadyScanner {
         buffer = "";
         return;
       }
+      if (looksLikePlainPrompt(buffer)) {
+        finish(true);
+        buffer = "";
+        return;
+      }
       if (buffer.length > OSC133_A.length * 4) {
-        buffer = buffer.slice(-OSC133_A.length * 2);
+        buffer = buffer.slice(-128);
       }
     },
     ready,

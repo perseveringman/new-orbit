@@ -28,10 +28,8 @@ export function ProjectSessionsView({
   const setSidebarFocus = useSidebar((s) => s.setFocus);
   const [sessions, setSessions] = useState<TerminalAgentSessionDTO[]>([]);
   const [detail, setDetail] = useState<TerminalAgentSessionDetailDTO | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
     try {
       const next = await window.orbit.terminalAgent.list(projectUid);
       setSessions(next);
@@ -42,8 +40,6 @@ export function ProjectSessionsView({
       });
     } catch (e) {
       toast(`Load project sessions failed: ${(e as Error).message}`);
-    } finally {
-      setLoading(false);
     }
   }, [projectUid, selectedSessionId, setSidebarFocus, toast]);
 

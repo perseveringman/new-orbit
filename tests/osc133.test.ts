@@ -13,6 +13,13 @@ describe("createShellReadyScanner", () => {
     await expect(scanner.ready).resolves.toBe(true);
   });
 
+  it("resolves true when a plain shell prompt appears without OSC 133", async () => {
+    const scanner = createShellReadyScanner(1000);
+    scanner.push("Last login: Wed Apr 23 15:52:49 on ttys001\r\n");
+    scanner.push("ryanbzhou@twitter main % ");
+    await expect(scanner.ready).resolves.toBe(true);
+  });
+
   it("resolves false when timeout elapses without the sequence", async () => {
     const scanner = createShellReadyScanner(10);
     scanner.push("no marker here");
