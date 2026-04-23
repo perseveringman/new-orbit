@@ -119,6 +119,11 @@ export function ProjectSessionsDetailPane({
   detail: TerminalAgentSessionDetailDTO | null;
   onOpenSession(): void;
 }): JSX.Element {
+  const presentedMessages = useMemo(
+    () => buildFriendlyTranscriptMessages(detail?.messages ?? []),
+    [detail?.messages]
+  );
+
   return (
     <div className="flex min-h-0 h-full flex-1 flex-col">
       <div className="min-w-0 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
@@ -169,9 +174,9 @@ export function ProjectSessionsDetailPane({
         <div className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
           Imported transcript
         </div>
-        {detail?.messages.length ? (
+        {presentedMessages.length ? (
           <div className="min-w-0 space-y-3">
-            {detail.messages.map((message) => (
+            {presentedMessages.map((message) => (
               <div
                 key={message.id}
                 className="min-w-0 rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
@@ -194,6 +199,58 @@ export function ProjectSessionsDetailPane({
       </div>
     </div>
   );
+}
+
+function buildFriendlyTranscriptMessages(
+  messages: TerminalAgentSessionDetailDTO['messages']
+): TerminalAgentSessionDetailDTO['messages'] {
+  const turns: TerminalAgentSessionDetailDTO['messages'] = [];
+
+  for (const message of messages) {
+    const text = cleanTranscriptMessage(message);
+    if (!text) continue;
+
+    const previous = turns.at(-1);
+    if (previous?.role === message.role) {
+      previous.text = `${previous.text}\n\n${text}`;
+      previous.at = message.at;
+      continue;
+    }
+
+    turns.push({
+      ...message,
+      text
+    });
+  }
+
+  return turns;
+}
+
+function cleanTranscriptMessage(
+  message: TerminalAgentSessionDetailDTO['messages'][number]
+): string {
+  if (message.role !== 'assistant') return message.text.trim();
+
+  const sections = message.text
+    .split(/\n{2,}/)
+    .map((section) => section.trim())
+    .filter(Boolean);
+
+  const cleaned = sections
+    .map((section) => {
+      if (section.startsWith('Thinking:')) return '';
+      if (section.startsWith('Tool Use:')) {
+        const name = section
+          .slice('Tool Use:'.length)
+          .split('\n', 1)[0]
+          ?.trim();
+        return name ? `Used ${name}` : '';
+      }
+      return section;
+    })
+    .filter(Boolean);
+
+  return cleaned.join('\n\n').trim();
 }
 
 function formatRelativeTs(value: string): string {

@@ -34,7 +34,7 @@ function makeDetail(overrides: Partial<TerminalAgentSessionDetailDTO> = {}): Ter
         id: 'msg-1',
         role: 'assistant',
         at: '2026-04-23T05:45:09.346Z',
-        text: `Thinking:\n${'x'.repeat(240)}`
+        text: `根据项目文件，这是一个仍在早期阶段的 Twitter 抓取项目。\n\n${'x'.repeat(240)}`
       }
     ],
     ...overrides
@@ -69,5 +69,56 @@ describe('ProjectSessionsDetailPane', () => {
 
     expect(html).toContain('flex min-h-0 h-full flex-1 flex-col');
     expect(html).toContain('overflow-y-auto');
+  });
+
+  it('renders a friendly assistant turn instead of raw fragmented Claude transcript blocks', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProjectSessionsDetailPane, {
+        selected: makeSession(),
+        detail: makeDetail({
+          messages: [
+            {
+              id: 'msg-user-1',
+              role: 'user',
+              at: '2026-04-23T05:45:01.962Z',
+              text: '项目能做什么'
+            },
+            {
+              id: 'msg-assistant-1',
+              role: 'assistant',
+              at: '2026-04-23T05:45:09.346Z',
+              text: 'Thinking:\nLet me inspect the repository state first.'
+            },
+            {
+              id: 'msg-assistant-2',
+              role: 'assistant',
+              at: '2026-04-23T05:45:09.400Z',
+              text: 'Tool Use: Glob\n{\n  "pattern": "**/*.md"\n}'
+            },
+            {
+              id: 'msg-assistant-3',
+              role: 'assistant',
+              at: '2026-04-23T05:45:12.000Z',
+              text: 'Let me check the project documentation to understand what this project does.'
+            },
+            {
+              id: 'msg-assistant-4',
+              role: 'assistant',
+              at: '2026-04-23T05:45:20.000Z',
+              text: '根据项目文件，这是一个 Twitter 抓取项目，但目前还处于非常早期阶段。'
+            }
+          ]
+        }),
+        onOpenSession: vi.fn()
+      })
+    );
+
+    expect(html).toContain('项目能做什么');
+    expect(html).toContain('Used Glob');
+    expect(html).toContain('Let me check the project documentation to understand what this project does.');
+    expect(html).toContain('根据项目文件，这是一个 Twitter 抓取项目，但目前还处于非常早期阶段。');
+    expect(html).not.toContain('Thinking:');
+    expect(html).not.toContain('&quot;pattern&quot;');
+    expect(html.match(/>assistant</g)?.length ?? 0).toBe(1);
   });
 });
