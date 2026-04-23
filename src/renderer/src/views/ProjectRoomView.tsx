@@ -48,7 +48,7 @@ export function ProjectRoomView(): JSX.Element {
   const activeProjectUid = useWorkspace((s) => s.activeProjectUid);
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
   const refreshProjects = useWorkspace((s) => s.refreshProjects);
-  const dark = useWorkspace((s) => s.settings.theme === 'dark');
+  const dark = useWorkspace((s) => s.resolvedTheme === 'dark');
   const vault = useWorkspace((s) => s.vault);
   const view = usePara((s) => s.view);
   const setView = usePara((s) => s.setView);

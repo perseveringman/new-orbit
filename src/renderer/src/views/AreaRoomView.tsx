@@ -53,7 +53,7 @@ const REVIEW_VISION_COMMAND =
 export function AreaRoomView(): JSX.Element {
   const view = usePara((s) => s.view);
   const areas = useWorkspace((s) => s.areas);
-  const dark = useWorkspace((s) => s.settings.theme === 'dark');
+  const dark = useWorkspace((s) => s.resolvedTheme === 'dark');
   const vault = useWorkspace((s) => s.vault);
   const toast = useFiles((s) => s.toast);
   const openSidebarPanel = useSidebar((s) => s.openPanel);

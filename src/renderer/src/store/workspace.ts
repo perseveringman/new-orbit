@@ -7,6 +7,7 @@ import { usePara } from './para';
 interface WorkspaceState {
   vault: VaultInfo | null;
   settings: AppSettings;
+  resolvedTheme: 'light' | 'dark';
   loading: boolean;
   error: string | null;
 
@@ -34,6 +35,7 @@ const DEFAULT_SETTINGS: AppSettings = { ...DEFAULT_APP_SETTINGS };
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   vault: null,
   settings: DEFAULT_SETTINGS,
+  resolvedTheme: resolveTheme(DEFAULT_SETTINGS.theme),
   loading: true,
   error: null,
 
@@ -48,7 +50,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         window.orbit.settings.get(),
         window.orbit.workspace.current()
       ]);
-      set({ settings, vault, loading: false, error: null });
+      set({
+        settings,
+        resolvedTheme: resolveTheme(settings.theme),
+        vault,
+        loading: false,
+        error: null
+      });
       applyTheme(settings.theme);
       if (vault) {
         void get().refreshVision();
@@ -91,13 +99,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   async setTheme(theme: Theme) {
     const next = await window.orbit.settings.setTheme(theme);
-    set({ settings: next });
+    set({ settings: next, resolvedTheme: resolveTheme(next.theme) });
     applyTheme(theme);
   },
 
   async updateSettings(partial: Partial<AppSettings>) {
     const next = await window.orbit.settings.update(partial);
-    set({ settings: next });
+    set({ settings: next, resolvedTheme: resolveTheme(next.theme) });
     if (partial.theme) applyTheme(next.theme);
   },
 
@@ -147,12 +155,13 @@ function resolveTheme(theme: Theme): 'light' | 'dark' {
   return theme;
 }
 
-function applyTheme(theme: Theme): void {
+function applyTheme(theme: Theme): 'light' | 'dark' {
   const root = document.documentElement;
   const resolved = resolveTheme(theme);
   root.setAttribute('data-theme', resolved);
   if (resolved === 'dark') root.classList.add('dark');
   else root.classList.remove('dark');
+  return resolved;
 }
 
 // Track system color-scheme changes once, in case the user picked 'system'.
@@ -160,6 +169,9 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   mq.addEventListener?.('change', () => {
     const st = useWorkspace.getState().settings;
-    if (st.theme === 'system') applyTheme('system');
+    if (st.theme === 'system') {
+      const resolvedTheme = applyTheme('system');
+      useWorkspace.setState({ resolvedTheme });
+    }
   });
 }

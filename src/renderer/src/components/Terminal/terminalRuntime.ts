@@ -2,22 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
 import type { TerminalRuntime, TerminalRuntimeHost } from './terminalRuntimeRegistry';
-
-function getTheme(dark?: boolean) {
-  return dark
-    ? {
-        background: '#0b0b0d',
-        foreground: '#e5e5e5',
-        cursor: '#e5e5e5',
-        selectionBackground: '#3b3b3f'
-      }
-    : {
-        background: '#ffffff',
-        foreground: '#1f1f24',
-        cursor: '#1f1f24',
-        selectionBackground: '#c7e0ff'
-      };
-}
+import { getTerminalTheme, TERMINAL_TYPOGRAPHY } from './terminalTheme';
 
 function isVisible(host: HTMLDivElement | null): boolean {
   return Boolean(host && host.clientWidth > 0 && host.clientHeight > 0);
@@ -30,12 +15,14 @@ export function createBrowserTerminalRuntime(args: {
   void args.sessionKey;
 
   const term = new Terminal({
-    fontFamily:
-      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-    fontSize: 12,
+    fontFamily: TERMINAL_TYPOGRAPHY.fontFamily,
+    fontSize: TERMINAL_TYPOGRAPHY.fontSize,
+    lineHeight: TERMINAL_TYPOGRAPHY.lineHeight,
+    fontWeight: TERMINAL_TYPOGRAPHY.fontWeight,
+    fontWeightBold: TERMINAL_TYPOGRAPHY.fontWeightBold,
     cursorBlink: true,
     allowProposedApi: true,
-    theme: getTheme(args.dark)
+    theme: getTerminalTheme(args.dark)
   });
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
@@ -111,7 +98,7 @@ export function createBrowserTerminalRuntime(args: {
       term.clearSelection();
     },
     setTheme(dark?: boolean): void {
-      term.options.theme = getTheme(dark);
+      term.options.theme = getTerminalTheme(dark);
       refit();
     },
     onInput(cb: (data: string) => void): () => void {

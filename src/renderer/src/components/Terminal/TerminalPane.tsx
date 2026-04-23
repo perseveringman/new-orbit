@@ -189,9 +189,9 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
     return (
       <div
         data-orbit-terminal
-        className={`flex h-full min-h-0 min-w-0 flex-col ${dark ? 'bg-neutral-950' : 'bg-white'}`}
+        className={`flex h-full min-h-0 min-w-0 flex-col ${dark ? 'bg-neutral-950' : 'bg-neutral-50'}`}
       >
-        <header className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-800">
+        <header className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
           <span className="font-mono">
             Terminal{' '}
             {snapshot.session ? (
@@ -233,7 +233,7 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         <div
           ref={hostRef}
           className="min-h-0 min-w-0 flex-1 overflow-hidden"
-          style={{ padding: 4 }}
+          style={{ padding: 8 }}
           onFocus={onFocus}
         />
       </div>
