@@ -1,3 +1,4 @@
+import type { TerminalAgentLaunchDTO } from '@shared/ipc';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import YAML from 'yaml';
 import { NotesConnectPanel } from './NotesConnectPanel';
@@ -46,10 +47,10 @@ function parseVision(raw: string): VisionDocumentState {
   };
 }
 
-function emitOpenTerminal(initialCommand: string): void {
+function emitOpenTerminal(agentLaunch: TerminalAgentLaunchDTO): void {
   window.dispatchEvent(
     new CustomEvent('orbit:area-open-terminal', {
-      detail: { initialCommand }
+      detail: { agentLaunch }
     })
   );
 }
@@ -120,7 +121,12 @@ export function VisionRoomContent({
             </p>
             <div className="mt-4">
               <button
-                onClick={() => emitOpenTerminal(startCommand)}
+                onClick={() =>
+                  emitOpenTerminal({
+                    launcherCommand: 'claude',
+                    prompt: startCommand
+                  })
+                }
                 className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
               >
                 ✨ 启动愿景访谈
@@ -152,7 +158,12 @@ export function VisionRoomContent({
             )}
           </div>
           <button
-            onClick={() => emitOpenTerminal(reviewCommand)}
+            onClick={() =>
+              emitOpenTerminal({
+                launcherCommand: 'claude',
+                prompt: reviewCommand
+              })
+            }
             className="rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-500"
           >
             🔄 回顾愿景

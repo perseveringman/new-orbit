@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import { groupByStatus, moveTask } from '@shared/kanban';
-import type { AreaSummaryDTO } from '@shared/ipc';
+import type { AreaSummaryDTO, TerminalAgentLaunchDTO } from '@shared/ipc';
 import { usePara } from '../store/para';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
@@ -167,13 +167,14 @@ export function AreaRoomView(): JSX.Element {
     if (!area) return;
     const currentAreaUid = area.uid;
     function onOpenTerminal(event: Event): void {
-      const detail = (event as CustomEvent<{ initialCommand?: string } | undefined>).detail;
+      const detail = (event as CustomEvent<{ agentLaunch?: TerminalAgentLaunchDTO } | undefined>)
+        .detail;
       setOuterTab('terminal');
-      if (detail?.initialCommand) {
+      if (detail?.agentLaunch) {
         queueTerminalNavigation({
           projectUid: currentAreaUid,
           roomKind: 'area',
-          initialCommand: detail.initialCommand
+          agentLaunch: detail.agentLaunch
         });
       }
     }
@@ -187,6 +188,10 @@ export function AreaRoomView(): JSX.Element {
     const pending = consumePendingTerminalNavigation(area.uid);
     if (!pending || (pending.roomKind ?? 'project') !== 'area') return;
     setOuterTab('terminal');
+    if (pending.agentLaunch) {
+      managerRef.current?.openTab({ agentLaunch: pending.agentLaunch });
+      return;
+    }
     if (pending.initialCommand) {
       managerRef.current?.openTab({ initialCommand: pending.initialCommand });
       return;

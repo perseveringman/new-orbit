@@ -1,9 +1,12 @@
+import type { TerminalAgentLaunchDTO } from '@shared/ipc';
+
 export interface TerminalNavigationIntent {
   projectUid: string;
   roomKind?: 'project' | 'area';
   orbitSessionId?: string;
   paneId?: string;
   initialCommand?: string;
+  agentLaunch?: TerminalAgentLaunchDTO;
   openMode?: 'focus-pane' | 'resume-session' | 'reopen-session';
 }
 

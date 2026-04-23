@@ -129,6 +129,28 @@ describe.skipIf(!PTY_OK || !!process.env['CI_SKIP_PTY'])('pty_manager', () => {
     off();
     expect(ok).toBe(true);
   });
+
+  it('launches an agent command before sending the follow-up prompt', async () => {
+    const collected: string[] = [];
+    const info = await openSession({
+      cwd: vault,
+      shell: '/bin/bash',
+      env: { PS1: '\u001b]133;A\u0007$ ' },
+      agentLaunch: {
+        launcherCommand: 'printf "agent-ready\\n"',
+        prompt: 'echo follow-up'
+      }
+    });
+    const { on } = await import('../src/main/terminal/pty_manager');
+    const off = on('data', (id, payload) => {
+      if (id === info.id) collected.push(payload);
+    });
+
+    const ok = await waitUntil(() => collected.join('').includes('follow-up'), 4000);
+    off();
+    expect(ok).toBe(true);
+    expect(collected.join('')).toContain('agent-ready');
+  });
 });
 
 describe('pty_manager gating', () => {

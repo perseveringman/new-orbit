@@ -230,6 +230,12 @@ export interface TerminalOpenArgsDTO {
   cols?: number;
   rows?: number;
   initialCommand?: string;
+  agentLaunch?: TerminalAgentLaunchDTO;
+}
+
+export interface TerminalAgentLaunchDTO {
+  launcherCommand: string;
+  prompt: string;
 }
 
 export interface TerminalSessionInfoDTO {

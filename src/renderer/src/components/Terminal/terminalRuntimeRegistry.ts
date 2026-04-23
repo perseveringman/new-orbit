@@ -38,6 +38,10 @@ export interface TerminalRuntimeRegistryDeps {
     dark?: boolean;
     env?: Record<string, string>;
     initialCommand?: string;
+    agentLaunch?: {
+      launcherCommand: string;
+      prompt: string;
+    };
   }): Promise<TerminalSessionInfoDTO>;
   clearSession(sessionKey: string): void;
   write(sessionId: string, data: string): void | Promise<void>;
@@ -115,6 +119,10 @@ export function createTerminalRuntimeRegistry(deps: TerminalRuntimeRegistryDeps)
       dark?: boolean;
       env?: Record<string, string>;
       initialCommand?: string;
+      agentLaunch?: {
+        launcherCommand: string;
+        prompt: string;
+      };
     }): Promise<TerminalRuntimeSnapshot> {
       const entry = ensureEntry(args.sessionKey, args.dark);
       entry.runtime.attach(args.host);
@@ -125,7 +133,8 @@ export function createTerminalRuntimeRegistry(deps: TerminalRuntimeRegistryDeps)
             cwd: args.cwd,
             dark: args.dark,
             ...(args.env ? { env: args.env } : {}),
-            ...(args.initialCommand ? { initialCommand: args.initialCommand } : {})
+            ...(args.initialCommand ? { initialCommand: args.initialCommand } : {}),
+            ...(args.agentLaunch ? { agentLaunch: args.agentLaunch } : {})
           }),
           exitState: null
         };
@@ -191,6 +200,10 @@ export function createTerminalRuntimeRegistry(deps: TerminalRuntimeRegistryDeps)
       dark?: boolean;
       env?: Record<string, string>;
       initialCommand?: string;
+      agentLaunch?: {
+        launcherCommand: string;
+        prompt: string;
+      };
     }): Promise<TerminalRuntimeSnapshot> {
       const entry = ensureEntry(args.sessionKey, args.dark);
       entry.snapshot = {
@@ -224,12 +237,13 @@ export const terminalRuntimeRegistry =
     ? createTerminalRuntimeRegistry({
         createRuntime: ({ sessionKey, dark }) =>
           createBrowserTerminalRuntime({ sessionKey, dark }),
-        ensureSession: ({ sessionKey, cwd, env, initialCommand }) =>
+        ensureSession: ({ sessionKey, cwd, env, initialCommand, agentLaunch }) =>
           getOrCreateSession(sessionKey, () =>
             window.orbit.terminal.open({
               cwd,
               ...(env ? { env } : {}),
-              ...(initialCommand ? { initialCommand } : {})
+              ...(initialCommand ? { initialCommand } : {}),
+              ...(agentLaunch ? { agentLaunch } : {})
             })
           ),
         clearSession,

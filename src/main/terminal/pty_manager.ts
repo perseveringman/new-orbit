@@ -12,6 +12,10 @@ export interface OpenSessionArgs {
   cols?: number;
   rows?: number;
   initialCommand?: string;
+  agentLaunch?: {
+    launcherCommand: string;
+    prompt: string;
+  };
 }
 
 export interface SessionInfo {
@@ -160,6 +164,46 @@ function normalizeInitialCommand(command: string): string {
   return command.endsWith('\n') ? command : `${command}\n`;
 }
 
+function createOutputSettledScanner(idleMs: number, timeoutMs: number): {
+  push(data: string): void;
+  ready: Promise<boolean>;
+  cancel(): void;
+} {
+  let done = false;
+  let sawOutput = false;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  let resolveReady: (value: boolean) => void = () => undefined;
+
+  function finish(value: boolean): void {
+    if (done) return;
+    done = true;
+    if (idleTimer) clearTimeout(idleTimer);
+    if (timeoutTimer) clearTimeout(timeoutTimer);
+    resolveReady(value);
+  }
+
+  const ready = new Promise<boolean>((resolve) => {
+    resolveReady = resolve;
+    timeoutTimer = setTimeout(() => finish(true), timeoutMs);
+  });
+
+  return {
+    push(data) {
+      if (done || data.length === 0) return;
+      sawOutput = true;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (sawOutput) finish(true);
+      }, idleMs);
+    },
+    ready,
+    cancel() {
+      finish(false);
+    }
+  };
+}
+
 function rotateIfNeeded(entry: SessionEntry): void {
   if (entry.logBytes < LOG_ROTATE_BYTES) return;
   try {
@@ -258,8 +302,12 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
   sessions.set(id, entry);
 
   const shellReady =
-    args.initialCommand?.trim()
+    args.initialCommand?.trim() || args.agentLaunch?.launcherCommand?.trim()
       ? createShellReadyScanner(LIMITS.SHELL_READY_TIMEOUT_MS)
+      : null;
+  const agentReady =
+    args.agentLaunch?.launcherCommand?.trim() && args.agentLaunch.prompt.trim()
+      ? createOutputSettledScanner(700, LIMITS.SHELL_READY_TIMEOUT_MS)
       : null;
 
   proc.onData((data: string) => {
@@ -276,6 +324,7 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
       /* ignore */
     }
     shellReady?.push(data);
+    agentReady?.push(data);
     for (const l of dataListeners) {
       try {
         l(id, data);
@@ -287,6 +336,7 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
 
   proc.onExit(({ exitCode, signal }) => {
     shellReady?.cancel();
+    agentReady?.cancel();
     for (const l of exitListeners) {
       try {
         l(id, {
@@ -315,6 +365,18 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
     void shellReady.ready.then(() => {
       if (!sessions.has(id)) return;
       proc.write(normalizeInitialCommand(args.initialCommand!));
+    });
+  }
+
+  if (shellReady && args.agentLaunch?.launcherCommand?.trim()) {
+    void shellReady.ready.then(() => {
+      if (!sessions.has(id)) return;
+      proc.write(normalizeInitialCommand(args.agentLaunch!.launcherCommand));
+      if (!agentReady || !args.agentLaunch?.prompt.trim()) return;
+      void agentReady.ready.then((ready) => {
+        if (!ready || !sessions.has(id)) return;
+        proc.write(normalizeInitialCommand(args.agentLaunch!.prompt));
+      });
     });
   }
 

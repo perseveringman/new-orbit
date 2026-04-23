@@ -7,6 +7,7 @@ import {
   useState
 } from 'react';
 import { nanoid } from 'nanoid';
+import type { TerminalAgentLaunchDTO } from '@shared/ipc';
 import { TerminalPane } from './TerminalPane';
 import type { TerminalPaneHandle } from './TerminalPane';
 import { disposeTerminal } from './terminalResources';
@@ -108,8 +109,8 @@ interface SplitNodeSharedProps {
   onFocusLeaf(leafId: string): void;
   onPersist(): void;
   paneRefs: React.MutableRefObject<Map<string, React.RefObject<TerminalPaneHandle>>>;
-  initialCommandForLeaf(leafId: string): string | undefined;
-  onInitialCommandConsumed(leafId: string): void;
+  launchRequestForLeaf(leafId: string): TerminalLaunchRequest | undefined;
+  onLaunchRequestConsumed(leafId: string): void;
   onPaneStatusChange(leafId: string, status: TerminalPaneAgentStatus): void;
 }
 
@@ -120,6 +121,11 @@ interface SplitNodeProps extends SplitNodeSharedProps {
 
 interface LeafPaneProps extends SplitNodeSharedProps {
   node: Extract<PaneNode, { kind: 'leaf' }>;
+}
+
+interface TerminalLaunchRequest {
+  initialCommand?: string;
+  agentLaunch?: TerminalAgentLaunchDTO;
 }
 
 function LeafPane({
@@ -133,8 +139,8 @@ function LeafPane({
   zoomedLeafId,
   onFocusLeaf,
   paneRefs,
-  initialCommandForLeaf,
-  onInitialCommandConsumed,
+  launchRequestForLeaf,
+  onLaunchRequestConsumed,
   onPaneStatusChange
 }: LeafPaneProps): JSX.Element {
   const sessionKey = `${projectUid}::${node.id}`;
@@ -146,9 +152,10 @@ function LeafPane({
   }
 
   const wrapperStyle = getLeafWrapperStyle(isZoomed);
-  const handleInitialCommandConsumed = useCallback(() => {
-    onInitialCommandConsumed(node.id);
-  }, [node.id, onInitialCommandConsumed]);
+  const launchRequest = launchRequestForLeaf(node.id);
+  const handleLaunchRequestConsumed = useCallback(() => {
+    onLaunchRequestConsumed(node.id);
+  }, [node.id, onLaunchRequestConsumed]);
   const handleStatusChange = useCallback(
     (status: TerminalPaneAgentStatus) => {
       onPaneStatusChange(node.id, status);
@@ -170,11 +177,12 @@ function LeafPane({
         paneId={node.id}
         projectUid={projectUid}
         isVisible={isVisible && (zoomedLeafId === null || zoomedLeafId === node.id)}
-        initialCommand={initialCommandForLeaf(node.id)}
+        initialCommand={launchRequest?.initialCommand}
+        agentLaunch={launchRequest?.agentLaunch}
         dark={dark}
         env={env ? { ...env, ORBIT_PANE_ID: node.id } : { ORBIT_PANE_ID: node.id }}
         onFocus={() => onFocusLeaf(node.id)}
-        onInitialCommandConsumed={handleInitialCommandConsumed}
+        onLaunchRequestConsumed={handleLaunchRequestConsumed}
         onStatusChange={handleStatusChange}
       />
     </div>
@@ -278,7 +286,7 @@ function SplitNode({ node, onNodeChange, ...shared }: SplitNodeProps): JSX.Eleme
 export interface TerminalManagerHandle {
   focusActive(): void;
   refitActive(): void;
-  openTab(opts?: { initialCommand?: string }): void;
+  openTab(opts?: TerminalLaunchRequest): void;
   focusPane(leafId: string): boolean;
 }
 
@@ -298,7 +306,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
     const [renameValue, setRenameValue] = useState('');
     const managerRootRef = useRef<HTMLDivElement>(null);
     const paneRefs = useRef<Map<string, React.RefObject<TerminalPaneHandle>>>(new Map());
-    const pendingInitialCommands = useRef<Map<string, string>>(new Map());
+    const pendingLaunchRequests = useRef<Map<string, TerminalLaunchRequest>>(new Map());
     const paneStatusesRef = useRef<Map<string, TerminalPaneAgentStatus>>(new Map());
     const [, setPaneStatusVersion] = useState(0);
     const stateRef = useRef(state);
@@ -317,7 +325,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
     useEffect(() => {
       setState(loadState(projectUid));
       paneStatusesRef.current.clear();
-      pendingInitialCommands.current.clear();
+      pendingLaunchRequests.current.clear();
     }, [projectUid]);
 
     // ── Refit on tab switch ────────────────────────────────────────────────
@@ -379,7 +387,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
 
     // ── Core operations ───────────────────────────────────────────────────
 
-    function newTab(opts?: { initialCommand?: string }): void {
+    function newTab(opts?: TerminalLaunchRequest): void {
       const leafId = makeLeafId();
       const tabId = makeTabId();
       const count = stateRef.current.tabs.length + 1;
@@ -390,8 +398,8 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
         focusedLeafId: leafId,
         zoomedLeafId: null
       };
-      if (opts?.initialCommand) {
-        pendingInitialCommands.current.set(leafId, opts.initialCommand);
+      if (opts?.initialCommand || opts?.agentLaunch) {
+        pendingLaunchRequests.current.set(leafId, opts);
       }
       setState((prev) => {
         const next = { tabs: [...prev.tabs, newTabState], activeTabId: tabId };
@@ -408,7 +416,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       const leafIds = getAllLeafIds(tab.root);
       for (const leafId of leafIds) {
         paneStatusesRef.current.delete(leafId);
-        pendingInitialCommands.current.delete(leafId);
+        pendingLaunchRequests.current.delete(leafId);
         void disposeTerminal(`${projectUid}::${leafId}`);
       }
       setState((prev) => {
@@ -480,7 +488,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
 
       void disposeTerminal(`${projectUid}::${leafId}`);
       paneStatusesRef.current.delete(leafId);
-      pendingInitialCommands.current.delete(leafId);
+      pendingLaunchRequests.current.delete(leafId);
       const result = deriveClosePaneResult(tab.root, leafId, tab.zoomedLeafId);
 
       if (result.root === null || result.focusedLeafId === null) {
@@ -641,12 +649,12 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       setRenamingTabId(null);
     }
 
-    const initialCommandForLeaf = useCallback((leafId: string): string | undefined => {
-      return pendingInitialCommands.current.get(leafId);
+    const launchRequestForLeaf = useCallback((leafId: string): TerminalLaunchRequest | undefined => {
+      return pendingLaunchRequests.current.get(leafId);
     }, []);
 
-    const onInitialCommandConsumed = useCallback((leafId: string): void => {
-      pendingInitialCommands.current.delete(leafId);
+    const onLaunchRequestConsumed = useCallback((leafId: string): void => {
+      pendingLaunchRequests.current.delete(leafId);
     }, []);
 
     const onPaneStatusChange = useCallback((leafId: string, status: TerminalPaneAgentStatus): void => {
@@ -777,8 +785,8 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
                 }}
                 onPersist={persist}
                 paneRefs={paneRefs}
-                initialCommandForLeaf={initialCommandForLeaf}
-                onInitialCommandConsumed={onInitialCommandConsumed}
+                launchRequestForLeaf={launchRequestForLeaf}
+                onLaunchRequestConsumed={onLaunchRequestConsumed}
                 onPaneStatusChange={onPaneStatusChange}
               />
             </div>

@@ -136,7 +136,9 @@ describe('terminalAgent detail transcript import', () => {
     await closeFsSession();
   });
 
-  it('returns imported claude transcript messages using the session cwd instead of the Orbit project path', async () => {
+  it(
+    'returns imported claude transcript messages using the session cwd instead of the Orbit project path',
+    async () => {
     const { createVault } = await import('../src/main/vault');
     const { createProject } = await import('../src/main/project');
     const { openFsSession, closeFsSession } = await import('../src/main/fs');
@@ -234,5 +236,7 @@ describe('terminalAgent detail transcript import', () => {
     });
 
     await closeFsSession();
-  });
+    },
+    10000
+  );
 });

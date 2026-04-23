@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
+import type { TerminalAgentLaunchDTO } from '@shared/ipc';
 import type { TerminalPaneAgentStatus } from './terminalAgentStatus';
 import { terminalPaneStatusRegistry } from './terminalPaneStatusRegistry';
 import { terminalRuntimeRegistry } from './terminalRuntimeRegistry';
@@ -16,11 +17,12 @@ export interface TerminalPaneProps {
   projectUid?: string;
   isVisible?: boolean;
   initialCommand?: string;
+  agentLaunch?: TerminalAgentLaunchDTO;
   dark?: boolean;
   env?: Record<string, string>;
   onExit?: (info: { exitCode: number; signal?: number }) => void;
   onFocus?: () => void;
-  onInitialCommandConsumed?: () => void;
+  onLaunchRequestConsumed?: () => void;
   onStatusChange?: (status: TerminalPaneAgentStatus) => void;
 }
 
@@ -29,12 +31,14 @@ export function getTerminalLaunchKey(args: {
   dark?: boolean;
   env?: Record<string, string>;
   initialCommand?: string;
+  agentLaunch?: TerminalAgentLaunchDTO;
 }): string {
   const envEntries = Object.entries(args.env ?? {}).sort(([a], [b]) => a.localeCompare(b));
   return JSON.stringify({
     cwd: args.cwd,
     dark: args.dark ?? false,
     initialCommand: args.initialCommand ?? '',
+    agentLaunch: args.agentLaunch ?? null,
     env: envEntries
   });
 }
@@ -45,17 +49,18 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
       cwd,
       sessionKey,
       initialCommand,
+      agentLaunch,
       dark,
       env,
       onExit,
       onFocus,
-      onInitialCommandConsumed,
+      onLaunchRequestConsumed,
       onStatusChange
     },
     ref
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
-    const launchKey = getTerminalLaunchKey({ cwd, dark, env, initialCommand });
+    const launchKey = getTerminalLaunchKey({ cwd, dark, env, initialCommand, agentLaunch });
     const launchArgsRef = useRef<{
       key: string;
       value: {
@@ -63,6 +68,7 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         dark?: boolean;
         env?: Record<string, string>;
         initialCommand?: string;
+        agentLaunch?: TerminalAgentLaunchDTO;
       };
     } | null>(null);
     if (!launchArgsRef.current || launchArgsRef.current.key !== launchKey) {
@@ -72,7 +78,8 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
           cwd,
           dark,
           ...(env ? { env } : {}),
-          ...(initialCommand ? { initialCommand } : {})
+          ...(initialCommand ? { initialCommand } : {}),
+          ...(agentLaunch ? { agentLaunch } : {})
         }
       };
     }
@@ -127,14 +134,14 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         .then((next) => {
           if (cancelled) return;
           setSnapshot(next);
-          if (initialCommand) onInitialCommandConsumed?.();
+          if (initialCommand || agentLaunch) onLaunchRequestConsumed?.();
         });
 
       return () => {
         cancelled = true;
         registry.detach(sessionKey);
       };
-    }, [sessionKey, launchArgs, initialCommand, onInitialCommandConsumed]);
+    }, [sessionKey, launchArgs, initialCommand, agentLaunch, onLaunchRequestConsumed]);
 
     useEffect(() => {
       const exitState = snapshot.exitState;
@@ -160,7 +167,8 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
         cwd,
         dark,
         ...(env ? { env } : {}),
-        ...(initialCommand ? { initialCommand } : {})
+        ...(initialCommand ? { initialCommand } : {}),
+        ...(agentLaunch ? { agentLaunch } : {})
       });
       setSnapshot(next);
       terminalPaneStatusRegistry.clear(sessionKey);
