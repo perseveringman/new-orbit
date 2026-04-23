@@ -4,17 +4,17 @@ import type { ProjectSummaryDTO } from '@shared/ipc';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
-import { TaskEditor } from '../components/TaskEditor/TaskEditor';
+import { useSidebar } from '../store/sidebar';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { MigrationDialog } from '../components/Modals/MigrationDialog';
-import { TaskDetailsModal } from '../components/Modals/TaskDetailsModal';
 import { TerminalManager } from '../components/Terminal/TerminalManager';
 import type { TerminalManagerHandle } from '../components/Terminal/TerminalManager';
 import { consumePendingTerminalNavigation } from '../components/Terminal/terminalNavigationIntent';
 import { disposeTerminalsByPrefix } from '../components/Terminal/terminalResources';
 import {
   deriveProjectRoomKanbanModel,
-  resolveProjectRoomPaneHint
+  resolveProjectRoomPaneHint,
+  resolveProjectRoomSidebarSurface
 } from './projectRoomModel';
 
 /**
@@ -43,6 +43,9 @@ export function ProjectRoomView(): JSX.Element {
   const view = usePara((s) => s.view);
   const setView = usePara((s) => s.setView);
   const toast = useFiles((s) => s.toast);
+  const setSidebarSurface = useSidebar((s) => s.setSurface);
+  const setSidebarFocus = useSidebar((s) => s.setFocus);
+  const openSidebarPanel = useSidebar((s) => s.openPanel);
 
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -147,6 +150,36 @@ export function ProjectRoomView(): JSX.Element {
     for (const t of tasks) map[t.status]?.push(t);
     return map;
   }, [tasks]);
+
+  useEffect(() => {
+    if (!project) return;
+    setSidebarSurface(resolveProjectRoomSidebarSurface(outerTab));
+    setSidebarFocus({ projectUid: project.uid });
+  }, [outerTab, project, setSidebarFocus, setSidebarSurface]);
+
+  useEffect(() => {
+    if (!project || outerTab !== 'kanban') return;
+    if (selectedTask) {
+      openSidebarPanel({
+        surface: 'project.kanban',
+        panel: 'task-detail',
+        focus: {
+          task: selectedTask,
+          projectUid: project.uid
+        }
+      });
+      return;
+    }
+
+    openSidebarPanel({
+      surface: 'project.kanban',
+      panel: 'task-tree',
+      focus: {
+        task: null,
+        projectUid: project.uid
+      }
+    });
+  }, [openSidebarPanel, outerTab, project, selectedTask]);
 
   async function onDropTask(taskId: string, target: TaskStatus): Promise<void> {
     const t = tasks.find((x) => x.id === taskId);
@@ -453,25 +486,6 @@ export function ProjectRoomView(): JSX.Element {
           })();
         }}
       />
-      <TaskDetailsModal
-        open={kanbanModel.taskModal.open && selectedTask !== null}
-        title={selectedTask?.title ?? 'Task'}
-        detail={selectedTask?.relPath}
-        onClose={() => setSelectedTaskId(null)}
-      >
-        {selectedTask ? (
-          <TaskEditor
-            key={selectedTask.filePath}
-            task={selectedTask}
-            siblings={tasks}
-            onFrontmatterChanged={() => void refreshTasks()}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs text-neutral-500">
-            {kanbanModel.taskModal.emptyStateMessage}
-          </div>
-        )}
-      </TaskDetailsModal>
       <MigrationDialog
         open={migrateOpen}
         onClose={() => {

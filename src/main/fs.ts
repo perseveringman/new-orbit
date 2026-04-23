@@ -698,6 +698,13 @@ export function registerFsIpc(): void {
       sess.refmap.setContentHash(uid, contentHash(next));
       await sess.refmap.flush();
     }
+    const ev: FsEvent = {
+      kind: 'change',
+      path: abs,
+      relPath: rel
+    };
+    notifyHooks(ev);
+    broadcast(ev);
   };
 
   ipcMain.handle(IPC.task.get, async (_e, abs: string) => {

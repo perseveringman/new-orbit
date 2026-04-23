@@ -3,10 +3,13 @@ import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
 import { useAgent } from '../store/agent';
+import { useSidebar } from '../store/sidebar';
 import { FileTree } from '../components/Sidebar/FileTree';
 import { BacklinksPanel } from '../components/Sidebar/BacklinksPanel';
 import { AgentPanel } from '../components/Sidebar/AgentPanel';
 import { WorktreesPanel } from '../components/Sidebar/WorktreesPanel';
+import { TaskDetailPanel } from '../components/Sidebar/TaskDetailPanel';
+import { ProjectTaskTreePanel } from '../components/Sidebar/ProjectTaskTreePanel';
 import { MarkdownEditor } from '../components/Editor/MarkdownEditor';
 import { CommandPalette } from '../components/CommandPalette';
 import { ProjectsNav } from '../components/Sidebar/ProjectsNav';
@@ -28,18 +31,31 @@ import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
 import { applyTerminalPaneEvent } from '../components/Terminal/terminalAgentStatus';
 import { terminalPaneStatusRegistry } from '../components/Terminal/terminalPaneStatusRegistry';
 import { useReviewQueue } from '../store/reviewQueue';
-import { usePanesStore } from '../lib/panes/store';
 import {
-  RIGHT_PANE_TABS,
-  getVisibleRightPaneTabs,
-  resolveVisibleRightPaneTab,
-  type RightPaneTabId
+  getSidebarIntentTabs,
+  getSidebarPanelTabs,
+  resolveSidebarSurface,
+  type SidebarPanelId
 } from './vaultRightSidebarModel';
 
-const RIGHT_PANE_LEAF_ID = 'vault-right-sidebar';
+function isSidebarPanelId(value: string): value is SidebarPanelId {
+  return (
+    value === 'files' ||
+    value === 'backlinks' ||
+    value === 'task-detail' ||
+    value === 'task-tree' ||
+    value === 'agent' ||
+    value === 'worktrees' ||
+    value === 'review' ||
+    value === 'runlog' ||
+    value === 'diff' ||
+    value === 'sessions'
+  );
+}
 
 export function VaultView(): JSX.Element {
   const { vault, settings } = useWorkspace();
+  const activeProjectUid = useWorkspace((s) => s.activeProjectUid);
   const { tree, active, init, teardown, openPath, toast } = useFiles();
   const view = usePara((s) => s.view);
   const setView = usePara((s) => s.setView);
@@ -49,23 +65,25 @@ export function VaultView(): JSX.Element {
   const seedReviewQueueFromNightShift = useReviewQueue((s) => s.seedFromNightShift);
   const ingestReviewAgentEvent = useReviewQueue((s) => s.ingestAgentEvent);
   const ingestTerminalReviewEvent = useReviewQueue((s) => s.ingestTerminalEvent);
+  const sidebarSurface = useSidebar((s) => s.surface);
+  const sidebarIntent = useSidebar((s) => s.intent);
+  const sidebarPanel = useSidebar((s) => s.panel);
+  const setSidebarSurface = useSidebar((s) => s.setSurface);
+  const selectSidebarIntent = useSidebar((s) => s.selectIntent);
+  const selectSidebarPanel = useSidebar((s) => s.selectPanel);
+  const setSidebarFocus = useSidebar((s) => s.setFocus);
+  const openSidebarPanel = useSidebar((s) => s.openPanel);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [nsHistoryOpen, setNsHistoryOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
-  const rightLayout = usePanesStore((s) => s.layout);
-  const replaceRightLayout = usePanesStore((s) => s.replaceLayout);
-  const activateRightTab = usePanesStore((s) => s.activateTab);
 
-  const rightLeaf =
-    rightLayout.root.type === 'leaf' && rightLayout.root.id === RIGHT_PANE_LEAF_ID
-      ? rightLayout.root
-      : null;
-  const rightTab = rightLeaf?.activeTabId ?? 'files';
-  const visibleRightTabs = getVisibleRightPaneTabs(view.kind);
-  const visibleRightTab = resolveVisibleRightPaneTab(rightTab, view.kind);
+  const sidebarProjectUid =
+    view.kind === 'project' ? activeProjectUid : view.kind === 'kanban' ? view.projectUid : null;
+  const sidebarIntentTabs = getSidebarIntentTabs(sidebarSurface);
+  const sidebarPanelTabs = getSidebarPanelTabs(sidebarSurface, sidebarIntent);
 
   const vaultPath = vault?.path;
   useEffect(() => {
@@ -73,8 +91,6 @@ export function VaultView(): JSX.Element {
     void init(vaultPath);
     void refresh();
     void initAgent();
-    // R2: default to Dashboard when a vault has 0 folder-projects (typical for
-    // a freshly-bootstrapped one). Idempotent: only nudges the view once.
     void (async () => {
       try {
         const projs = await window.orbit.project.list();
@@ -99,6 +115,18 @@ export function VaultView(): JSX.Element {
   }, [refresh]);
 
   useEffect(() => {
+    if (view.kind === 'project') return;
+    setSidebarSurface(resolveSidebarSurface(view));
+    setSidebarFocus({
+      task: null,
+      filePath: view.kind === 'editor' ? active?.path ?? null : null,
+      projectUid: view.kind === 'kanban' ? view.projectUid : null,
+      runId: null,
+      worktreeId: null
+    });
+  }, [active?.path, setSidebarFocus, setSidebarSurface, view]);
+
+  useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
@@ -106,7 +134,6 @@ export function VaultView(): JSX.Element {
         e.preventDefault();
         setPaletteOpen((v) => !v);
       } else if (mod && e.shiftKey && key === 'n') {
-        // ⌘⇧N — new task (only meaningful inside a project room)
         if (view.kind === 'project') {
           e.preventDefault();
           setNewTaskOpen(true);
@@ -118,7 +145,6 @@ export function VaultView(): JSX.Element {
         e.preventDefault();
         setSidebarCollapsed((v) => !v);
       } else if (mod && e.key === '`') {
-        // ⌘` — focus terminal; ProjectRoomView listens for this event
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('orbit:focus-terminal'));
       } else if (e.key === 'Escape') {
@@ -130,67 +156,39 @@ export function VaultView(): JSX.Element {
   }, [view.kind]);
 
   useEffect(() => {
-    if (rightLeaf) return;
-    replaceRightLayout({
-      root: {
-        type: 'leaf',
-        id: RIGHT_PANE_LEAF_ID,
-        activeTabId: 'files',
-        tabs: RIGHT_PANE_TABS.map((tab) => ({
-          ...tab,
-          data: {},
-          lastActiveAt: new Date().toISOString()
-        }))
-      },
-      focusedLeafId: RIGHT_PANE_LEAF_ID
-    });
-  }, [replaceRightLayout, rightLeaf]);
-
-  useEffect(() => {
     function onOpenDrawer(e: Event): void {
       const detail = (e as CustomEvent<string>).detail;
       if (detail === 'night-shift-history') setNsHistoryOpen(true);
     }
     window.addEventListener('orbit:open-drawer', onOpenDrawer as EventListener);
     return () =>
-      window.removeEventListener(
-        'orbit:open-drawer',
-        onOpenDrawer as EventListener
-      );
+      window.removeEventListener('orbit:open-drawer', onOpenDrawer as EventListener);
   }, []);
 
   useEffect(() => {
     function onOpenRightTab(e: Event): void {
-        const detail = (e as CustomEvent<
-          | 'files'
-          | 'backlinks'
-          | 'agent'
-          | 'worktrees'
-          | 'review'
-          | 'runlog'
-          | 'diff'
-          | 'sessions'
-          | {
-              tab:
-                | 'files'
-                | 'backlinks'
-                | 'agent'
-                | 'worktrees'
-                | 'review'
-                | 'runlog'
-                | 'diff'
-                | 'sessions'
-            }
-        >).detail;
-        activateRightTab(typeof detail === 'string' ? detail : detail.tab);
+      const raw = (e as CustomEvent<
+        | string
+        | {
+            tab: string;
+            runId?: string;
+            worktreeId?: string;
+          }
+      >).detail;
+      const detail = (typeof raw === 'string' ? { tab: raw } : raw) ?? { tab: '' };
+      if (!isSidebarPanelId(detail.tab)) return;
+      openSidebarPanel({
+        panel: detail.tab,
+        focus: {
+          runId: detail.runId ?? null,
+          worktreeId: detail.worktreeId ?? null
+        }
+      });
     }
     window.addEventListener('orbit:open-right-tab', onOpenRightTab as EventListener);
     return () =>
-      window.removeEventListener(
-        'orbit:open-right-tab',
-        onOpenRightTab as EventListener
-      );
-  }, [activateRightTab]);
+      window.removeEventListener('orbit:open-right-tab', onOpenRightTab as EventListener);
+  }, [openSidebarPanel]);
 
   useEffect(() => {
     function onOpenNewProject(): void {
@@ -199,10 +197,6 @@ export function VaultView(): JSX.Element {
     window.addEventListener('orbit:open-new-project', onOpenNewProject);
     return () => window.removeEventListener('orbit:open-new-project', onOpenNewProject);
   }, []);
-
-  useEffect(() => {
-    if (rightTab !== visibleRightTab) activateRightTab(visibleRightTab);
-  }, [activateRightTab, rightTab, visibleRightTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,7 +242,6 @@ export function VaultView(): JSX.Element {
       off();
     };
   }, [ingestReviewAgentEvent, ingestTerminalReviewEvent, seedReviewQueueFromNightShift]);
-
   async function onOpenWikilink(target: string): Promise<void> {
     const hits = await window.orbit.fs.search(target, { limit: 10 });
     const lower = target.replace(/\.md$/i, '').toLowerCase();
@@ -259,7 +252,9 @@ export function VaultView(): JSX.Element {
     if (chosen) {
       await openPath(chosen.path);
       setView({ kind: 'editor' });
-    } else toast(`No file matches [[${target}]]`);
+    } else {
+      toast(`No file matches [[${target}]]`);
+    }
   }
 
   async function onCloseProject(): Promise<void> {
@@ -276,18 +271,33 @@ export function VaultView(): JSX.Element {
       await openPath(res.newPath);
       if (opts.distill) {
         toast('Distilling project…');
-        activateRightTab('agent');
+        openSidebarPanel({ panel: 'agent' });
         try {
           const out = await window.orbit.distill.project(res.uid);
           toast(`Distilled → ${out.resourceRelPath}`);
           await openPath(out.resourcePath);
-        } catch (e) {
-          toast(`Distillation failed: ${(e as Error).message}`);
+        } catch (error) {
+          toast(`Distillation failed: ${(error as Error).message}`);
         }
       }
-    } catch (e) {
-      toast((e as Error).message);
+    } catch (error) {
+      toast((error as Error).message);
     }
+  }
+
+  function renderSidebarPanel(): JSX.Element {
+    if (sidebarPanel === 'files') {
+      return tree ? <FileTree root={tree} /> : <p className="text-xs text-neutral-500">Scanning…</p>;
+    }
+    if (sidebarPanel === 'backlinks') return <BacklinksPanel />;
+    if (sidebarPanel === 'task-detail') return <TaskDetailPanel />;
+    if (sidebarPanel === 'task-tree') return <ProjectTaskTreePanel projectUid={sidebarProjectUid} />;
+    if (sidebarPanel === 'agent') return <AgentPanel />;
+    if (sidebarPanel === 'review') return <ReviewInboxView />;
+    if (sidebarPanel === 'runlog') return <RunLogPane />;
+    if (sidebarPanel === 'diff') return <DiffWorkspacePane />;
+    if (sidebarPanel === 'sessions') return <TerminalSessionsPanel />;
+    return <WorktreesPanel />;
   }
 
   if (!vault) return <></>;
@@ -349,57 +359,45 @@ export function VaultView(): JSX.Element {
         )}
       </section>
 
-        <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-white/40 dark:border-neutral-800 dark:bg-neutral-900/40">
-        <div className="flex shrink-0 overflow-x-auto border-b border-neutral-200 text-xs dark:border-neutral-800">
-          {visibleRightTabs.map((tab) => (
+      <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-[color:color-mix(in_oklab,white_88%,transparent)] dark:border-neutral-800 dark:bg-[color:color-mix(in_oklab,#111827_86%,transparent)]">
+        <div className="flex shrink-0 overflow-x-auto border-b border-neutral-200 px-2 pt-2 text-[11px] uppercase tracking-[0.18em] text-neutral-500 dark:border-neutral-800">
+          {sidebarIntentTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => activateRightTab(tab.id as RightPaneTabId)}
+              onClick={() => selectSidebarIntent(tab.id)}
               className={
-                'shrink-0 px-3 py-2 capitalize ' +
-                (visibleRightTab === tab.id
-                  ? 'bg-neutral-200/60 dark:bg-neutral-800/60'
-                  : 'hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30')
+                'shrink-0 border-b px-3 py-2 transition-colors ' +
+                (sidebarIntent === tab.id
+                  ? 'border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100'
+                  : 'border-transparent hover:text-neutral-700 dark:hover:text-neutral-300')
               }
             >
               {tab.title}
             </button>
           ))}
         </div>
-        <div className="flex-1 overflow-y-auto p-3">
-          {visibleRightTab === 'files' ? (
-            tree ? (
-              <FileTree root={tree} />
-            ) : (
-              <p className="text-xs text-neutral-500">Scanning…</p>
-            )
-          ) : visibleRightTab === 'backlinks' ? (
-            <BacklinksPanel />
-          ) : visibleRightTab === 'agent' ? (
-            <AgentPanel />
-          ) : visibleRightTab === 'review' ? (
-            <ReviewInboxView />
-          ) : visibleRightTab === 'runlog' ? (
-            <RunLogPane />
-          ) : visibleRightTab === 'diff' ? (
-            <DiffWorkspacePane />
-          ) : visibleRightTab === 'sessions' ? (
-            <TerminalSessionsPanel />
-          ) : (
-            <WorktreesPanel />
-          )}
+        <div className="flex shrink-0 flex-wrap gap-1 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+          {sidebarPanelTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => selectSidebarPanel(tab.id)}
+              className={
+                'rounded-full border px-2.5 py-1 transition-colors ' +
+                (sidebarPanel === tab.id
+                  ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                  : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800')
+              }
+            >
+              {tab.title}
+            </button>
+          ))}
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">{renderSidebarPanel()}</div>
       </aside>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-      <NightShiftHistoryDrawer
-        open={nsHistoryOpen}
-        onClose={() => setNsHistoryOpen(false)}
-      />
-      <NewProjectModal
-        open={newProjectOpen}
-        onClose={() => setNewProjectOpen(false)}
-      />
+      <NightShiftHistoryDrawer open={nsHistoryOpen} onClose={() => setNsHistoryOpen(false)} />
+      <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
       {view.kind === 'project' && (
         <NewTaskModal
           open={newTaskOpen}

@@ -43,9 +43,21 @@ Dashboard 顶部有 **Vision** 卡片。第一件事就是把它写出来——O
 
 点 Dashboard 卡片或顶栏 **Project** tab 进入 Project Room：
 
-- **左半**：Kanban（inbox / today / doing / blocked / done 五列）
-- **右半上**：四段式 Task Editor
-- **右半下**：嵌入式终端，cwd 就是项目根
+- **中间主区**：Project header + 外层 `Kanban / Terminal` 两个工作模式
+- **Kanban 模式**：全宽任务看板；点 task 后在右栏里编辑
+- **Terminal 模式**：嵌入式终端，cwd 就是项目根
+- **最右侧 Sidebar**：上下文右栏，按你当前在做什么切换
+
+Project Room 的右栏现在分两级：
+
+- **一级 tab**：`Overview / Focus / Execution`
+- **二级 tab**：只显示当前页面相关的共享子面板
+
+具体来说：
+
+- 在 **Kanban** 外层页签下，点一个 task 会把详情放进右栏的 **Focus → Task Detail**
+- 切到 **Terminal** 外层页签，右栏默认显示 **Overview → Task Tree**，方便边跑命令边看整个项目任务状态
+- `Sessions / Run Log / Diff / Review` 归到 **Execution**，不再和文件/任务上下文混在一起
 
 Kanban 顶部：
 - 拖拽卡片换列会立即写回 frontmatter 的 `status`
@@ -176,7 +188,17 @@ Dashboard → **Today's Journal**：
 | `⌘S` | 强制保存当前编辑器 |
 | `Esc` | 关 Modal / Drawer / Palette |
 
-## 14. Settings 要点
+## 14. 右侧 Sidebar 的工作方式
+
+右侧栏不再是全局固定工具箱，而是**跟随当前页面上下文**：
+
+- **Editor**：显示文件相关面板，比如 `Files / Backlinks`
+- **Dashboard**：显示总览与执行相关面板，比如 `Review / Worktrees / Agent / Run Log / Diff`
+- **Project Room**：按 `Overview / Focus / Execution` 切分任务理解、对象处理、执行跟进
+
+这样切换页面时，右栏只保留和这一页真正相关的面板，不会再把所有工具同时堆出来。
+
+## 15. Settings 要点
 
 - **Budget**: 每次 run + 每日的 token / USD 上限；Hard stop 打开时超限直接中断
 - **API / CLI**: 自定义 `claude` binary 路径（留空则走 PATH）
@@ -184,7 +206,7 @@ Dashboard → **Today's Journal**：
 - **Worktree GC**: `worktreeGcEnabled` / `worktreeGcDays`（默认 7 天）
 - **Daily Review**: 定时自动生成 Daily Review 的时间
 
-## 15. 常见问题
+## 16. 常见问题
 
 - **Claude not found** → Settings → API / CLI 里填 binary 路径
 - **预算耗尽** → Settings → Budget 提高上限或关掉 Hard stop
