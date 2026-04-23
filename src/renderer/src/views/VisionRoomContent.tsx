@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import matter from 'gray-matter';
+import YAML from 'yaml';
 import { NotesConnectPanel } from './NotesConnectPanel';
 
 interface Props {
@@ -15,17 +15,34 @@ interface VisionDocumentState {
   body: string;
 }
 
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+
 function isPlaceholderVision(raw: string): boolean {
   return raw.includes('VISION.md 尚未生成');
 }
 
 function parseVision(raw: string): VisionDocumentState {
-  const parsed = matter(raw);
+  const match = raw.match(FRONTMATTER_RE);
+  let data: Record<string, unknown> = {};
+  let body = raw;
+
+  if (match) {
+    body = raw.slice((match[0] ?? '').length);
+    try {
+      const parsed = YAML.parse(match[1] ?? '');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        data = parsed as Record<string, unknown>;
+      }
+    } catch {
+      data = {};
+    }
+  }
+
   return {
     raw,
     placeholder: isPlaceholderVision(raw),
-    data: parsed.data as Record<string, unknown>,
-    body: parsed.content.trim()
+    data,
+    body: body.trim()
   };
 }
 

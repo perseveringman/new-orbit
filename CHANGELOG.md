@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- **Vision 页浏览器兼容性**：移除 renderer 里的 `gray-matter` 依赖，改为浏览器安全的 frontmatter 解析，修复 `Buffer is not defined`
 - **Vault 切换文件树竞态**：`fs:listTree` 不再因旧 session 与新 vault 路径短暂交错而抛出 `path escapes vault`；文件树订阅初始化也会主动丢弃过期 listener
 - **Session 详情页信息降噪**：精简 Project Session 详情头部，移除 sessionId / pane / prompt / permission / vendor 等内部字段；仅保留会话标题、状态、时间与入口动作，并将 transcript 文案调整为更面向用户的表述
 - **Inbox 终端审批同步**：terminal approval 卡片在终端里批准/继续执行后会及时清除待审批状态；`Notification` hook 统一按进度事件处理，避免审批消息卡住
