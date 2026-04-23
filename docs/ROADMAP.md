@@ -47,6 +47,7 @@
 | --- | --- | --- |
 | Agent Context System | `docs/plans/2026-04-22-orbit-agent-context-architecture.md`（+ scheme-a/c/d） | 设计中，待选型落地 |
 | Capture & Content System | `docs/plans/2026-04-23-capture-and-content-system.md` | 设计中 |
+| **Area Room + Vision System** | `docs/plans/2026-04-23-area-room-vision-system-design.md` | 设计完成，待实施 |
 
 ---
 
