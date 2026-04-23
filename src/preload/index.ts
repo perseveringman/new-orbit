@@ -2,7 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
   type ArchiveProjectResultDTO,
+  type AreaConfigDTO,
   type CloseProjectResult,
+  type CreateAreaArgsDTO,
   type CreateGitHubPullRequestArgsDTO,
   type CreateProjectArgsDTO,
   type CreateProjectResultDTO,
@@ -35,7 +37,8 @@ import {
   type TerminalExitEventDTO,
   type TerminalOpenArgsDTO,
   type TerminalSessionInfoDTO,
-  type V3MigrationReport
+  type V3MigrationReport,
+  type VaultExtConfigDTO
 } from '@shared/ipc';
 import type {
   GitHubConnection,
@@ -293,6 +296,17 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.github.bindTaskIssue, args),
     unbindTaskIssue: (taskPath: string): Promise<void> =>
       ipcRenderer.invoke(IPC.github.unbindTaskIssue, taskPath)
+  },
+  area: {
+    list: () => ipcRenderer.invoke(IPC.area.list),
+    create: (args: CreateAreaArgsDTO) => ipcRenderer.invoke(IPC.area.create, args),
+    getConfig: (areaPath: string) => ipcRenderer.invoke(IPC.area.getConfig, areaPath),
+    setConfig: (areaPath: string, patch: Partial<AreaConfigDTO>) =>
+      ipcRenderer.invoke(IPC.area.setConfig, areaPath, patch)
+  },
+  vaultConfig: {
+    get: () => ipcRenderer.invoke(IPC.vaultConfig.get),
+    update: (patch: Partial<VaultExtConfigDTO>) => ipcRenderer.invoke(IPC.vaultConfig.update, patch)
   }
 };
 

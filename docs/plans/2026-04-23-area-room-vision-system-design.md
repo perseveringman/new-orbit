@@ -1,7 +1,7 @@
 ---
-status: active
+status: completed
 created: 2026-04-23
-updated: 2026-04-23
+updated: 2026-04-25
 ---
 
 # Area Room + Vision System 设计方案

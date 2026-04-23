@@ -13,7 +13,7 @@ import {
   PARA_DIRS
 } from '@shared/constants';
 import type { VaultConfig, VaultInfo } from '@shared/types';
-import { ensureVision } from './vision';
+import { scaffoldVisionArea } from './area';
 
 const ORBIT_VERSION = '0.1.0';
 
@@ -45,9 +45,9 @@ export async function createVault(dir: string): Promise<VaultInfo> {
     await fs.writeFile(agentPath, AGENT_MD_TEMPLATE, 'utf8');
   }
 
-  // R2: Vision.md is the user's North Star; always seeded at vault root so
-  // downstream persona composition has something to append.
-  await ensureVision(dir);
+  // R2: Vision Area is auto-scaffolded at vault creation; provides the user's
+  // North Star AGENTS.md, interview questions, and vision template.
+  await scaffoldVisionArea(dir);
 
   const orbitDir = path.join(dir, ORBIT_DIR);
   await fs.mkdir(orbitDir, { recursive: true });

@@ -14,6 +14,7 @@ import { getTerminalShortcutAction } from './terminalHotkeys';
 import type { TerminalPaneAgentStatus } from './terminalAgentStatus';
 import { upsertTerminalPaneStatus } from './terminalPaneStatusRegistry';
 import { terminalPaneStatusRegistry } from './terminalPaneStatusRegistry';
+import { getOrCreateStoredTerminalManagerState } from './terminalManagerState';
 import {
   getLeafWrapperStyle,
   getPrimarySplitSectionStyle,
@@ -44,23 +45,20 @@ interface ManagerState {
   activeTabId: string;
 }
 
+function isManagerState(value: unknown): value is ManagerState {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.tabs) && record.tabs.length > 0 && typeof record.activeTabId === 'string';
+}
+
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
 function storageKey(projectUid: string): string {
   return `orbit.termmgr.${projectUid}`;
 }
 
-function loadState(projectUid: string): ManagerState | null {
-  try {
-    const raw = localStorage.getItem(storageKey(projectUid));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ManagerState;
-    // Basic validation
-    if (!Array.isArray(parsed.tabs) || parsed.tabs.length === 0) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+function loadState(projectUid: string): ManagerState {
+  return getOrCreateStoredTerminalManagerState(projectUid, () => defaultState(), isManagerState);
 }
 
 function makeLeafId(): string {
@@ -294,7 +292,7 @@ interface TerminalManagerProps {
 export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManagerProps>(
   function TerminalManager({ projectUid, cwd, dark, env }, ref) {
     const [state, setState] = useState<ManagerState>(() => {
-      return loadState(projectUid) ?? defaultState();
+      return loadState(projectUid);
     });
     const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
@@ -317,7 +315,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
 
     // Reload state when projectUid changes
     useEffect(() => {
-      setState(loadState(projectUid) ?? defaultState());
+      setState(loadState(projectUid));
       paneStatusesRef.current.clear();
       pendingInitialCommands.current.clear();
     }, [projectUid]);

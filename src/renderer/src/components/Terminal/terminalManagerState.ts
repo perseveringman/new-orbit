@@ -13,6 +13,8 @@ interface StoredManagerState {
   activeTabId: string;
 }
 
+type TerminalManagerStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
 function storageKey(projectUid: string): string {
   return `orbit.termmgr.${projectUid}`;
 }
@@ -35,6 +37,28 @@ function readStoredManagerState(
   } catch {
     return null;
   }
+}
+
+export function getOrCreateStoredTerminalManagerState<T extends { tabs: unknown[] }>(
+  projectUid: string,
+  createDefault: () => T,
+  isStoredState: (value: unknown) => value is T,
+  storage: TerminalManagerStorage | null | undefined =
+    typeof globalThis !== 'undefined' && 'localStorage' in globalThis
+      ? globalThis.localStorage
+      : null
+): T {
+  const existing = readStoredManagerState(projectUid, storage);
+  if (existing && isStoredState(existing)) return existing;
+  const next = createDefault();
+  if (storage) {
+    try {
+      storage.setItem(storageKey(projectUid), JSON.stringify(next));
+    } catch {
+      // ignore storage write errors and still return the in-memory default
+    }
+  }
+  return next;
 }
 
 export function getStoredTerminalTitle(

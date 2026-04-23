@@ -205,6 +205,16 @@ export const IPC = {
     createPullRequest: 'github:createPullRequest',
     bindTaskIssue: 'github:bindTaskIssue',
     unbindTaskIssue: 'github:unbindTaskIssue'
+  },
+  area: {
+    list: 'area:list',
+    create: 'area:create',
+    getConfig: 'area:getConfig',
+    setConfig: 'area:setConfig'
+  },
+  vaultConfig: {
+    get: 'vaultConfig:get',
+    update: 'vaultConfig:update'
   }
 } as const;
 
@@ -481,6 +491,48 @@ export interface VisionDTO {
   excerpt: string;
 }
 
+// --- Area DTOs ---
+
+export interface AreaSummaryDTO {
+  uid: string;
+  slug: string;
+  name: string;
+  template?: string;
+  tags: string[];
+  created_at: string;
+  path: string;
+  relPath: string;
+  hasVision: boolean;
+}
+
+export interface AreaConfigDTO {
+  uid: string;
+  slug: string;
+  name: string;
+  template?: string;
+  tags: string[];
+  created_at: string;
+}
+
+export interface CreateAreaArgsDTO {
+  slug: string;
+  name: string;
+  template?: string;
+  tags?: string[];
+  uid?: string;
+}
+
+export interface CreateAreaResultDTO {
+  areaPath: string;
+  relPath: string;
+  uid: string;
+  slug: string;
+}
+
+export interface VaultExtConfigDTO {
+  external_notes_paths: string[];
+}
+
 export interface DistillResult {
   resourcePath: string;
   resourceRelPath: string;
@@ -741,5 +793,15 @@ export interface OrbitApi {
     createPullRequest(args: CreateGitHubPullRequestArgsDTO): Promise<GitHubPullRequestSummary>;
     bindTaskIssue(args: GitHubTaskIssueBindingArgsDTO): Promise<GitHubTaskBinding>;
     unbindTaskIssue(taskPath: string): Promise<void>;
+  };
+  area: {
+    list(): Promise<AreaSummaryDTO[]>;
+    create(args: CreateAreaArgsDTO): Promise<CreateAreaResultDTO>;
+    getConfig(areaPath: string): Promise<AreaConfigDTO>;
+    setConfig(areaPath: string, patch: Partial<AreaConfigDTO>): Promise<AreaConfigDTO>;
+  };
+  vaultConfig: {
+    get(): Promise<VaultExtConfigDTO>;
+    update(patch: Partial<VaultExtConfigDTO>): Promise<VaultExtConfigDTO>;
   };
 }

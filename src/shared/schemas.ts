@@ -162,10 +162,24 @@ export interface TaskFilter {
   tag?: string;
 }
 
+// --- Area-as-folder config schema ---
+export const AreaConfigSchema = z.object({
+  uid: z.string(),
+  slug: z.string(),
+  name: z.string(),
+  template: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  created_at: z.string()
+});
+export type AreaConfig = z.infer<typeof AreaConfigSchema>;
+
+// --- Vault extended config (adds external_notes_paths) ---
+export const VaultExtConfigSchema = z.object({
+  external_notes_paths: z.array(z.string()).default([])
+});
+export type VaultExtConfig = z.infer<typeof VaultExtConfigSchema>;
+
 // --- Budget settings (M6) ---
-//
-// All caps accept `null` to mean "unlimited". Missing keys are back-filled
-// with `DEFAULT_BUDGET` on load; schema never throws for missing fields.
 export const BudgetSettingsSchema = z.object({
   perRunTokens: z.number().int().nonnegative().nullable().default(200_000),
   perRunUSD: z.number().nonnegative().nullable().default(5),

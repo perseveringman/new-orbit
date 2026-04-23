@@ -42,3 +42,13 @@ export const PROJECT_ORBIT_BRIDGE_DIR = 'bridge';
 export const PROJECT_BRIDGE_MANIFEST = 'manifest.json';
 export const PROJECTS_DIR = '01_Projects';
 export const ARCHIVES_DIR = '04_Archives';
+
+// --- Area-as-folder constants ---
+export const AREAS_DIR = '02_Areas';
+export const AREA_ORBIT_DIR = '.orbit';
+export const AREA_ORBIT_CONFIG = 'config.json';
+export const AREA_ORBIT_AGENT_DIR = 'agent';
+export const AREA_ORBIT_TASKS_DIR = 'tasks';
+export const AREA_ORBIT_SESSIONS_DIR = 'sessions';
+export const AREA_ORBIT_MEMORIES_DIR = 'memories';
+export const VISION_AREA_SLUG = 'vision';

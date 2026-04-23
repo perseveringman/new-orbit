@@ -3,6 +3,10 @@ import type { SidebarPanelId, SidebarSurfaceId } from './vaultRightSidebarModel'
 export type ProjectRoomHeaderAction = 'enable-orbit-tools' | 'archive-project';
 export type ProjectRoomOuterTab = 'kanban' | 'terminal' | 'sessions' | 'github';
 
+export function deriveProjectRoomInstanceKey(projectUid: string | null): string {
+  return `project-room:${projectUid ?? 'none'}`;
+}
+
 export interface ProjectRoomKanbanModel {
   headerActions: ProjectRoomHeaderAction[];
   documentTabs: [];

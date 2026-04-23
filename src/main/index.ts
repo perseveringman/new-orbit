@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { IPC } from '@shared/ipc';
 import type { AppSettings, DiagnosticsInfo, Theme, VaultInfo, VaultResult } from '@shared/types';
 import { createVault, isVault, openVault } from './vault';
-import { ensureVision, excerptFromBody, readVision, writeVision } from './vision';
+import { excerptFromBody, readVision, writeVision } from './vision';
 import { getSettings, setLastVaultPath, setTheme, updateSettings } from './settings';
+import { registerAreaIpc } from './area_ipc';
 import { closeFsSession, openFsSession, registerFsIpc } from './fs';
 import {
   ensureTerminalAgentRuntimeForVault,
@@ -112,7 +113,6 @@ async function handlePickAndOpen(): Promise<VaultResult> {
     currentVault = vault;
     terminal.setVaultRoot(vault.path);
     await setLastVaultPath(dir);
-    await ensureVision(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
     await ensureTerminalAgentRuntimeForVault(dir);
@@ -151,7 +151,6 @@ async function handleOpenPath(_: unknown, dir: string): Promise<VaultResult> {
     currentVault = vault;
     terminal.setVaultRoot(vault.path);
     await setLastVaultPath(dir);
-    await ensureVision(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
     await ensureTerminalAgentRuntimeForVault(dir);
@@ -315,6 +314,7 @@ function registerIpc(): void {
   registerDistillIpc();
   registerTerminalIpc();
   registerR6Ipc();
+  registerAreaIpc(() => currentVault?.path ?? null);
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);
 
@@ -343,7 +343,6 @@ app.whenReady().then(async () => {
     ) {
       currentVault = await openVault(settings.lastVaultPath);
       terminal.setVaultRoot(currentVault.path);
-      await ensureVision(settings.lastVaultPath);
       await openFsSession(settings.lastVaultPath);
       await reconcileOnStart(settings.lastVaultPath);
       await ensureTerminalAgentRuntimeForVault(settings.lastVaultPath);
