@@ -15,9 +15,8 @@ export function applyTerminalPaneEvent(
 
 export function acknowledgeTerminalPaneStatus(
   current: TerminalPaneAgentStatus,
-  isVisible: boolean
+  _isVisible: boolean
 ): TerminalPaneAgentStatus {
-  if (current === 'review' && isVisible) return 'idle';
   return current;
 }
 

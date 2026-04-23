@@ -16,7 +16,7 @@ describe('terminalAgentStatus', () => {
   it('goes to review when stop happens offscreen and clears when acknowledged', () => {
     const reviewed = applyTerminalPaneEvent('working', 'Stop', false);
     expect(reviewed).toBe('review');
-    expect(acknowledgeTerminalPaneStatus(reviewed, true)).toBe('idle');
+    expect(acknowledgeTerminalPaneStatus(reviewed, true)).toBe('review');
   });
 
   it('returns to idle immediately when stop happens while visible or terminal exits', () => {

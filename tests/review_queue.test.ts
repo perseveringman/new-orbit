@@ -84,4 +84,27 @@ describe('review queue store', () => {
     useReviewQueue.getState().dismiss('ns:ns-1:t-1');
     expect(useReviewQueue.getState().items).toEqual([]);
   });
+
+  it('stores terminal permission requests with project and pane routing details', () => {
+    useReviewQueue.getState().reset();
+
+    useReviewQueue.getState().ingestTerminalEvent({
+      eventType: 'PermissionRequest',
+      projectUid: 'project-1',
+      paneId: 'pane-7',
+      sessionId: 'sess-9',
+      ts: '2026-04-23T03:32:00Z',
+      reason: 'hook'
+    });
+
+    expect(useReviewQueue.getState().items).toContainEqual(
+      expect.objectContaining({
+        id: 'term-perm:sess-9',
+        source: 'permission',
+        projectUid: 'project-1',
+        paneId: 'pane-7',
+        sessionId: 'sess-9'
+      })
+    );
+  });
 });

@@ -1,27 +1,25 @@
-import { useEffect } from 'react';
+import { usePara } from '../store/para';
 import { useReviewQueue } from '../store/reviewQueue';
 import { useFiles } from '../store/files';
+import { useWorkspace } from '../store/workspace';
+import { queueTerminalNavigation } from '../components/Terminal/terminalNavigationIntent';
 
 export function ReviewInboxView(): JSX.Element {
   const items = useReviewQueue((s) => s.items);
-  const seedFromNightShift = useReviewQueue((s) => s.seedFromNightShift);
-  const ingestAgentEvent = useReviewQueue((s) => s.ingestAgentEvent);
   const dismiss = useReviewQueue((s) => s.dismiss);
   const toast = useFiles((s) => s.toast);
+  const setView = usePara((s) => s.setView);
+  const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
 
-  useEffect(() => {
-    let cancelled = false;
-    void window.orbit.nightShift.list().then((runs) => {
-      if (!cancelled) seedFromNightShift(runs);
-    });
-    const off = window.orbit.agent.onEvent(({ runId, event }) => {
-      ingestAgentEvent(runId, event);
-    });
-    return () => {
-      cancelled = true;
-      off();
-    };
-  }, [ingestAgentEvent, seedFromNightShift]);
+  function openTerminal(projectUid?: string, paneId?: string): void {
+    if (!projectUid || !paneId) {
+      toast('No terminal pane linked to this review item.');
+      return;
+    }
+    queueTerminalNavigation({ projectUid, paneId });
+    setActiveProjectUid(projectUid);
+    setView({ kind: 'project', projectUid });
+  }
 
   async function onApprove(worktreeId?: string): Promise<void> {
     if (!worktreeId) {
@@ -111,30 +109,44 @@ export function ReviewInboxView(): JSX.Element {
                   </p>
                 </div>
                 <div className="flex gap-1">
-                  <button
-                    onClick={() => openDiff(item.worktreeId)}
-                    className="rounded border border-sky-400/50 px-2 py-1 text-[11px] text-sky-600 hover:bg-sky-500/10 dark:text-sky-300"
-                  >
-                    Diff
-                  </button>
-                  <button
-                    onClick={() => openLog(item.runId)}
-                    className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                  >
-                    Log
-                  </button>
-                  <button
-                    onClick={() => void onApprove(item.worktreeId)}
-                    className="rounded border border-emerald-400/50 px-2 py-1 text-[11px] text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-300"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => void onReject(item.worktreeId)}
-                    className="rounded border border-red-400/50 px-2 py-1 text-[11px] text-red-600 hover:bg-red-500/10 dark:text-red-300"
-                  >
-                    Reject
-                  </button>
+                  {item.projectUid && item.paneId ? (
+                    <button
+                      onClick={() => openTerminal(item.projectUid, item.paneId)}
+                      className="rounded border border-amber-400/50 px-2 py-1 text-[11px] text-amber-600 hover:bg-amber-500/10 dark:text-amber-300"
+                    >
+                      Open terminal
+                    </button>
+                  ) : null}
+                  {item.worktreeId ? (
+                    <>
+                      <button
+                        onClick={() => openDiff(item.worktreeId)}
+                        className="rounded border border-sky-400/50 px-2 py-1 text-[11px] text-sky-600 hover:bg-sky-500/10 dark:text-sky-300"
+                      >
+                        Diff
+                      </button>
+                      <button
+                        onClick={() => void onApprove(item.worktreeId)}
+                        className="rounded border border-emerald-400/50 px-2 py-1 text-[11px] text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-300"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => void onReject(item.worktreeId)}
+                        className="rounded border border-red-400/50 px-2 py-1 text-[11px] text-red-600 hover:bg-red-500/10 dark:text-red-300"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  ) : null}
+                  {item.runId ? (
+                    <button
+                      onClick={() => openLog(item.runId)}
+                      className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    >
+                      Log
+                    </button>
+                  ) : null}
                   <button
                     onClick={() => dismiss(item.id)}
                     className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"

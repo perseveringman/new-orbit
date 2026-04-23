@@ -63,7 +63,7 @@ describe('renderTerminalNotifyShTemplate', () => {
     expect(script).toContain('HOOK_PORT="${ORBIT_HOOK_PORT:-}"');
     expect(script).toContain('PANE_ID="${ORBIT_PANE_ID:-}"');
     expect(script).toContain('PROJECT_UID="${ORBIT_PROJECT_UID:-}"');
-    expect(script).toContain('CLAUDE_HOOK_EVENT_TYPE');
+    expect(script).toContain('hook_event_name');
     expect(script).toContain('/hook/event?eventType=');
     expect(script).not.toContain('Authorization: Bearer');
     expect(script).not.toContain('ORBIT_RUN_ID');

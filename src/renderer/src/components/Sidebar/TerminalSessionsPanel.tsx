@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import type { TerminalAgentSessionDTO } from '@shared/ipc';
 import { useWorkspace } from '../../store/workspace';
 import { useFiles } from '../../store/files';
+import { usePara } from '../../store/para';
+import { queueTerminalNavigation } from '../Terminal/terminalNavigationIntent';
 
 export function TerminalSessionsPanel(): JSX.Element {
   const activeProjectUid = useWorkspace((s) => s.activeProjectUid);
-  const viewProjectUid =
-    useWorkspace((s) => s.activeProjectUid);
+  const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
+  const setView = usePara((s) => s.setView);
   const toast = useFiles((s) => s.toast);
   const [sessions, setSessions] = useState<TerminalAgentSessionDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,16 +41,23 @@ export function TerminalSessionsPanel(): JSX.Element {
     return off;
   }, [activeProjectUid, refresh]);
 
-  function onResume(session: TerminalAgentSessionDTO): void {
-    if (!session.resumeCommand || !viewProjectUid) return;
-    window.dispatchEvent(
-      new CustomEvent('orbit:resume-terminal-session', {
-        detail: {
-          projectUid: viewProjectUid,
-          initialCommand: session.resumeCommand
-        }
-      })
-    );
+  function onOpen(session: TerminalAgentSessionDTO): void {
+    if (session.status === 'active') {
+      queueTerminalNavigation({
+        projectUid: session.projectUid,
+        paneId: session.paneId,
+        ...(session.resumeCommand ? { initialCommand: session.resumeCommand } : {})
+      });
+    } else if (session.resumeCommand) {
+      queueTerminalNavigation({
+        projectUid: session.projectUid,
+        initialCommand: session.resumeCommand
+      });
+    } else {
+      return;
+    }
+    setActiveProjectUid(session.projectUid);
+    setView({ kind: 'project', projectUid: session.projectUid });
   }
 
   return (
@@ -77,8 +86,8 @@ export function TerminalSessionsPanel(): JSX.Element {
             {sessions.map((session) => (
               <button
                 key={session.sessionId}
-                onClick={() => onResume(session)}
-                disabled={!session.resumeCommand}
+                onClick={() => onOpen(session)}
+                disabled={session.status !== 'active' && !session.resumeCommand}
                 className="block w-full rounded-lg border border-neutral-200 bg-white p-3 text-left hover:border-sky-400 hover:bg-sky-50 disabled:cursor-default disabled:hover:border-neutral-200 disabled:hover:bg-white dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-sky-700 dark:hover:bg-sky-950/20 dark:disabled:hover:border-neutral-800 dark:disabled:hover:bg-neutral-900"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -110,7 +119,9 @@ export function TerminalSessionsPanel(): JSX.Element {
                 </div>
                 <div className="mt-2 text-[10px] text-neutral-500">
                   Pane {session.paneId}
-                  {session.resumeCommand ? (
+                  {session.status === 'active' ? (
+                    <span className="ml-2 text-amber-600 dark:text-amber-400">Jump to active terminal</span>
+                  ) : session.resumeCommand ? (
                     <span className="ml-2 text-sky-600 dark:text-sky-400">Resume in new tab</span>
                   ) : (
                     <span className="ml-2">Resume unavailable</span>

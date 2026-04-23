@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AgentEvent } from '@shared/agent';
-import type { NightShiftRunDTO } from '@shared/ipc';
+import type { NightShiftRunDTO, TerminalAgentEventDTO } from '@shared/ipc';
 
 export interface ReviewQueueItem {
   id: string;
@@ -10,6 +10,9 @@ export interface ReviewQueueItem {
   runId?: string;
   taskUid?: string;
   worktreeId?: string;
+  projectUid?: string;
+  paneId?: string;
+  sessionId?: string;
   createdAt: string;
   status: 'pending' | 'dismissed';
 }
@@ -18,6 +21,7 @@ interface ReviewQueueStore {
   items: ReviewQueueItem[];
   seedFromNightShift(runs: NightShiftRunDTO[]): void;
   ingestAgentEvent(runId: string, event: AgentEvent): void;
+  ingestTerminalEvent(event: TerminalAgentEventDTO): void;
   dismiss(id: string): void;
   reset(): void;
 }
@@ -77,6 +81,24 @@ export const useReviewQueue = create<ReviewQueueStore>((set) => ({
         runId,
         worktreeId,
         createdAt: event.at,
+        status: 'pending'
+      })
+    }));
+  },
+  ingestTerminalEvent(event) {
+    if (event.eventType !== 'PermissionRequest') return;
+    if (!event.projectUid || !event.paneId) return;
+    set((state) => ({
+      items: upsert(state.items, {
+        id: `term-perm:${event.sessionId ?? `${event.projectUid}:${event.paneId}`}`,
+        source: 'permission',
+        title: 'Terminal permission request',
+        detail: event.agentType ? `${event.agentType} waiting for approval` : 'Approval needed',
+        runId: event.sessionId,
+        projectUid: event.projectUid,
+        paneId: event.paneId,
+        sessionId: event.sessionId,
+        createdAt: event.ts,
         status: 'pending'
       })
     }));

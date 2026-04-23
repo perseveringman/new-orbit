@@ -10,7 +10,8 @@ import { MigrationDialog } from '../components/Modals/MigrationDialog';
 import { TaskDetailsModal } from '../components/Modals/TaskDetailsModal';
 import { TerminalManager } from '../components/Terminal/TerminalManager';
 import type { TerminalManagerHandle } from '../components/Terminal/TerminalManager';
-import { disposeByPrefix } from '../components/Terminal/sessionRegistry';
+import { consumePendingTerminalNavigation } from '../components/Terminal/terminalNavigationIntent';
+import { disposeTerminalsByPrefix } from '../components/Terminal/terminalResources';
 import {
   deriveProjectRoomKanbanModel,
   resolveProjectRoomPaneHint
@@ -59,14 +60,14 @@ export function ProjectRoomView(): JSX.Element {
     }
   });
 
-  function setOuterTab(tab: 'kanban' | 'terminal'): void {
+  const setOuterTab = useCallback((tab: 'kanban' | 'terminal'): void => {
     setOuterTabRaw(tab);
     try {
       localStorage.setItem(outerTabKey, tab);
     } catch {
       /* ignore */
     }
-  }
+  }, [outerTabKey]);
 
   // Reload persisted outer tab when project changes
   useEffect(() => {
@@ -77,17 +78,7 @@ export function ProjectRoomView(): JSX.Element {
     } catch {
       setOuterTabRaw('kanban');
     }
-  }, [activeProjectUid]);
-
-  // Dispose PTYs for the previous project when switching projects
-  const prevUidRef = useRef<string | null>(null);
-  useEffect(() => {
-    const prev = prevUidRef.current;
-    if (prev && prev !== activeProjectUid) {
-      void disposeByPrefix(`${prev}::`);
-    }
-    prevUidRef.current = activeProjectUid;
-  }, [activeProjectUid]);
+  }, [activeProjectUid, setOuterTab]);
 
   // Ref to TerminalManager for imperative focus
   const managerRef = useRef<TerminalManagerHandle | null>(null);
@@ -180,6 +171,7 @@ export function ProjectRoomView(): JSX.Element {
     if (!project) return;
     if (!window.confirm(`Archive project "${project.name}"?`)) return;
     try {
+      await disposeTerminalsByPrefix(`${project.uid}::`);
       const res = await window.orbit.project.archive(project.uid);
       toast(`Archived → ${res.newPath}`);
       await refreshProjects();
@@ -213,6 +205,26 @@ export function ProjectRoomView(): JSX.Element {
     }, 0);
   }
 
+  const consumePendingNavigation = useCallback(() => {
+    if (!activeProjectUid) return;
+    const pending = consumePendingTerminalNavigation(activeProjectUid);
+    if (!pending) return;
+    setOuterTab('terminal');
+    requestAnimationFrame(() => {
+      if (pending.paneId && managerRef.current?.focusPane(pending.paneId)) return;
+      if (pending.initialCommand) {
+        managerRef.current?.openTab({ initialCommand: pending.initialCommand });
+      }
+      requestAnimationFrame(() => {
+        managerRef.current?.focusActive();
+      });
+    });
+  }, [activeProjectUid, setOuterTab]);
+
+  useEffect(() => {
+    consumePendingNavigation();
+  }, [consumePendingNavigation]);
+
   // Listen for orbit:focus-terminal custom event (fired by ⌘` in VaultView)
   useEffect(() => {
     function onFocusTerminal(): void {
@@ -226,10 +238,19 @@ export function ProjectRoomView(): JSX.Element {
       if (detail.projectUid && detail.projectUid !== activeProjectUid) return;
       openResumeSession(detail.initialCommand);
     }
+    function onQueuedTerminalNavigation(e: Event): void {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail && detail !== activeProjectUid) return;
+      consumePendingNavigation();
+    }
     window.addEventListener('orbit:focus-terminal', onFocusTerminal);
     window.addEventListener(
       'orbit:resume-terminal-session',
       onResumeTerminalSession as EventListener
+    );
+    window.addEventListener(
+      'orbit:terminal-navigation-queued',
+      onQueuedTerminalNavigation as EventListener
     );
     return () => {
       window.removeEventListener('orbit:focus-terminal', onFocusTerminal);
@@ -237,9 +258,21 @@ export function ProjectRoomView(): JSX.Element {
         'orbit:resume-terminal-session',
         onResumeTerminalSession as EventListener
       );
+      window.removeEventListener(
+        'orbit:terminal-navigation-queued',
+        onQueuedTerminalNavigation as EventListener
+      );
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProjectUid]);
+  }, [activeProjectUid, consumePendingNavigation]);
+
+  useEffect(() => {
+    if (outerTab !== 'terminal') return;
+    const id = requestAnimationFrame(() => {
+      managerRef.current?.refitActive();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [outerTab]);
 
   // ⌘1 / ⌘2 switches outer tabs (only when focus is NOT inside TerminalManager)
   useEffect(() => {
@@ -381,7 +414,7 @@ export function ProjectRoomView(): JSX.Element {
       </div>
 
       {/* Terminal tab content */}
-      <div className={`flex min-h-0 flex-1 ${outerTab === 'terminal' ? 'flex' : 'hidden'}`}>
+      <div className={`min-h-0 flex-1 ${outerTab === 'terminal' ? 'flex' : 'hidden'}`}>
         <TerminalManager
           ref={managerRef}
           projectUid={project.uid}

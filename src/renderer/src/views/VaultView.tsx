@@ -25,6 +25,9 @@ import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { ReviewInboxView } from './ReviewInboxView';
 import { RunLogPane } from '../components/RunLogPane';
 import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
+import { applyTerminalPaneEvent } from '../components/Terminal/terminalAgentStatus';
+import { terminalPaneStatusRegistry } from '../components/Terminal/terminalPaneStatusRegistry';
+import { useReviewQueue } from '../store/reviewQueue';
 import { usePanesStore } from '../lib/panes/store';
 import {
   RIGHT_PANE_TABS,
@@ -43,6 +46,9 @@ export function VaultView(): JSX.Element {
   const refresh = usePara((s) => s.refresh);
   const initAgent = useAgent((s) => s.init);
   const teardownAgent = useAgent((s) => s.teardown);
+  const seedReviewQueueFromNightShift = useReviewQueue((s) => s.seedFromNightShift);
+  const ingestReviewAgentEvent = useReviewQueue((s) => s.ingestAgentEvent);
+  const ingestTerminalReviewEvent = useReviewQueue((s) => s.ingestTerminalEvent);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [nsHistoryOpen, setNsHistoryOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -197,6 +203,51 @@ export function VaultView(): JSX.Element {
   useEffect(() => {
     if (rightTab !== visibleRightTab) activateRightTab(visibleRightTab);
   }, [activateRightTab, rightTab, visibleRightTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.orbit.nightShift.list().then((runs) => {
+      if (!cancelled) seedReviewQueueFromNightShift(runs);
+    });
+
+    const offAgent = window.orbit.agent.onEvent(({ runId, event }) => {
+      ingestReviewAgentEvent(runId, event);
+    });
+
+    function isProjectTerminalVisible(projectUid?: string): boolean {
+      if (!projectUid) return false;
+      const workspace = useWorkspace.getState();
+      const para = usePara.getState();
+      if (workspace.activeProjectUid !== projectUid) return false;
+      if (para.view.kind !== 'project') return false;
+      try {
+        return localStorage.getItem(`orbit.projectRoom.outerTab.${projectUid}`) === 'terminal';
+      } catch {
+        return false;
+      }
+    }
+
+    const off = window.orbit.terminalAgent.onEvent((ev) => {
+      ingestTerminalReviewEvent(ev);
+      if (!ev.projectUid || !ev.paneId) return;
+      const sessionKey = `${ev.projectUid}::${ev.paneId}`;
+      const next = applyTerminalPaneEvent(
+        terminalPaneStatusRegistry.get(sessionKey),
+        ev.eventType,
+        isProjectTerminalVisible(ev.projectUid)
+      );
+      if (next === 'idle') {
+        terminalPaneStatusRegistry.clear(sessionKey);
+        return;
+      }
+      terminalPaneStatusRegistry.set(sessionKey, next);
+    });
+    return () => {
+      cancelled = true;
+      offAgent();
+      off();
+    };
+  }, [ingestReviewAgentEvent, ingestTerminalReviewEvent, seedReviewQueueFromNightShift]);
 
   async function onOpenWikilink(target: string): Promise<void> {
     const hits = await window.orbit.fs.search(target, { limit: 10 });

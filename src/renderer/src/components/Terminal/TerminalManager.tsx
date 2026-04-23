@@ -9,10 +9,11 @@ import {
 import { nanoid } from 'nanoid';
 import { TerminalPane } from './TerminalPane';
 import type { TerminalPaneHandle } from './TerminalPane';
-import { disposeSession } from './sessionRegistry';
+import { disposeTerminal } from './terminalResources';
 import { getTerminalShortcutAction } from './terminalHotkeys';
 import type { TerminalPaneAgentStatus } from './terminalAgentStatus';
 import { upsertTerminalPaneStatus } from './terminalPaneStatusRegistry';
+import { terminalPaneStatusRegistry } from './terminalPaneStatusRegistry';
 import {
   getLeafWrapperStyle,
   getPrimarySplitSectionStyle,
@@ -278,7 +279,9 @@ function SplitNode({ node, onNodeChange, ...shared }: SplitNodeProps): JSX.Eleme
 
 export interface TerminalManagerHandle {
   focusActive(): void;
+  refitActive(): void;
   openTab(opts?: { initialCommand?: string }): void;
+  focusPane(leafId: string): boolean;
 }
 
 interface TerminalManagerProps {
@@ -339,11 +342,40 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       focusActive() {
         const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeTabId);
         if (!tab) return;
+        const leafIds = getAllLeafIds(tab.root);
+        for (const leafId of leafIds) {
+          const key = `${projectUid}::${leafId}`;
+          paneRefs.current.get(key)?.current?.refit();
+        }
         const key = `${projectUid}::${tab.focusedLeafId}`;
         paneRefs.current.get(key)?.current?.focus();
       },
+      refitActive() {
+        const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeTabId);
+        if (!tab) return;
+        for (const leafId of getAllLeafIds(tab.root)) {
+          const key = `${projectUid}::${leafId}`;
+          paneRefs.current.get(key)?.current?.refit();
+        }
+      },
       openTab(opts) {
         newTab(opts);
+      },
+      focusPane(leafId) {
+        const tab = stateRef.current.tabs.find((item) => getAllLeafIds(item.root).includes(leafId));
+        if (!tab) return false;
+        setState((prev) => {
+          const focused = updateTab(prev, tab.id, { focusedLeafId: leafId });
+          const next =
+            focused.activeTabId === tab.id ? focused : { ...focused, activeTabId: tab.id };
+          stateRef.current = next;
+          return next;
+        });
+        persist();
+        requestAnimationFrame(() => {
+          paneRefs.current.get(`${projectUid}::${leafId}`)?.current?.focus();
+        });
+        return true;
       }
     }));
 
@@ -379,7 +411,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       for (const leafId of leafIds) {
         paneStatusesRef.current.delete(leafId);
         pendingInitialCommands.current.delete(leafId);
-        void disposeSession(`${projectUid}::${leafId}`);
+        void disposeTerminal(`${projectUid}::${leafId}`);
       }
       setState((prev) => {
         let { tabs, activeTabId } = prev;
@@ -448,7 +480,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       const tab = cur.tabs.find((t) => t.id === cur.activeTabId);
       if (!tab) return;
 
-      void disposeSession(`${projectUid}::${leafId}`);
+      void disposeTerminal(`${projectUid}::${leafId}`);
       paneStatusesRef.current.delete(leafId);
       pendingInitialCommands.current.delete(leafId);
       const result = deriveClosePaneResult(tab.root, leafId, tab.zoomedLeafId);
@@ -628,7 +660,9 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
 
     function tabIndicatorStatus(tab: TabState): TerminalPaneAgentStatus | null {
       const statuses = getAllLeafIds(tab.root).map(
-        (leafId) => paneStatusesRef.current.get(leafId) ?? 'idle'
+        (leafId) =>
+          paneStatusesRef.current.get(leafId) ??
+          terminalPaneStatusRegistry.get(`${projectUid}::${leafId}`)
       );
       if (statuses.some((status) => status === 'permission')) return 'permission';
       if (statuses.some((status) => status === 'review')) return 'review';

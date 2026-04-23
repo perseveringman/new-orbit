@@ -11,8 +11,6 @@ type ClaudeHookEntry = {
   hooks?: Array<{
     type: 'command';
     command: string;
-    env?: Record<string, string>;
-    matcher?: string;
   }>;
   matcher?: string;
 };
@@ -84,10 +82,21 @@ PANE_ID="\${ORBIT_PANE_ID:-}"
 PROJECT_UID="\${ORBIT_PROJECT_UID:-}"
 
 if [ -z "\${HOOK_PORT}" ]; then
+  cat >/dev/null 2>&1 || true
   exit 0
 fi
 
-EVENT_TYPE="\${CLAUDE_HOOK_EVENT_TYPE:-\${ORBIT_HOOK_EVENT_TYPE:-Stop}}"
+# Claude Code sends hook context as JSON on stdin; extract hook_event_name.
+INPUT="$(cat 2>/dev/null || true)"
+EVENT_TYPE=""
+if [ -n "\${INPUT}" ]; then
+  EVENT_TYPE="$(printf '%s' "\${INPUT}" | /usr/bin/env node -e '
+    let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{
+      try{process.stdout.write(JSON.parse(d).hook_event_name||"")}catch{process.stdout.write("")}
+    });
+  ' 2>/dev/null || true)"
+fi
+EVENT_TYPE="\${EVENT_TYPE:-\${ORBIT_HOOK_EVENT_TYPE:-Stop}}"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 curl -fsS --max-time 3 \\
@@ -148,21 +157,20 @@ function isManagedHookCommand(command: unknown, scriptPath: string): boolean {
 }
 
 function managedClaudeHooks(scriptPath: string): Record<string, ClaudeHookEntry[]> {
-  const entry = (eventType: string, matcher?: string): ClaudeHookEntry => ({
+  const entry = (matcher?: string): ClaudeHookEntry => ({
     ...(matcher ? { matcher } : {}),
     hooks: [
       {
         type: 'command',
-        command: scriptPath,
-        env: { ORBIT_HOOK_EVENT_TYPE: eventType }
+        command: scriptPath
       }
     ]
   });
 
   return {
-    UserPromptSubmit: [entry('UserPromptSubmit')],
-    Stop: [entry('Stop')],
-    PreToolUse: [entry('PreToolUse', '*')]
+    UserPromptSubmit: [entry()],
+    Stop: [entry()],
+    PreToolUse: [entry('*')]
   };
 }
 

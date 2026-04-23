@@ -50,11 +50,6 @@ export async function disposeSession(key: string): Promise<void> {
   map.delete(key);
 }
 
-export async function disposeByPrefix(prefix: string): Promise<void> {
-  const keys = Array.from(map.keys()).filter((k) => k.startsWith(prefix));
-  await Promise.all(keys.map((k) => disposeSession(k)));
-}
-
 export function listKeys(): string[] {
   return Array.from(map.keys());
 }
