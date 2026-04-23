@@ -47,6 +47,9 @@ function runToDto(r: NightShiftRun): NightShiftRunDTO {
     if (t.detail !== undefined) dto.detail = t.detail;
     if (t.branch !== undefined) dto.branch = t.branch;
     if (t.prUrl !== undefined) dto.prUrl = t.prUrl;
+    if (t.prNumber !== undefined) dto.prNumber = t.prNumber;
+    if (t.issueNumber !== undefined) dto.issueNumber = t.issueNumber;
+    if (t.checks !== undefined) dto.checks = t.checks;
     if (t.startedAt !== undefined) dto.startedAt = t.startedAt;
     if (t.endedAt !== undefined) dto.endedAt = t.endedAt;
     return dto;

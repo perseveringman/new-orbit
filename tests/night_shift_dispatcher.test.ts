@@ -274,4 +274,82 @@ describe('NightShiftDispatcher', () => {
       expect(['cancelled', 'blocked', 'done']).toContain(t.phase);
     }
   });
+
+  it('creates github-aware draft pull requests and reflects issue/check metadata', async () => {
+    await createProject(vault, { slug: 'p6', template: 'blank', name: 'P6' });
+    const abs = await writeTask(vault, 'p6', 'nsuid000050', 'Ship GitHub flow');
+    const raw = await fs.readFile(abs, 'utf8');
+    const bound = frontmatter.update(raw, {
+      github_issue_number: 18,
+      github_issue_title: 'Polish GitHub UI',
+      github_issue_url: 'https://github.com/acme/p6/issues/18'
+    });
+    await fs.writeFile(abs, bound.content, 'utf8');
+
+    const ghCalls: string[][] = [];
+    const disp = new NightShiftDispatcher(vault, {
+      spawnRunner: makeOkRunner(),
+      preMergeCheck: async () => passingCheck(),
+      hasGh: async () => true,
+      runGh: async (args) => {
+        ghCalls.push(args);
+        if (args[0] === 'pr' && args[1] === 'create') {
+          return { stdout: 'https://github.com/acme/p6/pull/77\n', code: 0 };
+        }
+        if (args[0] === 'pr' && args[1] === 'checks') {
+          return {
+            stdout: JSON.stringify([
+              { name: 'CI', state: 'pass', link: 'https://github.com/acme/p6/actions/runs/1' }
+            ]),
+            code: 0
+          };
+        }
+        return { stdout: '', code: 0 };
+      },
+      createWorktree: async () => undefined,
+      removeWorktree: async () => undefined
+    });
+    const runId = await disp.start({
+      taskUids: ['nsuid000050'],
+      concurrency: 1,
+      createPR: true,
+      github: {
+        createDraftPr: true,
+        baseBranch: 'develop',
+        reviewers: ['octocat'],
+        labels: ['night-shift'],
+        waitForChecks: true
+      }
+    });
+    await waitForDone(disp, runId);
+
+    const run = disp.get(runId)!;
+    expect(run.tasks[0]).toMatchObject({
+      taskUid: 'nsuid000050',
+      issueNumber: 18,
+      prNumber: 77,
+      prUrl: 'https://github.com/acme/p6/pull/77'
+    });
+    expect(run.tasks[0]?.checks).toEqual([
+      {
+        name: 'CI',
+        status: 'completed',
+        conclusion: 'success',
+        url: 'https://github.com/acme/p6/actions/runs/1'
+      }
+    ]);
+    expect(ghCalls).toContainEqual(
+      expect.arrayContaining([
+        'pr',
+        'create',
+        '--base',
+        'develop',
+        '--draft',
+        '--reviewer',
+        'octocat',
+        '--label',
+        'night-shift'
+      ])
+    );
+  });
 });

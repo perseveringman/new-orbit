@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid';
 import { simpleGit } from 'simple-git';
 import { ORBIT_DIR } from '@shared/constants';
 import type { CheckReport } from '@shared/git';
+import type { GitHubCheckSummary, NightShiftGitHubOptions } from '@shared/github';
 import { listProjects, listProjectTaskPaths } from '../project';
 import * as frontmatter from '../frontmatter';
 import { parseTaskSections, appendToSection } from '../task_sections';
@@ -35,6 +36,9 @@ export interface NightShiftTaskStatus {
   detail?: string;
   branch?: string;
   prUrl?: string;
+  prNumber?: number;
+  issueNumber?: number;
+  checks?: GitHubCheckSummary[];
   startedAt?: string;
   endedAt?: string;
 }
@@ -43,6 +47,7 @@ export interface NightShiftPlan {
   taskUids: string[];
   concurrency?: number;
   createPR?: boolean;
+  github?: NightShiftGitHubOptions;
 }
 
 export interface NightShiftRun {
@@ -52,6 +57,7 @@ export interface NightShiftRun {
   status: 'running' | 'done' | 'cancelled' | 'error';
   concurrency: number;
   createPR: boolean;
+  github?: NightShiftGitHubOptions;
   tasks: NightShiftTaskStatus[];
   summary?: { done: number; blocked: number; cancelled: number };
 }
@@ -251,7 +257,7 @@ export class NightShiftDispatcher extends EventEmitter {
       Math.max(1, plan.concurrency ?? 2, 1),
       cpu
     );
-    const createPR = plan.createPR === true;
+    const createPR = plan.createPR === true || plan.github?.createDraftPr === true;
 
     const order = dag.order;
     const byUid = new Map(tasks.map((t) => [t.taskUid, t]));
@@ -262,6 +268,7 @@ export class NightShiftDispatcher extends EventEmitter {
       status: 'running',
       concurrency,
       createPR,
+      github: plan.github,
       tasks: order.map((uid) => {
         const t = byUid.get(uid)!;
         const status: NightShiftTaskStatus & { _pre?: string[] } = {
@@ -273,6 +280,7 @@ export class NightShiftDispatcher extends EventEmitter {
           phase: 'pending'
         };
         status._pre = t.preConditions;
+        if (t.issueNumber !== undefined) status.issueNumber = t.issueNumber;
         return status;
       })
     };
@@ -353,6 +361,7 @@ export class NightShiftDispatcher extends EventEmitter {
       projectPath: string;
       taskPath: string;
       preConditions: string[];
+      issueNumber?: number;
     }[]
   > {
     const projects = await listProjects(this.vaultPath);
@@ -364,6 +373,7 @@ export class NightShiftDispatcher extends EventEmitter {
       projectPath: string;
       taskPath: string;
       preConditions: string[];
+      issueNumber?: number;
     }[] = [];
     for (const p of projects) {
       if (p.legacy) continue;
@@ -382,13 +392,20 @@ export class NightShiftDispatcher extends EventEmitter {
                 (x): x is string => typeof x === 'string'
               ))
             : [];
+          const issueNumber =
+            typeof data['github_issue_number'] === 'number'
+              ? data['github_issue_number']
+              : typeof data['github_issue_number'] === 'string'
+                ? Number(data['github_issue_number']) || undefined
+                : undefined;
           out.push({
             taskUid: uid,
             title,
             projectUid: p.uid,
             projectPath: p.path,
             taskPath: abs,
-            preConditions
+            preConditions,
+            issueNumber
           });
         } catch {
           /* ignore */
@@ -566,26 +583,42 @@ export class NightShiftDispatcher extends EventEmitter {
           } else {
             this.emitProgress(run.runId, task, 'pr');
             const runGh = this.deps.runGh ?? defaultRunGh;
-            const body = `Automated by Orbit Night Shift.\nTask: ${task.title}\nUID: ${task.taskUid}`;
-            const r = await runGh(
-              [
-                'pr',
-                'create',
-                '--base',
-                'main',
-                '--head',
-                branch,
-                '--title',
-                task.title,
-                '--body',
-                body
-              ],
-              worktreePath
-            );
+            const body = [
+              'Automated by Orbit Night Shift.',
+              `Task: ${task.title}`,
+              `UID: ${task.taskUid}`,
+              task.issueNumber ? `Issue: #${task.issueNumber}` : null
+            ]
+              .filter((line): line is string => Boolean(line))
+              .join('\n');
+            const prArgs = [
+              'pr',
+              'create',
+              '--base',
+              run.github?.baseBranch ?? 'main',
+              '--head',
+              branch,
+              '--title',
+              task.title,
+              '--body',
+              body
+            ];
+            if (run.github?.createDraftPr) prArgs.push('--draft');
+            for (const reviewer of run.github?.reviewers ?? []) {
+              prArgs.push('--reviewer', reviewer);
+            }
+            for (const label of run.github?.labels ?? []) {
+              prArgs.push('--label', label);
+            }
+            const r = await runGh(prArgs, worktreePath);
             const url = (r.stdout.match(/https?:\/\/\S+/) ?? [])[0];
             if (r.code === 0 && url) {
               prUrl = url;
               task.prUrl = url;
+              task.prNumber = extractPullRequestNumber(url);
+              if (task.prNumber && run.github?.waitForChecks) {
+                task.checks = await fetchPullRequestChecks(runGh, worktreePath, task.prNumber);
+              }
             } else {
               await this.appendExecLog(
                 task.taskPath,
@@ -724,6 +757,52 @@ function stringifyValue(v: unknown): string {
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
   if (Array.isArray(v)) return `[${v.map((x) => stringifyValue(x)).join(', ')}]`;
   return JSON.stringify(v);
+}
+
+function extractPullRequestNumber(url: string): number | undefined {
+  const match = url.match(/\/pull\/(\d+)(?:\/|$)/);
+  if (!match) return undefined;
+  const number = Number(match[1]);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+async function fetchPullRequestChecks(
+  runGh: (args: string[], cwd: string) => Promise<{ stdout: string; code: number }>,
+  cwd: string,
+  pullRequestNumber: number
+): Promise<GitHubCheckSummary[]> {
+  const result = await runGh(
+    ['pr', 'checks', String(pullRequestNumber), '--json', 'name,state,link'],
+    cwd
+  );
+  if (result.code !== 0) return [];
+  try {
+    const raw = JSON.parse(result.stdout) as Array<{
+      name?: string;
+      state?: string;
+      link?: string;
+    }>;
+    return raw
+      .filter(
+        (entry): entry is { name: string; state?: string; link?: string } =>
+          typeof entry.name === 'string'
+      )
+      .map((entry) => ({
+        name: entry.name,
+        status: entry.state === 'pending' ? 'in_progress' : 'completed',
+        conclusion:
+          entry.state === 'pass'
+            ? 'success'
+            : entry.state === 'fail'
+              ? 'failure'
+              : entry.state === 'pending'
+                ? null
+                : 'neutral',
+        url: entry.link
+      }));
+  } catch {
+    return [];
+  }
 }
 
 function cloneRun(r: NightShiftRun): NightShiftRun {

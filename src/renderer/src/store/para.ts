@@ -4,12 +4,13 @@ import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/
 export type WorkspaceView =
   | { kind: 'editor' }
   | { kind: 'dashboard' }
+  | { kind: 'github' }
   | { kind: 'inbox' }
   | { kind: 'today' }
   | { kind: 'journals' }
   | { kind: 'kanban'; projectUid: string | null }
   | { kind: 'area'; areaUid: string | null }
-  | { kind: 'project'; projectUid: string; pane?: 'task' | 'sessions' };
+  | { kind: 'project'; projectUid: string; pane?: 'task' | 'sessions' | 'github' };
 
 interface ParaState {
   view: WorkspaceView;

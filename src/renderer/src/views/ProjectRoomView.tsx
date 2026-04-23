@@ -7,6 +7,7 @@ import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
 import { useSidebar } from '../store/sidebar';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
+import { NightShiftModal } from '../components/Modals/NightShiftModal';
 import { MigrationDialog } from '../components/Modals/MigrationDialog';
 import { TerminalManager } from '../components/Terminal/TerminalManager';
 import type { TerminalManagerHandle } from '../components/Terminal/TerminalManager';
@@ -18,10 +19,12 @@ import {
 import { disposeTerminalsByPrefix } from '../components/Terminal/terminalResources';
 import {
   deriveProjectRoomKanbanModel,
+  type ProjectRoomOuterTab,
   resolveProjectRoomPaneHint,
   resolveProjectRoomSidebarPanel,
   resolveProjectRoomSidebarSurface
 } from './projectRoomModel';
+import { ProjectGitHubView } from './ProjectGitHubView';
 import { ProjectSessionsView } from './ProjectSessionsView';
 
 /**
@@ -58,20 +61,21 @@ export function ProjectRoomView(): JSX.Element {
   const [githubState, setGitHubState] = useState<GitHubProjectState | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [nightShiftOpen, setNightShiftOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
 
-  // Outer tab: 'kanban' or 'terminal', persisted per project
+  // Outer tab: 'kanban' / 'terminal' / 'sessions' / 'github', persisted per project
   const outerTabKey = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
-  const [outerTab, setOuterTabRaw] = useState<'kanban' | 'terminal' | 'sessions'>(() => {
+  const [outerTab, setOuterTabRaw] = useState<ProjectRoomOuterTab>(() => {
     try {
       const v = localStorage.getItem(outerTabKey);
-      return v === 'terminal' || v === 'sessions' ? v : 'kanban';
+      return v === 'terminal' || v === 'sessions' || v === 'github' ? v : 'kanban';
     } catch {
       return 'kanban';
     }
   });
 
-  const setOuterTab = useCallback((tab: 'kanban' | 'terminal' | 'sessions'): void => {
+  const setOuterTab = useCallback((tab: ProjectRoomOuterTab): void => {
     setOuterTabRaw(tab);
     try {
       localStorage.setItem(outerTabKey, tab);
@@ -85,7 +89,7 @@ export function ProjectRoomView(): JSX.Element {
     try {
       const key = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
       const v = localStorage.getItem(key);
-      setOuterTabRaw(v === 'terminal' || v === 'sessions' ? v : 'kanban');
+      setOuterTabRaw(v === 'terminal' || v === 'sessions' || v === 'github' ? v : 'kanban');
     } catch {
       setOuterTabRaw('kanban');
     }
@@ -147,12 +151,14 @@ export function ProjectRoomView(): JSX.Element {
   useEffect(() => {
     if (view.kind !== 'project') return;
     const hint = resolveProjectRoomPaneHint(
-      view.pane as 'task' | 'sessions' | 'readme' | 'agent' | undefined
+      view.pane as 'task' | 'sessions' | 'github' | 'readme' | 'agent' | undefined
     );
     if (hint === 'task') {
       setOuterTab('kanban');
     } else if (hint === 'sessions') {
       setOuterTab('sessions');
+    } else if (hint === 'github') {
+      setOuterTab('github');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
@@ -416,6 +422,12 @@ export function ProjectRoomView(): JSX.Element {
       } else if (e.key === '2') {
         e.preventDefault();
         setOuterTab('terminal');
+      } else if (e.key === '3') {
+        e.preventDefault();
+        setOuterTab('github');
+      } else if (e.key === '4') {
+        e.preventDefault();
+        setOuterTab('sessions');
       }
     }
     window.addEventListener('keydown', onKey);
@@ -553,6 +565,9 @@ export function ProjectRoomView(): JSX.Element {
         <OuterTabButton active={outerTab === 'terminal'} onClick={() => setOuterTab('terminal')}>
           Terminal
         </OuterTabButton>
+        <OuterTabButton active={outerTab === 'github'} onClick={() => setOuterTab('github')}>
+          GitHub
+        </OuterTabButton>
         <OuterTabButton active={outerTab === 'sessions'} onClick={() => setOuterTab('sessions')}>
           Sessions
         </OuterTabButton>
@@ -626,6 +641,17 @@ export function ProjectRoomView(): JSX.Element {
         <ProjectSessionsView projectUid={project.uid} onOpenSession={openSessionNavigation} />
       </div>
 
+      <div className={`min-h-0 flex-1 ${outerTab === 'github' ? 'flex' : 'hidden'}`}>
+        <ProjectGitHubView
+          project={project}
+          tasks={tasks}
+          onProjectsChanged={refreshProjects}
+          onTasksChanged={refreshTasks}
+          onOpenTerminal={() => setOuterTab('terminal')}
+          onStartNightShift={() => setNightShiftOpen(true)}
+        />
+      </div>
+
       <NewTaskModal
         open={newTaskOpen}
         projectUid={project.uid}
@@ -654,6 +680,11 @@ export function ProjectRoomView(): JSX.Element {
           void refreshProjects();
           void refreshTasks();
         }}
+      />
+      <NightShiftModal
+        open={nightShiftOpen}
+        projectUid={project.uid}
+        onClose={() => setNightShiftOpen(false)}
       />
     </div>
   );

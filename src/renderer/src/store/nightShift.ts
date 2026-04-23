@@ -1,16 +1,23 @@
 import { create } from 'zustand';
 import type {
   NightShiftDoneEventDTO,
+  NightShiftPlanDTO,
   NightShiftProgressEventDTO,
   NightShiftRunDTO
 } from '@shared/ipc';
+import type { NightShiftGitHubOptions } from '@shared/github';
 
 interface NightShiftState {
   run: NightShiftRunDTO | null;
   subscribed: boolean;
   subscribe(): void;
   refresh(): Promise<void>;
-  start(taskUids: string[], concurrency: number, createPR: boolean): Promise<void>;
+  start(
+    taskUids: string[],
+    concurrency: number,
+    createPR: boolean,
+    github?: NightShiftGitHubOptions
+  ): Promise<void>;
   cancel(): Promise<void>;
   clear(): void;
 }
@@ -51,12 +58,14 @@ export const useNightShift = create<NightShiftState>((set, get) => ({
     const latest = runs[runs.length - 1] ?? null;
     set({ run: latest });
   },
-  async start(taskUids, concurrency, createPR): Promise<void> {
-    const { runId } = await window.orbit.nightShift.start({
+  async start(taskUids, concurrency, createPR, github): Promise<void> {
+    const plan: NightShiftPlanDTO = {
       taskUids,
       concurrency,
       createPR
-    });
+    };
+    if (github) plan.github = github;
+    const { runId } = await window.orbit.nightShift.start(plan);
     const run = await window.orbit.nightShift.status(runId);
     set({ run });
   },

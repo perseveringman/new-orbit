@@ -43,11 +43,17 @@ import type {
   WorktreeRecord
 } from './git';
 import type {
+  GitHubCheckSummary,
   GitHubConnection,
+  GitHubIssueSummary,
+  GitHubProjectDetails,
   GitHubPullRequestSummary,
   GitHubProjectState,
   GitHubRepoBinding,
-  GitHubRepoVisibility
+  GitHubRepoVisibility,
+  GitHubTaskBinding,
+  GitHubWorkspaceRepository,
+  NightShiftGitHubOptions
 } from './github';
 
 /**
@@ -189,11 +195,16 @@ export const IPC = {
     hasGhCli: 'env:hasGhCli'
   },
   github: {
+    authenticate: 'github:authenticate',
+    listRepositories: 'github:listRepositories',
     getConnection: 'github:getConnection',
     getProjectState: 'github:getProjectState',
+    getProjectDetails: 'github:getProjectDetails',
     publishProject: 'github:publishProject',
     importRepository: 'github:importRepository',
-    createPullRequest: 'github:createPullRequest'
+    createPullRequest: 'github:createPullRequest',
+    bindTaskIssue: 'github:bindTaskIssue',
+    unbindTaskIssue: 'github:unbindTaskIssue'
   }
 } as const;
 
@@ -395,6 +406,18 @@ export interface CreateGitHubPullRequestArgsDTO {
   draft?: boolean;
 }
 
+export interface GitHubRepositoryListArgsDTO {
+  owner?: string;
+  query?: string;
+}
+
+export interface GitHubTaskIssueBindingArgsDTO {
+  taskPath: string;
+  issueNumber: number;
+  issueTitle?: string;
+  issueUrl?: string;
+}
+
 export interface CreateTaskArgsDTO {
   project_uid: string;
   title: string;
@@ -511,6 +534,9 @@ export interface NightShiftTaskStatusDTO {
   detail?: string;
   branch?: string;
   prUrl?: string;
+  prNumber?: number;
+  issueNumber?: number;
+  checks?: GitHubCheckSummary[];
   startedAt?: string;
   endedAt?: string;
 }
@@ -530,6 +556,7 @@ export interface NightShiftPlanDTO {
   taskUids: string[];
   concurrency?: number;
   createPR?: boolean;
+  github?: NightShiftGitHubOptions;
 }
 
 export interface NightShiftProgressEventDTO {
@@ -705,9 +732,14 @@ export interface OrbitApi {
   };
   github: {
     getConnection(): Promise<GitHubConnection>;
+    authenticate(): Promise<GitHubConnection>;
+    listRepositories(args?: GitHubRepositoryListArgsDTO): Promise<GitHubWorkspaceRepository[]>;
     getProjectState(projectUid: string): Promise<GitHubProjectState>;
+    getProjectDetails(projectUid: string): Promise<GitHubProjectDetails>;
     publishProject(args: PublishProjectToGitHubArgsDTO): Promise<GitHubProjectState>;
     importRepository(args: ImportGitHubRepositoryArgsDTO): Promise<ImportGitHubRepositoryResultDTO>;
     createPullRequest(args: CreateGitHubPullRequestArgsDTO): Promise<GitHubPullRequestSummary>;
+    bindTaskIssue(args: GitHubTaskIssueBindingArgsDTO): Promise<GitHubTaskBinding>;
+    unbindTaskIssue(taskPath: string): Promise<void>;
   };
 }

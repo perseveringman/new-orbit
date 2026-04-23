@@ -91,6 +91,25 @@ describe('IPC contract', () => {
     }
   });
 
+  it('github namespace declares workspace + project + binding channels', () => {
+    const keys = Object.keys(IPC.github).sort();
+    expect(keys).toEqual(
+      [
+        'authenticate',
+        'bindTaskIssue',
+        'createPullRequest',
+        'getConnection',
+        'getProjectDetails',
+        'getProjectState',
+        'importRepository',
+        'listRepositories',
+        'publishProject',
+        'unbindTaskIssue'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.github)) expect(v.startsWith('github:')).toBe(true);
+  });
+
   it('OrbitApi type shape is assignable', () => {
     const defSettings = {
       lastVaultPath: null,
@@ -104,7 +123,7 @@ describe('IPC contract', () => {
       worktreeGcDays: 7
     };
     // Compile-time test: this block will fail typecheck if the shape drifts.
-    const shape: Pick<OrbitApi, 'workspace' | 'settings'> = {
+    const shape: Pick<OrbitApi, 'workspace' | 'settings' | 'github'> = {
       workspace: {
         pickAndOpen: async () => ({ ok: false, reason: 'cancelled' }),
         createNew: async () => ({ ok: false, reason: 'cancelled' }),
@@ -133,9 +152,72 @@ describe('IPC contract', () => {
         setTheme: async (t) => ({ ...defSettings, theme: t }),
         update: async (partial) => ({ ...defSettings, ...partial }),
         detectClaude: async () => ({ available: false, error: 'test' })
+      },
+      github: {
+        getConnection: async () => ({ available: true, authenticated: false, host: 'github.com' }),
+        authenticate: async () => ({
+          available: true,
+          authenticated: true,
+          host: 'github.com',
+          viewer: 'orbit-test'
+        }),
+        listRepositories: async () => [],
+        getProjectState: async () => ({
+          connection: { available: true, authenticated: false, host: 'github.com' },
+          binding: null,
+          sync: null,
+          pullRequest: null,
+          canPublish: true
+        }),
+        getProjectDetails: async () => ({
+          overview: {
+            connection: { available: true, authenticated: false, host: 'github.com' },
+            binding: null,
+            sync: null,
+            pullRequest: null,
+            canPublish: true
+          },
+          issues: [],
+          pullRequests: [],
+          checks: [],
+          reviews: [],
+          worktrees: [],
+          taskBindings: [],
+          lastSyncedAt: null
+        }),
+        publishProject: async () => ({
+          connection: { available: true, authenticated: false, host: 'github.com' },
+          binding: null,
+          sync: null,
+          pullRequest: null,
+          canPublish: false
+        }),
+        importRepository: async () => ({
+          uid: 'project-1',
+          slug: 'project-1',
+          projectPath: '/tmp/project-1',
+          binding: null
+        }),
+        createPullRequest: async () => ({
+          number: 1,
+          url: 'https://github.com/acme/repo/pull/1',
+          title: 'Test',
+          state: 'open',
+          baseBranch: 'main',
+          headBranch: 'feature/test'
+        }),
+        bindTaskIssue: async () => ({
+          taskId: 'file:task.md',
+          taskTitle: 'Task',
+          issueNumber: 1,
+          issueTitle: 'Issue',
+          issueUrl: 'https://github.com/acme/repo/issues/1'
+        }),
+        unbindTaskIssue: async () => undefined
       }
     };
     expect(shape.workspace).toBeDefined();
     expect(shape.settings).toBeDefined();
+    expect(shape.github).toBeDefined();
   });
 });
