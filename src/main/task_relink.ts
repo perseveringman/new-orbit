@@ -3,8 +3,9 @@ import path from 'node:path';
 import { simpleGit } from 'simple-git';
 import {
   PROJECTS_DIR,
-  PROJECT_AGENT_DIR,
-  PROJECT_TASKS_DIR
+  PROJECT_ORBIT_AGENT_DIR,
+  PROJECT_ORBIT_DIR,
+  PROJECT_ORBIT_TASKS_DIR
 } from '@shared/constants';
 import * as frontmatter from './frontmatter';
 import { listProjects } from './project';
@@ -21,7 +22,7 @@ export interface RelinkResult {
 /**
  * Relink a task markdown file to a different project. Rewrites the
  * `project_uid` frontmatter. If the file currently lives outside the target
- * project's `.agent/tasks/` directory, it is physically moved via `git mv`
+ * project's `.orbit/agent/tasks/` directory, it is physically moved via `git mv`
  * when possible, or a plain rename when the source repo can't track it.
  *
  * Idempotent: no-op (but still returns a consistent result) when the task is
@@ -43,8 +44,9 @@ export async function relinkTask(
 
   const targetTasksDir = path.join(
     target.path,
-    PROJECT_AGENT_DIR,
-    PROJECT_TASKS_DIR
+    PROJECT_ORBIT_DIR,
+    PROJECT_ORBIT_AGENT_DIR,
+    PROJECT_ORBIT_TASKS_DIR
   );
   await fs.mkdir(targetTasksDir, { recursive: true });
 
@@ -65,7 +67,7 @@ export async function relinkTask(
     await fs.writeFile(taskAbsPath, patched, 'utf8');
   }
 
-  // 2) if the file sits elsewhere, try to move into target `.agent/tasks/`
+  // 2) if the file sits elsewhere, try to move into target `.orbit/agent/tasks/`
   const desired = path.join(targetTasksDir, path.basename(taskAbsPath));
   let finalPath = taskAbsPath;
   let moved = false;
@@ -132,12 +134,13 @@ export async function relinkTask(
   return {
     taskPath: finalPath,
     relPath: path.posix.join(
-      PROJECTS_DIR,
-      target.slug,
-      PROJECT_AGENT_DIR,
-      PROJECT_TASKS_DIR,
-      path.basename(finalPath)
-    ),
+        PROJECTS_DIR,
+        target.slug,
+        PROJECT_ORBIT_DIR,
+        PROJECT_ORBIT_AGENT_DIR,
+        PROJECT_ORBIT_TASKS_DIR,
+        path.basename(finalPath)
+      ),
     uid,
     projectUid: newProjectUid,
     moved

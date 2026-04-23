@@ -10,15 +10,15 @@ const blank: TemplateDefinition = {
   meta: {
     id: 'blank',
     label: 'Blank',
-    description: 'Minimal project scaffold with .agent/, AGENT.md, README.md and .gitignore.'
+    description: 'Minimal project scaffold with .orbit/, AGENT.md, README.md and .gitignore.'
   },
   files: {
     'AGENT.md': BASE_AGENT_MD,
     'README.md': BASE_README_MD,
     '.gitignore': BASE_GITIGNORE,
-    '.agent/config.json': BASE_CONFIG_JSON,
-    '.agent/tasks/.gitkeep': '',
-    '.agent/memories/.gitkeep': ''
+    '.orbit/config.json': BASE_CONFIG_JSON,
+    '.orbit/agent/tasks/.gitkeep': '',
+    '.orbit/agent/memories/.gitkeep': ''
   }
 };
 

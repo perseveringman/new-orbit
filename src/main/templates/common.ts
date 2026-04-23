@@ -51,7 +51,16 @@ export const BASE_CONFIG_JSON = `{
   "created_at": "{{created_at}}",
   "vision_linked": true,
   "setup": [],
-  "teardown": []
+  "teardown": [],
+  "agent_exposure": {
+    "mode": "isolated",
+    "exposeMcpBridge": false,
+    "exposeAgentMdBridge": false,
+    "exposeAgentsMdBridge": false,
+    "consumeCommunityAgentMd": false,
+    "consumeCommunityAgentsMd": false,
+    "consumeCommunityDotAgent": false
+  }
 }
 `;
 

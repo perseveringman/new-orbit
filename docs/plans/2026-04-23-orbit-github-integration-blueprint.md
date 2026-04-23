@@ -16,6 +16,16 @@ Orbit **尚未**具备的是完整的 GitHub 产品面。目前 GitHub 是 Night
 
 本文档记录了该目标状态的设计。
 
+## 当前实现状态
+
+截至本次实施，Orbit 已完成一版可用的本地优先 GitHub 集成：
+
+- 后端通过 `gh` CLI 实现连接探测、项目发布、仓库导入、项目状态聚合与 PR 创建
+- 前端已在新建项目和 Project Room 接入 GitHub 导入、发布、刷新与建 PR
+- 项目级 GitHub binding 已落到 `.orbit/config.json`
+
+也就是说，这份蓝图里的主链路已经具备可运行实现；后续增强重点将转向更深的 review / CI / issue 建模，而不是从零开始补 GitHub 基础能力。
+
 ---
 
 ## 产品定位

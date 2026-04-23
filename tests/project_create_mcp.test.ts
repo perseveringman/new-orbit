@@ -12,7 +12,7 @@ async function tmpVault(): Promise<string> {
   return d;
 }
 
-describe('project.create writes .mcp.json (R5)', () => {
+describe('project.create writes .orbit/.mcp.json (R5)', () => {
   let vault: string;
   beforeEach(async () => {
     vault = await tmpVault();
@@ -21,14 +21,22 @@ describe('project.create writes .mcp.json (R5)', () => {
     await fs.rm(vault, { recursive: true, force: true });
   });
 
-  it('emits .mcp.json with an Orbit stdio entry when mcpServerPath is supplied', async () => {
+  it('emits .orbit/.mcp.json with an Orbit stdio entry when mcpServerPath is supplied', async () => {
     const fakeMcp = '/path/to/orbit/out/mcp/server.cjs';
     const r = await createProject(
       vault,
-      { slug: 'demo', template: 'blank', name: 'Demo' },
+      {
+        slug: 'demo',
+        template: 'blank',
+        name: 'Demo',
+        agent_exposure: {
+          mode: 'bridge',
+          exposeMcpBridge: true
+        }
+      },
       { mcpServerPath: fakeMcp }
     );
-    const cfgPath = path.join(r.projectPath, '.mcp.json');
+    const cfgPath = path.join(r.projectPath, '.orbit', '.mcp.json');
     const raw = await fs.readFile(cfgPath, 'utf8');
     const cfg = JSON.parse(raw) as {
       mcpServers: { orbit: { type: string; command: string; args: string[]; env: Record<string, string> } };
@@ -41,15 +49,26 @@ describe('project.create writes .mcp.json (R5)', () => {
       ORBIT_PROJECT_UID: r.uid,
       ORBIT_PROJECT_SLUG: 'demo'
     });
+    const rootRaw = await fs.readFile(path.join(r.projectPath, '.mcp.json'), 'utf8');
+    expect(JSON.parse(rootRaw)).toEqual(cfg);
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(r.projectPath, '.orbit', 'bridge', 'manifest.json'), 'utf8')
+    ) as {
+      bridges: Record<string, { status: string; targetPath: string }>;
+    };
+    expect(manifest.bridges['.mcp.json']).toMatchObject({
+      status: 'published',
+      targetPath: '.mcp.json'
+    });
   });
 
-  it('skips .mcp.json when no mcpServerPath is supplied (test/CLI path)', async () => {
+  it('skips .orbit/.mcp.json when no mcpServerPath is supplied (test/CLI path)', async () => {
     const r = await createProject(vault, {
       slug: 'demo2',
       template: 'blank',
       name: 'Demo'
     });
-    await expect(fs.access(path.join(r.projectPath, '.mcp.json'))).rejects.toThrow();
+    await expect(fs.access(path.join(r.projectPath, '.orbit', '.mcp.json'))).rejects.toThrow();
   });
 });
 
@@ -86,7 +105,7 @@ describe('ensureMcpConfig idempotency', () => {
       template: 'blank',
       name: 'Mix'
     });
-    const cfgPath = path.join(proj.projectPath, '.mcp.json');
+    const cfgPath = path.join(proj.projectPath, '.orbit', '.mcp.json');
     await fs.writeFile(
       cfgPath,
       JSON.stringify(
@@ -115,5 +134,64 @@ describe('ensureMcpConfig idempotency', () => {
       mcpServers: Record<string, unknown>;
     };
     expect(Object.keys(cfg.mcpServers).sort()).toEqual(['myCustom', 'orbit']);
+  });
+
+  it('does not overwrite a conflicting root .mcp.json bridge', async () => {
+    const proj = await createProject(vault, {
+      slug: 'conflict',
+      template: 'blank',
+      name: 'Conflict',
+      agent_exposure: {
+        mode: 'bridge',
+        exposeMcpBridge: true
+      }
+    });
+    const rootPath = path.join(proj.projectPath, '.mcp.json');
+    await fs.writeFile(
+      rootPath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            existing: {
+              type: 'stdio',
+              command: 'python',
+              args: ['server.py'],
+              env: {}
+            }
+          }
+        },
+        null,
+        2
+      ) + '\n',
+      'utf8'
+    );
+
+    await ensureMcpConfig(proj.projectPath, {
+      vault,
+      projectUid: proj.uid,
+      projectSlug: 'conflict',
+      mcpServerPath: '/orb/server.cjs'
+    });
+
+    const root = JSON.parse(await fs.readFile(rootPath, 'utf8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    expect(root.mcpServers).toEqual({
+      existing: {
+        type: 'stdio',
+        command: 'python',
+        args: ['server.py'],
+        env: {}
+      }
+    });
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(proj.projectPath, '.orbit', 'bridge', 'manifest.json'), 'utf8')
+    ) as {
+      bridges: Record<string, { status: string; conflictReason?: string }>;
+    };
+    expect(manifest.bridges['.mcp.json']).toMatchObject({
+      status: 'conflict',
+      conflictReason: 'target_exists'
+    });
   });
 });

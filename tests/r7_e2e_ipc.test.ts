@@ -45,7 +45,7 @@ describe('R7 end-to-end (IPC layer): vault → project → task → archive + mi
       description: 'initial description'
     });
     expect(task.taskPath).toContain(
-      path.join('01_Projects', 'e2e-proj', '.agent', 'tasks')
+      path.join('01_Projects', 'e2e-proj', '.orbit', 'agent', 'tasks')
     );
 
     // 4) Update all four sections via the task module.
@@ -90,7 +90,7 @@ describe('R7 end-to-end (IPC layer): vault → project → task → archive + mi
 
     const cfg = JSON.parse(
       await fs.readFile(
-        path.join(vault, '01_Projects', 'legacy-e2e', '.agent', 'config.json'),
+        path.join(vault, '01_Projects', 'legacy-e2e', '.orbit', 'config.json'),
         'utf8'
       )
     ) as { slug: string };

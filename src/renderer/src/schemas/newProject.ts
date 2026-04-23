@@ -34,6 +34,7 @@ export const NewProjectForm = z.object({
   template: z.string().min(1),
   slug: z.string().refine(isValidSlug, 'slug must be kebab-case lowercase ASCII'),
   area_uid: z.string().optional(),
-  tags: z.array(z.string().min(1).max(32)).max(12).optional()
+  tags: z.array(z.string().min(1).max(32)).max(12).optional(),
+  agent_exposure_mode: z.enum(['isolated', 'bridge', 'compatible']).default('isolated')
 });
 export type NewProjectForm = z.infer<typeof NewProjectForm>;

@@ -1,8 +1,13 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { PROJECT_AGENT_DIR, PROJECT_CONFIG } from '@shared/constants';
-import type { ProjectConfig } from './project';
+import {
+  PROJECT_AGENT_DIR,
+  PROJECT_CONFIG,
+  PROJECT_ORBIT_CONFIG,
+  PROJECT_ORBIT_DIR
+} from '@shared/constants';
+import { normalizeProjectConfig, type ProjectConfig } from './project_config';
 
 export interface ProjectLifecycleContext {
   projectPath: string;
@@ -20,19 +25,23 @@ export interface ProjectLifecycleConfig {
 export async function readProjectLifecycleConfig(
   projectPath: string
 ): Promise<ProjectLifecycleConfig> {
-  try {
-    const raw = await fs.readFile(
-      path.join(projectPath, PROJECT_AGENT_DIR, PROJECT_CONFIG),
-      'utf8'
-    );
-    const parsed = JSON.parse(raw) as ProjectConfig;
-    return {
-      setup: Array.isArray(parsed.setup) ? parsed.setup.filter(isString) : [],
-      teardown: Array.isArray(parsed.teardown) ? parsed.teardown.filter(isString) : []
-    };
-  } catch {
-    return { setup: [], teardown: [] };
+  const candidates = [
+    path.join(projectPath, PROJECT_ORBIT_DIR, PROJECT_ORBIT_CONFIG),
+    path.join(projectPath, PROJECT_AGENT_DIR, PROJECT_CONFIG)
+  ];
+  for (const file of candidates) {
+    try {
+      const raw = await fs.readFile(file, 'utf8');
+      const parsed = normalizeProjectConfig(JSON.parse(raw)) as ProjectConfig;
+      return {
+        setup: Array.isArray(parsed.setup) ? parsed.setup.filter(isString) : [],
+        teardown: Array.isArray(parsed.teardown) ? parsed.teardown.filter(isString) : []
+      };
+    } catch {
+      // try next candidate
+    }
   }
+  return { setup: [], teardown: [] };
 }
 
 function isString(value: unknown): value is string {

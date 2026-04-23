@@ -368,6 +368,8 @@ function extractText(r: RawEventShape): string {
 export class AgentRunner extends EventEmitter {
   readonly runId: string;
   private readonly opts: SpawnOpts;
+  private readonly donePromise: Promise<void>;
+  private resolveDone!: () => void;
   private child: ChildProcessWithoutNullStreams | null = null;
   private stdoutBuf = '';
   private stderrBuf = '';
@@ -388,6 +390,9 @@ export class AgentRunner extends EventEmitter {
     super();
     this.opts = opts;
     this.runId = nanoid(12);
+    this.donePromise = new Promise<void>((resolve) => {
+      this.resolveDone = resolve;
+    });
   }
 
   get summary(): RunSummary {
@@ -456,7 +461,7 @@ export class AgentRunner extends EventEmitter {
         stdio: ['pipe', 'pipe', 'pipe']
       }) as ChildProcessWithoutNullStreams;
     } catch (e) {
-      this.finish('error', (e as Error).message, null);
+      await this.finish('error', (e as Error).message, null);
       throw e;
     }
 
@@ -479,7 +484,7 @@ export class AgentRunner extends EventEmitter {
     this.child.on('close', (code) => {
       this.flushStdout();
       this.flushStderr();
-      this.finish(code === 0 ? 'done' : 'error', undefined, code);
+      void this.finish(code === 0 ? 'done' : 'error', undefined, code);
     });
   }
 
@@ -695,29 +700,38 @@ export class AgentRunner extends EventEmitter {
       }, LIMITS.KILL_TIMEOUT_MS).unref?.();
     }
     // Note: `finish` will be called by the close handler.
+    await this.donePromise;
   }
 
-  private finish(
+  private async finish(
     status: RunStatus,
     reason: string | undefined,
     code: number | null
-  ): void {
-    if (this.status === 'done' || this.status === 'error' || this.status === 'killed') return;
-    if (reason === 'idle_timeout' || reason === 'stopped') this.status = 'killed';
-    else this.status = status;
+  ): Promise<void> {
+    if (this.status === 'done' || this.status === 'error' || this.status === 'killed') {
+      this.resolveDone();
+      return;
+    }
+    const finalReason = reason ?? this.reason;
+    if (this.reason || finalReason === 'idle_timeout' || finalReason === 'stopped') {
+      this.status = 'killed';
+    } else {
+      this.status = status;
+    }
     this.endedAt = new Date().toISOString();
     this.exitCode = code;
-    if (reason) this.reason = reason;
+    if (finalReason) this.reason = finalReason;
     this.clearIdle();
-    void this.unregisterPid();
+    await this.unregisterPid();
     this.push({
       idx: this.eventIdx++,
       at: this.endedAt,
       kind: 'done',
       text: this.reason ?? (code === 0 ? 'exit 0' : `exit ${code}`)
     });
-    this.closeLog();
+    await this.closeLog();
     this.emit('exit', this.summary);
+    this.resolveDone();
   }
 
   dispose(): void {
@@ -748,13 +762,12 @@ export class AgentRunner extends EventEmitter {
     this.logStream.write(`[${stamp}] ${line}${line.endsWith('\n') ? '' : '\n'}`);
   }
 
-  private closeLog(): void {
+  private async closeLog(): Promise<void> {
     const s = this.logStream;
     this.logStream = null;
-    s?.end();
     const ev = this.eventLogStream;
     this.eventLogStream = null;
-    ev?.end();
+    await Promise.all([closeStream(s), closeStream(ev)]);
   }
 
   private async registerPid(pid: number): Promise<void> {
@@ -776,4 +789,14 @@ export class AgentRunner extends EventEmitter {
       await writeActive(this.opts.vaultPath, map);
     }
   }
+}
+
+function closeStream(stream: WriteStream | null): Promise<void> {
+  if (!stream || stream.destroyed) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    stream.end((error?: Error | null) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }

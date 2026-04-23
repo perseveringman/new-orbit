@@ -2,14 +2,18 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as frontmatter from './frontmatter';
 import {
-  PROJECT_AGENT_DIR,
-  PROJECT_LOGS_DIR,
+  PROJECT_AGENT_MD,
   PROJECT_LOG_ARCHIVE_DIR,
   PROJECT_OPERATION_LOG,
+  PROJECT_ORBIT_AGENT_DIR,
+  PROJECT_ORBIT_DIR,
+  PROJECT_ORBIT_LOGS_DIR,
+  PROJECT_ORBIT_SKILLS_DIR,
   PROJECT_SESSION_HISTORY,
-  PROJECT_SKILLS_DIR,
   PROJECT_TIMELINE
 } from '@shared/constants';
+import { syncProjectBridges } from './project_bridges';
+import { defaultAgentExposureSettings, readProjectConfig } from './project_config';
 
 export interface ProjectAgentContextMeta {
   name: string;
@@ -44,7 +48,10 @@ async function readPackageScripts(
   }
 }
 
-function buildIndex(): string {
+function buildIndex(hasCommunityConventions: boolean): string {
+  const communityRow = hasCommunityConventions
+    ? '| 社区约定 | `community-conventions.md` | 已吸收的社区 AGENT / AGENTS / .agent 约定 |'
+    : '';
   return `# Orbit Agent Skills
 
 以下是在 Orbit 工作台中工作时可用的技能指南。根据当前任务按需阅读。
@@ -58,10 +65,11 @@ function buildIndex(): string {
 | Worktree 工作流 | \`worktree-workflow.md\` | 何时以及如何使用 worktree |
 | 安全规则 | \`safety-rules.md\` | 操作边界与安全约束 |
 | MCP 工具指南 | \`mcp-tools.md\` | 可用的 Orbit MCP 工具及推荐用法 |
+${communityRow}
 
 ## 操作记录
-\`.agent/logs/TIMELINE.md\` 包含本项目的历史操作记录，可用于恢复上下文。
-\`.agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了项目级 agent 会话历史，可用于恢复近期协作脉络。
+\`.orbit/agent/logs/TIMELINE.md\` 包含本项目的历史操作记录，可用于恢复上下文。
+\`.orbit/agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了项目级 agent 会话历史，可用于恢复近期协作脉络。
 `;
 }
 
@@ -73,7 +81,7 @@ Orbit 是一个个人愿景驱动的 AI 协作工作台。核心原则是：**�
 ## 核心概念
 - **Vault**：整个知识与项目的根目录，采用 PARA 结构组织。
 - **Project**：位于 \`01_Projects/\` 下的文件夹型项目，内部有 README、AGENT、任务与记忆目录。
-- **Task**：位于 \`.agent/tasks/\` 的 Markdown 任务文件，是执行过程的最小管理单元。
+- **Task**：位于 \`.orbit/agent/tasks/\` 的 Markdown 任务文件，是执行过程的最小管理单元。
 - **Worktree**：用于大改动、实验或并行任务的隔离工作副本。
 - **Distill / Night Shift**：Orbit 中用于总结、回顾和持续推进工作的机制。
 
@@ -86,7 +94,7 @@ function buildTaskWorkflow(): string {
   return `# 任务工作流
 
 ## Task 结构
-Orbit 任务文件位于 \`.agent/tasks/\`，采用四段式结构：
+Orbit 任务文件位于 \`.orbit/agent/tasks/\`，采用四段式结构：
 1. \`# Description\`
 2. \`# Agent Thinking\`
 3. \`# Execution Log\`
@@ -119,15 +127,15 @@ function buildProjectUnderstanding(meta: ProjectAgentContextMeta): string {
 ## 如何建立项目认知
 - 读 \`README.md\`：理解项目目标、frontmatter、状态与正文说明。
 - 读 \`AGENT.md\`：理解项目工作人格与协作方式。
-- 读 \`.agent/config.json\`：了解项目基础配置。
-- 读 \`.agent/logs/TIMELINE.md\`：恢复近期进展和历史操作。
+- 读 \`.orbit/config.json\`：了解项目基础配置。
+- 读 \`.orbit/agent/logs/TIMELINE.md\`：恢复近期进展和历史操作。
 - 调用 \`get_vision\`：获取 vault 级长期方向。
 
 ## 建议顺序
 1. 先读 \`README.md\`
 2. 再读 \`AGENT.md\`
 3. 需要长期方向时调用 \`get_vision\`
-4. 需要最近进展时读 \`.agent/logs/TIMELINE.md\`
+4. 需要最近进展时读 \`.orbit/agent/logs/TIMELINE.md\`
 `;
 }
 
@@ -252,17 +260,83 @@ function buildEntry(target: EntryTarget): string {
 - 修改任务相关内容时更新对应 task markdown
 
 ## 技能指南
-\`.agent/skills/_index.md\` 列出了所有可用的 Orbit 工作技能，根据当前任务按需阅读。
+\`.orbit/agent/skills/_index.md\` 列出了所有可用的 Orbit 工作技能，根据当前任务按需阅读。
 
 ## 操作记录
-\`.agent/logs/TIMELINE.md\` 包含本项目的历史操作记录，可用于恢复上下文和了解近期进展。
-\`.agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了近期项目级 agent 会话，是恢复项目上下文的首选入口之一。
+\`.orbit/agent/logs/TIMELINE.md\` 包含本项目的历史操作记录，可用于恢复上下文和了解近期进展。
+\`.orbit/agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了近期项目级 agent 会话，是恢复项目上下文的首选入口之一。
 
 ## MCP 工具
-本项目已配置 Orbit MCP server，提供任务管理、代码提交、知识检索等工具。详见 \`.agent/skills/mcp-tools.md\`。
+本项目已配置 Orbit MCP server，提供任务管理、代码提交、知识检索等工具。详见 \`.orbit/agent/skills/mcp-tools.md\`。
 
 > 此文件面向 ${label} 入口。若需要更深入认知，请从 skills 索引继续阅读。
 `;
+}
+
+function buildBridgeAgentMd(): string {
+  return `# Orbit Bridge
+
+This repository is managed in Orbit. When working manually, start from:
+
+- \`.orbit/agent/skills/_index.md\`
+- \`.orbit/agent/logs/${PROJECT_SESSION_HISTORY}\`
+- \`.orbit/agent/logs/${PROJECT_TIMELINE}\`
+`;
+}
+
+function buildBridgeAgentsMd(): string {
+  return `# Orbit Agent Bridge
+
+If you are an agent started manually from the project root, Orbit context lives under:
+
+- \`.orbit/agent/skills/_index.md\`
+- \`.orbit/agent/skills/project-understanding.md\`
+- \`.orbit/agent/logs/${PROJECT_SESSION_HISTORY}\`
+
+Use those files as the Orbit source of truth instead of treating root bridge files as canonical.
+`;
+}
+
+async function readCommunityConventions(projectDir: string): Promise<string | null> {
+  const config = await readProjectConfig(projectDir);
+  const exposure = config?.agent_exposure ?? defaultAgentExposureSettings();
+  const sections: string[] = [];
+
+  if (exposure.consumeCommunityAgentMd) {
+    try {
+      const raw = await fs.readFile(path.join(projectDir, PROJECT_AGENT_MD), 'utf8');
+      const { body } = frontmatter.read(raw);
+      const content = body.trim();
+      if (content) sections.push(`# Imported from AGENT.md\n\n${content}`);
+    } catch {
+      // ignore
+    }
+  }
+
+  if (exposure.consumeCommunityAgentsMd) {
+    try {
+      const raw = (await fs.readFile(path.join(projectDir, 'AGENTS.md'), 'utf8')).trim();
+      if (raw) sections.push(`# Imported from AGENTS.md\n\n${raw}`);
+    } catch {
+      // ignore
+    }
+  }
+
+  if (exposure.consumeCommunityDotAgent) {
+    try {
+      const dirents = await fs.readdir(path.join(projectDir, '.agent'), { withFileTypes: true });
+      const entries = dirents
+        .filter((entry) => entry.isFile() || entry.isDirectory())
+        .map((entry) => `- ${entry.name}`);
+      if (entries.length > 0) {
+        sections.push(`# Imported from .agent\n\n${entries.join('\n')}`);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return sections.length > 0 ? `${sections.join('\n\n')}\n` : null;
 }
 
 export async function buildProjectAgentContextFiles(
@@ -270,6 +344,7 @@ export async function buildProjectAgentContextFiles(
   meta: ProjectAgentContextMeta
 ): Promise<Record<string, string>> {
   const scripts = await readPackageScripts(projectDir);
+  const communityConventions = await readCommunityConventions(projectDir);
   const markers = {
     hasMakefile: await exists(path.join(projectDir, 'Makefile')),
     hasCargoToml: await exists(path.join(projectDir, 'Cargo.toml')),
@@ -278,27 +353,39 @@ export async function buildProjectAgentContextFiles(
   };
 
   return {
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, '_index.md')]: buildIndex(),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, 'orbit-world.md')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, '_index.md')]:
+      buildIndex(!!communityConventions),
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'orbit-world.md')]:
       buildOrbitWorld(),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, 'task-workflow.md')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'task-workflow.md')]:
       buildTaskWorkflow(),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, 'project-understanding.md')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'project-understanding.md')]:
       buildProjectUnderstanding(meta),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, 'tooling-commands.md')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'tooling-commands.md')]:
       buildToolingCommandsContent(meta.template, scripts, markers),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, 'worktree-workflow.md')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'worktree-workflow.md')]:
       buildWorktreeWorkflow(),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, 'safety-rules.md')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'safety-rules.md')]:
       buildSafetyRules(),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_SKILLS_DIR, 'mcp-tools.md')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'mcp-tools.md')]:
       buildMcpTools(),
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_OPERATION_LOG)]: '',
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_TIMELINE)]:
+    ...(communityConventions
+      ? {
+          [path.posix.join(
+            PROJECT_ORBIT_DIR,
+            PROJECT_ORBIT_AGENT_DIR,
+            PROJECT_ORBIT_SKILLS_DIR,
+            'community-conventions.md'
+          )]: communityConventions
+        }
+      : {}),
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_LOGS_DIR, PROJECT_OPERATION_LOG)]:
+      '',
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_LOGS_DIR, PROJECT_TIMELINE)]:
       '# 操作时间线\n\n_尚无记录。_\n',
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_SESSION_HISTORY)]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_LOGS_DIR, PROJECT_SESSION_HISTORY)]:
       '# 项目会话历史\n\n_尚无记录。_\n',
-    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_LOG_ARCHIVE_DIR, '.gitkeep')]:
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_LOGS_DIR, PROJECT_LOG_ARCHIVE_DIR, '.gitkeep')]:
       '',
     'CLAUDE.md': buildEntry('claude'),
     'CODEX.md': buildEntry('codex'),
@@ -312,6 +399,8 @@ export async function ensureProjectAgentContext(
   opts: { overwrite?: boolean } = {}
 ): Promise<void> {
   const files = await buildProjectAgentContextFiles(projectDir, meta);
+  const config = await readProjectConfig(projectDir);
+  const exposure = config?.agent_exposure ?? defaultAgentExposureSettings();
   const overwrite = opts.overwrite ?? false;
 
   for (const [rel, content] of Object.entries(files)) {
@@ -320,6 +409,11 @@ export async function ensureProjectAgentContext(
     if (!overwrite && (await exists(abs))) continue;
     await fs.writeFile(abs, content, 'utf8');
   }
+
+  await syncProjectBridges(projectDir, exposure, {
+    [PROJECT_AGENT_MD]: buildBridgeAgentMd(),
+    'AGENTS.md': buildBridgeAgentsMd()
+  });
 }
 
 export async function readProjectAgentContextMeta(

@@ -16,7 +16,7 @@ async function tmpVault(): Promise<string> {
   return d;
 }
 
-describe('TaskIndex reads .agent/tasks/*.md (R1)', () => {
+describe('TaskIndex reads .orbit/agent/tasks/*.md (R1)', () => {
   let vault: string;
   beforeEach(async () => {
     vault = await tmpVault();
@@ -39,7 +39,7 @@ describe('TaskIndex reads .agent/tasks/*.md (R1)', () => {
       title: 'Implement feature X',
       description: 'Do the thing'
     });
-    expect(t.taskPath).toContain('/.agent/tasks/');
+    expect(t.taskPath).toContain('/.orbit/agent/tasks/');
     const content = await fs.readFile(t.taskPath, 'utf8');
     expect(content).toContain('# Description');
     expect(content).toContain('# Agent Thinking');
