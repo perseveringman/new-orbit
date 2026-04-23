@@ -3,7 +3,12 @@ import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { ORBIT_DIR } from '@shared/constants';
 import type { TerminalHookEnvelope } from './hooks/server';
-import { writeProjectSessionHistory } from '../project_session_history';
+import {
+  writeAreaSessionHistory,
+  writeProjectSessionHistory
+} from '../project_session_history';
+import { listAreas } from '../area';
+import { listProjects } from '../project';
 
 export interface TerminalAgentSession {
   sessionId: string;
@@ -55,11 +60,16 @@ async function syncProjectSessionHistory(
   projectUid: string,
   registry: TerminalAgentRegistry
 ): Promise<void> {
-  await writeProjectSessionHistory(
-    vaultPath,
-    projectUid,
-    registry.sessions.filter((session) => session.projectUid === projectUid).sort(byNewest)
-  );
+  const sessions = registry.sessions.filter((session) => session.projectUid === projectUid).sort(byNewest);
+  const projects = await listProjects(vaultPath);
+  if (projects.some((project) => project.uid === projectUid)) {
+    await writeProjectSessionHistory(vaultPath, projectUid, sessions);
+    return;
+  }
+  const areas = await listAreas(vaultPath);
+  if (areas.some((area) => area.uid === projectUid)) {
+    await writeAreaSessionHistory(vaultPath, projectUid, sessions);
+  }
 }
 
 function inferAgentType(rawEventType: string): string {

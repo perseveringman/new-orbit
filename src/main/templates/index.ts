@@ -78,7 +78,8 @@ export async function scaffoldProject(
 export function renderTaskMarkdown(vars: {
   uid: string;
   title: string;
-  project_uid: string;
+  project_uid?: string;
+  area_uid?: string;
   created_at: string;
   description?: string;
 }): string {
@@ -88,7 +89,8 @@ export function renderTaskMarkdown(vars: {
     'type: task',
     `title: ${JSON.stringify(vars.title)}`,
     'status: inbox',
-    `project_uid: ${vars.project_uid}`,
+    ...(vars.project_uid ? [`project_uid: ${vars.project_uid}`] : []),
+    ...(vars.area_uid ? [`area_uid: ${vars.area_uid}`] : []),
     `created_at: ${vars.created_at}`,
     '---',
     ''

@@ -64,6 +64,7 @@ import {
 } from './claude_sessions';
 import { readCodexSessionMessages } from './codex_sessions';
 import { listProjects } from '../project';
+import { listAreas } from '../area';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
 const TERMINAL_AGENT_EVENT_CHANNEL = IPC.terminalAgent.event;
@@ -115,6 +116,18 @@ async function enrichTerminalAgentSession(
     vendorSessionId: session.vendorSessionId ?? target.sessionId,
     resumeCommand: `claude --resume ${target.sessionId}`
   };
+}
+
+async function resolveTerminalRoom(
+  vaultPath: string,
+  uid: string
+): Promise<{ kind: 'project' | 'area'; path: string } | null> {
+  const [projects, areas] = await Promise.all([listProjects(vaultPath), listAreas(vaultPath)]);
+  const project = projects.find((item) => item.uid === uid);
+  if (project) return { kind: 'project', path: project.path };
+  const area = areas.find((item) => item.uid === uid);
+  if (area) return { kind: 'area', path: area.path };
+  return null;
 }
 
 async function ensureHookRuntime(): Promise<HookServer> {
@@ -249,16 +262,16 @@ export function registerAgentIpc(): void {
     const sess = currentSession();
     if (!sess) return [];
     const sessions = await listTerminalAgentSessions(sess.vault, projectUid);
-    const projects = await listProjects(sess.vault);
-    const project = projects.find((item) => item.uid === projectUid);
-    if (!project) return sessions;
+    const room = await resolveTerminalRoom(sess.vault, projectUid);
+    if (!room) return sessions;
     return Promise.all(
       sessions.map(async (session) => {
-        const enriched = await enrichTerminalAgentSession(session, project.path);
+        const enriched = await enrichTerminalAgentSession(session, room.path);
         const resumeSessionId =
           enriched.vendorSessionId && enriched.agentType === 'claude' ? enriched.vendorSessionId : null;
         return {
           ...enriched,
+          roomKind: room.kind,
           resumeSessionId,
           resumeCommand: enriched.resumeCommand ?? null
         };
@@ -270,18 +283,18 @@ export function registerAgentIpc(): void {
     const sess = currentSession();
     if (!sess) return null;
     const sessions = await listTerminalAgentSessions(sess.vault, projectUid);
-    const projects = await listProjects(sess.vault);
-    const project = projects.find((item) => item.uid === projectUid);
+    const room = await resolveTerminalRoom(sess.vault, projectUid);
     const session = sessions.find((item) => item.sessionId === sessionId);
-    if (!project || !session) return null;
+    if (!room || !session) return null;
 
-    const enriched = await enrichTerminalAgentSession(session, project.path);
+    const enriched = await enrichTerminalAgentSession(session, room.path);
     if (enriched.agentType === 'codex') {
       const messages = enriched.vendorSessionId
         ? await readCodexSessionMessages(path.join(os.homedir(), '.codex'), enriched.vendorSessionId)
         : [];
       return {
         ...enriched,
+        roomKind: room.kind,
         resumeSessionId: null,
         resumeCommand: enriched.resumeCommand ?? null,
         messages
@@ -291,6 +304,7 @@ export function registerAgentIpc(): void {
     if (enriched.agentType !== 'claude') {
       return {
         ...enriched,
+        roomKind: room.kind,
         resumeSessionId: null,
         resumeCommand: enriched.resumeCommand ?? null,
         messages: []
@@ -298,7 +312,7 @@ export function registerAgentIpc(): void {
     }
 
     const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
-    const claudeProjectPath = enriched.cwd ?? project.path;
+    const claudeProjectPath = enriched.cwd ?? room.path;
     const target = await resolveClaudeSessionTarget(claudeRoot, claudeProjectPath, {
       vendorSessionId: enriched.vendorSessionId,
       startedAt: enriched.startedAt,
@@ -309,6 +323,7 @@ export function registerAgentIpc(): void {
       : null;
     return {
       ...enriched,
+      roomKind: room.kind,
       resumeSessionId: target?.sessionId ?? null,
       resumeCommand:
         enriched.resumeCommand ?? (target ? `claude --resume ${target.sessionId}` : null),

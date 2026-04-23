@@ -35,6 +35,12 @@ describe('vault bootstrap', () => {
       const gitDir = await fs.stat(path.join(dir, '.git'));
       expect(gitDir.isDirectory()).toBe(true);
 
+      const visionAreaAgents = await fs.readFile(
+        path.join(dir, '02_Areas', 'vision', '.orbit', 'agent', 'AGENTS.md'),
+        'utf8'
+      );
+      expect(visionAreaAgents).toContain('Personal Vision Agent');
+
       expect(await isVault(dir)).toBe(true);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });

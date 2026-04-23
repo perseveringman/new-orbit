@@ -31,6 +31,7 @@ export type SidebarIntentId = 'overview' | 'focus' | 'execution';
 
 export type SidebarPanelId =
   | 'files'
+  | 'area-config'
   | 'backlinks'
   | 'task-detail'
   | 'task-tree'
@@ -61,6 +62,7 @@ interface SidebarSurfaceProfile {
 
 const PANEL_TITLES: Record<SidebarPanelId, string> = {
   files: 'Files',
+  'area-config': 'Area',
   backlinks: 'Backlinks',
   'task-detail': 'Task Detail',
   'task-tree': 'Task Tree',
@@ -107,7 +109,7 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
   },
   areaRoom: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
+    intents: [{ id: 'overview', title: 'Overview', panels: ['area-config', 'files', 'sessions'] }]
   },
   'project.kanban': {
     intents: [

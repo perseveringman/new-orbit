@@ -18,6 +18,7 @@ import {
 export function TerminalSessionsPanel(): JSX.Element {
   const activeProjectUid = useWorkspace((s) => s.activeProjectUid);
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
+  const view = usePara((s) => s.view);
   const setView = usePara((s) => s.setView);
   const toast = useFiles((s) => s.toast);
   const sidebarSurface = useSidebar((s) => s.surface);
@@ -27,20 +28,22 @@ export function TerminalSessionsPanel(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [activeAgent, setActiveAgent] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const activeRoomUid =
+    view.kind === 'areaRoom' ? view.areaUid : view.kind === 'project' ? view.projectUid : activeProjectUid;
 
   const refresh = useCallback(async () => {
-    if (!activeProjectUid) {
+    if (!activeRoomUid) {
       setSessions([]);
       setSidebarFocus({ sessionId: null });
       return;
     }
     setLoading(true);
     try {
-      const next = await window.orbit.terminalAgent.list(activeProjectUid);
+      const next = await window.orbit.terminalAgent.list(activeRoomUid);
       setSessions(next);
       const nextSelected = resolveTerminalSessionSelection(next, selectedSessionId);
       setSidebarFocus({
-        projectUid: activeProjectUid,
+        projectUid: activeRoomUid,
         sessionId: nextSelected
       });
     } catch (e) {
@@ -48,7 +51,7 @@ export function TerminalSessionsPanel(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [activeProjectUid, selectedSessionId, setSidebarFocus, toast]);
+  }, [activeRoomUid, selectedSessionId, setSidebarFocus, toast]);
 
   useEffect(() => {
     void refresh();
@@ -56,23 +59,28 @@ export function TerminalSessionsPanel(): JSX.Element {
 
   useEffect(() => {
     const off = window.orbit.terminalAgent.onEvent((ev) => {
-      if (activeProjectUid && ev.projectUid && ev.projectUid !== activeProjectUid) return;
+      if (activeRoomUid && ev.projectUid && ev.projectUid !== activeRoomUid) return;
       void refresh();
     });
     return off;
-  }, [activeProjectUid, refresh]);
+  }, [activeRoomUid, refresh]);
 
   function onOpen(session: TerminalAgentSessionDTO): void {
     const action = getTerminalSessionAction(session);
     if (action.disabled) return;
     queueTerminalNavigation(action.navigation);
-    setActiveProjectUid(action.navigation.projectUid);
-    setView({ kind: 'project', projectUid: action.navigation.projectUid });
+    if (action.navigation.roomKind === 'project') {
+      setActiveProjectUid(action.navigation.projectUid);
+      setView({ kind: 'project', projectUid: action.navigation.projectUid });
+    } else {
+      setView({ kind: 'areaRoom', areaUid: action.navigation.projectUid });
+    }
   }
 
   const sessionFilters = getTerminalSessionAgentFilters(sessions);
   const visibleSessions = filterTerminalSessions(sessions, { activeAgent, searchQuery });
-  const selectionMode = sidebarSurface === 'project.sessions';
+  const selectionMode =
+    sidebarSurface === 'project.sessions' || (sidebarSurface === 'areaRoom' && view.kind === 'areaRoom');
 
   return (
     <div className="flex h-full min-h-0 flex-col">

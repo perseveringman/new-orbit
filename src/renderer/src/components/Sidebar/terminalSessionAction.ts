@@ -5,6 +5,7 @@ export interface TerminalSessionAction {
   hint: string;
   navigation: {
     projectUid: string;
+    roomKind: 'project' | 'area';
     orbitSessionId?: string;
     paneId?: string;
     initialCommand?: string;
@@ -15,12 +16,14 @@ export interface TerminalSessionAction {
 export function getTerminalSessionAction(
   session: TerminalAgentSessionDTO
 ): TerminalSessionAction {
+  const roomKind = session.roomKind ?? 'project';
   if (session.status === 'active') {
     return {
       disabled: false,
       hint: 'Jump to active terminal',
       navigation: {
         projectUid: session.projectUid,
+        roomKind,
         orbitSessionId: session.sessionId,
         paneId: session.paneId,
         openMode: 'focus-pane'
@@ -34,6 +37,7 @@ export function getTerminalSessionAction(
       hint: 'Resume in new tab',
       navigation: {
         projectUid: session.projectUid,
+        roomKind,
         orbitSessionId: session.sessionId,
         initialCommand: session.resumeCommand,
         openMode: 'resume-session'
@@ -43,11 +47,12 @@ export function getTerminalSessionAction(
 
   return {
     disabled: false,
-    hint: 'Open a fresh terminal with session context',
-    navigation: {
-      projectUid: session.projectUid,
-      orbitSessionId: session.sessionId,
-      openMode: 'reopen-session'
-    }
+      hint: 'Open a fresh terminal with session context',
+      navigation: {
+        projectUid: session.projectUid,
+        roomKind,
+        orbitSessionId: session.sessionId,
+        openMode: 'reopen-session'
+      }
   };
 }

@@ -1,5 +1,6 @@
 export interface TerminalNavigationIntent {
   projectUid: string;
+  roomKind?: 'project' | 'area';
   orbitSessionId?: string;
   paneId?: string;
   initialCommand?: string;

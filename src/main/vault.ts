@@ -14,6 +14,7 @@ import {
 } from '@shared/constants';
 import type { VaultConfig, VaultInfo } from '@shared/types';
 import { scaffoldVisionArea } from './area';
+import { ensureVision } from './vision';
 
 const ORBIT_VERSION = '0.1.0';
 
@@ -48,6 +49,7 @@ export async function createVault(dir: string): Promise<VaultInfo> {
   // R2: Vision Area is auto-scaffolded at vault creation; provides the user's
   // North Star AGENTS.md, interview questions, and vision template.
   await scaffoldVisionArea(dir);
+  await ensureVision(dir);
 
   const orbitDir = path.join(dir, ORBIT_DIR);
   await fs.mkdir(orbitDir, { recursive: true });

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { AppSettings, Theme, VaultInfo } from '@shared/types';
 import type { AreaSummaryDTO, ProjectSummaryDTO } from '@shared/ipc';
 import { DEFAULT_APP_SETTINGS } from '@shared/schemas';
+import { usePara } from './para';
 
 interface WorkspaceState {
   vault: VaultInfo | null;
@@ -75,7 +76,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ vault: res.vault, error: null });
       void get().refreshVision();
       void get().refreshProjects();
-      void get().refreshAreas();
+      void (async () => {
+        const areas = await get().refreshAreas();
+        const vision = areas.find((area) => area.slug === 'vision');
+        if (vision) usePara.getState().setView({ kind: 'areaRoom', areaUid: vision.uid });
+      })();
     } else if (res.reason !== 'cancelled') set({ error: res.message ?? res.reason });
   },
 

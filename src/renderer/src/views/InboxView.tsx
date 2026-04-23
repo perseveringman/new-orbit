@@ -29,7 +29,7 @@ export function InboxView(): JSX.Element {
   }, [refreshFiltered, tasks]);
 
   function openTerminal(projectUid: string, paneId: string): void {
-    queueTerminalNavigation({ projectUid, paneId });
+    queueTerminalNavigation({ projectUid, paneId, roomKind: 'project' });
     setActiveProjectUid(projectUid);
     setView({ kind: 'project', projectUid });
   }

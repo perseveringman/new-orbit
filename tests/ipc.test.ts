@@ -7,6 +7,7 @@ describe('IPC contract', () => {
     expect(Object.keys(IPC).sort()).toEqual(
       [
         'agent',
+        'area',
         'distill',
         'env',
         'envExt',
@@ -22,6 +23,7 @@ describe('IPC contract', () => {
         'task',
         'terminal',
         'terminalAgent',
+        'vaultConfig',
         'vision',
         'workspace'
       ].sort()

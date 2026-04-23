@@ -1,6 +1,13 @@
-import { ipcMain } from 'electron';
+import path from 'node:path';
+import { dialog, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { CreateAreaArgsDTO, AreaConfigDTO, VaultExtConfigDTO } from '@shared/ipc';
+import type {
+  CreateAreaArgsDTO,
+  AreaConfigDTO,
+  ExternalNotesPathInfoDTO,
+  ImportNotesResultDTO,
+  VaultExtConfigDTO
+} from '@shared/ipc';
 import type { AreaConfig } from '@shared/schemas';
 import {
   listAreas,
@@ -9,6 +16,7 @@ import {
   setAreaConfig
 } from './area';
 import { getVaultExtConfig, updateVaultExtConfig } from './vault_config';
+import { importNotesDirectory, inspectExternalNotesPaths } from './vault_notes';
 
 function configToDTO(config: AreaConfig): AreaConfigDTO {
   return {
@@ -61,4 +69,54 @@ export function registerAreaIpc(getVaultPath: () => string | null): void {
       return updateVaultExtConfig(vaultPath, patch);
     }
   );
+
+  ipcMain.handle(IPC.vaultConfig.inspect, async (): Promise<ExternalNotesPathInfoDTO[]> => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) return [];
+    const config = await getVaultExtConfig(vaultPath);
+    return inspectExternalNotesPaths(config.external_notes_paths);
+  });
+
+  ipcMain.handle(IPC.vaultConfig.linkDirectory, async (): Promise<VaultExtConfigDTO | null> => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    const result = await dialog.showOpenDialog({
+      title: 'Link external notes directory',
+      properties: ['openDirectory']
+    });
+    const dirPath = result.canceled ? null : result.filePaths[0] ?? null;
+    if (!dirPath) return null;
+    const current = await getVaultExtConfig(vaultPath);
+    const normalized = Array.from(new Set([...current.external_notes_paths, path.resolve(dirPath)]));
+    return updateVaultExtConfig(vaultPath, { external_notes_paths: normalized });
+  });
+
+  ipcMain.handle(
+    IPC.vaultConfig.unlinkDirectory,
+    async (_e, dirPath: string): Promise<VaultExtConfigDTO> => {
+      const vaultPath = getVaultPath();
+      if (!vaultPath) throw new Error('No vault open');
+      const current = await getVaultExtConfig(vaultPath);
+      const target = path.resolve(dirPath);
+      return updateVaultExtConfig(vaultPath, {
+        external_notes_paths: current.external_notes_paths.filter((item) => path.resolve(item) !== target)
+      });
+    }
+  );
+
+  ipcMain.handle(IPC.vaultConfig.importDirectory, async (): Promise<ImportNotesResultDTO | null> => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    const result = await dialog.showOpenDialog({
+      title: 'Import notes into Orbit vault',
+      properties: ['openDirectory']
+    });
+    const sourcePath = result.canceled ? null : result.filePaths[0] ?? null;
+    if (!sourcePath) return null;
+    const imported = await importNotesDirectory(vaultPath, sourcePath);
+    return {
+      sourcePath,
+      ...imported
+    };
+  });
 }

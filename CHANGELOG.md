@@ -8,11 +8,18 @@
 
 - **Session 详情页信息降噪**：精简 Project Session 详情头部，移除 sessionId / pane / prompt / permission / vendor 等内部字段；仅保留会话标题、状态、时间与入口动作，并将 transcript 文案调整为更面向用户的表述
 - **Inbox 终端审批同步**：terminal approval 卡片在终端里批准/继续执行后会及时清除待审批状态；`Notification` hook 统一按进度事件处理，避免审批消息卡住
+- **Area / Vision 用户旅程闭环**：补齐 Vision 冷启动、笔记接入、Area 级任务创建、Area Session 历史，以及 vault 创建后进入 Vision Room 的导航链路
 
 ### Added
 
-- **Area Room + Vision System 设计方案**：`docs/plans/2026-04-23-area-room-vision-system-design.md`（status: active）；设计 Area 升级为文件夹单元（含 Kanban + Terminal + Sessions）；内置 Vision 模板（基于 45 题访谈协议 + 笔记接入 + 迭代 review 流程）；vault 创建时自动 scaffold vision area
-- **Area Room 渲染层**：新增 `AreasNav` 侧边栏、`NewAreaModal`、`AreaRoomView`（Overview/Terminal/Sessions）、`VisionRoomContent`（冷态 + VISION.md 展示）；workspace store 加入 `areas` 状态与 `refreshAreas()`；`WorkspaceView` 新增 `areaRoom` 变体
+- **Area Room + Vision System 设计方案**：`docs/plans/2026-04-23-area-room-vision-system-design.md`（status: completed）；设计 Area 升级为文件夹单元（含 Kanban + Terminal + Sessions）；内置 Vision 模板（基于 45 题访谈协议 + 笔记接入 + 迭代 review 流程）；vault 创建时自动 scaffold vision area
+- **Vision 冷启动交互**：新增 `NotesConnectPanel`、Vision 冷启动/活跃态切换、启动访谈与 review 预填命令、外部笔记目录链接/导入、`ORBIT_EXTERNAL_NOTES_PATHS` 终端注入
+- **Area 日常工作流**：Area Room 改为 `Kanban / Terminal / Sessions`，普通 Area 支持 area-owned task 文件与 Kanban；Vision Area 支持 transcript 历史与回顾入口
+
+### Changed
+
+- **Areas 侧边栏**：改为 Vision 置顶、按 tag 分组展示，且新建 Area 后会直接进入对应 Area Room
+- **Area 创建流**：`NewAreaModal` 现在支持 blank / vision 模板与 GitHub 仓库导入；GitHub 导入内容会落入 Area 目录但不会保留独立 `.git`
 
 ---
 

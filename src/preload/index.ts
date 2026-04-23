@@ -13,10 +13,12 @@ import {
   type DailyReviewDTO,
   type DistillResult,
   type DistillSuggestHit,
+  type ExternalNotesPathInfoDTO,
   type EnsureMcpConfigResultDTO,
   type EntityFilter,
   type GitHubRepositoryListArgsDTO,
   type GitHubTaskIssueBindingArgsDTO,
+  type ImportNotesResultDTO,
   type ImportGitHubRepositoryArgsDTO,
   type ImportGitHubRepositoryResultDTO,
   type JournalListItemDTO,
@@ -33,7 +35,7 @@ import {
   type TerminalAgentSessionDetailDTO,
   type TerminalAgentEventDTO,
   type TerminalAgentSessionDTO,
-    type TerminalDataEventDTO,
+  type TerminalDataEventDTO,
   type TerminalExitEventDTO,
   type TerminalOpenArgsDTO,
   type TerminalSessionInfoDTO,
@@ -306,7 +308,14 @@ const api: OrbitApi = {
   },
   vaultConfig: {
     get: () => ipcRenderer.invoke(IPC.vaultConfig.get),
-    update: (patch: Partial<VaultExtConfigDTO>) => ipcRenderer.invoke(IPC.vaultConfig.update, patch)
+    update: (patch: Partial<VaultExtConfigDTO>) => ipcRenderer.invoke(IPC.vaultConfig.update, patch),
+    inspect: (): Promise<ExternalNotesPathInfoDTO[]> => ipcRenderer.invoke(IPC.vaultConfig.inspect),
+    linkDirectory: (): Promise<VaultExtConfigDTO | null> =>
+      ipcRenderer.invoke(IPC.vaultConfig.linkDirectory),
+    unlinkDirectory: (dirPath: string): Promise<VaultExtConfigDTO> =>
+      ipcRenderer.invoke(IPC.vaultConfig.unlinkDirectory, dirPath),
+    importDirectory: (): Promise<ImportNotesResultDTO | null> =>
+      ipcRenderer.invoke(IPC.vaultConfig.importDirectory)
   }
 };
 

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createVault } from '../src/main/vault';
 import { createProject, createTask } from '../src/main/project';
+import { listAreas } from '../src/main/area';
 
 vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
@@ -105,5 +106,32 @@ describe('TaskIndex reads .orbit/agent/tasks/*.md (R1)', () => {
 
     await closeFsSession();
     void sess;
+  });
+
+  it('task.create can target an area-owned tasks directory', async () => {
+    const vision = (await listAreas(vault)).find((area) => area.slug === 'vision');
+    expect(vision).toBeTruthy();
+
+    const task = await createTask(vault, {
+      area_uid: vision!.uid,
+      title: 'Revisit life principles',
+      description: 'Update the north-star milestones'
+    });
+
+    expect(task.relPath).toContain('02_Areas/vision/.orbit/agent/tasks/');
+    const content = await fs.readFile(task.taskPath, 'utf8');
+    expect(content).toContain(`area_uid: ${vision!.uid}`);
+    expect(content).not.toContain('project_uid:');
+
+    const { openFsSession, closeFsSession, registerFsIpc, currentSession } = await import(
+      '../src/main/fs'
+    );
+    registerFsIpc();
+    await openFsSession(vault);
+    const sess = currentSession()!;
+    const indexed = sess.tasks.allTasks().find((item) => item.uid === task.uid);
+    expect(indexed?.area_uid).toBe(vision!.uid);
+    expect(indexed?.project_uid).toBeUndefined();
+    await closeFsSession();
   });
 });

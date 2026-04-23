@@ -11,7 +11,8 @@ import { useFiles } from '../../store/files';
 
 interface Props {
   open: boolean;
-  projectUid: string;
+  projectUid?: string;
+  areaUid?: string;
   siblings?: TaskRecord[];
   onClose(): void;
   onCreated?(res: CreateTaskResultDTO): void;
@@ -33,6 +34,7 @@ const PRIORITIES = ['', 'low', 'med', 'high'] as const;
 export function NewTaskModal({
   open,
   projectUid,
+  areaUid,
   siblings = [],
   onClose,
   onCreated
@@ -70,13 +72,15 @@ export function NewTaskModal({
     setBusy(true);
     setErr(null);
     try {
+      if (!projectUid && !areaUid) throw new Error('Task owner is missing.');
       const fm: Record<string, unknown> = {};
       if (priority) fm['priority'] = priority;
       if (due) fm['due'] = due;
       if (tags.length) fm['tags'] = tags;
       if (preConds.length) fm['pre_conditions'] = preConds;
       const res = await window.orbit.task.create({
-        project_uid: projectUid,
+        ...(projectUid ? { project_uid: projectUid } : {}),
+        ...(areaUid ? { area_uid: areaUid } : {}),
         title: titleTrimmed,
         description: description || undefined,
         frontmatter: Object.keys(fm).length ? fm : undefined
@@ -111,7 +115,7 @@ export function NewTaskModal({
         aria-modal="true"
       >
         <div className="border-b border-neutral-200 px-4 py-2 text-sm font-semibold dark:border-neutral-800">
-          New Task
+          {areaUid ? 'New Area Task' : 'New Task'}
         </div>
         <div className="space-y-3 p-4 text-xs">
           <label className="block">

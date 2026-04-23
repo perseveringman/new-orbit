@@ -45,7 +45,6 @@ import type {
 import type {
   GitHubCheckSummary,
   GitHubConnection,
-  GitHubIssueSummary,
   GitHubProjectDetails,
   GitHubPullRequestSummary,
   GitHubProjectState,
@@ -214,7 +213,11 @@ export const IPC = {
   },
   vaultConfig: {
     get: 'vaultConfig:get',
-    update: 'vaultConfig:update'
+    update: 'vaultConfig:update',
+    inspect: 'vaultConfig:inspect',
+    linkDirectory: 'vaultConfig:linkDirectory',
+    unlinkDirectory: 'vaultConfig:unlinkDirectory',
+    importDirectory: 'vaultConfig:importDirectory'
   }
 } as const;
 
@@ -258,6 +261,7 @@ export interface TerminalAgentSessionDTO {
   sessionId: string;
   paneId: string;
   projectUid: string;
+  roomKind?: 'project' | 'area';
   agentType: string;
   vendorSessionId?: string;
   status: 'active' | 'completed' | 'interrupted';
@@ -429,7 +433,8 @@ export interface GitHubTaskIssueBindingArgsDTO {
 }
 
 export interface CreateTaskArgsDTO {
-  project_uid: string;
+  project_uid?: string;
+  area_uid?: string;
   title: string;
   description?: string;
   uid?: string;
@@ -520,6 +525,10 @@ export interface CreateAreaArgsDTO {
   template?: string;
   tags?: string[];
   uid?: string;
+  github?: {
+    owner: string;
+    repo: string;
+  };
 }
 
 export interface CreateAreaResultDTO {
@@ -531,6 +540,20 @@ export interface CreateAreaResultDTO {
 
 export interface VaultExtConfigDTO {
   external_notes_paths: string[];
+}
+
+export interface ExternalNotesPathInfoDTO {
+  path: string;
+  label: string;
+  noteCount: number;
+  exists: boolean;
+}
+
+export interface ImportNotesResultDTO {
+  sourcePath: string;
+  targetPath: string;
+  relPath: string;
+  importedFiles: number;
 }
 
 export interface DistillResult {
@@ -803,5 +826,9 @@ export interface OrbitApi {
   vaultConfig: {
     get(): Promise<VaultExtConfigDTO>;
     update(patch: Partial<VaultExtConfigDTO>): Promise<VaultExtConfigDTO>;
+    inspect(): Promise<ExternalNotesPathInfoDTO[]>;
+    linkDirectory(): Promise<VaultExtConfigDTO | null>;
+    unlinkDirectory(path: string): Promise<VaultExtConfigDTO>;
+    importDirectory(): Promise<ImportNotesResultDTO | null>;
   };
 }

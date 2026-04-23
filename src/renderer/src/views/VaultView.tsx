@@ -5,6 +5,7 @@ import { usePara } from '../store/para';
 import { useAgent } from '../store/agent';
 import { useSidebar } from '../store/sidebar';
 import { FileTree } from '../components/Sidebar/FileTree';
+import { AreaConfigPanel } from '../components/Sidebar/AreaConfigPanel';
 import { BacklinksPanel } from '../components/Sidebar/BacklinksPanel';
 import { AgentPanel } from '../components/Sidebar/AgentPanel';
 import { WorktreesPanel } from '../components/Sidebar/WorktreesPanel';
@@ -45,6 +46,7 @@ import {
 function isSidebarPanelId(value: string): value is SidebarPanelId {
   return (
     value === 'files' ||
+    value === 'area-config' ||
     value === 'backlinks' ||
     value === 'task-detail' ||
     value === 'task-tree' ||
@@ -99,7 +101,10 @@ export function VaultView(): JSX.Element {
       try {
         const projs = await window.orbit.project.list();
         if (projs.length === 0) {
-          setView({ kind: 'dashboard' });
+          const areas = await window.orbit.area.list();
+          const vision = areas.find((area) => area.slug === 'vision');
+          if (vision) setView({ kind: 'areaRoom', areaUid: vision.uid });
+          else setView({ kind: 'dashboard' });
         }
       } catch {
         /* ignore */
@@ -293,6 +298,7 @@ export function VaultView(): JSX.Element {
     if (sidebarPanel === 'files') {
       return tree ? <FileTree root={tree} /> : <p className="text-xs text-neutral-500">Scanning…</p>;
     }
+    if (sidebarPanel === 'area-config') return <AreaConfigPanel />;
     if (sidebarPanel === 'backlinks') return <BacklinksPanel />;
     if (sidebarPanel === 'task-detail') return <TaskDetailPanel />;
     if (sidebarPanel === 'task-tree') return <ProjectTaskTreePanel projectUid={sidebarProjectUid} />;

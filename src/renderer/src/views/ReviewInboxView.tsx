@@ -18,7 +18,7 @@ export function ReviewInboxView(): JSX.Element {
       toast('No terminal pane linked to this review item.');
       return;
     }
-    queueTerminalNavigation({ projectUid, paneId });
+    queueTerminalNavigation({ projectUid, paneId, roomKind: 'project' });
     setActiveProjectUid(projectUid);
     setView({ kind: 'project', projectUid });
   }

@@ -27,6 +27,7 @@ describe('project session action', () => {
       hint: 'Jump to active terminal',
       navigation: {
         projectUid: 'project-1',
+        roomKind: 'project',
         paneId: 'pane-1',
         orbitSessionId: 'orbit-session-1',
         openMode: 'focus-pane'
@@ -40,6 +41,7 @@ describe('project session action', () => {
       hint: 'Resume in new tab',
       navigation: {
         projectUid: 'project-1',
+        roomKind: 'project',
         orbitSessionId: 'orbit-session-1',
         openMode: 'resume-session',
         initialCommand: 'claude --resume resume-1'
@@ -61,6 +63,7 @@ describe('project session action', () => {
       hint: 'Open a fresh terminal with session context',
       navigation: {
         projectUid: 'project-1',
+        roomKind: 'project',
         orbitSessionId: 'orbit-session-1',
         openMode: 'reopen-session'
       }

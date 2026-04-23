@@ -337,7 +337,7 @@ export function ProjectRoomView(): JSX.Element {
   const consumePendingNavigation = useCallback(() => {
     if (!activeProjectUid) return;
     const pending = consumePendingTerminalNavigation(activeProjectUid);
-    if (!pending) return;
+    if (!pending || (pending.roomKind ?? 'project') !== 'project') return;
     setOuterTab('terminal');
     requestAnimationFrame(() => {
       if (pending.paneId && managerRef.current?.focusPane(pending.paneId)) return;

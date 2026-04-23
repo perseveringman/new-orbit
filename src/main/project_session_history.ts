@@ -1,14 +1,18 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
+  AREA_ORBIT_AGENT_DIR,
+  AREA_ORBIT_DIR,
+  AREA_ORBIT_SESSIONS_DIR,
   PROJECT_ORBIT_AGENT_DIR,
   PROJECT_ORBIT_DIR,
   PROJECT_ORBIT_LOGS_DIR,
   PROJECT_SESSION_HISTORY
 } from '@shared/constants';
 import { listProjects } from './project';
+import { listAreas } from './area';
 
-interface ProjectSessionHistoryItem {
+interface RoomSessionHistoryItem {
   sessionId: string;
   paneId: string;
   projectUid: string;
@@ -27,12 +31,12 @@ interface ProjectSessionHistoryItem {
 }
 
 export function renderProjectSessionHistory(
-  sessions: ProjectSessionHistoryItem[],
+  sessions: RoomSessionHistoryItem[],
   projectName?: string
 ): string {
-  const lines = ['# 项目会话历史', ''];
+  const lines = ['# 会话历史', ''];
   if (projectName) {
-    lines.push(`项目：**${projectName}**`, '');
+    lines.push(`空间：**${projectName}**`, '');
   }
   if (sessions.length === 0) {
     lines.push('_尚无记录。_', '');
@@ -72,7 +76,7 @@ export function renderProjectSessionHistory(
 export async function writeProjectSessionHistory(
   vaultPath: string,
   projectUid: string,
-  sessions: ProjectSessionHistoryItem[]
+  sessions: RoomSessionHistoryItem[]
 ): Promise<void> {
   const projects = await listProjects(vaultPath);
   const project = projects.find((item) => item.uid === projectUid);
@@ -88,6 +92,29 @@ export async function writeProjectSessionHistory(
   await fs.writeFile(
     filePath,
     renderProjectSessionHistory(sessions, project.name).trimEnd() + '\n',
+    'utf8'
+  );
+}
+
+export async function writeAreaSessionHistory(
+  vaultPath: string,
+  areaUid: string,
+  sessions: RoomSessionHistoryItem[]
+): Promise<void> {
+  const areas = await listAreas(vaultPath);
+  const area = areas.find((item) => item.uid === areaUid);
+  if (!area) return;
+  const filePath = path.join(
+    area.path,
+    AREA_ORBIT_DIR,
+    AREA_ORBIT_AGENT_DIR,
+    AREA_ORBIT_SESSIONS_DIR,
+    PROJECT_SESSION_HISTORY
+  );
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(
+    filePath,
+    renderProjectSessionHistory(sessions, area.name).trimEnd() + '\n',
     'utf8'
   );
 }

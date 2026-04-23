@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { spawn as nodeSpawn } from 'node:child_process';
 import path from 'node:path';
 import {
   AREAS_DIR,
@@ -22,6 +23,57 @@ async function fileExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function runGh(args: string[], cwd: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let output = '';
+    const child = nodeSpawn('gh', args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    child.stdout?.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+    child.on('error', (error) => reject(error));
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(output.trim() || `gh exited with code ${code ?? 1}`));
+    });
+  });
+}
+
+async function ensureAreaOrbitDirs(areaPath: string): Promise<void> {
+  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_SESSIONS_DIR), {
+    recursive: true
+  });
+  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_TASKS_DIR), {
+    recursive: true
+  });
+  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_MEMORIES_DIR), {
+    recursive: true
+  });
+}
+
+async function writeBlankAreaReadme(areaPath: string, name: string): Promise<void> {
+  await fs.writeFile(
+    path.join(areaPath, 'README.md'),
+    `# ${name}\n\n`,
+    'utf8'
+  );
+}
+
+async function cloneAreaGitHubRepository(
+  parentDir: string,
+  areaPath: string,
+  owner: string,
+  repo: string
+): Promise<void> {
+  await runGh(['repo', 'clone', `${owner}/${repo}`, areaPath], parentDir);
+  await fs.rm(path.join(areaPath, '.git'), { recursive: true, force: true });
 }
 
 function parseAreaConfig(raw: unknown): AreaConfig {
@@ -102,10 +154,19 @@ export async function createArea(
   const uid = args.uid ?? generateUid();
   const createdAt = new Date().toISOString();
 
-  await fs.mkdir(areaPath, { recursive: true });
-  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_SESSIONS_DIR), { recursive: true });
-  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_TASKS_DIR), { recursive: true });
-  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_MEMORIES_DIR), { recursive: true });
+  if (args.github) {
+    await fs.mkdir(areasDir, { recursive: true });
+    try {
+      await cloneAreaGitHubRepository(areasDir, areaPath, args.github.owner, args.github.repo);
+    } catch (error) {
+      await fs.rm(areaPath, { recursive: true, force: true });
+      throw error;
+    }
+  } else {
+    await fs.mkdir(areaPath, { recursive: true });
+  }
+
+  await ensureAreaOrbitDirs(areaPath);
 
   const config: AreaConfig = {
     uid,
@@ -117,14 +178,14 @@ export async function createArea(
   };
   await writeAreaConfig(areaPath, config);
 
-  if (args.template === VISION_AREA_SLUG) {
+  if (args.github) {
+    if (!(await fileExists(path.join(areaPath, 'README.md')))) {
+      await writeBlankAreaReadme(areaPath, args.name);
+    }
+  } else if (args.template === VISION_AREA_SLUG) {
     await scaffoldVisionFiles(areaPath, { name: args.name, slug, uid });
   } else {
-    await fs.writeFile(
-      path.join(areaPath, 'README.md'),
-      `# ${args.name}\n\n`,
-      'utf8'
-    );
+    await writeBlankAreaReadme(areaPath, args.name);
   }
 
   return {
@@ -158,9 +219,7 @@ export async function scaffoldVisionArea(vaultPath: string): Promise<void> {
   const vars = { name, slug: VISION_AREA_SLUG, uid };
 
   await fs.mkdir(areaPath, { recursive: true });
-  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_SESSIONS_DIR), { recursive: true });
-  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_TASKS_DIR), { recursive: true });
-  await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_MEMORIES_DIR), { recursive: true });
+  await ensureAreaOrbitDirs(areaPath);
 
   const config: AreaConfig = {
     uid,
@@ -188,4 +247,12 @@ export async function setAreaConfig(
   const updated: AreaConfig = { ...current, ...patch };
   await writeAreaConfig(areaPath, updated);
   return updated;
+}
+
+export async function findAreaByUid(
+  vaultPath: string,
+  uid: string
+): Promise<AreaSummaryDTO | null> {
+  const areas = await listAreas(vaultPath);
+  return areas.find((area) => area.uid === uid) ?? null;
 }

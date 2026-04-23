@@ -28,6 +28,7 @@ import {
   type AgentExposureSettings,
   type ProjectConfig
 } from './project_config';
+import { findAreaByUid } from './area';
 
 export interface ProjectSummary {
   uid: string;
@@ -410,7 +411,8 @@ export async function listProjectTaskPaths(projectDir: string): Promise<string[]
 }
 
 export interface CreateTaskArgs {
-  project_uid: string;
+  project_uid?: string;
+  area_uid?: string;
   title: string;
   description?: string;
   uid?: string;
@@ -444,20 +446,34 @@ export async function createTask(
   vault: string,
   args: CreateTaskArgs
 ): Promise<CreateTaskResult> {
-  const projects = await listProjects(vault);
-  const target = projects.find((p) => p.uid === args.project_uid);
-  if (!target) throw new Error(`project_uid not found: ${args.project_uid}`);
-  if (target.legacy) {
-    throw new Error(
-      `project "${target.slug}" is a legacy project; cannot create structured task inside it`
-    );
+  if (!args.project_uid && !args.area_uid) {
+    throw new Error('task owner missing: provide project_uid or area_uid');
   }
-  const tasksDir = path.join(
-    target.path,
-    PROJECT_ORBIT_DIR,
-    PROJECT_ORBIT_AGENT_DIR,
-    PROJECT_ORBIT_TASKS_DIR
-  );
+  if (args.project_uid && args.area_uid) {
+    throw new Error('task owner ambiguous: provide only one of project_uid or area_uid');
+  }
+
+  let tasksDir = '';
+  if (args.project_uid) {
+    const projects = await listProjects(vault);
+    const target = projects.find((p) => p.uid === args.project_uid);
+    if (!target) throw new Error(`project_uid not found: ${args.project_uid}`);
+    if (target.legacy) {
+      throw new Error(
+        `project "${target.slug}" is a legacy project; cannot create structured task inside it`
+      );
+    }
+    tasksDir = path.join(
+      target.path,
+      PROJECT_ORBIT_DIR,
+      PROJECT_ORBIT_AGENT_DIR,
+      PROJECT_ORBIT_TASKS_DIR
+    );
+  } else {
+    const target = await findAreaByUid(vault, args.area_uid!);
+    if (!target) throw new Error(`area_uid not found: ${args.area_uid}`);
+    tasksDir = path.join(target.path, '.orbit', 'agent', 'tasks');
+  }
   await fs.mkdir(tasksDir, { recursive: true });
   const now = new Date();
   const prefix = datePrefix(now);
@@ -475,7 +491,8 @@ export async function createTask(
   const content = renderTaskMarkdown({
     uid,
     title: args.title,
-    project_uid: args.project_uid,
+    ...(args.project_uid ? { project_uid: args.project_uid } : {}),
+    ...(args.area_uid ? { area_uid: args.area_uid } : {}),
     created_at: now.toISOString(),
     ...(args.description !== undefined ? { description: args.description } : {})
   });
