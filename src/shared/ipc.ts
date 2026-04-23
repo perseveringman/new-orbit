@@ -162,6 +162,7 @@ export const IPC = {
   },
   terminalAgent: {
     list: 'terminalAgent:list',
+    detail: 'terminalAgent:detail',
     event: 'terminalAgent:event'
   },
   review: {
@@ -223,10 +224,13 @@ export interface TerminalAgentSessionDTO {
   paneId: string;
   projectUid: string;
   agentType: string;
+  vendorSessionId?: string;
   status: 'active' | 'completed' | 'interrupted';
   startedAt: string;
   endedAt?: string;
   lastActivityAt: string;
+  title?: string;
+  summary?: string;
   stats: {
     promptCount: number;
     permissionCount: number;
@@ -235,9 +239,21 @@ export interface TerminalAgentSessionDTO {
   resumeCommand?: string | null;
 }
 
+export interface TerminalAgentSessionMessageDTO {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  text: string;
+  at: string;
+}
+
+export interface TerminalAgentSessionDetailDTO extends TerminalAgentSessionDTO {
+  messages: TerminalAgentSessionMessageDTO[];
+}
+
 export interface TerminalAgentEventDTO {
   eventType: 'Start' | 'Stop' | 'PermissionRequest' | 'Progress';
   rawEventType?: string;
+  payload?: Record<string, unknown>;
   paneId?: string;
   projectUid?: string;
   ts: string;
@@ -611,6 +627,7 @@ export interface OrbitApi {
   };
   terminalAgent: {
     list(projectUid: string): Promise<TerminalAgentSessionDTO[]>;
+    detail(projectUid: string, sessionId: string): Promise<TerminalAgentSessionDetailDTO | null>;
     onEvent(cb: (ev: TerminalAgentEventDTO) => void): () => void;
   };
   review: {

@@ -9,6 +9,17 @@ export interface ClaudeProjectSession {
   lastActivityAt: string;
 }
 
+export interface ClaudeProjectSessionMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  text: string;
+  at: string;
+}
+
+export interface ClaudeProjectSessionDetail extends ClaudeProjectSession {
+  messages: ClaudeProjectSessionMessage[];
+}
+
 export function getClaudeProjectDirName(projectPath: string): string {
   return projectPath.replace(/\//g, '-');
 }
@@ -76,6 +87,81 @@ async function readSessionSummary(filePath: string): Promise<ClaudeProjectSessio
   return { sessionId, filePath, cwd, startedAt, lastActivityAt };
 }
 
+function extractMessageText(row: {
+  text?: unknown;
+  message?: {
+    content?: unknown;
+  };
+}): string {
+  if (typeof row.text === 'string' && row.text.trim()) return row.text.trim();
+  const content = row.message?.content;
+  if (typeof content === 'string' && content.trim()) return content.trim();
+  if (Array.isArray(content)) {
+    const texts = content
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return '';
+        const text = (entry as { text?: unknown }).text;
+        return typeof text === 'string' ? text.trim() : '';
+      })
+      .filter(Boolean);
+    if (texts.length > 0) return texts.join('\n\n');
+  }
+  return '';
+}
+
+function extractMessageRole(row: {
+  type?: unknown;
+  message?: {
+    role?: unknown;
+  };
+}): 'user' | 'assistant' | 'system' | null {
+  const role = row.message?.role;
+  if (role === 'user' || role === 'assistant' || role === 'system') return role;
+  if (row.type === 'user' || row.type === 'assistant' || row.type === 'system') {
+    return row.type;
+  }
+  return null;
+}
+
+async function readClaudeSessionMessages(filePath: string): Promise<ClaudeProjectSessionMessage[]> {
+  let raw = '';
+  try {
+    raw = await fs.readFile(filePath, 'utf8');
+  } catch {
+    return [];
+  }
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  const messages: ClaudeProjectSessionMessage[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    try {
+      const row = JSON.parse(line) as {
+        sessionId?: string;
+        timestamp?: string;
+        type?: unknown;
+        text?: unknown;
+        message?: {
+          role?: unknown;
+          content?: unknown;
+        };
+      };
+      const role = extractMessageRole(row);
+      const text = extractMessageText(row);
+      if (!role || !text || typeof row.timestamp !== 'string' || !row.timestamp) continue;
+      messages.push({
+        id: `${row.sessionId ?? path.basename(filePath, '.jsonl')}:${index}`,
+        role,
+        text,
+        at: row.timestamp
+      });
+    } catch {
+      // ignore malformed lines
+    }
+  }
+
+  return messages;
+}
+
 export async function listClaudeProjectSessions(
   root: string,
   projectPath: string
@@ -133,4 +219,31 @@ export async function findBestClaudeResumeTarget(
     }
   }
   return best;
+}
+
+export async function resolveClaudeSessionTarget(
+  root: string,
+  projectPath: string,
+  sessionWindow: { vendorSessionId?: string; startedAt: string; endedAt?: string }
+): Promise<ClaudeProjectSession | null> {
+  const sessions = await listClaudeProjectSessions(root, projectPath);
+  if (sessionWindow.vendorSessionId) {
+    const exact = sessions.find((session) => session.sessionId === sessionWindow.vendorSessionId);
+    if (exact) return exact;
+  }
+  return findBestClaudeResumeTarget(root, projectPath, sessionWindow);
+}
+
+export async function readClaudeProjectSessionDetail(
+  root: string,
+  projectPath: string,
+  sessionId: string
+): Promise<ClaudeProjectSessionDetail | null> {
+  const sessions = await listClaudeProjectSessions(root, projectPath);
+  const target = sessions.find((session) => session.sessionId === sessionId);
+  if (!target) return null;
+  return {
+    ...target,
+    messages: await readClaudeSessionMessages(target.filePath)
+  };
 }

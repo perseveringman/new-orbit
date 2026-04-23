@@ -43,7 +43,7 @@ Dashboard 顶部有 **Vision** 卡片。第一件事就是把它写出来——O
 
 点 Dashboard 卡片或顶栏 **Project** tab 进入 Project Room：
 
-- **中间主区**：Project header + 外层 `Kanban / Terminal` 两个工作模式
+- **中间主区**：Project header + 外层 `Kanban / Terminal / Sessions` 三个工作模式
 - **Kanban 模式**：全宽任务看板；点 task 后在右栏里编辑
 - **Terminal 模式**：嵌入式终端，cwd 就是项目根
 - **最右侧 Sidebar**：上下文右栏，按你当前在做什么切换
@@ -58,6 +58,8 @@ Project Room 的右栏现在分两级：
 - 在 **Kanban** 外层页签下，点一个 task 会把详情放进右栏的 **Focus → Task Detail**
 - 切到 **Terminal** 外层页签，右栏默认显示 **Overview → Task Tree**，方便边跑命令边看整个项目任务状态
 - `Sessions / Run Log / Diff / Review` 归到 **Execution**，不再和文件/任务上下文混在一起
+- 切到 **Sessions** 外层页签时，右栏会自动跳到 **Execution → Sessions**；列表留在右栏，主区专门显示会话详情与 transcript
+- 目前 Project Sessions 会优先导入本机的 **Claude** 与 **Codex** 本地 transcript，能看到用户/agent 的聊天记录
 
 Kanban 顶部：
 - 拖拽卡片换列会立即写回 frontmatter 的 `status`

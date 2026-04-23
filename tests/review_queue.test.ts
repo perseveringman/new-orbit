@@ -87,6 +87,25 @@ describe('review queue store', () => {
 
   it('stores terminal permission requests with project and pane routing details', () => {
     useReviewQueue.getState().reset();
+    const originalLocalStorage = globalThis.localStorage;
+    const memoryStorage = {
+      getItem(key: string): string | null {
+        if (key !== 'orbit.termmgr.project-1') return null;
+        return JSON.stringify({
+          tabs: [
+            {
+              id: 'tab-1',
+              title: 'Planning Terminal',
+              root: { kind: 'leaf', id: 'pane-7' },
+              focusedLeafId: 'pane-7',
+              zoomedLeafId: null
+            }
+          ],
+          activeTabId: 'tab-1'
+        });
+      }
+    } as Storage;
+    globalThis.localStorage = memoryStorage;
 
     useReviewQueue.getState().ingestTerminalEvent({
       eventType: 'PermissionRequest',
@@ -94,17 +113,24 @@ describe('review queue store', () => {
       paneId: 'pane-7',
       sessionId: 'sess-9',
       ts: '2026-04-23T03:32:00Z',
-      reason: 'hook'
+      reason: 'hook',
+      payload: {
+        tool_name: 'Edit',
+        reason: 'Edit README.md'
+      }
     });
 
     expect(useReviewQueue.getState().items).toContainEqual(
       expect.objectContaining({
         id: 'term-perm:sess-9',
         source: 'permission',
+        detail: 'Edit README.md',
         projectUid: 'project-1',
         paneId: 'pane-7',
-        sessionId: 'sess-9'
+        sessionId: 'sess-9',
+        terminalTitle: 'Planning Terminal'
       })
     );
+    globalThis.localStorage = originalLocalStorage;
   });
 });

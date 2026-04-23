@@ -21,9 +21,10 @@ import {
   type OrphanRescueCandidate,
   type ProjectSummaryDTO,
   type SearchOpts,
-    type TemplateMetaDTO,
-    type TerminalAgentEventDTO,
-    type TerminalAgentSessionDTO,
+  type TemplateMetaDTO,
+  type TerminalAgentSessionDetailDTO,
+  type TerminalAgentEventDTO,
+  type TerminalAgentSessionDTO,
     type TerminalDataEventDTO,
   type TerminalExitEventDTO,
   type TerminalOpenArgsDTO,
@@ -218,6 +219,8 @@ const api: OrbitApi = {
   terminalAgent: {
     list: (projectUid: string): Promise<TerminalAgentSessionDTO[]> =>
       ipcRenderer.invoke(IPC.terminalAgent.list, projectUid),
+    detail: (projectUid: string, sessionId: string): Promise<TerminalAgentSessionDetailDTO | null> =>
+      ipcRenderer.invoke(IPC.terminalAgent.detail, projectUid, sessionId),
     onEvent: (cb: (ev: TerminalAgentEventDTO) => void) => {
       const listener = (_: unknown, ev: TerminalAgentEventDTO): void => cb(ev);
       ipcRenderer.on(IPC.terminalAgent.event, listener);

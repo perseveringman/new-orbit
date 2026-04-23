@@ -9,13 +9,19 @@ import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { MigrationDialog } from '../components/Modals/MigrationDialog';
 import { TerminalManager } from '../components/Terminal/TerminalManager';
 import type { TerminalManagerHandle } from '../components/Terminal/TerminalManager';
-import { consumePendingTerminalNavigation } from '../components/Terminal/terminalNavigationIntent';
+import {
+  consumePendingTerminalNavigation,
+  queueTerminalNavigation,
+  type TerminalNavigationIntent
+} from '../components/Terminal/terminalNavigationIntent';
 import { disposeTerminalsByPrefix } from '../components/Terminal/terminalResources';
 import {
   deriveProjectRoomKanbanModel,
   resolveProjectRoomPaneHint,
+  resolveProjectRoomSidebarPanel,
   resolveProjectRoomSidebarSurface
 } from './projectRoomModel';
+import { ProjectSessionsView } from './ProjectSessionsView';
 
 /**
  * ProjectRoomView — the "inside a project" mode.
@@ -54,16 +60,16 @@ export function ProjectRoomView(): JSX.Element {
 
   // Outer tab: 'kanban' or 'terminal', persisted per project
   const outerTabKey = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
-  const [outerTab, setOuterTabRaw] = useState<'kanban' | 'terminal'>(() => {
+  const [outerTab, setOuterTabRaw] = useState<'kanban' | 'terminal' | 'sessions'>(() => {
     try {
       const v = localStorage.getItem(outerTabKey);
-      return v === 'terminal' ? 'terminal' : 'kanban';
+      return v === 'terminal' || v === 'sessions' ? v : 'kanban';
     } catch {
       return 'kanban';
     }
   });
 
-  const setOuterTab = useCallback((tab: 'kanban' | 'terminal'): void => {
+  const setOuterTab = useCallback((tab: 'kanban' | 'terminal' | 'sessions'): void => {
     setOuterTabRaw(tab);
     try {
       localStorage.setItem(outerTabKey, tab);
@@ -77,7 +83,7 @@ export function ProjectRoomView(): JSX.Element {
     try {
       const key = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
       const v = localStorage.getItem(key);
-      setOuterTabRaw(v === 'terminal' ? 'terminal' : 'kanban');
+      setOuterTabRaw(v === 'terminal' || v === 'sessions' ? v : 'kanban');
     } catch {
       setOuterTabRaw('kanban');
     }
@@ -120,8 +126,13 @@ export function ProjectRoomView(): JSX.Element {
   // honor it once and ensure Kanban tab is active.
   useEffect(() => {
     if (view.kind !== 'project') return;
-    if (resolveProjectRoomPaneHint(view.pane as 'task' | 'readme' | 'agent' | undefined) === 'task') {
+    const hint = resolveProjectRoomPaneHint(
+      view.pane as 'task' | 'sessions' | 'readme' | 'agent' | undefined
+    );
+    if (hint === 'task') {
       setOuterTab('kanban');
+    } else if (hint === 'sessions') {
+      setOuterTab('sessions');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
@@ -153,9 +164,20 @@ export function ProjectRoomView(): JSX.Element {
 
   useEffect(() => {
     if (!project) return;
-    setSidebarSurface(resolveProjectRoomSidebarSurface(outerTab));
+    const surface = resolveProjectRoomSidebarSurface(outerTab);
+    const panel = resolveProjectRoomSidebarPanel(outerTab);
+    if (panel) {
+      openSidebarPanel({
+        surface,
+        panel,
+        focus: { projectUid: project.uid }
+      });
+      return;
+    }
+
+    setSidebarSurface(surface);
     setSidebarFocus({ projectUid: project.uid });
-  }, [outerTab, project, setSidebarFocus, setSidebarSurface]);
+  }, [openSidebarPanel, outerTab, project, setSidebarFocus, setSidebarSurface]);
 
   useEffect(() => {
     if (!project || outerTab !== 'kanban') return;
@@ -253,6 +275,14 @@ export function ProjectRoomView(): JSX.Element {
       });
     });
   }, [activeProjectUid, setOuterTab]);
+
+  const openSessionNavigation = useCallback(
+    (intent: TerminalNavigationIntent) => {
+      queueTerminalNavigation(intent);
+      setOuterTab('terminal');
+    },
+    [setOuterTab]
+  );
 
   useEffect(() => {
     consumePendingNavigation();
@@ -399,6 +429,9 @@ export function ProjectRoomView(): JSX.Element {
         <OuterTabButton active={outerTab === 'terminal'} onClick={() => setOuterTab('terminal')}>
           Terminal
         </OuterTabButton>
+        <OuterTabButton active={outerTab === 'sessions'} onClick={() => setOuterTab('sessions')}>
+          Sessions
+        </OuterTabButton>
       </div>
 
       {/* Kanban tab content */}
@@ -463,6 +496,10 @@ export function ProjectRoomView(): JSX.Element {
               : undefined
           }
         />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'sessions' ? 'flex' : 'hidden'}`}>
+        <ProjectSessionsView projectUid={project.uid} onOpenSession={openSessionNavigation} />
       </div>
 
       <NewTaskModal

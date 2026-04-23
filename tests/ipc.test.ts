@@ -84,7 +84,7 @@ describe('IPC contract', () => {
 
   it('terminalAgent namespace declares session awareness channels', () => {
     const keys = Object.keys(IPC.terminalAgent).sort();
-    expect(keys).toEqual(['event', 'list'].sort());
+    expect(keys).toEqual(['detail', 'event', 'list'].sort());
     for (const v of Object.values(IPC.terminalAgent)) {
       expect(v.startsWith('terminalAgent:')).toBe(true);
     }

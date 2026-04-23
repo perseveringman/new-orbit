@@ -8,7 +8,7 @@ export type VaultViewKind =
   | 'kanban'
   | 'area';
 
-export type ProjectRoomMode = 'kanban' | 'terminal';
+export type ProjectRoomMode = 'kanban' | 'terminal' | 'sessions';
 
 export type SidebarSurfaceId =
   | 'editor'
@@ -19,7 +19,8 @@ export type SidebarSurfaceId =
   | 'kanban'
   | 'area'
   | 'project.kanban'
-  | 'project.terminal';
+  | 'project.terminal'
+  | 'project.sessions';
 
 export type SidebarIntentId = 'overview' | 'focus' | 'execution';
 
@@ -102,6 +103,13 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
     ]
   },
   'project.terminal': {
+    intents: [
+      { id: 'overview', title: 'Overview', panels: ['task-tree'] },
+      { id: 'focus', title: 'Focus', panels: ['task-detail'] },
+      { id: 'execution', title: 'Execution', panels: ['sessions', 'runlog', 'diff'] }
+    ]
+  },
+  'project.sessions': {
     intents: [
       { id: 'overview', title: 'Overview', panels: ['task-tree'] },
       { id: 'focus', title: 'Focus', panels: ['task-detail'] },

@@ -9,7 +9,7 @@ export type WorkspaceView =
   | { kind: 'journals' }
   | { kind: 'kanban'; projectUid: string | null }
   | { kind: 'area'; areaUid: string | null }
-  | { kind: 'project'; projectUid: string; pane?: 'task' };
+  | { kind: 'project'; projectUid: string; pane?: 'task' | 'sessions' };
 
 interface ParaState {
   view: WorkspaceView;

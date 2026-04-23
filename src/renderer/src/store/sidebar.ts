@@ -13,6 +13,7 @@ export interface SidebarFocusState {
   task: TaskRecord | null;
   filePath: string | null;
   projectUid: string | null;
+  sessionId: string | null;
   runId: string | null;
   worktreeId: string | null;
 }
@@ -51,6 +52,7 @@ function createEmptyFocus(): SidebarFocusState {
     task: null,
     filePath: null,
     projectUid: null,
+    sessionId: null,
     runId: null,
     worktreeId: null
   };

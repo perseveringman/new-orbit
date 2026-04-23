@@ -86,13 +86,32 @@ if [ -z "\${HOOK_PORT}" ]; then
   exit 0
 fi
 
-# Claude Code sends hook context as JSON on stdin; extract hook_event_name.
+# Claude Code sends hook context as JSON on stdin; extract hook_event_name and forward payload.
 INPUT="$(cat 2>/dev/null || true)"
 EVENT_TYPE=""
+PAYLOAD="{}"
 if [ -n "\${INPUT}" ]; then
-  EVENT_TYPE="$(printf '%s' "\${INPUT}" | /usr/bin/env node -e '
+  PARSED="$(printf '%s' "\${INPUT}" | /usr/bin/env node -e '
     let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{
-      try{process.stdout.write(JSON.parse(d).hook_event_name||"")}catch{process.stdout.write("")}
+      try{
+        const parsed = JSON.parse(d);
+        process.stdout.write(JSON.stringify({
+          eventType: parsed.hook_event_name || "",
+          payload: JSON.stringify(parsed)
+        }));
+      }catch{
+        process.stdout.write(JSON.stringify({ eventType: "", payload: "{}" }));
+      }
+    });
+  ' 2>/dev/null || true)"
+  EVENT_TYPE="$(printf '%s' "\${PARSED}" | /usr/bin/env node -e '
+    let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{
+      try{process.stdout.write(JSON.parse(d).eventType||"")}catch{process.stdout.write("")}
+    });
+  ' 2>/dev/null || true)"
+  PAYLOAD="$(printf '%s' "\${PARSED}" | /usr/bin/env node -e '
+    let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{
+      try{process.stdout.write(encodeURIComponent(JSON.parse(d).payload||"{}"))}catch{process.stdout.write("%7B%7D")}
     });
   ' 2>/dev/null || true)"
 fi
@@ -101,7 +120,7 @@ ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 curl -fsS --max-time 3 \\
   -X GET \\
-  "http://127.0.0.1:\${HOOK_PORT}/hook/event?eventType=\${EVENT_TYPE}&paneId=\${PANE_ID}&projectUid=\${PROJECT_UID}&ts=\${ts}" \\
+  "http://127.0.0.1:\${HOOK_PORT}/hook/event?eventType=\${EVENT_TYPE}&paneId=\${PANE_ID}&projectUid=\${PROJECT_UID}&ts=\${ts}&payload=\${PAYLOAD}" \\
   >/dev/null 2>&1 || true
 `;
 }

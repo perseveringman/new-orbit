@@ -37,4 +37,16 @@ describe('terminal navigation intent', () => {
       initialCommand: 'claude --resume sess-9'
     });
   });
+
+  it('preserves session-oriented navigation metadata for history actions', () => {
+    clearPendingTerminalNavigation();
+    const intent = {
+      projectUid: 'project-1',
+      orbitSessionId: 'orbit-session-1',
+      openMode: 'reopen-session' as const
+    };
+    queueTerminalNavigation(intent);
+
+    expect(consumePendingTerminalNavigation('project-1')).toEqual(intent);
+  });
 });

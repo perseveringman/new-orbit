@@ -5,6 +5,7 @@ import { useWorkspace } from '../store/workspace';
 import { useReviewQueue } from '../store/reviewQueue';
 import { TaskRow } from '../components/TaskRow';
 import { queueTerminalNavigation } from '../components/Terminal/terminalNavigationIntent';
+import { getReviewQueueContextSummary } from './reviewQueuePresentation';
 
 /**
  * The Inbox view: all tasks with status `inbox`. "Un-triaged" inline tasks
@@ -16,6 +17,7 @@ export function InboxView(): JSX.Element {
   const updateStatus = usePara((s) => s.updateStatus);
   const setView = usePara((s) => s.setView);
   const tasks = usePara((s) => s.tasks);
+  const projects = useWorkspace((s) => s.projects);
   const permissionItems = useReviewQueue((s) =>
     s.items.filter((item) => item.source === 'permission' && item.projectUid && item.paneId)
   );
@@ -49,6 +51,9 @@ export function InboxView(): JSX.Element {
             <ul className="space-y-2">
               {permissionItems.map((item) => (
                 <li key={item.id}>
+                  {(() => {
+                    const context = getReviewQueueContextSummary(item, projects);
+                    return (
                   <button
                     onClick={() => openTerminal(item.projectUid!, item.paneId!)}
                     className="block w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left hover:border-amber-400 dark:border-amber-900/60 dark:bg-amber-950/20"
@@ -61,10 +66,17 @@ export function InboxView(): JSX.Element {
                         {item.detail}
                       </div>
                     )}
+                    {context && (
+                      <div className="mt-1 text-[11px] font-medium text-amber-900/80 dark:text-amber-100/80">
+                        {context}
+                      </div>
+                    )}
                     <div className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-300/70">
                       Open related terminal
                     </div>
                   </button>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>

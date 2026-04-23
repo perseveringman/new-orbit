@@ -25,6 +25,7 @@ export const PROJECT_LOGS_DIR = 'logs';
 export const PROJECT_LOG_ARCHIVE_DIR = 'archive';
 export const PROJECT_OPERATION_LOG = 'operations.jsonl';
 export const PROJECT_TIMELINE = 'TIMELINE.md';
+export const PROJECT_SESSION_HISTORY = 'SESSION_HISTORY.md';
 export const PROJECT_CONFIG = 'config.json';
 export const PROJECT_README = 'README.md';
 export const PROJECT_AGENT_MD = 'AGENT.md';

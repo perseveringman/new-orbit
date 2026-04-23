@@ -61,4 +61,20 @@ describe('sidebar store', () => {
     expect(useSidebar.getState().intent).toBe('overview');
     expect(useSidebar.getState().panel).toBe('files');
   });
+
+  it('keeps the selected session in sidebar focus for the project sessions surface', () => {
+    useSidebar.getState().setSurface('project.sessions');
+    useSidebar
+      .getState()
+      .openPanel({
+        panel: 'sessions',
+        focus: { projectUid: 'project-1', sessionId: 'tas-9' } as unknown as never
+      });
+
+    expect(useSidebar.getState().intent).toBe('execution');
+    expect(useSidebar.getState().panel).toBe('sessions');
+    expect((useSidebar.getState().focus as unknown as Record<string, unknown>).sessionId).toBe(
+      'tas-9'
+    );
+  });
 });

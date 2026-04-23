@@ -3,16 +3,21 @@ import path from 'node:path';
 import { nanoid } from 'nanoid';
 import { ORBIT_DIR } from '@shared/constants';
 import type { TerminalHookEnvelope } from './hooks/server';
+import { writeProjectSessionHistory } from '../project_session_history';
 
 export interface TerminalAgentSession {
   sessionId: string;
   paneId: string;
   projectUid: string;
   agentType: string;
+  vendorSessionId?: string;
   status: 'active' | 'completed' | 'interrupted';
   startedAt: string;
   endedAt?: string;
   lastActivityAt: string;
+  title?: string;
+  summary?: string;
+  resumeCommand?: string;
   stats: {
     promptCount: number;
     permissionCount: number;
@@ -44,6 +49,18 @@ async function writeRegistry(vaultPath: string, registry: TerminalAgentRegistry)
   await fs.writeFile(file, JSON.stringify(registry, null, 2) + '\n', 'utf8');
 }
 
+async function syncProjectSessionHistory(
+  vaultPath: string,
+  projectUid: string,
+  registry: TerminalAgentRegistry
+): Promise<void> {
+  await writeProjectSessionHistory(
+    vaultPath,
+    projectUid,
+    registry.sessions.filter((session) => session.projectUid === projectUid).sort(byNewest)
+  );
+}
+
 function inferAgentType(rawEventType: string): string {
   if (
     [
@@ -71,12 +88,83 @@ function byNewest(a: TerminalAgentSession, b: TerminalAgentSession): number {
   return b.lastActivityAt.localeCompare(a.lastActivityAt);
 }
 
+function getPayloadString(
+  payload: Record<string, unknown> | undefined,
+  ...keys: string[]
+): string | undefined {
+  if (!payload) return undefined;
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return undefined;
+}
+
+function deriveSessionMetadata(
+  envelope: TerminalHookEnvelope,
+  agentType: string
+): Pick<TerminalAgentSession, 'vendorSessionId' | 'title' | 'summary' | 'resumeCommand'> {
+  const payload = envelope.payload;
+  const vendorSessionId = getPayloadString(
+    payload,
+    'session_id',
+    'sessionId',
+    'conversation_id',
+    'conversationId'
+  );
+  const resumeCommand =
+    getPayloadString(payload, 'resume_command', 'resumeCommand') ??
+    (vendorSessionId && agentType === 'claude' ? `claude --resume ${vendorSessionId}` : undefined);
+
+  return {
+    ...(vendorSessionId ? { vendorSessionId } : {}),
+    ...(getPayloadString(payload, 'title') ? { title: getPayloadString(payload, 'title') } : {}),
+    ...(getPayloadString(payload, 'summary', 'reason')
+      ? { summary: getPayloadString(payload, 'summary', 'reason') }
+      : {}),
+    ...(resumeCommand ? { resumeCommand } : {})
+  };
+}
+
+function isSameVendorSession(
+  session: TerminalAgentSession,
+  agentType: string,
+  vendorSessionId?: string
+): boolean {
+  if (session.agentType !== agentType) return false;
+  if (session.vendorSessionId || vendorSessionId) {
+    return session.vendorSessionId === vendorSessionId;
+  }
+  return true;
+}
+
+function mergeSessionMetadata(
+  session: TerminalAgentSession,
+  metadata: Pick<TerminalAgentSession, 'vendorSessionId' | 'title' | 'summary' | 'resumeCommand'>
+): void {
+  if (metadata.vendorSessionId) session.vendorSessionId = metadata.vendorSessionId;
+  if (metadata.title) session.title = metadata.title;
+  if (metadata.summary) session.summary = metadata.summary;
+  if (metadata.resumeCommand) session.resumeCommand = metadata.resumeCommand;
+}
+
+function completeSession(session: TerminalAgentSession, ts: string): void {
+  session.status = 'completed';
+  session.endedAt = ts;
+  session.lastActivityAt = ts;
+}
+
 export async function ingestTerminalHookEvent(
   vaultPath: string,
   envelope: TerminalHookEnvelope
 ): Promise<TerminalAgentSession | null> {
   if (!envelope.paneId || !envelope.projectUid) return null;
   const registry = await readRegistry(vaultPath);
+  const agentType = inferAgentType(envelope.rawEventType);
+  const metadata = deriveSessionMetadata(envelope, agentType);
   const active = registry.sessions.find(
     (session) =>
       session.paneId === envelope.paneId &&
@@ -85,14 +173,22 @@ export async function ingestTerminalHookEvent(
   );
 
   if (active) {
-    active.lastActivityAt = envelope.ts;
-    if (envelope.eventType === 'Start') active.stats.promptCount += 1;
-    if (envelope.eventType === 'PermissionRequest') active.stats.permissionCount += 1;
-    await writeRegistry(vaultPath, { sessions: registry.sessions.sort(byNewest) });
-    return active;
+    if (!isSameVendorSession(active, agentType, metadata.vendorSessionId) && envelope.eventType !== 'Stop') {
+      completeSession(active, envelope.ts);
+    } else {
+      active.lastActivityAt = envelope.ts;
+      if (envelope.eventType === 'Start') active.stats.promptCount += 1;
+      if (envelope.eventType === 'PermissionRequest') active.stats.permissionCount += 1;
+      mergeSessionMetadata(active, metadata);
+      await writeRegistry(vaultPath, { sessions: registry.sessions.sort(byNewest) });
+      await syncProjectSessionHistory(vaultPath, envelope.projectUid, registry);
+      return active;
+    }
   }
 
   if (envelope.eventType === 'Stop') {
+    await writeRegistry(vaultPath, { sessions: registry.sessions.sort(byNewest) });
+    await syncProjectSessionHistory(vaultPath, envelope.projectUid, registry);
     return null;
   }
 
@@ -100,10 +196,11 @@ export async function ingestTerminalHookEvent(
     sessionId: `tas_${nanoid(10)}`,
     paneId: envelope.paneId,
     projectUid: envelope.projectUid,
-    agentType: inferAgentType(envelope.rawEventType),
+    agentType,
     status: 'active',
     startedAt: envelope.ts,
     lastActivityAt: envelope.ts,
+    ...metadata,
     stats: {
       promptCount: envelope.eventType === 'Start' ? 1 : 0,
       permissionCount: envelope.eventType === 'PermissionRequest' ? 1 : 0
@@ -111,6 +208,7 @@ export async function ingestTerminalHookEvent(
   };
   registry.sessions.unshift(created);
   await writeRegistry(vaultPath, { sessions: registry.sessions.sort(byNewest) });
+  await syncProjectSessionHistory(vaultPath, envelope.projectUid, registry);
   return created;
 }
 
@@ -124,10 +222,9 @@ export async function markTerminalPaneExited(
     (session) => session.paneId === paneId && session.status === 'active'
   );
   if (!active) return null;
-  active.status = 'completed';
-  active.endedAt = ts;
-  active.lastActivityAt = ts;
+  completeSession(active, ts);
   await writeRegistry(vaultPath, { sessions: registry.sessions.sort(byNewest) });
+  await syncProjectSessionHistory(vaultPath, active.projectUid, registry);
   return active;
 }
 
@@ -137,15 +234,20 @@ export async function reconcileTerminalAgentSessionsOnStart(
 ): Promise<void> {
   const registry = await readRegistry(vaultPath);
   let changed = false;
+  const changedProjects = new Set<string>();
   for (const session of registry.sessions) {
     if (session.status !== 'active') continue;
     session.status = 'interrupted';
     session.endedAt = ts;
     session.lastActivityAt = ts;
     changed = true;
+    changedProjects.add(session.projectUid);
   }
   if (changed) {
     await writeRegistry(vaultPath, { sessions: registry.sessions.sort(byNewest) });
+    await Promise.all(
+      Array.from(changedProjects, (projectUid) => syncProjectSessionHistory(vaultPath, projectUid, registry))
+    );
   }
 }
 

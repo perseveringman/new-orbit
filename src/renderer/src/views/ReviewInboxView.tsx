@@ -3,6 +3,7 @@ import { useReviewQueue } from '../store/reviewQueue';
 import { useFiles } from '../store/files';
 import { useWorkspace } from '../store/workspace';
 import { queueTerminalNavigation } from '../components/Terminal/terminalNavigationIntent';
+import { getReviewQueueContextSummary } from './reviewQueuePresentation';
 
 export function ReviewInboxView(): JSX.Element {
   const items = useReviewQueue((s) => s.items);
@@ -10,6 +11,7 @@ export function ReviewInboxView(): JSX.Element {
   const toast = useFiles((s) => s.toast);
   const setView = usePara((s) => s.setView);
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
+  const projects = useWorkspace((s) => s.projects);
 
   function openTerminal(projectUid?: string, paneId?: string): void {
     if (!projectUid || !paneId) {
@@ -92,22 +94,29 @@ export function ReviewInboxView(): JSX.Element {
           Inbox clear.
         </div>
       ) : (
-        <ul className="space-y-2 overflow-auto">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              className="rounded border border-neutral-200 bg-white/50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900/40"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium">{item.title}</p>
-                  {item.detail && (
-                    <p className="mt-1 text-xs text-neutral-500">{item.detail}</p>
-                  )}
-                  <p className="mt-1 text-[11px] text-neutral-400">
-                    {item.source} · {new Date(item.createdAt).toLocaleString()}
-                  </p>
-                </div>
+          <ul className="space-y-2 overflow-auto">
+            {items.map((item) => {
+              const context = getReviewQueueContextSummary(item, projects);
+              return (
+                <li
+                  key={item.id}
+                  className="rounded border border-neutral-200 bg-white/50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900/40"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{item.title}</p>
+                      {item.detail && (
+                        <p className="mt-1 text-xs text-neutral-500">{item.detail}</p>
+                      )}
+                      {context && (
+                        <p className="mt-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
+                          {context}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[11px] text-neutral-400">
+                        {item.source} · {new Date(item.createdAt).toLocaleString()}
+                      </p>
+                    </div>
                 <div className="flex gap-1">
                   {item.projectUid && item.paneId ? (
                     <button
@@ -154,9 +163,10 @@ export function ReviewInboxView(): JSX.Element {
                     Dismiss
                   </button>
                 </div>
-              </div>
-            </li>
-          ))}
+                  </div>
+                </li>
+              );
+            })}
         </ul>
       )}
     </div>

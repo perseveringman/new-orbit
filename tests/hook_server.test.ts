@@ -131,7 +131,9 @@ describe('hook server', () => {
 
     const res = await post(
       server.port,
-      '/hook/event?eventType=UserPromptSubmit&paneId=pane-1&projectUid=proj-1&ts=2026-04-22T10:00:00Z',
+      `/hook/event?eventType=UserPromptSubmit&paneId=pane-1&projectUid=proj-1&ts=2026-04-22T10:00:00Z&payload=${encodeURIComponent(
+        JSON.stringify({ tool_name: 'Edit', reason: 'Need approval' })
+      )}`,
       {},
       '',
       'GET'
@@ -144,7 +146,8 @@ describe('hook server', () => {
         rawEventType: 'UserPromptSubmit',
         paneId: 'pane-1',
         projectUid: 'proj-1',
-        ts: '2026-04-22T10:00:00Z'
+        ts: '2026-04-22T10:00:00Z',
+        payload: { tool_name: 'Edit', reason: 'Need approval' }
       }
     ]);
   });

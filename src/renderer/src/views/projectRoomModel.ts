@@ -1,7 +1,7 @@
-import type { SidebarSurfaceId } from './vaultRightSidebarModel';
+import type { SidebarPanelId, SidebarSurfaceId } from './vaultRightSidebarModel';
 
 export type ProjectRoomHeaderAction = 'enable-orbit-tools' | 'archive-project';
-export type ProjectRoomOuterTab = 'kanban' | 'terminal';
+export type ProjectRoomOuterTab = 'kanban' | 'terminal' | 'sessions';
 
 export interface ProjectRoomKanbanModel {
   headerActions: ProjectRoomHeaderAction[];
@@ -38,15 +38,26 @@ export function deriveProjectRoomKanbanModel(args: {
 export function resolveProjectRoomSidebarSurface(
   outerTab: ProjectRoomOuterTab
 ): SidebarSurfaceId {
-  return outerTab === 'terminal' ? 'project.terminal' : 'project.kanban';
+  if (outerTab === 'terminal') return 'project.terminal';
+  if (outerTab === 'sessions') return 'project.sessions';
+  return 'project.kanban';
+}
+
+export function resolveProjectRoomSidebarPanel(
+  outerTab: ProjectRoomOuterTab
+): SidebarPanelId | null {
+  if (outerTab === 'sessions') return 'sessions';
+  return null;
 }
 
 export function resolveProjectRoomPaneHint(pane?: 'task'): 'task' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'readme' | 'agent'
-): 'task' | null;
+  pane?: 'task' | 'sessions' | 'readme' | 'agent'
+): 'task' | 'sessions' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'readme' | 'agent'
-): 'task' | null {
-  return pane === 'task' ? 'task' : null;
+  pane?: 'task' | 'sessions' | 'readme' | 'agent'
+): 'task' | 'sessions' | null {
+  if (pane === 'task') return 'task';
+  if (pane === 'sessions') return 'sessions';
+  return null;
 }

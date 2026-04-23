@@ -6,6 +6,7 @@ import {
   PROJECT_LOGS_DIR,
   PROJECT_LOG_ARCHIVE_DIR,
   PROJECT_OPERATION_LOG,
+  PROJECT_SESSION_HISTORY,
   PROJECT_SKILLS_DIR,
   PROJECT_TIMELINE
 } from '@shared/constants';
@@ -60,6 +61,7 @@ function buildIndex(): string {
 
 ## 操作记录
 \`.agent/logs/TIMELINE.md\` 包含本项目的历史操作记录，可用于恢复上下文。
+\`.agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了项目级 agent 会话历史，可用于恢复近期协作脉络。
 `;
 }
 
@@ -254,6 +256,7 @@ function buildEntry(target: EntryTarget): string {
 
 ## 操作记录
 \`.agent/logs/TIMELINE.md\` 包含本项目的历史操作记录，可用于恢复上下文和了解近期进展。
+\`.agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了近期项目级 agent 会话，是恢复项目上下文的首选入口之一。
 
 ## MCP 工具
 本项目已配置 Orbit MCP server，提供任务管理、代码提交、知识检索等工具。详见 \`.agent/skills/mcp-tools.md\`。
@@ -293,6 +296,8 @@ export async function buildProjectAgentContextFiles(
     [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_OPERATION_LOG)]: '',
     [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_TIMELINE)]:
       '# 操作时间线\n\n_尚无记录。_\n',
+    [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_SESSION_HISTORY)]:
+      '# 项目会话历史\n\n_尚无记录。_\n',
     [path.posix.join(PROJECT_AGENT_DIR, PROJECT_LOGS_DIR, PROJECT_LOG_ARCHIVE_DIR, '.gitkeep')]:
       '',
     'CLAUDE.md': buildEntry('claude'),

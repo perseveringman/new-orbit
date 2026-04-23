@@ -1,7 +1,9 @@
 export interface TerminalNavigationIntent {
   projectUid: string;
+  orbitSessionId?: string;
   paneId?: string;
   initialCommand?: string;
+  openMode?: 'focus-pane' | 'resume-session' | 'reopen-session';
 }
 
 let pendingIntent: TerminalNavigationIntent | null = null;

@@ -55,9 +55,14 @@ import {
   ingestTerminalHookEvent,
   listTerminalAgentSessions,
   markTerminalPaneExited,
-  reconcileTerminalAgentSessionsOnStart
+  reconcileTerminalAgentSessionsOnStart,
+  type TerminalAgentSession
 } from './terminal_sessions';
-import { findBestClaudeResumeTarget } from './claude_sessions';
+import {
+  readClaudeProjectSessionDetail,
+  resolveClaudeSessionTarget
+} from './claude_sessions';
+import { readCodexSessionMessages } from './codex_sessions';
 import { listProjects } from '../project';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
@@ -87,6 +92,28 @@ function broadcastTerminalAgentEvent(event: Record<string, unknown>): void {
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) w.webContents.send(TERMINAL_AGENT_EVENT_CHANNEL, event);
   }
+}
+
+async function enrichTerminalAgentSession(
+  session: TerminalAgentSession,
+  projectPath: string
+): Promise<TerminalAgentSession> {
+  if (session.resumeCommand) return session;
+  if (session.agentType !== 'claude') {
+    return { ...session, resumeCommand: undefined };
+  }
+  const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
+  const target = await resolveClaudeSessionTarget(claudeRoot, projectPath, {
+    vendorSessionId: session.vendorSessionId,
+    startedAt: session.startedAt,
+    ...(session.endedAt ? { endedAt: session.endedAt } : {})
+  });
+  if (!target) return session;
+  return {
+    ...session,
+    vendorSessionId: session.vendorSessionId ?? target.sessionId,
+    resumeCommand: `claude --resume ${target.sessionId}`
+  };
 }
 
 async function ensureHookRuntime(): Promise<HookServer> {
@@ -224,23 +251,67 @@ export function registerAgentIpc(): void {
     const projects = await listProjects(sess.vault);
     const project = projects.find((item) => item.uid === projectUid);
     if (!project) return sessions;
-    const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
     return Promise.all(
       sessions.map(async (session) => {
-        if (session.agentType !== 'claude') {
-          return { ...session, resumeSessionId: null, resumeCommand: null };
-        }
-        const target = await findBestClaudeResumeTarget(claudeRoot, project.path, {
-          startedAt: session.startedAt,
-          ...(session.endedAt ? { endedAt: session.endedAt } : {})
-        });
+        const enriched = await enrichTerminalAgentSession(session, project.path);
+        const resumeSessionId =
+          enriched.vendorSessionId && enriched.agentType === 'claude' ? enriched.vendorSessionId : null;
         return {
-          ...session,
-          resumeSessionId: target?.sessionId ?? null,
-          resumeCommand: target ? `claude --resume ${target.sessionId}` : null
+          ...enriched,
+          resumeSessionId,
+          resumeCommand: enriched.resumeCommand ?? null
         };
       })
     );
+  });
+
+  ipcMain.handle(IPC.terminalAgent.detail, async (_e, projectUid: string, sessionId: string) => {
+    const sess = currentSession();
+    if (!sess) return null;
+    const sessions = await listTerminalAgentSessions(sess.vault, projectUid);
+    const projects = await listProjects(sess.vault);
+    const project = projects.find((item) => item.uid === projectUid);
+    const session = sessions.find((item) => item.sessionId === sessionId);
+    if (!project || !session) return null;
+
+    const enriched = await enrichTerminalAgentSession(session, project.path);
+    if (enriched.agentType === 'codex') {
+      const messages = enriched.vendorSessionId
+        ? await readCodexSessionMessages(path.join(os.homedir(), '.codex'), enriched.vendorSessionId)
+        : [];
+      return {
+        ...enriched,
+        resumeSessionId: null,
+        resumeCommand: enriched.resumeCommand ?? null,
+        messages
+      };
+    }
+
+    if (enriched.agentType !== 'claude') {
+      return {
+        ...enriched,
+        resumeSessionId: null,
+        resumeCommand: enriched.resumeCommand ?? null,
+        messages: []
+      };
+    }
+
+    const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
+    const target = await resolveClaudeSessionTarget(claudeRoot, project.path, {
+      vendorSessionId: enriched.vendorSessionId,
+      startedAt: enriched.startedAt,
+      ...(enriched.endedAt ? { endedAt: enriched.endedAt } : {})
+    });
+    const detail = target
+      ? await readClaudeProjectSessionDetail(claudeRoot, project.path, target.sessionId)
+      : null;
+    return {
+      ...enriched,
+      resumeSessionId: target?.sessionId ?? null,
+      resumeCommand:
+        enriched.resumeCommand ?? (target ? `claude --resume ${target.sessionId}` : null),
+      messages: detail?.messages ?? []
+    };
   });
 
   ipcMain.handle(

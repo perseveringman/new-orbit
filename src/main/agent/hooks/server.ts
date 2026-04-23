@@ -15,6 +15,7 @@ export interface HookEnvelope {
 export interface TerminalHookEnvelope {
   eventType: OrbitHookEventType;
   rawEventType: string;
+  payload?: Record<string, unknown>;
   paneId?: string;
   projectUid?: string;
   ts: string;
@@ -73,9 +74,22 @@ export async function startHookServer(opts: StartHookServerOpts = {}): Promise<H
       const paneId = url.searchParams.get('paneId') ?? undefined;
       const projectUid = url.searchParams.get('projectUid') ?? undefined;
       const ts = url.searchParams.get('ts') ?? new Date().toISOString();
+      const rawPayload = url.searchParams.get('payload');
+      let payload: Record<string, unknown> = {};
+      if (rawPayload) {
+        try {
+          const parsed = JSON.parse(rawPayload);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            payload = parsed as Record<string, unknown>;
+          }
+        } catch {
+          payload = {};
+        }
+      }
       const envelope: TerminalHookEnvelope = {
         eventType,
         rawEventType,
+        payload,
         ...(paneId ? { paneId } : {}),
         ...(projectUid ? { projectUid } : {}),
         ts
