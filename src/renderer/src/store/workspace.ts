@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AppSettings, Theme, VaultInfo } from '@shared/types';
-import type { ProjectSummaryDTO } from '@shared/ipc';
+import type { AreaSummaryDTO, ProjectSummaryDTO } from '@shared/ipc';
 import { DEFAULT_APP_SETTINGS } from '@shared/schemas';
 
 interface WorkspaceState {
@@ -13,6 +13,7 @@ interface WorkspaceState {
   visionExcerpt: string | null;
   activeProjectUid: string | null;
   projects: ProjectSummaryDTO[];
+  areas: AreaSummaryDTO[];
 
   init(): Promise<void>;
   openVault(): Promise<void>;
@@ -23,6 +24,7 @@ interface WorkspaceState {
 
   refreshVision(): Promise<void>;
   refreshProjects(): Promise<ProjectSummaryDTO[]>;
+  refreshAreas(): Promise<AreaSummaryDTO[]>;
   setActiveProjectUid(uid: string | null): void;
 }
 
@@ -37,6 +39,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   visionExcerpt: null,
   activeProjectUid: null,
   projects: [],
+  areas: [],
 
   async init() {
     try {
@@ -49,6 +52,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       if (vault) {
         void get().refreshVision();
         void get().refreshProjects();
+        void get().refreshAreas();
       }
     } catch (e) {
       set({ loading: false, error: (e as Error).message });
@@ -61,6 +65,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ vault: res.vault, error: null });
       void get().refreshVision();
       void get().refreshProjects();
+      void get().refreshAreas();
     } else if (res.reason !== 'cancelled') set({ error: res.message ?? res.reason });
   },
 
@@ -70,12 +75,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       set({ vault: res.vault, error: null });
       void get().refreshVision();
       void get().refreshProjects();
+      void get().refreshAreas();
     } else if (res.reason !== 'cancelled') set({ error: res.message ?? res.reason });
   },
 
   async closeVault() {
     await window.orbit.workspace.close();
-    set({ vault: null, visionExcerpt: null, projects: [], activeProjectUid: null });
+    set({ vault: null, visionExcerpt: null, projects: [], areas: [], activeProjectUid: null });
   },
 
   async setTheme(theme: Theme) {
@@ -106,6 +112,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       return list;
     } catch {
       set({ projects: [] });
+      return [];
+    }
+  },
+
+  async refreshAreas() {
+    try {
+      const list = await window.orbit.area.list();
+      set({ areas: list });
+      return list;
+    } catch {
+      set({ areas: [] });
       return [];
     }
   },

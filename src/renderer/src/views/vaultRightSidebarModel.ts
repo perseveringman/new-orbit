@@ -7,7 +7,8 @@ export type VaultViewKind =
   | 'journals'
   | 'project'
   | 'kanban'
-  | 'area';
+  | 'area'
+  | 'areaRoom';
 
 export type ProjectRoomMode = 'kanban' | 'terminal' | 'sessions' | 'github';
 
@@ -20,6 +21,7 @@ export type SidebarSurfaceId =
   | 'journals'
   | 'kanban'
   | 'area'
+  | 'areaRoom'
   | 'project.kanban'
   | 'project.terminal'
   | 'project.sessions'
@@ -102,6 +104,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
     ]
   },
   area: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
+  },
+  areaRoom: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
   },
   'project.kanban': {

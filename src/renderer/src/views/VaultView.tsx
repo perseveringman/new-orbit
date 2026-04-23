@@ -18,6 +18,7 @@ import { CloseProjectDialog } from '../components/CloseProjectDialog';
 import { InboxView } from './InboxView';
 import { TodayView } from './TodayView';
 import { KanbanView } from './KanbanView';
+import { AreaRoomView } from './AreaRoomView';
 import { AreaOverview } from './AreaOverview';
 import { DashboardView } from './DashboardView';
 import { GitHubWorkspaceView } from './GitHubWorkspaceView';
@@ -25,6 +26,7 @@ import { ProjectRoomView } from './ProjectRoomView';
 import { JournalHistoryView } from './JournalHistoryView';
 import { NightShiftHistoryDrawer } from '../components/NightShiftHistoryDrawer';
 import { NewProjectModal } from '../components/Modals/NewProjectModal';
+import { NewAreaModal } from '../components/Modals/NewAreaModal';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { ReviewInboxView } from './ReviewInboxView';
 import { RunLogPane } from '../components/RunLogPane';
@@ -32,6 +34,7 @@ import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
 import { applyTerminalPaneEvent } from '../components/Terminal/terminalAgentStatus';
 import { terminalPaneStatusRegistry } from '../components/Terminal/terminalPaneStatusRegistry';
 import { useReviewQueue } from '../store/reviewQueue';
+import { deriveProjectRoomInstanceKey } from './projectRoomModel';
 import {
   getSidebarIntentTabs,
   getSidebarPanelTabs,
@@ -354,9 +357,11 @@ export function VaultView(): JSX.Element {
         ) : view.kind === 'journals' ? (
           <JournalHistoryView />
         ) : view.kind === 'project' ? (
-          <ProjectRoomView />
+          <ProjectRoomView key={deriveProjectRoomInstanceKey(activeProjectUid)} />
         ) : view.kind === 'kanban' ? (
           <KanbanView projectUid={view.projectUid} />
+        ) : view.kind === 'areaRoom' ? (
+          <AreaRoomView key={view.areaUid} />
         ) : (
           <AreaOverview areaUid={view.areaUid} />
         )}
@@ -401,6 +406,7 @@ export function VaultView(): JSX.Element {
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <NightShiftHistoryDrawer open={nsHistoryOpen} onClose={() => setNsHistoryOpen(false)} />
       <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
+      <NewAreaModal />
       {view.kind === 'project' && (
         <NewTaskModal
           open={newTaskOpen}
