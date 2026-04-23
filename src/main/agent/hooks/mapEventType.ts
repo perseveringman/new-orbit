@@ -10,7 +10,10 @@ export interface RawHookPayload {
  * Supports Claude Code Stop/PreToolUse hooks, Codex exec_approval_request,
  * and a generic {type:'start'|'stop'|...} fallback.
  */
-export function mapEventType(vendor: string | undefined, payload: RawHookPayload): OrbitHookEventType {
+export function mapEventType(
+  vendor: string | undefined,
+  payload: RawHookPayload
+): OrbitHookEventType {
   if (vendor === 'claude') {
     const name = payload.hook_event_name;
     if (name === 'Stop') return 'Stop';
@@ -40,10 +43,11 @@ const TERMINAL_START_EVENTS = new Set([
   'task_started'
 ]);
 
+const TERMINAL_PROGRESS_EVENTS = new Set(['Progress', 'Notification', 'progress', 'notification']);
+
 const TERMINAL_PERMISSION_EVENTS = new Set([
   'PermissionRequest',
   'PreToolUse',
-  'Notification',
   'pre_tool_use',
   'exec_approval_request',
   'apply_patch_approval_request',
@@ -63,6 +67,7 @@ export function mapTerminalEventType(rawEventType: string): OrbitHookEventType |
   const name = rawEventType.trim();
   if (!name) return null;
   if (TERMINAL_START_EVENTS.has(name)) return 'Start';
+  if (TERMINAL_PROGRESS_EVENTS.has(name)) return 'Progress';
   if (TERMINAL_PERMISSION_EVENTS.has(name)) return 'PermissionRequest';
   if (TERMINAL_STOP_EVENTS.has(name)) return 'Stop';
   return null;

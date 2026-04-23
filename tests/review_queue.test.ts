@@ -133,4 +133,58 @@ describe('review queue store', () => {
     );
     globalThis.localStorage = originalLocalStorage;
   });
+
+  it('clears terminal permission requests after follow-up terminal activity', () => {
+    useReviewQueue.getState().reset();
+
+    useReviewQueue.getState().ingestTerminalEvent({
+      eventType: 'PermissionRequest',
+      projectUid: 'project-1',
+      paneId: 'pane-7',
+      sessionId: 'sess-9',
+      ts: '2026-04-23T03:32:00Z',
+      reason: 'hook',
+      payload: {
+        tool_name: 'Edit',
+        reason: 'Edit README.md'
+      }
+    });
+    useReviewQueue.getState().ingestTerminalEvent({
+      eventType: 'Progress',
+      projectUid: 'project-1',
+      paneId: 'pane-7',
+      sessionId: 'sess-9',
+      ts: '2026-04-23T03:33:00Z',
+      reason: 'hook',
+      rawEventType: 'Notification'
+    });
+
+    expect(useReviewQueue.getState().items).toEqual([]);
+  });
+
+  it('clears pane-keyed terminal approvals when a later session event includes a session id', () => {
+    useReviewQueue.getState().reset();
+
+    useReviewQueue.getState().ingestTerminalEvent({
+      eventType: 'PermissionRequest',
+      projectUid: 'project-1',
+      paneId: 'pane-7',
+      ts: '2026-04-23T03:32:00Z',
+      reason: 'hook',
+      payload: {
+        tool_name: 'Edit'
+      }
+    });
+    useReviewQueue.getState().ingestTerminalEvent({
+      eventType: 'Start',
+      projectUid: 'project-1',
+      paneId: 'pane-7',
+      sessionId: 'sess-10',
+      ts: '2026-04-23T03:33:00Z',
+      reason: 'hook',
+      rawEventType: 'PostToolUse'
+    });
+
+    expect(useReviewQueue.getState().items).toEqual([]);
+  });
 });

@@ -4,7 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Inbox 终端审批同步**：terminal approval 卡片在终端里批准/继续执行后会及时清除待审批状态；`Notification` hook 统一按进度事件处理，避免审批消息卡住
+
 ### Added
+
 - **Area Room + Vision System 设计方案**：`docs/plans/2026-04-23-area-room-vision-system-design.md`（status: active）；设计 Area 升级为文件夹单元（含 Kanban + Terminal + Sessions）；内置 Vision 模板（基于 45 题访谈协议 + 笔记接入 + 迭代 review 流程）；vault 创建时自动 scaffold vision area
 - **Area Room 渲染层**：新增 `AreasNav` 侧边栏、`NewAreaModal`、`AreaRoomView`（Overview/Terminal/Sessions）、`VisionRoomContent`（冷态 + VISION.md 展示）；workspace store 加入 `areas` 状态与 `refreshAreas()`；`WorkspaceView` 新增 `areaRoom` 变体
 
@@ -13,6 +18,7 @@
 ## [2026-04-23]
 
 ### Added
+
 - **Contextual Right Sidebar**：右侧栏改为跟随当前页面上下文，三级 tab（Overview / Focus / Execution）；Project Room 下的 task detail、session list、run log、diff 各归其位
 - **`.orbit`-First Agent Exposure**：项目级 Orbit 数据统一收敛到 `.orbit/`；新增 `agent_exposure` 项目配置（isolated / bridge / compatible）；社区规范文件（`AGENT.md` / `AGENTS.md` / `.mcp.json`）仅作兼容桥接
 - **GitHub Integration**：以 `gh` CLI 为基础的 GitHub 连接、仓库导入、发布、PR 创建与状态读取；`src/main/github/` 模块 + IPC surface
@@ -20,6 +26,7 @@
 - **Capture & Content System 方案文档**：`docs/plans/2026-04-23-capture-and-content-system.md`（status: draft）
 
 ### Changed
+
 - 终端环境注入优化：`ORBIT_VAULT_PATH`、`ORBIT_PROJECT_UID`、`ORBIT_PROJECT_SLUG` 注入时机提前；pty 启动更稳定
 
 ---
@@ -27,6 +34,7 @@
 ## [2026-04-22]
 
 ### Added
+
 - **Agent Context Architecture 设计**：`docs/plans/` 新增整体方案分析 + 方案 A / C / D 详细设计（status: draft）
 - **Terminal Session Awareness 设计**：`docs/plans/2026-04-22-orbit-terminal-session-awareness.md`（已落地为 Project Session History）
 
@@ -35,6 +43,7 @@
 ## [2026-04 初期 — v1.0 基础功能]
 
 ### Added
+
 - Electron 三进程架构（main / preload / renderer），contextBridge + `window.orbit` typed API
 - PARA vault（`01_Projects` / `02_Areas` / `03_Resources` / `04_Archives`）+ refmap UID 系统
 - 文件系统 IPC（`fs:*`）：原子写入、backlink-safe rename、watcher rename heuristic、MiniSearch 全文索引

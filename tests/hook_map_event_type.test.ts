@@ -44,6 +44,10 @@ describe('mapTerminalEventType', () => {
     expect(mapTerminalEventType('exec_approval_request')).toBe('PermissionRequest');
   });
 
+  it('maps terminal progress hook names', () => {
+    expect(mapTerminalEventType('Notification')).toBe('Progress');
+  });
+
   it('maps terminal stop-family hook names and ignores unknown names', () => {
     expect(mapTerminalEventType('Stop')).toBe('Stop');
     expect(mapTerminalEventType('session_end')).toBe('Stop');
