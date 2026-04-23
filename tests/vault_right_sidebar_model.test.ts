@@ -1,24 +1,55 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getVisibleRightPaneTabs,
-  resolveVisibleRightPaneTab
+  getSidebarIntentTabs,
+  getSidebarPanelTabs,
+  resolveSidebarIntentTab,
+  resolveSidebarPanelTab,
+  resolveSidebarSurface
 } from '../src/renderer/src/views/vaultRightSidebarModel';
 
 describe('vault right sidebar model', () => {
-  it('shows Session History only on project pages', () => {
-    expect(getVisibleRightPaneTabs('project').map((tab) => tab.id)).toContain('sessions');
-    expect(getVisibleRightPaneTabs('editor').map((tab) => tab.id)).not.toContain('sessions');
-    expect(getVisibleRightPaneTabs('dashboard').map((tab) => tab.id)).not.toContain('sessions');
+  it('maps project room modes to distinct sidebar surfaces', () => {
+    expect(resolveSidebarSurface({ kind: 'editor' })).toBe('editor');
+    expect(
+      resolveSidebarSurface({ kind: 'project', projectUid: 'project-1' }, 'kanban')
+    ).toBe('project.kanban');
+    expect(
+      resolveSidebarSurface({ kind: 'project', projectUid: 'project-1' }, 'terminal')
+    ).toBe('project.terminal');
   });
 
-  it('shows Backlinks only in editor view', () => {
-    expect(getVisibleRightPaneTabs('editor').map((tab) => tab.id)).toContain('backlinks');
-    expect(getVisibleRightPaneTabs('project').map((tab) => tab.id)).not.toContain('backlinks');
+  it('exposes top-level intents and shared panels per surface', () => {
+    expect(getSidebarIntentTabs('editor').map((tab) => tab.id)).toEqual(['overview']);
+    expect(getSidebarPanelTabs('editor', 'overview').map((tab) => tab.id)).toEqual([
+      'files',
+      'backlinks'
+    ]);
+
+    expect(getSidebarIntentTabs('project.kanban').map((tab) => tab.id)).toEqual([
+      'overview',
+      'focus',
+      'execution'
+    ]);
+    expect(getSidebarPanelTabs('project.kanban', 'focus').map((tab) => tab.id)).toEqual([
+      'task-detail'
+    ]);
+
+    expect(getSidebarPanelTabs('project.terminal', 'overview').map((tab) => tab.id)).toEqual([
+      'task-tree'
+    ]);
+    expect(getSidebarPanelTabs('project.terminal', 'execution').map((tab) => tab.id)).toEqual([
+      'sessions',
+      'runlog',
+      'diff'
+    ]);
   });
 
-  it('falls back to files when the active tab is hidden in the current view', () => {
-    expect(resolveVisibleRightPaneTab('backlinks', 'dashboard')).toBe('files');
-    expect(resolveVisibleRightPaneTab('sessions', 'editor')).toBe('files');
-    expect(resolveVisibleRightPaneTab('sessions', 'project')).toBe('sessions');
+  it('falls back to a valid intent and panel when previous selection is unavailable', () => {
+    expect(resolveSidebarIntentTab('editor', 'execution')).toBe('overview');
+    expect(resolveSidebarPanelTab('editor', 'overview', 'sessions')).toBe('files');
+    expect(resolveSidebarPanelTab('project.terminal', 'focus', 'runlog')).toBe(
+      'task-detail'
+    );
+    expect(resolveSidebarPanelTab('dashboard', 'execution', 'sessions')).toBe('agent');
   });
 });

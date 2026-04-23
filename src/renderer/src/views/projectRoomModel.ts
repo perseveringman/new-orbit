@@ -1,13 +1,16 @@
+import type { SidebarSurfaceId } from './vaultRightSidebarModel';
+
 export type ProjectRoomHeaderAction = 'enable-orbit-tools' | 'archive-project';
+export type ProjectRoomOuterTab = 'kanban' | 'terminal';
 
 export interface ProjectRoomKanbanModel {
   headerActions: ProjectRoomHeaderAction[];
   documentTabs: [];
-  detailSurface: 'modal';
+  detailSurface: 'sidebar';
   kanbanPaneClassName: 'flex-1';
-  taskModal: {
-    open: boolean;
-    taskId: string | null;
+  taskPanel: {
+    panelId: 'task-detail';
+    selectedTaskId: string | null;
     emptyStateMessage: string;
   };
 }
@@ -19,17 +22,23 @@ export function deriveProjectRoomKanbanModel(args: {
   return {
     headerActions: ['enable-orbit-tools', 'archive-project'],
     documentTabs: [],
-    detailSurface: 'modal',
+    detailSurface: 'sidebar',
     kanbanPaneClassName: 'flex-1',
-    taskModal: {
-      open: args.selectedTaskId !== null,
-      taskId: args.selectedTaskId,
+    taskPanel: {
+      panelId: 'task-detail',
+      selectedTaskId: args.selectedTaskId,
       emptyStateMessage:
         args.taskCount === 0
           ? 'Create a task to begin.'
           : 'Select a task from the Kanban to edit.'
     }
   };
+}
+
+export function resolveProjectRoomSidebarSurface(
+  outerTab: ProjectRoomOuterTab
+): SidebarSurfaceId {
+  return outerTab === 'terminal' ? 'project.terminal' : 'project.kanban';
 }
 
 export function resolveProjectRoomPaneHint(pane?: 'task'): 'task' | null;
