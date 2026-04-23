@@ -38,6 +38,7 @@
 | `.orbit`-First Agent Exposure | 项目 Orbit 数据收敛到 `.orbit/`；`agent_exposure` 策略（isolated/bridge/compatible）；社区规范文件兼容 |
 | GitHub Integration | 以 `gh` CLI 为基础的 GitHub 连接、导入、发布、PR 创建、状态读取 |
 | Project Session History | 终端 agent 会话作为项目级历史记录，支持 Claude/Codex transcript 导入，Session History tab |
+| Area Room + Vision System | Area 升级为独立工作单元（Kanban / Terminal / Sessions）；内置 Vision 模板、笔记接入、Vision 冷启动与 review 工作流 |
 
 ---
 
@@ -46,8 +47,7 @@
 | 功能 | 文档 | 状态 |
 | --- | --- | --- |
 | Agent Context System | `docs/plans/2026-04-22-orbit-agent-context-architecture.md`（+ scheme-a/c/d） | 设计中，待选型落地 |
-| Capture & Content System | `docs/plans/2026-04-23-capture-and-content-system.md` | 设计中 |
-| **Area Room + Vision System** | `docs/plans/2026-04-23-area-room-vision-system-design.md` | 设计完成，待实施 |
+| Capture & Knowledge Funnel | `docs/plans/2026-04-24-capture-knowledge-funnel.md` | 设计中 |
 
 ---
 
@@ -64,12 +64,12 @@
 
 参考 `docs/plans/` 中的设计方案。
 
-### P2 — Capture & Content System
+### P2 — Capture & Knowledge Funnel
 
-- Quick Capture 入口（全局快捷键，不依赖项目上下文）
-- Voice Log（语音转文字，存为 `.md`）
-- Scratch Pad（临时便签，定期归类提醒）
-- Reading/Notes 模块（URL 抓取 + 批注）
+- Universal Quick Capture（`Task / Note / Link`）
+- Resource Workspace（captured / imported / distilled 统一入口）
+- Reading Capture（URL / 摘录 → resource）
+- Voice transcript-first（延后）
 
 ### P3 — GitHub 深度集成
 

@@ -25,6 +25,7 @@
 - **Areas 左侧导航层级**：移除 Workspace 区的 `Area Overview` 入口，并恢复 `Areas` 独立分组，让它以 `Workspace → Areas → Projects` 的层级出现在左栏
 - **Areas 侧边栏**：改为 Vision 置顶、按 tag 分组展示，且新建 Area 后会直接进入对应 Area Room
 - **Area 创建流**：`NewAreaModal` 现在支持 blank / vision 模板与 GitHub 仓库导入；GitHub 导入内容会落入 Area 目录但不会保留独立 `.git`
+- **Capture 文档基线**：归档旧版 `2026-04-23-capture-and-content-system.md`，新增 `2026-04-24-capture-knowledge-funnel.md`；方案重心从孤立内容模块调整为 `task / resource` 双实体漏斗，并同步更新 ROADMAP 对应条目
 
 ---
 
