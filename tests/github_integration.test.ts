@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
 import { createVault } from '../src/main/vault';
-import { createProject, readProjectConfig } from '../src/main/project';
+import { createProject, listProjects, readProjectConfig } from '../src/main/project';
 import {
   createGitHubPullRequest,
   getGitHubProjectState,
@@ -143,6 +143,73 @@ describe('github integration core', () => {
     await expect(
       fs.readFile(path.join(imported.projectPath, '.orbit', 'config.json'), 'utf8')
     ).resolves.toContain('"template": "imported-github"');
+  });
+
+  it('keeps the Orbit uid authoritative when an imported repo already has README frontmatter', async () => {
+    const ghDeps = {
+      cloneRepo: async (_fullName: string, targetDir: string) => {
+        await fs.mkdir(path.join(targetDir, '.git'), { recursive: true });
+        await fs.writeFile(
+          path.join(targetDir, 'README.md'),
+          [
+            '---',
+            'uid: legacy-readme-uid',
+            'title: Foreign README',
+            'status: active',
+            '---',
+            '',
+            '# Space Kit',
+            '',
+            'Imported repo.'
+          ].join('\n'),
+          'utf8'
+        );
+        const git = simpleGit(targetDir);
+        await git.init();
+        await git.add('.');
+        await git.commit('init');
+        await git.addRemote('origin', 'git@github.com:acme/space-kit.git');
+      },
+      runGh: async (args: string[]) => {
+        if (args[0] === 'repo' && args[1] === 'view') {
+          return {
+            stdout: JSON.stringify({
+              nameWithOwner: 'acme/space-kit',
+              url: 'https://github.com/acme/space-kit',
+              sshUrl: 'git@github.com:acme/space-kit.git',
+              visibility: 'PUBLIC',
+              defaultBranchRef: { name: 'main' }
+            }),
+            code: 0
+          };
+        }
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return { stdout: 'no pull requests found for branch "main"', code: 1 };
+        }
+        if (args[0] === 'auth' && args[1] === 'status') {
+          return { stdout: 'github.com\n  ✓ Logged in to github.com account orbit-test', code: 0 };
+        }
+        throw new Error(`unexpected gh command: ${args.join(' ')}`);
+      }
+    };
+
+    const imported = await importGitHubRepository(
+      vault,
+      {
+        owner: 'acme',
+        repo: 'space-kit'
+      },
+      ghDeps
+    );
+
+    const [project] = await listProjects(vault);
+    expect(project?.uid).toBe(imported.uid);
+
+    await expect(getGitHubProjectState(vault, project!.uid, ghDeps)).resolves.toMatchObject({
+      binding: {
+        fullName: 'acme/space-kit'
+      }
+    });
   });
 
   it('summarizes binding, sync state and current branch PR for a linked project', async () => {

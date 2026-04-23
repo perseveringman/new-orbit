@@ -222,12 +222,12 @@ function parseReadmeSummary(
 ): ProjectSummary {
   const { data } = frontmatter.read(readmeRaw);
   const uid =
-    (typeof data['uid'] === 'string' ? (data['uid'] as string) : '') ||
     config?.uid ||
+    (typeof data['uid'] === 'string' ? (data['uid'] as string) : '') ||
     '';
   const slug =
-    (typeof data['slug'] === 'string' ? (data['slug'] as string) : '') ||
     config?.slug ||
+    (typeof data['slug'] === 'string' ? (data['slug'] as string) : '') ||
     path.basename(dir);
   const name =
     (typeof data['title'] === 'string' ? (data['title'] as string) : '') ||
@@ -252,9 +252,8 @@ function parseReadmeSummary(
   if (typeof data['created_at'] === 'string') summary.created_at = data['created_at'];
   if (typeof data['archived_at'] === 'string')
     summary.archived_at = data['archived_at'] as string;
-  if (typeof data['template'] === 'string')
-    summary.template = data['template'] as string;
-  else if (config?.template) summary.template = config.template;
+  if (config?.template) summary.template = config.template;
+  else if (typeof data['template'] === 'string') summary.template = data['template'] as string;
   if (typeof data['area_uid'] === 'string')
     summary.area_uid = data['area_uid'] as string;
   if (config?.github) summary.github = config.github;

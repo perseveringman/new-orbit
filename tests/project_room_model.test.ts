@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  deriveProjectRoomInstanceKey,
   resolveProjectRoomPaneHint,
   resolveProjectRoomSidebarPanel,
   resolveProjectRoomSidebarSurface,
@@ -28,5 +29,14 @@ describe('project room model', () => {
     const outerTab: ProjectRoomOuterTab = 'github';
     expect(resolveProjectRoomSidebarSurface(outerTab)).toBe('project.github');
     expect(resolveProjectRoomPaneHint('github')).toBe('github');
+  });
+
+  it('derives a distinct room instance key for each active project', () => {
+    expect(deriveProjectRoomInstanceKey(null)).toBe('project-room:none');
+    expect(deriveProjectRoomInstanceKey('project-a')).toBe('project-room:project-a');
+    expect(deriveProjectRoomInstanceKey('project-b')).toBe('project-room:project-b');
+    expect(deriveProjectRoomInstanceKey('project-a')).not.toBe(
+      deriveProjectRoomInstanceKey('project-b')
+    );
   });
 });
