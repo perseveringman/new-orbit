@@ -19,7 +19,7 @@
 
 ### Changed
 
-- **Areas 左侧导航层级**：移除 Workspace 区的 `Area Overview` 入口，让 Areas 只作为和 Projects 平级的独立区块出现
+- **Areas 左侧导航层级**：移除 Workspace 区的 `Area Overview` 入口，并恢复 `Areas` 独立分组，让它以 `Workspace → Areas → Projects` 的层级出现在左栏
 - **Areas 侧边栏**：改为 Vision 置顶、按 tag 分组展示，且新建 Area 后会直接进入对应 Area Room
 - **Area 创建流**：`NewAreaModal` 现在支持 blank / vision 模板与 GitHub 仓库导入；GitHub 导入内容会落入 Area 目录但不会保留独立 `.git`
 

@@ -62,7 +62,7 @@ export function AreasNav(): JSX.Element {
           title="New area"
           className="rounded px-1.5 py-0.5 text-[11px] text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-neutral-300"
         >
-          +
+          Create
         </button>
       </div>
 

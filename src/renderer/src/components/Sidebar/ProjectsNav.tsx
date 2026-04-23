@@ -4,6 +4,7 @@ import { useWorkspace } from '../../store/workspace';
 import type { ProjectSummaryDTO } from '@shared/ipc';
 import type { TaskRecord } from '@shared/schemas';
 import { WORKSPACE_DESTINATIONS, type WorkspaceDestination } from '../topbarModel';
+import { AreasNav } from './AreasNav';
 
 function isQuickItemActive(view: WorkspaceView, it: WorkspaceDestination): boolean {
   if (view.kind !== it.view.kind) return false;
@@ -96,6 +97,10 @@ export function ProjectsNav(): JSX.Element {
           );
         })}
       </ul>
+
+      <hr className="my-2 border-neutral-200 dark:border-neutral-800" />
+
+      <AreasNav />
 
       <hr className="my-2 border-neutral-200 dark:border-neutral-800" />
 
