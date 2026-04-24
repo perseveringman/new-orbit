@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Global Role Template Agents 设计方案**：新增 `docs/plans/2026-04-25-orbit-role-template-agent-design.md`，将 Orbit 的 agent 设计收敛为全局角色模板 + 项目角色绑定 + 运行实例三层模型，明确模板版本化、binding 调度模式、历史任务双入口、binding 健康状态，以及与 planner / dispatch / runtime 方案的衔接
 - **Local Runtime Architecture 设计方案**：新增 `docs/plans/2026-04-24-orbit-local-runtime-architecture.md`，分析 Multica 的 runtime discovery / communication / runtime-aware orchestration，并为 Orbit 设计 Electron 本机本进程方案（LocalRuntimeManager、RuntimeProbe、DispatchService、ProviderAdapter），同时预留向本地 sidecar daemon 扩展的接口
 - **Planner Agent + Agent Dispatching 设计方案**：新增 `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md`，明确规划画布、依赖图、`waiting` 列、任务 ownership、事务性认领与 Night Shift 向 agent dispatching 演进的路线
 

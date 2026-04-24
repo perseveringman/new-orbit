@@ -51,6 +51,7 @@
 | Capture & Knowledge Funnel | `docs/plans/2026-04-24-capture-knowledge-funnel.md` | 设计中 |
 | Planner Agent + Agent Dispatching | `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md` | 设计中 |
 | Local Runtime Architecture | `docs/plans/2026-04-24-orbit-local-runtime-architecture.md` | 设计中 |
+| Global Role Template Agents | `docs/plans/2026-04-25-orbit-role-template-agent-design.md` | 设计中 |
 
 ---
 
@@ -88,19 +89,26 @@
 - 用进程内 runtime 协议替代直接散落的 `startTask` 触发
 - 为未来本地 sidecar daemon 预留 transport / lease / execution 接口
 
-### P5 — GitHub 深度集成
+### P5 — Global Role Template Agents
+
+- 全局沉淀 `planner / executor / reviewer / researcher` 等角色模板
+- 项目通过 binding 引用模板，并支持轻量 project overlay
+- 角色模板版本化发布，项目显式升级
+- 任务 owner / history / run detail 围绕 binding 而非单一 agent 展开
+
+### P6 — GitHub 深度集成
 
 - Issue → Task 双向同步
 - PR review 状态在 Project Room 展示
 - Night Shift 结果直接推到指定远程分支
 
-### P6 — 性能与稳定性
+### P7 — 性能与稳定性
 
 - 大 vault（>1000 文件）的索引性能优化
 - Electron 启动时间优化
 - 自动崩溃恢复改善
 
-### P7 — 跨平台支持
+### P8 — 跨平台支持
 
 - Linux（AppImage/snap）
 - Windows（NSIS installer）
