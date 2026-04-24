@@ -32,6 +32,7 @@ import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { ReviewInboxView } from './ReviewInboxView';
 import { RunLogPane } from '../components/RunLogPane';
 import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
+import { WorkspaceInspectorPane } from '../components/Inspector/WorkspaceInspectorPane';
 import { applyTerminalPaneEvent } from '../components/Terminal/terminalAgentStatus';
 import { terminalPaneStatusRegistry } from '../components/Terminal/terminalPaneStatusRegistry';
 import { useReviewQueue } from '../store/reviewQueue';
@@ -45,6 +46,7 @@ import {
 
 function isSidebarPanelId(value: string): value is SidebarPanelId {
   return (
+    value === 'inspector' ||
     value === 'files' ||
     value === 'area-config' ||
     value === 'backlinks' ||
@@ -295,6 +297,7 @@ export function VaultView(): JSX.Element {
   }
 
   function renderSidebarPanel(): JSX.Element {
+    if (sidebarPanel === 'inspector') return <WorkspaceInspectorPane />;
     if (sidebarPanel === 'files') {
       return tree ? <FileTree root={tree} /> : <p className="text-xs text-neutral-500">Scanning…</p>;
     }

@@ -62,6 +62,14 @@ describe('sidebar store', () => {
     expect(useSidebar.getState().panel).toBe('files');
   });
 
+  it('can open and remember the inspector panel', () => {
+    useSidebar.getState().openPanel({ panel: 'inspector' as never });
+    expect(useSidebar.getState().panel).toBe('inspector');
+    useSidebar.getState().setSurface('project.kanban');
+    useSidebar.getState().setSurface('editor');
+    expect(useSidebar.getState().panel).toBe('inspector');
+  });
+
   it('keeps the selected session in sidebar focus for the project sessions surface', () => {
     useSidebar.getState().setSurface('project.sessions');
     useSidebar

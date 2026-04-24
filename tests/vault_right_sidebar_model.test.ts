@@ -26,7 +26,8 @@ describe('vault right sidebar model', () => {
     expect(getSidebarIntentTabs('editor').map((tab) => tab.id)).toEqual(['overview']);
     expect(getSidebarPanelTabs('editor', 'overview').map((tab) => tab.id)).toEqual([
       'files',
-      'backlinks'
+      'backlinks',
+      'inspector'
     ]);
 
     expect(getSidebarIntentTabs('project.kanban').map((tab) => tab.id)).toEqual([
@@ -39,7 +40,8 @@ describe('vault right sidebar model', () => {
     ]);
 
     expect(getSidebarPanelTabs('project.terminal', 'overview').map((tab) => tab.id)).toEqual([
-      'task-tree'
+      'task-tree',
+      'inspector'
     ]);
     expect(getSidebarPanelTabs('project.terminal', 'execution').map((tab) => tab.id)).toEqual([
       'sessions',
@@ -48,8 +50,18 @@ describe('vault right sidebar model', () => {
     ]);
     expect(getSidebarPanelTabs('project.github', 'overview').map((tab) => tab.id)).toEqual([
       'task-tree',
-      'worktrees'
+      'worktrees',
+      'inspector'
     ]);
+  });
+
+  it('exposes inspector panel on editor, areaRoom, and every project surface', () => {
+    expect(getSidebarPanelTabs('editor', 'overview').map((tab) => tab.id)).toContain('inspector');
+    expect(getSidebarPanelTabs('areaRoom', 'overview').map((tab) => tab.id)).toContain('inspector');
+    expect(getSidebarPanelTabs('project.kanban', 'overview').map((tab) => tab.id)).toContain('inspector');
+    expect(getSidebarPanelTabs('project.terminal', 'overview').map((tab) => tab.id)).toContain('inspector');
+    expect(getSidebarPanelTabs('project.sessions', 'overview').map((tab) => tab.id)).toContain('inspector');
+    expect(getSidebarPanelTabs('project.github', 'overview').map((tab) => tab.id)).toContain('inspector');
   });
 
   it('falls back to a valid intent and panel when previous selection is unavailable', () => {

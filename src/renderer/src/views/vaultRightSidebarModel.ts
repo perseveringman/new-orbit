@@ -30,6 +30,7 @@ export type SidebarSurfaceId =
 export type SidebarIntentId = 'overview' | 'focus' | 'execution';
 
 export type SidebarPanelId =
+  | 'inspector'
   | 'files'
   | 'area-config'
   | 'backlinks'
@@ -61,6 +62,7 @@ interface SidebarSurfaceProfile {
 }
 
 const PANEL_TITLES: Record<SidebarPanelId, string> = {
+  inspector: 'Inspector',
   files: 'Files',
   'area-config': 'Area',
   backlinks: 'Backlinks',
@@ -76,7 +78,7 @@ const PANEL_TITLES: Record<SidebarPanelId, string> = {
 
 const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   editor: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks'] }]
+    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks', 'inspector'] }]
   },
   github: {
     intents: [
@@ -109,32 +111,32 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
   },
   areaRoom: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['area-config', 'files', 'sessions'] }]
+    intents: [{ id: 'overview', title: 'Overview', panels: ['area-config', 'files', 'sessions', 'inspector'] }]
   },
   'project.kanban': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree'] },
+      { id: 'overview', title: 'Overview', panels: ['task-tree', 'inspector'] },
       { id: 'focus', title: 'Focus', panels: ['task-detail'] },
       { id: 'execution', title: 'Execution', panels: ['agent', 'review', 'diff'] }
     ]
   },
   'project.terminal': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree'] },
+      { id: 'overview', title: 'Overview', panels: ['task-tree', 'inspector'] },
       { id: 'focus', title: 'Focus', panels: ['task-detail'] },
       { id: 'execution', title: 'Execution', panels: ['sessions', 'runlog', 'diff'] }
     ]
   },
   'project.sessions': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree'] },
+      { id: 'overview', title: 'Overview', panels: ['task-tree', 'inspector'] },
       { id: 'focus', title: 'Focus', panels: ['task-detail'] },
       { id: 'execution', title: 'Execution', panels: ['sessions', 'runlog', 'diff'] }
     ]
   },
   'project.github': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree', 'worktrees'] },
+      { id: 'overview', title: 'Overview', panels: ['task-tree', 'worktrees', 'inspector'] },
       { id: 'focus', title: 'Focus', panels: ['task-detail'] },
       { id: 'execution', title: 'Execution', panels: ['review', 'diff'] }
     ]
