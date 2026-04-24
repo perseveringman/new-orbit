@@ -49,6 +49,7 @@
 | --- | --- | --- |
 | Agent Context System | `docs/plans/2026-04-22-orbit-agent-context-architecture.md`（+ scheme-a/c/d） | 设计中，待选型落地 |
 | Capture & Knowledge Funnel | `docs/plans/2026-04-24-capture-knowledge-funnel.md` | 设计中 |
+| Planner Agent + Agent Dispatching | `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md` | 设计中 |
 
 ---
 
@@ -72,19 +73,26 @@
 - Reading Capture（URL / 摘录 → resource）
 - Voice transcript-first（延后）
 
-### P3 — GitHub 深度集成
+### P3 — Planner Agent + Agent Dispatching
+
+- Planner Agent 将高层目标拆分为任务图与依赖图
+- 规划画布支持版本切换、图结构 diff 与人工确认发布
+- 看板新增 `waiting` 列；`todo` 任务支持 agent 自动认领
+- 任务引入 owner / release / retry 语义，逐步替代 Night Shift 作为主执行入口
+
+### P4 — GitHub 深度集成
 
 - Issue → Task 双向同步
 - PR review 状态在 Project Room 展示
 - Night Shift 结果直接推到指定远程分支
 
-### P4 — 性能与稳定性
+### P5 — 性能与稳定性
 
 - 大 vault（>1000 文件）的索引性能优化
 - Electron 启动时间优化
 - 自动崩溃恢复改善
 
-### P5 — 跨平台支持
+### P6 — 跨平台支持
 
 - Linux（AppImage/snap）
 - Windows（NSIS installer）

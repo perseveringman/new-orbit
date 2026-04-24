@@ -6,6 +6,8 @@
 
 ### Added
 
+- **Planner Agent + Agent Dispatching 设计方案**：新增 `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md`，明确规划画布、依赖图、`waiting` 列、任务 ownership、事务性认领与 Night Shift 向 agent dispatching 演进的路线
+
 - **Workspace Inspector Files + Changes（Task 4 / Task 6）**：右侧栏新增统一 `inspector` 面板；Files tab 在 project surface 下切换到完整项目树（`fs:listProjectTree`），提供搜索、刷新、折叠和二进制文件保护；Changes tab 提供按目录分组的变更树、行级 stage / unstage / discard、统一 diff 预览、staged-only commit bar，以及与 GitHub 发布 / Create PR 共用的受控表单流
 
 - **Staged 感知 git 动作（Task 5）**：新建 `src/main/git/status.ts`，提供 `parsePorcelainStatus`（从 `mcp/tools.ts` 提取共享）、`getChanges`、`stagePaths`、`unstagePaths`、`discardPaths`、`commitSelection` 六个纯后端函数；在 IPC 合约（`src/shared/ipc.ts`、`src/shared/git.ts`）中注册 `git:getChanges`、`git:stagePaths`、`git:unstagePaths`、`git:discardPaths`、`git:commitSelection` 五个新 channel 并完成 preload 暴露与 main-side handler 注册；`commitSelection` 不执行隐式 `add -A`，空暂存区时抛出 `nothing_staged`；旧 `git:commit` 保持向后兼容
