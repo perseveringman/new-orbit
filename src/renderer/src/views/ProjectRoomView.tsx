@@ -278,51 +278,11 @@ export function ProjectRoomView(): JSX.Element {
   }
 
   async function publishToGitHub(): Promise<void> {
-    if (!project) return;
-    const owner = window.prompt('GitHub owner / organization');
-    if (!owner) return;
-    const repo = window.prompt('Repository name', project.slug);
-    if (!repo) return;
-    const visibility = window.confirm('Create as private repository?') ? 'private' : 'public';
-    try {
-      const next = await window.orbit.github.publishProject({
-        projectUid: project.uid,
-        owner: owner.trim(),
-        repo: repo.trim(),
-        visibility
-      });
-      setGitHubState(next);
-      await refreshProjects();
-      toast(`Published ${owner}/${repo}`);
-    } catch (e) {
-      toast(`Publish failed: ${(e as Error).message}`);
-    }
+    setOuterTab('github');
   }
 
   async function createPullRequest(): Promise<void> {
-    if (!project) return;
-    const title = window.prompt('Pull request title', `Orbit: ${project.name}`);
-    if (!title) return;
-    const draft = window.confirm('Create as draft pull request?');
-    try {
-      const pr = await window.orbit.github.createPullRequest({
-        projectUid: project.uid,
-        title: title.trim(),
-        draft
-      });
-      setGitHubState((current) =>
-        current
-          ? {
-              ...current,
-              pullRequest: pr
-            }
-          : current
-      );
-      toast(`Created PR #${pr.number}`);
-      void refreshGitHubState();
-    } catch (e) {
-      toast(`Create PR failed: ${(e as Error).message}`);
-    }
+    setOuterTab('github');
   }
 
   function openResumeSession(initialCommand?: string): void {

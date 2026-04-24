@@ -21,3 +21,26 @@ describe('formatShortSha', () => {
     expect(formatShortSha('1234567')).toBe('1234567');
   });
 });
+
+describe('classifyPatch', () => {
+  it('classifies metadata, hunks, additions, deletions, and context lines', async () => {
+    const mod = (await import('../src/renderer/src/components/DiffPane')) as Record<string, unknown>;
+    const classifyPatch = mod['classifyPatch'] as
+      | ((patch: string) => Array<{ kind: string; text: string }>)
+      | undefined;
+
+    expect(classifyPatch).toBeTypeOf('function');
+
+    const lines = classifyPatch?.(
+      [
+        'diff --git a/src/app.ts b/src/app.ts',
+        '@@ -1,2 +1,2 @@',
+        '-old line',
+        '+new line',
+        ' unchanged'
+      ].join('\n')
+    );
+
+    expect(lines?.map((line) => line.kind)).toEqual(['meta', 'hunk', 'del', 'add', 'ctx']);
+  });
+});

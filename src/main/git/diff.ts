@@ -196,3 +196,51 @@ export async function getStagedFileSummary(
   const raw = await git.raw(['diff', '--cached', '--numstat', ...ps]);
   return parseNumstat(raw);
 }
+
+/**
+ * Return tracked working-tree diffs relative to HEAD.
+ *
+ * This powers the Workspace Inspector Changes panel, which needs live patch
+ * previews for staged and unstaged tracked files. Untracked files are omitted
+ * here and are represented separately by `git status --short`.
+ */
+export async function getWorkingTreeDiff(
+  cwd: string,
+  pathspec?: string[]
+): Promise<DiffFile[]> {
+  const git = simpleGit(cwd);
+  const ps = pathspec && pathspec.length > 0 ? ['--', ...pathspec] : [];
+  const numstatRaw = await git.raw(['diff', 'HEAD', '--numstat', ...ps]);
+  const nameStatusRaw = await git.raw(['diff', 'HEAD', '--name-status', '-M', ...ps]);
+
+  const numstat = parseNumstat(numstatRaw);
+  const nameStatus = parseNameStatus(nameStatusRaw);
+  const byPath = new Map<string, NameStatusEntry>();
+  for (const entry of nameStatus) byPath.set(entry.path, entry);
+
+  const files: DiffFile[] = [];
+  for (const entry of numstat) {
+    const nameStatusEntry = byPath.get(entry.path);
+    const binary = entry.additions === null && entry.deletions === null;
+    let patch = '';
+    if (!binary) {
+      try {
+        patch = await git.raw(['diff', 'HEAD', '--', entry.path]);
+      } catch {
+        patch = '';
+      }
+    }
+
+    files.push({
+      path: entry.path,
+      oldPath: nameStatusEntry?.oldPath ?? entry.oldPath,
+      status: nameStatusEntry?.status ?? 'modified',
+      additions: entry.additions ?? 0,
+      deletions: entry.deletions ?? 0,
+      patch,
+      binary: binary || undefined
+    });
+  }
+
+  return files;
+}

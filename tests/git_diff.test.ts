@@ -148,3 +148,30 @@ describe('getStagedFileSummary', () => {
     }
   });
 });
+
+describe('getWorkingTreeDiff', () => {
+  it('returns current tracked working-tree diffs relative to HEAD', async () => {
+    const mod = (await import('../src/main/git/diff')) as Record<string, unknown>;
+    const getWorkingTreeDiff = mod['getWorkingTreeDiff'] as
+      | ((cwd: string, pathspec?: string[]) => Promise<Array<{ path: string; patch: string }>>)
+      | undefined;
+
+    expect(getWorkingTreeDiff).toBeTypeOf('function');
+
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-working-tree-diff-'));
+    try {
+      const g = await initRepo(dir);
+      await fs.writeFile(path.join(dir, 'a.ts'), 'line1\n');
+      await g.add('.');
+      await g.commit('init');
+
+      await fs.writeFile(path.join(dir, 'a.ts'), 'line1\nline2\n');
+
+      const files = await getWorkingTreeDiff?.(dir);
+      expect(files?.map((file) => file.path)).toContain('a.ts');
+      expect(files?.[0]?.patch).toContain('+line2');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});

@@ -139,6 +139,8 @@ describe('ProjectGitHubSurface', () => {
     const html = renderToStaticMarkup(
       createElement(ProjectGitHubSurface, {
         projectName: 'Orbit App',
+        projectUid: 'project-1',
+        projectSlug: 'orbit-app',
         tasks,
         details,
         activeTab: 'overview',
@@ -160,13 +162,83 @@ describe('ProjectGitHubSurface', () => {
     expect(html).toContain('Terminal flow');
     expect(html).toContain('Night Shift flow');
     expect(html).toContain('Start Night Shift');
-    expect(html).toContain('Create PR');
+    expect(html).toContain('PRs 1');
+  });
+
+  it('renders inline publish form fields instead of relying on prompts when the project is not linked', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProjectGitHubSurface, {
+        projectName: 'Orbit App',
+        projectUid: 'project-1',
+        projectSlug: 'orbit-app',
+        tasks,
+        details: {
+          ...details,
+          overview: {
+            ...details.overview,
+            binding: null,
+            sync: null,
+            pullRequest: null,
+            canPublish: true
+          }
+        },
+        activeTab: 'overview',
+        onSelectTab: noop,
+        onRefresh: noop,
+        onPublish: noop,
+        onCreatePullRequest: noop,
+        onOpenTerminal: noop,
+        onStartNightShift: noop,
+        onOpenPullRequest: noop,
+        onOpenIssue: noop,
+        onBindIssue: noop,
+        onUnbindTask: noop
+      })
+    );
+
+    expect(html).toContain('Owner / organization');
+    expect(html).toContain('Repository name');
+    expect(html).toContain('Publish');
+  });
+
+  it('renders inline pull request form fields when the repository is already linked', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProjectGitHubSurface, {
+        projectName: 'Orbit App',
+        projectUid: 'project-1',
+        projectSlug: 'orbit-app',
+        tasks,
+        details: {
+          ...details,
+          overview: {
+            ...details.overview,
+            pullRequest: null
+          }
+        },
+        activeTab: 'overview',
+        onSelectTab: noop,
+        onRefresh: noop,
+        onPublish: noop,
+        onCreatePullRequest: noop,
+        onOpenTerminal: noop,
+        onStartNightShift: noop,
+        onOpenPullRequest: noop,
+        onOpenIssue: noop,
+        onBindIssue: noop,
+        onUnbindTask: noop
+      })
+    );
+
+    expect(html).toContain('Pull request title');
+    expect(html).toContain('Create pull request');
   });
 
   it('renders issue binding controls and existing task links', () => {
     const html = renderToStaticMarkup(
       createElement(ProjectGitHubSurface, {
         projectName: 'Orbit App',
+        projectUid: 'project-1',
+        projectSlug: 'orbit-app',
         tasks,
         details,
         activeTab: 'issues',
@@ -193,6 +265,8 @@ describe('ProjectGitHubSurface', () => {
     const prsHtml = renderToStaticMarkup(
       createElement(ProjectGitHubSurface, {
         projectName: 'Orbit App',
+        projectUid: 'project-1',
+        projectSlug: 'orbit-app',
         tasks,
         details,
         activeTab: 'prs',
@@ -211,6 +285,8 @@ describe('ProjectGitHubSurface', () => {
     const worktreesHtml = renderToStaticMarkup(
       createElement(ProjectGitHubSurface, {
         projectName: 'Orbit App',
+        projectUid: 'project-1',
+        projectSlug: 'orbit-app',
         tasks,
         details,
         activeTab: 'worktrees',

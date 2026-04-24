@@ -33,10 +33,10 @@ import type {
 } from './agent';
 import type { BudgetSettings } from './schemas';
 import type {
-  ChangesFileEntry,
   ChangesSummary,
   CheckReport,
   CommitSelectionArgs,
+  DiffFile,
   DiffResult,
   EnvQueueStatus,
   GitStatusSummary,
@@ -144,6 +144,7 @@ export const IPC = {
     preMergeCheck: 'git:preMergeCheck',
     mergeGhost: 'git:mergeGhost',
     getChanges: 'git:getChanges',
+    getWorkingTreeDiff: 'git:getWorkingTreeDiff',
     stagePaths: 'git:stagePaths',
     unstagePaths: 'git:unstagePaths',
     discardPaths: 'git:discardPaths',
@@ -766,6 +767,8 @@ export interface OrbitApi {
     ): Promise<MergeResult>;
     /** Inspector: staged-aware change summary for a given cwd. */
     getChanges(args: { cwd: string }): Promise<ChangesSummary>;
+    /** Inspector: tracked working-tree patch summary relative to HEAD. */
+    getWorkingTreeDiff(args: { cwd: string; pathspec?: string[] }): Promise<DiffFile[]>;
     /** Inspector: stage specific paths. */
     stagePaths(args: StagePathsArgs): Promise<void>;
     /** Inspector: unstage specific paths. */

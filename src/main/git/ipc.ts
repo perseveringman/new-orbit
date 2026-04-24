@@ -25,6 +25,7 @@ import { getGitQueue } from './queue';
 import { getInstallLock } from '../env/install_lock';
 import { CheckCache } from './check_cache';
 import { computeMergeBaseDiff } from './diff';
+import { getWorkingTreeDiff } from './diff';
 import {
   getChanges as gitGetChanges,
   stagePaths as gitStagePaths,
@@ -110,6 +111,13 @@ export function registerGitIpc(): void {
         worktreePath: rec.path,
         base: args.base
       });
+    }
+  );
+
+  ipcMain.handle(
+    IPC.git.getWorkingTreeDiff,
+    async (_e, args: { cwd: string; pathspec?: string[] }) => {
+      return getWorkingTreeDiff(args.cwd, args.pathspec);
     }
   );
 

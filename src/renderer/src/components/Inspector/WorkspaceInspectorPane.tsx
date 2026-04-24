@@ -2,6 +2,7 @@ import { Folder, GitBranch } from 'lucide-react';
 import { useWorkspaceInspector } from '../../store/workspaceInspector';
 import { INSPECTOR_THEME } from './inspectorTheme';
 import { FilesPanel } from './files/FilesPanel';
+import { ChangesPanel } from './changes/ChangesPanel';
 
 export function WorkspaceInspectorPane(): JSX.Element {
   const { activeTab, selectTab } = useWorkspaceInspector();
@@ -35,7 +36,7 @@ export function WorkspaceInspectorPane(): JSX.Element {
         {activeTab === 'files' ? (
           <FilesPanel />
         ) : (
-          <p className={`p-3 ${INSPECTOR_THEME.textDim}`}>Git changes coming soon.</p>
+          <ChangesPanel />
         )}
       </div>
     </div>

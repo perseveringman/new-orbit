@@ -70,7 +70,8 @@ export const useWorkspaceInspector = create<WorkspaceInspectorState>((set, get) 
 
   toggleExpanded(path) {
     const prev = get().expanded;
-    set({ expanded: { ...prev, [path]: !prev[path] } });
+    const isExpanded = prev[path] !== false;
+    set({ expanded: { ...prev, [path]: !isExpanded } });
   },
 
   collapseAll() {

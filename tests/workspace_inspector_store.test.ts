@@ -50,11 +50,11 @@ describe('workspaceInspector store', () => {
     expect(useWorkspaceInspector.getState().commitMessage).toBe('feat: add inspector');
   });
 
-  it('toggleExpanded marks a path as expanded then collapses it', () => {
-    useWorkspaceInspector.getState().toggleExpanded('src/');
-    expect(useWorkspaceInspector.getState().expanded['src/']).toBe(true);
+  it('toggleExpanded collapses default-open groups on the first click and re-expands on the second', () => {
     useWorkspaceInspector.getState().toggleExpanded('src/');
     expect(useWorkspaceInspector.getState().expanded['src/']).toBe(false);
+    useWorkspaceInspector.getState().toggleExpanded('src/');
+    expect(useWorkspaceInspector.getState().expanded['src/']).toBe(true);
   });
 
   it('reset restores all fields to their defaults', () => {

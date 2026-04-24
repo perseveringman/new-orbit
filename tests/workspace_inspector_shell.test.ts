@@ -64,10 +64,10 @@ describe('WorkspaceInspectorPane shell', () => {
     expect(html).toContain('Search files');
   });
 
-  it('shows the changes placeholder when activeTab is changes', () => {
+  it('shows the changes workspace when activeTab is changes', () => {
     mockState.activeTab = 'changes';
     const html = renderToStaticMarkup(createElement(WorkspaceInspectorPane));
-    expect(html).toContain('Git changes');
+    expect(html).toContain('Commit message');
   });
 
   it('INSPECTOR_THEME exports stable semantic class tokens', () => {

@@ -68,6 +68,7 @@ describe('IPC contract', () => {
         'discardPaths',
         'getChanges',
         'getDiff',
+        'getWorkingTreeDiff',
         'ghostCommit',
         'listWorktrees',
         'mergeGhost',

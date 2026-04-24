@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { classifyPatch, formatShortSha } from './Inspector/changes/diffFormatting';
 
 // TODO(integration): replace with @shared/git DiffResult
 interface LocalDiffFile {
@@ -27,12 +28,6 @@ export interface DiffPaneProps {
   className?: string;
 }
 
-/** Returns the first 7 characters of a SHA; returns the input unchanged if shorter. */
-export function formatShortSha(sha: string): string {
-  if (!sha) return '';
-  return sha.length >= 7 ? sha.slice(0, 7) : sha;
-}
-
 const STATUS_META: Record<
   LocalDiffFile['status'],
   { glyph: string; className: string; label: string }
@@ -43,33 +38,7 @@ const STATUS_META: Record<
   renamed: { glyph: '●→', className: 'text-sky-400', label: 'Renamed' }
 };
 
-interface PatchLine {
-  n: number;
-  text: string;
-  kind: 'add' | 'del' | 'hunk' | 'meta' | 'ctx';
-}
-
-function classifyPatch(patch: string): PatchLine[] {
-  const lines = patch.split('\n');
-  return lines.map((text, i) => {
-    let kind: PatchLine['kind'] = 'ctx';
-    if (text.startsWith('@@')) kind = 'hunk';
-    else if (
-      text.startsWith('diff --git') ||
-      text.startsWith('index ') ||
-      text.startsWith('--- ') ||
-      text.startsWith('+++ ') ||
-      text.startsWith('new file mode') ||
-      text.startsWith('deleted file mode') ||
-      text.startsWith('similarity index') ||
-      text.startsWith('rename ')
-    ) {
-      kind = 'meta';
-    } else if (text.startsWith('+')) kind = 'add';
-    else if (text.startsWith('-')) kind = 'del';
-    return { n: i + 1, text, kind };
-  });
-}
+export { classifyPatch, formatShortSha };
 
 export function DiffPane(props: DiffPaneProps): JSX.Element {
   const { worktreeId, base, className } = props;

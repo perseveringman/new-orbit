@@ -174,6 +174,8 @@ const api: OrbitApi = {
     mergeGhost: (id: string, opts: { strategy: 'fast-forward' | 'squash' }) =>
       ipcRenderer.invoke(IPC.git.mergeGhost, id, opts),
     getChanges: (args: { cwd: string }) => ipcRenderer.invoke(IPC.git.getChanges, args),
+    getWorkingTreeDiff: (args: { cwd: string; pathspec?: string[] }) =>
+      ipcRenderer.invoke(IPC.git.getWorkingTreeDiff, args),
     stagePaths: (args: StagePathsArgs) => ipcRenderer.invoke(IPC.git.stagePaths, args),
     unstagePaths: (args: StagePathsArgs) => ipcRenderer.invoke(IPC.git.unstagePaths, args),
     discardPaths: (args: StagePathsArgs) => ipcRenderer.invoke(IPC.git.discardPaths, args),

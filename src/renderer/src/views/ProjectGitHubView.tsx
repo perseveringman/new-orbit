@@ -1,20 +1,34 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TaskRecord } from '@shared/schemas';
 import type { ProjectSummaryDTO } from '@shared/ipc';
 import type { GitHubProjectDetails } from '@shared/github';
 import { useFiles } from '../store/files';
+import { GitHubPublishActions } from '../components/Inspector/changes/CommitBar';
 
 export type ProjectGitHubTab = 'overview' | 'issues' | 'prs' | 'worktrees';
 
 export interface ProjectGitHubSurfaceProps {
   projectName: string;
+  projectUid: string;
+  projectSlug: string;
   tasks: TaskRecord[];
   details: GitHubProjectDetails | null;
   activeTab: ProjectGitHubTab;
   onSelectTab(tab: ProjectGitHubTab): void;
   onRefresh(): void;
-  onPublish(): void;
-  onCreatePullRequest(): void;
+  onPublish(args: {
+    projectUid: string;
+    owner: string;
+    repo: string;
+    visibility: 'public' | 'private' | 'internal';
+  }): void;
+  onCreatePullRequest(args: {
+    projectUid: string;
+    title?: string;
+    body?: string;
+    baseBranch?: string;
+    draft?: boolean;
+  }): void;
   onOpenTerminal(): void;
   onStartNightShift(): void;
   onOpenPullRequest(url: string): void;
@@ -44,53 +58,47 @@ export function ProjectGitHubView({
   const [details, setDetails] = useState<GitHubProjectDetails | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectGitHubTab>('overview');
 
-  const refresh = async (): Promise<void> => {
+  const refresh = useCallback(async (): Promise<void> => {
     try {
       setDetails(await window.orbit.github.getProjectDetails(project.uid));
     } catch (error) {
       setDetails(null);
       toast(`Load GitHub details failed: ${(error as Error).message}`);
     }
-  };
+  }, [project.uid, toast]);
 
   useEffect(() => {
     void refresh();
-  }, [project.uid]);
+  }, [refresh]);
 
-  const publish = (): void => {
-    const owner = window.prompt('GitHub owner / organization');
-    if (!owner) return;
-    const repo = window.prompt('Repository name', project.slug);
-    if (!repo) return;
-    const visibility = window.confirm('Create as private repository?') ? 'private' : 'public';
+  const publish = (args: {
+    projectUid: string;
+    owner: string;
+    repo: string;
+    visibility: 'public' | 'private' | 'internal';
+  }): void => {
     void (async () => {
       try {
-        await window.orbit.github.publishProject({
-          projectUid: project.uid,
-          owner: owner.trim(),
-          repo: repo.trim(),
-          visibility
-        });
+        await window.orbit.github.publishProject(args);
         await onProjectsChanged();
         await refresh();
-        toast(`Published ${owner}/${repo}`);
+        toast(`Published ${args.owner}/${args.repo}`);
       } catch (error) {
         toast(`Publish failed: ${(error as Error).message}`);
       }
     })();
   };
 
-  const createPullRequest = (): void => {
-    const title = window.prompt('Pull request title', `Orbit: ${project.name}`);
-    if (!title) return;
-    const draft = window.confirm('Create as draft pull request?');
+  const createPullRequest = (args: {
+    projectUid: string;
+    title?: string;
+    body?: string;
+    baseBranch?: string;
+    draft?: boolean;
+  }): void => {
     void (async () => {
       try {
-        const pullRequest = await window.orbit.github.createPullRequest({
-          projectUid: project.uid,
-          title: title.trim(),
-          draft
-        });
+        const pullRequest = await window.orbit.github.createPullRequest(args);
         await refresh();
         toast(`Created PR #${pullRequest.number}`);
       } catch (error) {
@@ -154,11 +162,13 @@ export function ProjectGitHubView({
   };
 
   return (
-    <ProjectGitHubSurface
-      projectName={project.name}
-      tasks={tasks}
-      details={details}
-      activeTab={activeTab}
+      <ProjectGitHubSurface
+        projectName={project.name}
+        projectUid={project.uid}
+        projectSlug={project.slug}
+        tasks={tasks}
+        details={details}
+        activeTab={activeTab}
       onSelectTab={setActiveTab}
       onRefresh={() => void refresh()}
       onPublish={publish}
@@ -175,6 +185,8 @@ export function ProjectGitHubView({
 
 export function ProjectGitHubSurface({
   projectName,
+  projectUid,
+  projectSlug,
   tasks,
   details,
   activeTab,
@@ -217,21 +229,6 @@ export function ProjectGitHubSurface({
             >
               Refresh
             </button>
-            {details?.overview.binding ? (
-              <button
-                className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
-                onClick={onCreatePullRequest}
-              >
-                Create PR
-              </button>
-            ) : (
-              <button
-                className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
-                onClick={onPublish}
-              >
-                Publish to GitHub
-              </button>
-            )}
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-neutral-500">
@@ -295,6 +292,18 @@ export function ProjectGitHubSurface({
                 Open PR
               </button>
             )}
+            <div className="mt-4">
+              <GitHubPublishActions
+                projectUid={projectUid}
+                projectName={projectName}
+                defaultRepo={projectSlug}
+                binding={details?.overview.binding ?? null}
+                pullRequest={details?.overview.pullRequest ?? null}
+                onPublish={onPublish}
+                onCreatePullRequest={onCreatePullRequest}
+                onOpenPullRequest={onOpenPullRequest}
+              />
+            </div>
           </section>
 
           <section className="space-y-4">
