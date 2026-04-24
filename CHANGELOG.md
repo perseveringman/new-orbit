@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Workspace Inspector 骨架（Task 2）**：安装 `lucide-react`；新增 `useWorkspaceInspector` Zustand store（activeTab / fileQuery / changeQuery / selectedPath / commitMessage / expanded）；新增 `inspectorTheme.ts` 语义化 class token 映射；扩展 Tailwind 配置和 `styles.css`，添加 `inspector-surface-0/1/2/3`、`inspector-border-subtle/strong`、`inspector-text-primary/secondary/dim`、`inspector-git-added/modified/deleted/renamed`、`inspector-accent` CSS 变量与颜色 token（支持 light / dark 双主题）；重写 `WorkspaceInspectorPane` 展示 Files / Changes 两个 tab（含 lucide 图标），不再使用原始 `neutral-*` 类名
+
 ### Fixed
 
 - **终端可读性主题**：xterm 终端补齐完整 ANSI 调色板，修复浅色模式下白色系输出接近白底白字的问题；同时提高终端字号/行高，并让 `system` 主题下的终端配色跟随实际界面明暗
