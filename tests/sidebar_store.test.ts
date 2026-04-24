@@ -63,7 +63,7 @@ describe('sidebar store', () => {
   });
 
   it('can open and remember the inspector panel', () => {
-    useSidebar.getState().openPanel({ panel: 'inspector' as never });
+    useSidebar.getState().openPanel({ panel: 'inspector' });
     expect(useSidebar.getState().panel).toBe('inspector');
     useSidebar.getState().setSurface('project.kanban');
     useSidebar.getState().setSurface('editor');
