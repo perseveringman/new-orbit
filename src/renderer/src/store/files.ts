@@ -94,8 +94,13 @@ export const useFiles = create<FilesState>((set, get) => ({
   },
 
   async refreshProjectTree(rootPath: string) {
-    const projectTree = await window.orbit.fs.listProjectTree(rootPath);
-    set({ projectTree });
+    set({ projectTree: null });
+    try {
+      const projectTree = await window.orbit.fs.listProjectTree(rootPath);
+      set({ projectTree });
+    } catch {
+      get().toast('Failed to load project files');
+    }
   },
 
   async openPath(absPath: string) {
