@@ -11,6 +11,7 @@ interface OpenFile {
 interface FilesState {
   tree: FileNode | null;
   projectTree: ProjectFileNode | null;
+  projectTreeError: string | null;
   active: OpenFile | null;
   backlinks: BacklinkItem[];
   unsubscribe: (() => void) | null;
@@ -37,6 +38,7 @@ let initToken = 0;
 export const useFiles = create<FilesState>((set, get) => ({
   tree: null,
   projectTree: null,
+  projectTreeError: null,
   active: null,
   backlinks: [],
   unsubscribe: null,
@@ -85,7 +87,7 @@ export const useFiles = create<FilesState>((set, get) => ({
   teardown() {
     initToken += 1;
     get().unsubscribe?.();
-    set({ unsubscribe: null, tree: null, projectTree: null, active: null, backlinks: [] });
+    set({ unsubscribe: null, tree: null, projectTree: null, projectTreeError: null, active: null, backlinks: [] });
   },
 
   async refreshTree(vaultPath: string) {
@@ -94,11 +96,12 @@ export const useFiles = create<FilesState>((set, get) => ({
   },
 
   async refreshProjectTree(rootPath: string) {
-    set({ projectTree: null });
+    set({ projectTree: null, projectTreeError: null });
     try {
       const projectTree = await window.orbit.fs.listProjectTree(rootPath);
       set({ projectTree });
     } catch {
+      set({ projectTreeError: 'Failed to load project files' });
       get().toast('Failed to load project files');
     }
   },

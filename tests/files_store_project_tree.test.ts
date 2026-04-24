@@ -134,4 +134,40 @@ describe('useFiles.refreshProjectTree', () => {
     expect(getState().tree).toEqual(vaultTree);
     expect(getState().projectTree).toEqual(TREE_B);
   });
+
+  it('sets projectTreeError when listProjectTree rejects', async () => {
+    useFiles.setState({ projectTree: TREE_A, projectTreeError: null });
+
+    mockListProjectTree.mockRejectedValue(new Error('ENOENT'));
+
+    await getState().refreshProjectTree('/bad-path');
+
+    expect(getState().projectTreeError).toBe('Failed to load project files');
+    expect(getState().projectTree).toBeNull();
+  });
+
+  it('clears projectTreeError on successful refresh', async () => {
+    useFiles.setState({ projectTree: null, projectTreeError: 'previous error' });
+
+    mockListProjectTree.mockResolvedValue(TREE_B);
+
+    await getState().refreshProjectTree('/b');
+
+    expect(getState().projectTreeError).toBeNull();
+    expect(getState().projectTree).toEqual(TREE_B);
+  });
+
+  it('clears projectTreeError at the start of a new refresh', async () => {
+    useFiles.setState({ projectTree: null, projectTreeError: 'old error' });
+
+    let resolve!: (v: typeof TREE_B) => void;
+    mockListProjectTree.mockReturnValue(new Promise<typeof TREE_B>((res) => { resolve = res; }));
+
+    const promise = getState().refreshProjectTree('/b');
+    // Error cleared immediately, before IPC resolves
+    expect(getState().projectTreeError).toBeNull();
+
+    resolve(TREE_B);
+    await promise;
+  });
 });

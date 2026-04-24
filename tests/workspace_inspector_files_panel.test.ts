@@ -244,6 +244,7 @@ const mockProjectTree: ProjectFileNode = {
 const mockFilesState = {
   tree: mockVaultTree as ProjectFileNode | null,
   projectTree: null as ProjectFileNode | null,
+  projectTreeError: null as string | null,
   openPath: vi.fn(),
   toast: vi.fn(),
   refreshProjectTree: vi.fn()
@@ -274,6 +275,7 @@ describe('FilesPanel component', () => {
     mockWorkspaceState.projects = [];
     mockFilesState.tree = mockVaultTree;
     mockFilesState.projectTree = null;
+    mockFilesState.projectTreeError = null;
     mockSetFileQuery.mockClear();
     mockToggleExpanded.mockClear();
     mockCollapseAll.mockClear();
@@ -344,5 +346,44 @@ describe('FilesPanel component', () => {
     const html = renderToStaticMarkup(createElement(FilesPanel));
     // The project tree doesn't have README
     expect(html).not.toContain('README.md');
+  });
+
+  it('shows error message in project surface when projectTreeError is set', () => {
+    mockParaView.kind = 'project';
+    mockParaView.projectUid = 'proj-1';
+    mockWorkspaceState.activeProjectUid = 'proj-1';
+    mockWorkspaceState.projects = [
+      { uid: 'proj-1', slug: 'my-project', name: 'My Project', path: '/projects/my-project' }
+    ];
+    mockFilesState.projectTree = null;
+    mockFilesState.projectTreeError = 'Failed to load project files';
+    const html = renderToStaticMarkup(createElement(FilesPanel));
+    expect(html).toContain('Failed to load project files');
+    expect(html).not.toContain('Loading');
+  });
+
+  it('shows Loading when projectTree is null and no error in project surface', () => {
+    mockParaView.kind = 'project';
+    mockParaView.projectUid = 'proj-1';
+    mockWorkspaceState.activeProjectUid = 'proj-1';
+    mockWorkspaceState.projects = [
+      { uid: 'proj-1', slug: 'my-project', name: 'My Project', path: '/projects/my-project' }
+    ];
+    mockFilesState.projectTree = null;
+    mockFilesState.projectTreeError = null;
+    const html = renderToStaticMarkup(createElement(FilesPanel));
+    expect(html).toContain('Loading');
+    expect(html).not.toContain('Failed');
+  });
+
+  it('does not show error message on non-project surface even when projectTreeError is set', () => {
+    // Non-project surface should ignore projectTreeError and fall through to vault tree
+    mockParaView.kind = 'editor';
+    mockFilesState.projectTreeError = 'Failed to load project files';
+    mockFilesState.tree = mockVaultTree;
+    const html = renderToStaticMarkup(createElement(FilesPanel));
+    // Vault tree should show, not the error message
+    expect(html).toContain('README');
+    expect(html).not.toContain('Failed to load project files');
   });
 });

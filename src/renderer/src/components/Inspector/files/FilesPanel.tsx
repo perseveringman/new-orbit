@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { FilePlus, FoldVertical, FolderPlus, RefreshCw } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { ProjectFileNode } from '@shared/types';
+import type { FileNode, ProjectFileNode } from '@shared/types';
 import { useWorkspaceInspector } from '../../../store/workspaceInspector';
 import { useFiles } from '../../../store/files';
 import { usePara } from '../../../store/para';
@@ -9,6 +9,21 @@ import { useWorkspace } from '../../../store/workspace';
 import { INSPECTOR_THEME } from '../inspectorTheme';
 import { applyFileQuery } from './buildFileRows';
 import { FilesTree } from './FilesTree';
+
+// ---------------------------------------------------------------------------
+// Adapter: convert vault FileNode (vault-relative relPath) to ProjectFileNode
+// shape so shared row-building logic can accept both without an unsafe cast.
+// ---------------------------------------------------------------------------
+
+function adaptVaultTree(node: FileNode): ProjectFileNode {
+  return {
+    name: node.name,
+    path: node.path,
+    relPath: node.relPath,
+    isDir: node.isDir,
+    children: node.children?.map(adaptVaultTree)
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Small icon button used in the toolbar
@@ -45,6 +60,7 @@ export function FilesPanel(): JSX.Element {
 
   const vaultTree = useFiles((s) => s.tree);
   const projectTree = useFiles((s) => s.projectTree);
+  const projectTreeError = useFiles((s) => s.projectTreeError);
   const refreshProjectTree = useFiles((s) => s.refreshProjectTree);
 
   const view = usePara((s) => s.view);
@@ -64,10 +80,12 @@ export function FilesPanel(): JSX.Element {
   }, [isProjectSurface, activeProject?.path]);
 
   // Choose the tree source: project surfaces use the full project tree,
-  // other surfaces use the existing vault markdown tree.
+  // other surfaces use the existing vault markdown tree adapted to the shared shape.
   const rawTree: ProjectFileNode | null = isProjectSurface
     ? projectTree
-    : (vaultTree as unknown as ProjectFileNode | null);
+    : vaultTree
+      ? adaptVaultTree(vaultTree)
+      : null;
 
   const filteredTree = rawTree ? applyFileQuery(rawTree, fileQuery) : null;
 
@@ -101,6 +119,8 @@ export function FilesPanel(): JSX.Element {
       <div className={`flex-1 overflow-y-auto ${INSPECTOR_THEME.body}`}>
         {filteredTree ? (
           <FilesTree root={filteredTree} />
+        ) : isProjectSurface && projectTreeError ? (
+          <p className={`p-3 text-xs text-red-400`}>{projectTreeError}</p>
         ) : (
           <p className={`p-3 text-xs ${INSPECTOR_THEME.textDim}`}>Loading…</p>
         )}
