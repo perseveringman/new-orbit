@@ -1,7 +1,7 @@
 import type { SidebarPanelId, SidebarSurfaceId } from './vaultRightSidebarModel';
 
 export type ProjectRoomHeaderAction = 'enable-orbit-tools' | 'archive-project';
-export type ProjectRoomOuterTab = 'kanban' | 'terminal' | 'sessions' | 'github';
+export type ProjectRoomOuterTab = 'kanban' | 'terminal' | 'sessions' | 'github' | 'planner' | 'roles';
 
 export function deriveProjectRoomInstanceKey(projectUid: string | null): string {
   return `project-room:${projectUid ?? 'none'}`;
@@ -45,6 +45,8 @@ export function resolveProjectRoomSidebarSurface(
   if (outerTab === 'terminal') return 'project.terminal';
   if (outerTab === 'sessions') return 'project.sessions';
   if (outerTab === 'github') return 'project.github';
+  if (outerTab === 'planner') return 'project.kanban';
+  if (outerTab === 'roles') return 'project.kanban';
   return 'project.kanban';
 }
 

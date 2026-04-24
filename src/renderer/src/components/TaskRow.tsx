@@ -69,11 +69,43 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
           type="checkbox"
           checked={task.status === 'done'}
           aria-label={`mark ${task.title} done`}
-          onChange={(e) => onStatus?.(task.id, e.target.checked ? 'done' : 'inbox')}
+          onChange={(e) => onStatus?.(task.id, e.target.checked ? 'done' : 'backlog')}
           className="mt-1 h-3.5 w-3.5"
         />
         <button onClick={jump} className="flex flex-1 flex-col items-start text-left">
           <span className="flex items-center gap-1.5">
+            {task.origin && task.origin !== 'human' && (
+              <span
+                title={`Origin: ${task.origin}`}
+                className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-300"
+              >
+                {task.origin === 'agent' ? '🤖' : task.origin === 'system' ? '⚙️' : '📥'} {task.origin}
+              </span>
+            )}
+            {task.owner_type && task.owner_id && (
+              <span
+                title={`Owner: ${task.owner_type} (${task.owner_id})`}
+                className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-300"
+              >
+                👤 {task.owner_type}
+              </span>
+            )}
+            {task.blocked_reason && (
+              <span
+                title={task.blocked_reason}
+                className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-300"
+              >
+                🚫 blocked
+              </span>
+            )}
+            {task.ready && task.status === 'waiting' && (
+              <span
+                title="All pre-conditions met, ready to start"
+                className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300"
+              >
+                ✓ ready
+              </span>
+            )}
             {task.recommended && (
               <span
                 title="Recommended by Orbit Daily Review"
@@ -97,6 +129,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             {task.relPath}
             {task.due ? ` · due ${task.due}` : ''}
             {task.effort ? ` · ${task.effort}` : ''}
+            {task.recommended_role ? ` · role: ${task.recommended_role}` : ''}
           </span>
         </button>
         <button
@@ -140,8 +173,9 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             onChange={(e) => onStatus(task.id, e.target.value as TaskStatus)}
             className="opacity-0 group-hover:opacity-100 rounded border border-neutral-300 bg-transparent px-1 py-0.5 text-[11px] dark:border-neutral-700"
           >
-            <option value="inbox">inbox</option>
-            <option value="today">today</option>
+            <option value="backlog">backlog</option>
+            <option value="waiting">waiting</option>
+            <option value="todo">todo</option>
             <option value="doing">doing</option>
             <option value="blocked">blocked</option>
           </select>

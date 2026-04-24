@@ -26,6 +26,8 @@ import {
 } from './projectRoomModel';
 import { ProjectGitHubView } from './ProjectGitHubView';
 import { ProjectSessionsView } from './ProjectSessionsView';
+import { ProjectPlannerView } from './ProjectPlannerView';
+import { ProjectRolesView } from './ProjectRolesView';
 
 /**
  * ProjectRoomView — the "inside a project" mode.
@@ -41,7 +43,7 @@ import { ProjectSessionsView } from './ProjectSessionsView';
  *   └──────────────────────────────────────────────────────────┘
  */
 
-const STATUS_ORDER: TaskStatus[] = ['inbox', 'today', 'doing', 'blocked', 'done'];
+const STATUS_ORDER: TaskStatus[] = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'];
 
 export function ProjectRoomView(): JSX.Element {
   const projects = useWorkspace((s) => s.projects);
@@ -69,7 +71,7 @@ export function ProjectRoomView(): JSX.Element {
   const [outerTab, setOuterTabRaw] = useState<ProjectRoomOuterTab>(() => {
     try {
       const v = localStorage.getItem(outerTabKey);
-      return v === 'terminal' || v === 'sessions' || v === 'github' ? v : 'kanban';
+      return v === 'terminal' || v === 'sessions' || v === 'github' || v === 'planner' || v === 'roles' ? v : 'kanban';
     } catch {
       return 'kanban';
     }
@@ -89,7 +91,7 @@ export function ProjectRoomView(): JSX.Element {
     try {
       const key = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
       const v = localStorage.getItem(key);
-      setOuterTabRaw(v === 'terminal' || v === 'sessions' || v === 'github' ? v : 'kanban');
+      setOuterTabRaw(v === 'terminal' || v === 'sessions' || v === 'github' || v === 'planner' || v === 'roles' ? v : 'kanban');
     } catch {
       setOuterTabRaw('kanban');
     }
@@ -178,8 +180,9 @@ export function ProjectRoomView(): JSX.Element {
 
   const columns = useMemo(() => {
     const map: Record<TaskStatus, TaskRecord[]> = {
-      inbox: [],
-      today: [],
+      backlog: [],
+      waiting: [],
+      todo: [],
       doing: [],
       blocked: [],
       done: []
@@ -388,6 +391,12 @@ export function ProjectRoomView(): JSX.Element {
       } else if (e.key === '4') {
         e.preventDefault();
         setOuterTab('sessions');
+      } else if (e.key === '5') {
+        e.preventDefault();
+        setOuterTab('planner');
+      } else if (e.key === '6') {
+        e.preventDefault();
+        setOuterTab('roles');
       }
     }
     window.addEventListener('keydown', onKey);
@@ -531,6 +540,12 @@ export function ProjectRoomView(): JSX.Element {
         <OuterTabButton active={outerTab === 'sessions'} onClick={() => setOuterTab('sessions')}>
           Sessions
         </OuterTabButton>
+        <OuterTabButton active={outerTab === 'planner'} onClick={() => setOuterTab('planner')}>
+          Planner
+        </OuterTabButton>
+        <OuterTabButton active={outerTab === 'roles'} onClick={() => setOuterTab('roles')}>
+          Roles
+        </OuterTabButton>
       </div>
 
       {/* Kanban tab content */}
@@ -610,6 +625,14 @@ export function ProjectRoomView(): JSX.Element {
           onOpenTerminal={() => setOuterTab('terminal')}
           onStartNightShift={() => setNightShiftOpen(true)}
         />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'planner' ? 'flex' : 'hidden'}`}>
+        <ProjectPlannerView projectUid={project.uid} />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'roles' ? 'flex' : 'hidden'}`}>
+        <ProjectRolesView projectUid={project.uid} />
       </div>
 
       <NewTaskModal
@@ -760,7 +783,27 @@ function TaskCard({
         )}
         <span className="min-w-0 flex-1 truncate font-medium">{task.title}</span>
       </div>
-      <div className="mt-0.5 flex items-center gap-2 text-[10px] text-neutral-500">
+      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
+        {task.origin && task.origin !== 'human' && (
+          <span className="rounded bg-purple-500/15 px-1 text-purple-600 dark:text-purple-300">
+            {task.origin}
+          </span>
+        )}
+        {task.owner_type && (
+          <span className="rounded bg-sky-500/15 px-1 text-sky-600 dark:text-sky-300">
+            {task.owner_type}
+          </span>
+        )}
+        {task.blocked_reason && (
+          <span className="rounded bg-red-500/15 px-1 text-red-600 dark:text-red-300">
+            blocked
+          </span>
+        )}
+        {task.ready && task.status === 'waiting' && (
+          <span className="rounded bg-emerald-500/15 px-1 text-emerald-600 dark:text-emerald-300">
+            ready
+          </span>
+        )}
         {task.due && <span>📅 {task.due}</span>}
         {task.effort !== undefined && <span>⚡ {String(task.effort)}</span>}
         {task.tags &&
