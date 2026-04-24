@@ -1,5 +1,5 @@
 ---
-status: draft
+status: completed
 created: 2026-04-24
 updated: 2026-04-24
 ---
@@ -548,4 +548,3 @@ Expected: PASS.
 git add docs/architecture.md docs/ROADMAP.md docs/USER_GUIDE.md CHANGELOG.md docs/plans/2026-04-24-orbit-workspace-inspector-files-changes.md
 git commit -m "docs(renderer): 记录 workspace inspector files 与 changes 工作台"
 ```
-

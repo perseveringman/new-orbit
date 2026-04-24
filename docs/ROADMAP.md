@@ -35,6 +35,7 @@
 | 功能 | 描述 |
 | --- | --- |
 | Contextual Right Sidebar | 右侧栏跟随当前页面上下文（Editor/Dashboard/Project Room），三级 tab（Overview/Focus/Execution） |
+| Workspace Inspector | 右侧统一 `Files / Changes` 工作台：完整项目树、目录分组变更树、staged-only commit、GitHub publish / PR 表单 |
 | `.orbit`-First Agent Exposure | 项目 Orbit 数据收敛到 `.orbit/`；`agent_exposure` 策略（isolated/bridge/compatible）；社区规范文件兼容 |
 | GitHub Integration | 以 `gh` CLI 为基础的 GitHub 连接、导入、发布、PR 创建、状态读取 |
 | Project Session History | 终端 agent 会话作为项目级历史记录，支持 Claude/Codex transcript 导入，Session History tab |

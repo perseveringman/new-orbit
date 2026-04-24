@@ -112,6 +112,39 @@ boost. It is updated incrementally on `fs:event` (`add`/`change`/`unlink`/
   public surface the editor and sidebars consume. Additional panes (PARA,
   tasks) should plug in here rather than call IPC directly.
 
+## Workspace Inspector（Files + Changes）
+
+Project / editor 右侧栏现在统一走 `inspector` 面板，而不是旧的分散式
+`files` / `diff` 分支。实现分三层：
+
+- **Renderer shell**：`src/renderer/src/components/Inspector/WorkspaceInspectorPane.tsx`
+  负责 tab 切换；`useWorkspaceInspector` 持有 `activeTab`、查询词、
+  `selectedPath`、`commitMessage` 与目录展开状态。
+- **Files tab**：`src/renderer/src/components/Inspector/files/` 复用
+  `useFiles`，但在 `project` surface 下改用新的 `fs:listProjectTree(root)`
+  加载完整项目树；非 project surface 仍保留旧的 markdown-only
+  `fs:listTree(vault)`，避免 PARA / editor 导航回退。
+- **Changes tab**：`src/renderer/src/components/Inspector/changes/` 通过
+  `git:getChanges(cwd)` 获取 staged / unstaged / untracked 状态，通过
+  `git:getWorkingTreeDiff(cwd, pathspec?)` 获取 tracked working-tree patch，
+  再在 renderer 里按目录分组、渲染 stage / unstage / discard、统一 diff
+  预览与 staged-only commit bar。
+
+与 Inspector 直接相关的新 IPC / git surface：
+
+| Channel | Purpose |
+| --- | --- |
+| `fs:listProjectTree(root)` | 返回完整项目树（不限于 Markdown），忽略 `.git` / `node_modules` / `.orbit`。 |
+| `fs:createDirectory(parent, name)` | 在 vault/project 边界内安全创建目录。 |
+| `git:getChanges({ cwd })` | 返回 porcelain status 摘要（staged / unstaged / untracked + file entries）。 |
+| `git:getWorkingTreeDiff({ cwd, pathspec? })` | 返回当前 tracked working tree 相对 `HEAD` 的 patch / numstat，用于 Changes 预览。 |
+| `git:stagePaths / git:unstagePaths / git:discardPaths` | 针对选中文件执行精细化 git 动作；untracked discard 由 renderer 二次确认后触发。 |
+| `git:commitSelection({ cwd, message })` | 只提交当前暂存区，不做隐式 `add -A`。 |
+
+`ProjectGitHubView` 复用与 Inspector Changes 相同的受控发布 / PR 表单；
+`ProjectRoomView` 顶栏的 Publish / Create PR 快捷入口不再弹 prompt，
+而是切到对应 GitHub/Inspector 工作区完成操作。
+
 ## Vault layout
 
 ```

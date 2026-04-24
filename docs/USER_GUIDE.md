@@ -43,9 +43,10 @@ Dashboard 顶部有 **Vision** 卡片。第一件事就是把它写出来——O
 
 点 Dashboard 卡片或顶栏 **Project** tab 进入 Project Room：
 
-- **中间主区**：Project header + 外层 `Kanban / Terminal / Sessions` 三个工作模式
+- **中间主区**：Project header + 外层 `Kanban / Terminal / Sessions / GitHub` 四个工作模式
 - **Kanban 模式**：全宽任务看板；点 task 后在右栏里编辑
 - **Terminal 模式**：嵌入式终端，cwd 就是项目根
+- **GitHub 模式**：看仓库状态、issues / PR / worktrees，并直接完成 publish / Create PR
 - **最右侧 Sidebar**：上下文右栏，按你当前在做什么切换
 
 Project Room 的右栏现在分两级：
@@ -57,6 +58,7 @@ Project Room 的右栏现在分两级：
 
 - 在 **Kanban** 外层页签下，点一个 task 会把详情放进右栏的 **Focus → Task Detail**
 - 切到 **Terminal** 外层页签，右栏默认显示 **Overview → Task Tree**，方便边跑命令边看整个项目任务状态
+- 在 **Editor / Project Room** 里，右栏都可以切到统一的 **Overview → Inspector**，里面有 `Files / Changes` 两个 tab
 - `Sessions / Run Log / Diff / Review` 归到 **Execution**，不再和文件/任务上下文混在一起
 - 切到 **Sessions** 外层页签时，右栏会自动跳到 **Execution → Sessions**；列表留在右栏，主区专门显示会话详情与 transcript
 - 目前 Project Sessions 会优先导入本机的 **Claude** 与 **Codex** 本地 transcript，能看到用户/agent 的聊天记录
@@ -194,11 +196,17 @@ Dashboard → **Today's Journal**：
 
 右侧栏不再是全局固定工具箱，而是**跟随当前页面上下文**：
 
-- **Editor**：显示文件相关面板，比如 `Files / Backlinks`
+- **Editor**：显示 `Inspector / Backlinks`，其中 Inspector 提供 `Files / Changes`
 - **Dashboard**：显示总览与执行相关面板，比如 `Review / Worktrees / Agent / Run Log / Diff`
 - **Project Room**：按 `Overview / Focus / Execution` 切分任务理解、对象处理、执行跟进
 
 这样切换页面时，右栏只保留和这一页真正相关的面板，不会再把所有工具同时堆出来。
+
+### Inspector：Files vs Changes
+
+- **Files**：像 IDE 一样浏览当前项目目录；project surface 下会显示完整项目树，而不是只看 Markdown；支持搜索、刷新、折叠
+- **Changes**：按目录分组查看当前 git 变更；可对单个文件 stage / unstage / discard；右侧直接看 unified diff
+- **Commit / Publish**：Changes 底部可直接提交 staged changes；如果项目还没绑定 GitHub，会显示 publish 表单；已绑定则显示 Create PR 表单。整个流程不再弹 `prompt / confirm`
 
 ## 15. Settings 要点
 

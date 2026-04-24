@@ -6,6 +6,8 @@
 
 ### Added
 
+- **Workspace Inspector Files + Changes（Task 4 / Task 6）**：右侧栏新增统一 `inspector` 面板；Files tab 在 project surface 下切换到完整项目树（`fs:listProjectTree`），提供搜索、刷新、折叠和二进制文件保护；Changes tab 提供按目录分组的变更树、行级 stage / unstage / discard、统一 diff 预览、staged-only commit bar，以及与 GitHub 发布 / Create PR 共用的受控表单流
+
 - **Staged 感知 git 动作（Task 5）**：新建 `src/main/git/status.ts`，提供 `parsePorcelainStatus`（从 `mcp/tools.ts` 提取共享）、`getChanges`、`stagePaths`、`unstagePaths`、`discardPaths`、`commitSelection` 六个纯后端函数；在 IPC 合约（`src/shared/ipc.ts`、`src/shared/git.ts`）中注册 `git:getChanges`、`git:stagePaths`、`git:unstagePaths`、`git:discardPaths`、`git:commitSelection` 五个新 channel 并完成 preload 暴露与 main-side handler 注册；`commitSelection` 不执行隐式 `add -A`，空暂存区时抛出 `nothing_staged`；旧 `git:commit` 保持向后兼容
 
 - **Workspace Inspector 骨架（Task 2）**：安装 `lucide-react`；新增 `useWorkspaceInspector` Zustand store（activeTab / fileQuery / changeQuery / selectedPath / commitMessage / expanded）；新增 `inspectorTheme.ts` 语义化 class token 映射；扩展 Tailwind 配置和 `styles.css`，添加 `inspector-surface-0/1/2/3`、`inspector-border-subtle/strong`、`inspector-text-primary/secondary/dim`、`inspector-git-added/modified/deleted/renamed`、`inspector-accent` CSS 变量与颜色 token（支持 light / dark 双主题）；重写 `WorkspaceInspectorPane` 展示 Files / Changes 两个 tab（含 lucide 图标），不再使用原始 `neutral-*` 类名
@@ -13,6 +15,7 @@
 
 ### Fixed
 
+- **Prompt-free GitHub 操作流**：Project GitHub View 与 Project Room 顶栏不再依赖 `window.prompt` / `window.confirm` 创建仓库或 PR；统一改为受控表单，Project Room 的快捷入口会直接带你进入 GitHub 工作面板完成发布或 PR 创建
 - **discardPaths 修复（Task 5 spec）**：`indexStatus='A'`（新增暂存文件）在 discard 时不再尝试 `git restore --source=HEAD`（因 HEAD 中不存在该文件会失败），改为 unstage 后直接删除文件；新增回归测试覆盖此路径
 - **diff 层兼容导出（Task 5 spec）**：`diff.ts` 新增 `getStagedFileSummary`，封装 `git diff --cached --numstat`，供 Changes 面板使用；`git_diff.test.ts` 新增对应集成测试
 
