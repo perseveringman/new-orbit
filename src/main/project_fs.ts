@@ -16,7 +16,12 @@ export async function listProjectTree(root: string): Promise<ProjectFileNode> {
 
   async function buildNode(abs: string, rel: string): Promise<ProjectFileNode> {
     const name = path.basename(abs);
-    const stat = await fsp.stat(abs);
+    const stat = await fsp.lstat(abs);
+
+    // Never descend into symlinks — treat them as opaque leaf entries
+    if (stat.isSymbolicLink()) {
+      return { name, path: abs, relPath: toPosix(rel), isDir: false };
+    }
 
     if (!stat.isDirectory()) {
       return { name, path: abs, relPath: toPosix(rel), isDir: false };
@@ -27,7 +32,7 @@ export async function listProjectTree(root: string): Promise<ProjectFileNode> {
       const dirents = await fsp.readdir(abs, { withFileTypes: true });
       entries = dirents
         .filter((d) => !IGNORE_DIRS.has(d.name))
-        .map((d) => ({ name: d.name, isDir: d.isDirectory() }))
+        .map((d) => ({ name: d.name, isDir: d.isDirectory() && !d.isSymbolicLink() }))
         .sort((a, b) => {
           // directories first, then alphabetical
           if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;

@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { listProjectTree, createDirectory } from '../src/main/project_fs';
+import { assertInsideVault } from '../src/main/pathGuard';
 
 async function tmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'orbit-project-fs-test-'));
@@ -83,6 +84,47 @@ describe('listProjectTree', () => {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('does not descend into directory symlinks (treats them as leaf nodes)', async () => {
+    const dir = await tmpDir();
+    const outsideDir = await tmpDir();
+    try {
+      await fs.writeFile(path.join(outsideDir, 'secret.txt'), 'sensitive');
+      const symlinkPath = path.join(dir, 'linked');
+      await fs.symlink(outsideDir, symlinkPath);
+
+      const tree = await listProjectTree(dir);
+
+      const names = tree.children?.map((n) => n.name) ?? [];
+      // The symlink entry should appear as a non-directory leaf, not be recursed into
+      const linkedNode = tree.children?.find((n) => n.name === 'linked');
+      expect(linkedNode).toBeDefined();
+      expect(linkedNode?.isDir).toBe(false);
+      expect(linkedNode?.children).toBeUndefined();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not include file symlinks as directories', async () => {
+    const dir = await tmpDir();
+    const outsideDir = await tmpDir();
+    try {
+      const realFile = path.join(outsideDir, 'real.ts');
+      await fs.writeFile(realFile, 'export {}');
+      await fs.symlink(realFile, path.join(dir, 'linked.ts'));
+
+      const tree = await listProjectTree(dir);
+
+      const linkedNode = tree.children?.find((n) => n.name === 'linked.ts');
+      expect(linkedNode).toBeDefined();
+      expect(linkedNode?.isDir).toBe(false);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('createDirectory', () => {
@@ -132,6 +174,39 @@ describe('createDirectory', () => {
       await expect(createDirectory(dir, 'foo\\bar')).rejects.toThrow('invalid directory name');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('assertInsideVault boundary (used by IPC handlers)', () => {
+  it('passes for paths inside the vault', async () => {
+    const vault = await tmpDir();
+    try {
+      const inside = path.join(vault, 'projects', 'my-app');
+      expect(() => assertInsideVault(vault, inside)).not.toThrow();
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('throws for paths outside the vault', async () => {
+    const vault = await tmpDir();
+    const outside = await tmpDir();
+    try {
+      expect(() => assertInsideVault(vault, outside)).toThrow('path escapes vault');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('throws for path traversal attempts (../../etc)', async () => {
+    const vault = await tmpDir();
+    try {
+      const traversal = path.join(vault, '..', '..', 'etc', 'passwd');
+      expect(() => assertInsideVault(vault, traversal)).toThrow('path escapes vault');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
     }
   });
 });

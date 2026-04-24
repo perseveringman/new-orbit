@@ -817,10 +817,14 @@ export function registerFsIpc(): void {
   );
 
   ipcMain.handle(IPC.fs.listProjectTree, async (_e, root: string) => {
+    const sess = getSession();
+    assertInsideVault(sess.vault, root);
     return _listProjectTree(root);
   });
 
   ipcMain.handle(IPC.fs.createDirectory, async (_e, parent: string, name: string) => {
+    const sess = getSession();
+    assertInsideVault(sess.vault, parent);
     return _createDirectory(parent, name);
   });
 }
