@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,6 +90,15 @@ describe('WorkspaceInspectorPane changes tab', () => {
 });
 
 describe('change row helpers', () => {
+  it('keeps change row helpers browser-safe', async () => {
+    const source = await readFile(
+      new URL('../src/renderer/src/components/Inspector/changes/buildChangeRows.ts', import.meta.url),
+      'utf8'
+    );
+
+    expect(source).not.toMatch(/from ['"]node:path['"]/);
+  });
+
   it('groups files by directory and keeps per-file diff totals', () => {
     const files: ChangesFileEntry[] = [
       { indexStatus: 'M', workTreeStatus: ' ', path: 'src/app.ts' },

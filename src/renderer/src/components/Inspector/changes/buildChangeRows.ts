@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { ChangesFileEntry, DiffFile } from '@shared/git';
 
 export type ChangeDisplayStatus = DiffFile['status'] | 'untracked';
@@ -34,13 +33,21 @@ export interface ChangeFileRow {
 export type ChangeRow = ChangeGroupRow | ChangeFileRow;
 
 function normalizePath(relPath: string): string {
-  return relPath.replace(/\\/g, '/');
+  return relPath.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function basenameOf(relPath: string): string {
+  const normalized = normalizePath(relPath);
+  if (!normalized) return '';
+  const slashIndex = normalized.lastIndexOf('/');
+  return slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
 }
 
 function directoryOf(relPath: string): string {
   const normalized = normalizePath(relPath);
-  const dir = path.posix.dirname(normalized);
-  return dir === '.' ? '' : dir;
+  if (!normalized) return '';
+  const slashIndex = normalized.lastIndexOf('/');
+  return slashIndex >= 0 ? normalized.slice(0, slashIndex) : '';
 }
 
 function inferDisplayStatus(entry: ChangesFileEntry, diff?: DiffFile): ChangeDisplayStatus {
@@ -65,7 +72,7 @@ export function buildChangeFiles(
       const diff = diffByPath.get(entry.path);
       return {
         ...entry,
-        name: path.posix.basename(normalizePath(entry.path)),
+        name: basenameOf(entry.path),
         dir: directoryOf(entry.path),
         displayStatus: inferDisplayStatus(entry, diff),
         additions: diff?.additions ?? 0,
