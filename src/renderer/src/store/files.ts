@@ -34,6 +34,7 @@ interface FilesState {
 
 let toastId = 0;
 let initToken = 0;
+let projectTreeToken = 0;
 
 export const useFiles = create<FilesState>((set, get) => ({
   tree: null,
@@ -96,11 +97,14 @@ export const useFiles = create<FilesState>((set, get) => ({
   },
 
   async refreshProjectTree(rootPath: string) {
+    const token = ++projectTreeToken;
     set({ projectTree: null, projectTreeError: null });
     try {
       const projectTree = await window.orbit.fs.listProjectTree(rootPath);
+      if (token !== projectTreeToken) return;
       set({ projectTree });
     } catch {
+      if (token !== projectTreeToken) return;
       set({ projectTreeError: 'Failed to load project files' });
       get().toast('Failed to load project files');
     }

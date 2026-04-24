@@ -170,4 +170,59 @@ describe('useFiles.refreshProjectTree', () => {
     resolve(TREE_B);
     await promise;
   });
+
+  // ---------------------------------------------------------------------------
+  // Out-of-order (race condition) tests
+  // ---------------------------------------------------------------------------
+
+  it('ignores stale success response when a newer request resolves first', async () => {
+    useFiles.setState({ projectTree: null, projectTreeError: null });
+
+    let resolveA!: (v: typeof TREE_A) => void;
+    let resolveB!: (v: typeof TREE_B) => void;
+
+    mockListProjectTree
+      .mockReturnValueOnce(new Promise<typeof TREE_A>((res) => { resolveA = res; }))
+      .mockReturnValueOnce(new Promise<typeof TREE_B>((res) => { resolveB = res; }));
+
+    // Start request A, then immediately start request B (supersedes A)
+    const promiseA = getState().refreshProjectTree('/a');
+    const promiseB = getState().refreshProjectTree('/b');
+
+    // B resolves first with the correct tree
+    resolveB(TREE_B);
+    await promiseB;
+    expect(getState().projectTree).toEqual(TREE_B);
+
+    // A resolves later — stale, must NOT overwrite B
+    resolveA(TREE_A);
+    await promiseA;
+    expect(getState().projectTree).toEqual(TREE_B);
+  });
+
+  it('ignores stale error response when a newer request already resolved', async () => {
+    useFiles.setState({ projectTree: null, projectTreeError: null, toasts: [] });
+
+    let rejectA!: (err: Error) => void;
+    let resolveB!: (v: typeof TREE_B) => void;
+
+    mockListProjectTree
+      .mockReturnValueOnce(new Promise<typeof TREE_A>((_res, rej) => { rejectA = rej; }))
+      .mockReturnValueOnce(new Promise<typeof TREE_B>((res) => { resolveB = res; }));
+
+    const promiseA = getState().refreshProjectTree('/a');
+    const promiseB = getState().refreshProjectTree('/b');
+
+    // B resolves successfully first
+    resolveB(TREE_B);
+    await promiseB;
+    expect(getState().projectTree).toEqual(TREE_B);
+
+    // A rejects late — must NOT overwrite state or add a toast
+    rejectA(new Error('ENOENT'));
+    await promiseA;
+    expect(getState().projectTree).toEqual(TREE_B);
+    expect(getState().projectTreeError).toBeNull();
+    expect(getState().toasts.length).toBe(0);
+  });
 });
