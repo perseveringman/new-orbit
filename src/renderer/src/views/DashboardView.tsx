@@ -17,6 +17,7 @@ export function DashboardView(): JSX.Element {
   const vision = useWorkspace((s) => s.visionExcerpt);
   const refreshVision = useWorkspace((s) => s.refreshVision);
   const projects = useWorkspace((s) => s.projects);
+  const areas = useWorkspace((s) => s.areas);
   const refreshProjects = useWorkspace((s) => s.refreshProjects);
   const entities = usePara((s) => s.entities);
   const tasks = usePara((s) => s.tasks);
@@ -55,10 +56,9 @@ export function DashboardView(): JSX.Element {
     const archived =
       entities.filter((e) => e.type === 'archive').length +
       projects.filter((p) => p.status === 'archived').length;
-    const areas = entities.filter((e) => e.type === 'area').length;
     const resources = entities.filter((e) => e.type === 'resource').length;
-    return { active, areas, resources, archived };
-  }, [projects, entities]);
+    return { active, areas: areas.length, resources, archived };
+  }, [projects, areas, entities]);
 
   const matrix = useMemo(() => {
     const active = projects.filter((p) => p.status !== 'archived' && !p.legacy);

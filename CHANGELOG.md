@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- **Dashboard Areas 计数口径**：Dashboard 的 `Areas` 卡片改为按真实 area 目录（`workspace.areas`）计数，不再把 `02_Areas/` 下 frontmatter 为 `type: area` 的文档文件重复算进总数
 - **Changes 面板浏览器兼容性**：移除 `buildChangeRows.ts` 对 renderer 中 `node:path` 的依赖，改用浏览器安全的 POSIX 风格字符串路径处理，修复 Workspace Inspector 的 Changes tab 打开即崩溃
 - **Prompt-free GitHub 操作流**：Project GitHub View 与 Project Room 顶栏不再依赖 `window.prompt` / `window.confirm` 创建仓库或 PR；统一改为受控表单，Project Room 的快捷入口会直接带你进入 GitHub 工作面板完成发布或 PR 创建
 - **discardPaths 修复（Task 5 spec）**：`indexStatus='A'`（新增暂存文件）在 discard 时不再尝试 `git restore --source=HEAD`（因 HEAD 中不存在该文件会失败），改为 unstage 后直接删除文件；新增回归测试覆盖此路径
