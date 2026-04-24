@@ -112,6 +112,14 @@ describe('IPC contract', () => {
     for (const v of Object.values(IPC.github)) expect(v.startsWith('github:')).toBe(true);
   });
 
+  it('fs namespace declares vault + project tree channels', () => {
+    const keys = Object.keys(IPC.fs).sort();
+    expect(keys).toContain('listTree');
+    expect(keys).toContain('listProjectTree');
+    expect(keys).toContain('createDirectory');
+    for (const v of Object.values(IPC.fs)) expect(v.startsWith('fs:')).toBe(true);
+  });
+
   it('OrbitApi type shape is assignable', () => {
     const defSettings = {
       lastVaultPath: null,

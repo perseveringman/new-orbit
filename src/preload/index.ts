@@ -50,7 +50,7 @@ import type {
   GitHubTaskBinding,
   GitHubWorkspaceRepository
 } from '@shared/github';
-import type { FsEvent, Theme } from '@shared/types';
+import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   AgentEvent,
@@ -99,7 +99,11 @@ const api: OrbitApi = {
       const listener = (_: unknown, ev: FsEvent): void => cb(ev);
       ipcRenderer.on(IPC.fs.event, listener);
       return () => ipcRenderer.removeListener(IPC.fs.event, listener);
-    }
+    },
+    listProjectTree: (root: string): Promise<ProjectFileNode> =>
+      ipcRenderer.invoke(IPC.fs.listProjectTree, root),
+    createDirectory: (parent: string, name: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.fs.createDirectory, parent, name)
   },
   para: {
     listEntities: (filter?: EntityFilter): Promise<EntitySummary[]> =>

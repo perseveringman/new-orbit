@@ -63,6 +63,10 @@ import {
   updateTaskSection
 } from './task';
 import { relinkTask } from './task_relink';
+import {
+  listProjectTree as _listProjectTree,
+  createDirectory as _createDirectory
+} from './project_fs';
 
 export interface VaultSession {
   vault: string;
@@ -811,6 +815,14 @@ export function registerFsIpc(): void {
       return rescueOrphan(sess, taskAbsPath);
     }
   );
+
+  ipcMain.handle(IPC.fs.listProjectTree, async (_e, root: string) => {
+    return _listProjectTree(root);
+  });
+
+  ipcMain.handle(IPC.fs.createDirectory, async (_e, parent: string, name: string) => {
+    return _createDirectory(parent, name);
+  });
 }
 
 /**

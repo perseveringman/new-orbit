@@ -5,6 +5,7 @@ import type {
   DiagnosticsInfo,
   FileNode,
   FsEvent,
+  ProjectFileNode,
   RenameResult,
   SearchHit,
   Theme,
@@ -94,7 +95,9 @@ export const IPC = {
     backlinksOf: 'fs:backlinksOf',
     findByContentHash: 'fs:findByContentHash',
     rescueOrphan: 'fs:rescueOrphan',
-    event: 'fs:event'
+    event: 'fs:event',
+    listProjectTree: 'fs:listProjectTree',
+    createDirectory: 'fs:createDirectory'
   },
   para: {
     listEntities: 'para:listEntities',
@@ -695,6 +698,8 @@ export interface OrbitApi {
     findByContentHash(hash: string): Promise<string[]>;
     rescueOrphan(taskPath: string): Promise<OrphanRescueCandidate[]>;
     onEvent(cb: (ev: FsEvent) => void): () => void;
+    listProjectTree(root: string): Promise<ProjectFileNode>;
+    createDirectory(parent: string, name: string): Promise<void>;
   };
   para: {
     listEntities(filter?: EntityFilter): Promise<EntitySummary[]>;

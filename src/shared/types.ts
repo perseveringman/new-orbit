@@ -71,6 +71,15 @@ export interface FileNode {
   children?: FileNode[];
 }
 
+/** Full project-scoped tree node — includes all file types, not just Markdown. */
+export interface ProjectFileNode {
+  name: string;
+  path: string; // absolute
+  relPath: string; // project-root-relative, POSIX-style
+  isDir: boolean;
+  children?: ProjectFileNode[];
+}
+
 export type FsEventKind =
   | 'add'
   | 'change'
