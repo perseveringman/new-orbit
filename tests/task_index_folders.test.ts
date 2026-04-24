@@ -61,7 +61,7 @@ describe('TaskIndex reads .orbit/agent/tasks/*.md (R1)', () => {
     expect(mine).toBeTruthy();
     expect(mine!.source).toBe('file');
     expect(mine!.project_uid).toBe(proj.uid);
-    expect(mine!.status).toBe('inbox');
+    expect(mine!.status).toBe('backlog');
 
     await closeFsSession();
   });

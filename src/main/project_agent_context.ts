@@ -101,7 +101,7 @@ Orbit 任务文件位于 \`.orbit/agent/tasks/\`，采用四段式结构：
 4. \`# Summary\`
 
 ## 状态流转
-\`inbox -> today -> doing -> blocked -> done\`
+\`backlog -> waiting -> todo -> doing -> blocked -> done\`
 
 ## 推荐工作流
 1. 先判断当前工作是否值得沉淀为 task。

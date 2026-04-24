@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import { useSidebar } from '../../store/sidebar';
 
-const STATUS_ORDER: TaskStatus[] = ['inbox', 'today', 'doing', 'blocked', 'done'];
+const STATUS_ORDER: TaskStatus[] = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'];
 
 export function ProjectTaskTreePanel({
   projectUid
@@ -37,8 +37,9 @@ export function ProjectTaskTreePanel({
 
   const grouped = useMemo(() => {
     const buckets: Record<TaskStatus, TaskRecord[]> = {
-      inbox: [],
-      today: [],
+      backlog: [],
+      waiting: [],
+      todo: [],
       doing: [],
       blocked: [],
       done: []

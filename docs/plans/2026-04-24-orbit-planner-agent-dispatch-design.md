@@ -1,13 +1,13 @@
 ---
-status: draft
+status: completed
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-04-25
 ---
 
 # Orbit Planner Agent + Agent Dispatching 设计方案
 
 > 日期：2026-04-24
-> 状态：Draft
+> 状态：Completed
 > 范围：任务规划画布、依赖图、任务发布、agent 抢单与任务 ownership
 
 ---

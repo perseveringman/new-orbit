@@ -23,6 +23,15 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       worktree_path: '.orbit/worktrees/wt-1',
       pr_url: 'https://github.com/x/y/pull/1',
       execution_strategy: 'autonomous',
+      origin: 'agent',
+      created_by: 'agent:planner',
+      owner_type: 'binding',
+      owner_id: 'binding-1',
+      claimed_at: '2026-04-25T00:00:00.000Z',
+      active_run_id: 'run-1',
+      role_binding_id: 'binding-1',
+      recommended_role: 'executor',
+      candidate_role_slugs: ['executor', 'reviewer'],
       pre_conditions: ['a', 'b'],
       priority: 'high',
       effort: 4
@@ -31,6 +40,8 @@ describe('TaskFrontmatter (R3 extensions)', () => {
     if (r.success) {
       expect(r.data.pre_conditions).toEqual(['a', 'b']);
       expect(r.data.effort).toBe(4);
+      expect(r.data.owner_type).toBe('binding');
+      expect(r.data.candidate_role_slugs).toEqual(['executor', 'reviewer']);
     }
   });
 
@@ -54,5 +65,18 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       priority: 'urgent'
     });
     expect(r.success).toBe(false);
+  });
+
+  it('normalizes legacy statuses to the new lifecycle', () => {
+    const r = TaskFrontmatter.safeParse({
+      uid: 't5',
+      type: 'task',
+      title: 'legacy',
+      status: 'today'
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.status).toBe('todo');
+    }
   });
 });

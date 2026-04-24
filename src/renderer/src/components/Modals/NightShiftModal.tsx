@@ -37,10 +37,10 @@ export function NightShiftModal({
   }, [open]);
 
   const candidates = useMemo<TaskRecord[]>(
-    () =>
+      () =>
         tasks.filter(
           (t) =>
-            (t.status === 'today' || t.status === 'inbox' || t.status === 'blocked') &&
+            (t.status === 'todo' || t.status === 'backlog' || t.status === 'blocked') &&
             (!projectUid || t.project_uid === projectUid) &&
             t.uid
         ),

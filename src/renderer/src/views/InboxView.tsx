@@ -8,9 +8,9 @@ import { queueTerminalNavigation } from '../components/Terminal/terminalNavigati
 import { getReviewQueueContextSummary } from './reviewQueuePresentation';
 
 /**
- * The Inbox view: all tasks with status `inbox`. "Un-triaged" inline tasks
+ * The Inbox view: all tasks with status `backlog`. "Un-triaged" inline tasks
  * from files outside the four PARA roots also surface here, because the
- * indexer defaults uncommented `- [ ]` checkboxes to `inbox`.
+ * indexer defaults unchecked `- [ ]` checkboxes to `backlog`.
  */
 export function InboxView(): JSX.Element {
   const refreshFiltered = usePara((s) => s.refreshFiltered);
@@ -25,7 +25,7 @@ export function InboxView(): JSX.Element {
   const [rows, setRows] = useState<TaskRecord[]>([]);
 
   useEffect(() => {
-    void refreshFiltered({ status: 'inbox' }).then(setRows);
+    void refreshFiltered({ status: 'backlog' }).then(setRows);
   }, [refreshFiltered, tasks]);
 
   function openTerminal(projectUid: string, paneId: string): void {

@@ -15,20 +15,21 @@ function t(id: string, status: TaskRecord['status']): TaskRecord {
 
 describe('kanban reducer', () => {
   it('groupByStatus partitions tasks into fixed columns', () => {
-    const rows = [t('a', 'inbox'), t('b', 'doing'), t('c', 'inbox'), t('d', 'done')];
+    const rows = [t('a', 'backlog'), t('b', 'doing'), t('c', 'backlog'), t('d', 'done')];
     const cols = groupByStatus(rows);
-    expect(cols.inbox.map((x) => x.id)).toEqual(['a', 'c']);
+    expect(cols.backlog.map((x) => x.id)).toEqual(['a', 'c']);
     expect(cols.doing.map((x) => x.id)).toEqual(['b']);
     expect(cols.done.map((x) => x.id)).toEqual(['d']);
-    expect(cols.today).toEqual([]);
+    expect(cols.waiting).toEqual([]);
+    expect(cols.todo).toEqual([]);
     expect(cols.blocked).toEqual([]);
   });
 
   it('moveTask returns next list with the task promoted to target column', () => {
-    const rows = [t('a', 'inbox'), t('b', 'doing')];
-    const { next, moved } = moveTask(rows, 'a', 'today');
-    expect(moved?.status).toBe('today');
-    expect(next.find((x) => x.id === 'a')?.status).toBe('today');
+    const rows = [t('a', 'backlog'), t('b', 'doing')];
+    const { next, moved } = moveTask(rows, 'a', 'todo');
+    expect(moved?.status).toBe('todo');
+    expect(next.find((x) => x.id === 'a')?.status).toBe('todo');
     expect(next).not.toBe(rows);
   });
 
@@ -40,8 +41,8 @@ describe('kanban reducer', () => {
   });
 
   it('moveTask is a no-op for unknown id', () => {
-    const rows = [t('a', 'inbox')];
-    const { next, moved } = moveTask(rows, 'zzz', 'today');
+    const rows = [t('a', 'backlog')];
+    const { next, moved } = moveTask(rows, 'zzz', 'todo');
     expect(moved).toBeNull();
     expect(next).toBe(rows);
   });
@@ -49,7 +50,7 @@ describe('kanban reducer', () => {
   it('EMPTY_COLUMNS returns every status key', () => {
     const c = EMPTY_COLUMNS();
     expect(Object.keys(c).sort()).toEqual(
-      ['blocked', 'doing', 'done', 'inbox', 'today'].sort()
+      ['backlog', 'blocked', 'doing', 'done', 'todo', 'waiting'].sort()
     );
   });
 });

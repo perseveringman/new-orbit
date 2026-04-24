@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   IPC,
   type ArchiveProjectResultDTO,
+  type DispatchEventDTO,
   type AreaConfigDTO,
   type CloseProjectResult,
   type CreateAreaArgsDTO,
@@ -30,6 +31,7 @@ import {
   type OrphanRescueCandidate,
   type PublishProjectToGitHubArgsDTO,
   type ProjectSummaryDTO,
+  type RoleEventDTO,
   type SearchOpts,
   type TemplateMetaDTO,
   type TerminalAgentSessionDetailDTO,
@@ -39,6 +41,7 @@ import {
   type TerminalExitEventDTO,
   type TerminalOpenArgsDTO,
   type TerminalSessionInfoDTO,
+  type RuntimeEventDTO,
   type V3MigrationReport,
   type VaultExtConfigDTO
 } from '@shared/ipc';
@@ -53,6 +56,17 @@ import type {
 } from '@shared/github';
 import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
+import type {
+  DispatchSnapshot,
+  ImplementationReport,
+  PlanProposal,
+  PlanPublishResult,
+  ProjectRoleBinding,
+  RoleTemplate,
+  RoleTemplateVersion,
+  RuntimeDescriptor,
+  RuntimeRegistrySnapshot
+} from '@shared/orchestration';
 import type {
   AgentEvent,
   StartTaskArgs,
@@ -128,6 +142,61 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.project.listTemplates),
     ensureMcpConfig: (uid: string): Promise<EnsureMcpConfigResultDTO> =>
       ipcRenderer.invoke(IPC.project.ensureMcpConfig, uid)
+  },
+  runtime: {
+    list: (): Promise<RuntimeDescriptor[]> => ipcRenderer.invoke(IPC.runtime.list),
+    refresh: (): Promise<RuntimeRegistrySnapshot> => ipcRenderer.invoke(IPC.runtime.refresh),
+    get: (runtimeId: string): Promise<RuntimeDescriptor | null> =>
+      ipcRenderer.invoke(IPC.runtime.get, runtimeId),
+    onEvent: (cb: (ev: RuntimeEventDTO) => void) => {
+      const listener = (_: unknown, ev: RuntimeEventDTO): void => cb(ev);
+      ipcRenderer.on(IPC.runtime.event, listener);
+      return () => ipcRenderer.removeListener(IPC.runtime.event, listener);
+    }
+  },
+  planner: {
+    listProposals: (projectUid: string): Promise<PlanProposal[]> =>
+      ipcRenderer.invoke(IPC.planner.listProposals, projectUid),
+    getProposal: (projectUid: string, proposalId: string): Promise<PlanProposal | null> =>
+      ipcRenderer.invoke(IPC.planner.getProposal, projectUid, proposalId),
+    saveProposal: (proposal: PlanProposal): Promise<PlanProposal> =>
+      ipcRenderer.invoke(IPC.planner.saveProposal, proposal),
+    publishProposal: (projectUid: string, proposalId: string): Promise<PlanPublishResult> =>
+      ipcRenderer.invoke(IPC.planner.publishProposal, projectUid, proposalId)
+  },
+  dispatch: {
+    status: (projectUid?: string): Promise<DispatchSnapshot> =>
+      ipcRenderer.invoke(IPC.dispatch.status, projectUid),
+    releaseTask: (taskId: string, reason?: string) =>
+      ipcRenderer.invoke(IPC.dispatch.releaseTask, taskId, reason),
+    retryTask: (taskId: string) => ipcRenderer.invoke(IPC.dispatch.retryTask, taskId),
+    onEvent: (cb: (ev: DispatchEventDTO) => void) => {
+      const listener = (_: unknown, ev: DispatchEventDTO): void => cb(ev);
+      ipcRenderer.on(IPC.dispatch.event, listener);
+      return () => ipcRenderer.removeListener(IPC.dispatch.event, listener);
+    }
+  },
+  role: {
+    listTemplates: (): Promise<RoleTemplate[]> => ipcRenderer.invoke(IPC.role.listTemplates),
+    listTemplateVersions: (templateId: string): Promise<RoleTemplateVersion[]> =>
+      ipcRenderer.invoke(IPC.role.listTemplateVersions, templateId),
+    listBindings: (projectUid: string): Promise<ProjectRoleBinding[]> =>
+      ipcRenderer.invoke(IPC.role.listBindings, projectUid),
+    createBinding: (projectUid: string, binding: ProjectRoleBinding): Promise<ProjectRoleBinding> =>
+      ipcRenderer.invoke(IPC.role.createBinding, projectUid, binding),
+    updateBinding: (
+      projectUid: string,
+      bindingId: string,
+      patch: Partial<ProjectRoleBinding>
+    ): Promise<ProjectRoleBinding> =>
+      ipcRenderer.invoke(IPC.role.updateBinding, projectUid, bindingId, patch),
+    getBindingTasks: (projectUid: string, bindingId: string): Promise<TaskRecord[]> =>
+      ipcRenderer.invoke(IPC.role.getBindingTasks, projectUid, bindingId),
+    getBindingReports: (
+      projectUid: string,
+      bindingId: string
+    ): Promise<ImplementationReport[]> =>
+      ipcRenderer.invoke(IPC.role.getBindingReports, projectUid, bindingId)
   },
   task: {
     create: (args: CreateTaskArgsDTO): Promise<CreateTaskResultDTO> =>

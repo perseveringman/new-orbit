@@ -64,7 +64,7 @@ describe('para IPC: updateTaskStatus, closeProject', () => {
 
     const tasks = (await list({})) as { id: string; status: string; title: string }[];
     const a = tasks.find((t) => t.title === 'a')!;
-    expect(a.status).toBe('inbox');
+    expect(a.status).toBe('backlog');
 
     await update({}, a.id, 'doing');
     const content = await fs.readFile(projPath, 'utf8');
@@ -83,7 +83,7 @@ describe('para IPC: updateTaskStatus, closeProject', () => {
     const taskPath = path.join(vault, '01_Projects', 'Task1.md');
     await fs.writeFile(
       taskPath,
-      '---\nuid: TASK12345678\ntype: task\ntitle: Buy beans\nstatus: inbox\n---\n',
+       '---\nuid: TASK12345678\ntype: task\ntitle: Buy beans\nstatus: backlog\n---\n',
       'utf8'
     );
 
@@ -94,9 +94,9 @@ describe('para IPC: updateTaskStatus, closeProject', () => {
     const handlers = await getHandlers();
     const update = handlers.get('para:updateTaskStatus')!;
 
-    await update({}, 'file:01_Projects/Task1.md', 'today');
+    await update({}, 'file:01_Projects/Task1.md', 'todo');
     const content = await fs.readFile(taskPath, 'utf8');
-    expect(content).toMatch(/status:\s*today/);
+    expect(content).toMatch(/status:\s*todo/);
 
     await closeFsSession();
   });

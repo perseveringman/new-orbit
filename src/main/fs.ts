@@ -63,6 +63,7 @@ import {
   updateTaskSection
 } from './task';
 import { relinkTask } from './task_relink';
+import { materializeTaskGraph } from './orchestration/task_graph';
 import {
   listProjectTree as _listProjectTree,
   createDirectory as _createDirectory
@@ -525,7 +526,7 @@ export function registerFsIpc(): void {
     IPC.para.listTasks,
     async (_e, filter?: TaskFilter): Promise<TaskRecord[]> => {
       const sess = getSession();
-      let list = sess.tasks.allTasks();
+      let list = materializeTaskGraph(sess.tasks.allTasks());
       if (filter?.status) list = list.filter((t) => t.status === filter.status);
       if (filter?.project_uid) list = list.filter((t) => t.project_uid === filter.project_uid);
       if (filter?.area_uid) list = list.filter((t) => t.area_uid === filter.area_uid);
@@ -634,7 +635,7 @@ export function registerFsIpc(): void {
         const rel = toPosix(vaultRel(sess.vault, abs));
         out.push(...sess.tasks.tasksOf(rel));
       }
-      return out;
+      return materializeTaskGraph(out);
     }
   );
 

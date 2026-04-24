@@ -7,9 +7,9 @@ import type { TaskStatus } from '@shared/schemas';
  * Rules (documented in `docs/architecture.md`):
  * - `done` → checkbox becomes `[x]` and any `<!-- orbit:status=... -->` tag
  *   is removed.
- * - `inbox` → checkbox becomes `[ ]` and the status comment is removed
- *   (inbox is the implicit default for an unchecked box).
- * - `today` | `doing` | `blocked` → checkbox becomes `[ ]` and the trailing
+ * - `backlog` → checkbox becomes `[ ]` and the status comment is removed
+ *   (backlog is the implicit default for an unchecked box).
+ * - `waiting` | `todo` | `doing` | `blocked` → checkbox becomes `[ ]` and the trailing
  *   comment is set to `<!-- orbit:status=${status} -->`, creating or
  *   replacing it as needed.
  */
@@ -19,7 +19,7 @@ export function setInlineTaskStatus(line: string, status: TaskStatus): string {
   const indent = m[1] ?? '';
   let body = (m[3] ?? '').replace(STATUS_COMMENT_RE, '').trimEnd();
   const checkbox = status === 'done' ? '[x]' : '[ ]';
-  if (status !== 'done' && status !== 'inbox') {
+  if (status !== 'done' && status !== 'backlog') {
     body = `${body} <!-- orbit:status=${status} -->`.trim();
   }
   return `${indent}- ${checkbox} ${body}`.replace(/\s+$/, '');

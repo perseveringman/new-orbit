@@ -88,7 +88,7 @@ export function renderTaskMarkdown(vars: {
     `uid: ${vars.uid}`,
     'type: task',
     `title: ${JSON.stringify(vars.title)}`,
-    'status: inbox',
+    'status: backlog',
     ...(vars.project_uid ? [`project_uid: ${vars.project_uid}`] : []),
     ...(vars.area_uid ? [`area_uid: ${vars.area_uid}`] : []),
     `created_at: ${vars.created_at}`,

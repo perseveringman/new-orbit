@@ -32,6 +32,7 @@ Namespaces:
 | `para`      | implemented | M3 |
 | `git`       | stub | M5 |
 | `agent`     | implemented | M4 |
+| `runtime` / `planner` / `dispatch` / `role` | implemented | Orchestration |
 
 ### `fs` surface
 
@@ -203,7 +204,7 @@ never mutated by the serializer.
 | `AreaFrontmatter`     | `uid`, `type: 'area'`, `title` | `standard`, `tags` |
 | `ResourceFrontmatter` | `uid`, `type: 'resource'`, `title` | `source_project_uid`, `tags` |
 | `ArchiveFrontmatter`  | `uid`, `type: 'archive'`, `title`, `archived_at`, `original_type ∈ project | area | resource` | `tags` |
-| `TaskFrontmatter`     | `uid`, `type: 'task'`, `title`, `status ∈ inbox | today | doing | blocked | done` | `project_uid`, `area_uid`, `due`, `effort ∈ xs|s|m|l|xl`, `tags` |
+| `TaskFrontmatter`     | `uid`, `type: 'task'`, `title`, `status ∈ backlog | waiting | todo | doing | blocked | done` | `project_uid`, `area_uid`, `due`, `effort ∈ xs|s|m|l|xl`, `tags`, orchestration ownership / proposal fields |
 
 `inferTypeFromPath(relPath)` maps `01_Projects/…` → `project`, `02_Areas/` →
 `area`, `03_Resources/` → `resource`, `04_Archives/` → `archive`. On first
@@ -237,7 +238,7 @@ file's frontmatter (`uid` if the file is itself a project/area; else
 #### Inline status comment convention
 
 GFM checklists only encode two states (`[ ]`, `[x]`). To carry the five
-statuses (`inbox | today | doing | blocked | done`) without leaving standard
+statuses (`backlog | waiting | todo | doing | blocked | done`) without leaving standard
 Markdown, Orbit encodes non-binary statuses as an HTML comment on the same
 line:
 
@@ -250,8 +251,8 @@ line:
 Rules applied by `para.updateTaskStatus`:
 
 - `done` → `[x]`, comment removed.
-- `inbox` → `[ ]`, comment removed (inbox is the implicit default).
-- `today | doing | blocked` → `[ ]` + `<!-- orbit:status=... -->` appended or
+- `backlog` → `[ ]`, comment removed (backlog is the implicit default).
+- `waiting | todo | doing | blocked` → `[ ]` + `<!-- orbit:status=... -->` appended or
   replaced.
 
 These comments are inert in any Obsidian/GitHub renderer.

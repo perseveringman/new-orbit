@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TaskOrigin, TaskOwnerType } from './orchestration';
 
 /**
  * PARA entity + task schemas. These live in the shared module so both the
@@ -9,14 +10,26 @@ import { z } from 'zod';
 export const PARA_ENTITY_TYPES = ['project', 'area', 'resource', 'archive'] as const;
 export type ParaEntityType = (typeof PARA_ENTITY_TYPES)[number];
 
-export const TASK_STATUSES = ['inbox', 'today', 'doing', 'blocked', 'done'] as const;
+export const TASK_STATUSES = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+export const LEGACY_TASK_STATUSES = ['inbox', 'today'] as const;
+export type LegacyTaskStatus = (typeof LEGACY_TASK_STATUSES)[number];
 
 export const PROJECT_STATUSES = ['active', 'paused', 'done', 'archived'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 export const EFFORT_VALUES = ['xs', 's', 'm', 'l', 'xl'] as const;
 export type Effort = (typeof EFFORT_VALUES)[number];
+
+const KNOWN_TASK_STATUS_INPUTS = [...TASK_STATUSES, ...LEGACY_TASK_STATUSES] as const;
+
+export function normalizeTaskStatus(value: unknown): TaskStatus | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (value === 'inbox') return 'backlog';
+  if (value === 'today') return 'todo';
+  if ((TASK_STATUSES as readonly string[]).includes(value)) return value as TaskStatus;
+  return undefined;
+}
 
 export const ProjectFrontmatter = z.object({
   uid: z.string(),
@@ -62,7 +75,10 @@ export const TaskFrontmatter = z.object({
   uid: z.string(),
   type: z.literal('task'),
   title: z.string(),
-  status: z.enum(TASK_STATUSES),
+  status: z.preprocess(
+    (value) => normalizeTaskStatus(value) ?? value,
+    z.enum(TASK_STATUSES)
+  ),
   project_uid: z.string().optional(),
   area_uid: z.string().optional(),
   due: z.string().optional(),
@@ -81,8 +97,21 @@ export const TaskFrontmatter = z.object({
   github_issue_title: z.string().optional(),
   github_issue_url: z.string().optional(),
   execution_strategy: z.enum(['manual', 'autonomous']).optional(),
+  origin: z.enum(['human', 'agent', 'system', 'imported']).optional(),
+  created_by: z.string().optional(),
+  assigned_to: z.string().optional(),
+  owner_type: z.enum(['agent', 'binding', 'human']).optional(),
+  owner_id: z.string().optional(),
+  claimed_at: z.string().optional(),
+  active_run_id: z.string().optional(),
+  parent_task_uid: z.string().optional(),
+  generated_from_task_uid: z.string().optional(),
+  role_binding_id: z.string().optional(),
+  recommended_role: z.string().optional(),
+  candidate_role_slugs: z.array(z.string()).optional(),
   /** UID list of tasks that must complete before this one (DAG parent refs). */
   pre_conditions: z.array(z.string()).optional(),
+  blocked_reason: z.string().optional(),
   /** R6: marked by Daily Review as recommended for today. */
   recommended: z.boolean().optional()
 });
@@ -135,11 +164,28 @@ export interface TaskRecord {
   due?: string;
   effort?: Effort | number;
   tags?: string[];
+  priority?: 'low' | 'med' | 'high';
+  execution_strategy?: 'manual' | 'autonomous';
+  pre_conditions?: string[];
   content_hash?: string;
   /** True when project_uid cannot be resolved in the current vault. */
   lost?: boolean;
   /** R6: Orbit Daily Review recommended this task. */
   recommended?: boolean;
+  origin?: TaskOrigin;
+  created_by?: string;
+  assigned_to?: string;
+  owner_type?: TaskOwnerType;
+  owner_id?: string;
+  claimed_at?: string;
+  active_run_id?: string;
+  parent_task_uid?: string;
+  generated_from_task_uid?: string;
+  role_binding_id?: string;
+  recommended_role?: string;
+  candidate_role_slugs?: string[];
+  blocked_reason?: string;
+  ready?: boolean;
 }
 
 export interface EntitySummary {

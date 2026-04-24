@@ -3,8 +3,9 @@ import type { TaskRecord, TaskStatus } from './schemas';
 export type KanbanColumns = Record<TaskStatus, TaskRecord[]>;
 
 export const EMPTY_COLUMNS = (): KanbanColumns => ({
-  inbox: [],
-  today: [],
+  backlog: [],
+  waiting: [],
+  todo: [],
   doing: [],
   blocked: [],
   done: []

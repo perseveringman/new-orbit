@@ -19,6 +19,7 @@ import { registerGitHubIpc } from './github/ipc';
 import { registerEnvIpc } from './env/ipc';
 import { registerDistillIpc, ensureVectorStore, closeVectorStore } from './distill/ipc';
 import { registerR6Ipc, startDailyReviewScheduler } from './r6_ipc';
+import { ensureOrchestrationForVault, registerOrchestrationIpc, shutdownOrchestration } from './orchestration/ipc';
 import * as terminal from './terminal/pty_manager';
 import { runWorktreeGc, startWorktreeGcScheduler } from './worktree_gc';
 import {
@@ -115,6 +116,7 @@ async function handlePickAndOpen(): Promise<VaultResult> {
     await setLastVaultPath(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
+    await ensureOrchestrationForVault(dir);
     await ensureTerminalAgentRuntimeForVault(dir);
     void ensureVectorStore(dir);
     void runWorktreeGc(dir).catch(() => undefined);
@@ -134,6 +136,7 @@ async function handleCreateNew(): Promise<VaultResult> {
     await setLastVaultPath(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
+    await ensureOrchestrationForVault(dir);
     await ensureTerminalAgentRuntimeForVault(dir);
     void ensureVectorStore(dir);
     return { ok: true, vault };
@@ -153,6 +156,7 @@ async function handleOpenPath(_: unknown, dir: string): Promise<VaultResult> {
     await setLastVaultPath(dir);
     await openFsSession(dir);
     await reconcileOnStart(dir);
+    await ensureOrchestrationForVault(dir);
     await ensureTerminalAgentRuntimeForVault(dir);
     void ensureVectorStore(dir);
     return { ok: true, vault };
@@ -235,6 +239,7 @@ function registerIpc(): void {
     await terminal.killAll();
     terminal.setVaultRoot(null);
     await closeVectorStore();
+    shutdownOrchestration();
     await closeFsSession();
     await setLastVaultPath(null);
   });
@@ -314,6 +319,7 @@ function registerIpc(): void {
   registerDistillIpc();
   registerTerminalIpc();
   registerR6Ipc();
+  registerOrchestrationIpc();
   registerAreaIpc(() => currentVault?.path ?? null);
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);

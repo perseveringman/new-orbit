@@ -1,5 +1,5 @@
 ---
-status: draft
+status: completed
 created: 2026-04-25
 updated: 2026-04-25
 ---
@@ -7,7 +7,7 @@ updated: 2026-04-25
 # Orbit Global Role Template Agent Design
 
 > 日期：2026-04-25
-> 状态：Draft
+> 状态：Completed
 > 范围：全局角色模板、项目角色绑定、运行实例、调度参与、历史观察、版本升级与健康状态
 
 ---

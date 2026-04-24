@@ -59,6 +59,18 @@ import type {
   GitHubWorkspaceRepository,
   NightShiftGitHubOptions
 } from './github';
+import type {
+  DispatchSnapshot,
+  ImplementationReport,
+  PlanProposal,
+  PlanPublishResult,
+  ProjectRoleBinding,
+  RoleTemplate,
+  RoleTemplateVersion,
+  RuntimeDescriptor,
+  RuntimeRegistrySnapshot,
+  TaskLease
+} from './orchestration';
 
 /**
  * Typed IPC contract shared between main and renderer.
@@ -116,6 +128,33 @@ export const IPC = {
     getTasks: 'project:getTasks',
     listTemplates: 'project:listTemplates',
     ensureMcpConfig: 'project:ensureMcpConfig'
+  },
+  runtime: {
+    list: 'runtime:list',
+    refresh: 'runtime:refresh',
+    get: 'runtime:get',
+    event: 'runtime:event'
+  },
+  planner: {
+    listProposals: 'planner:listProposals',
+    getProposal: 'planner:getProposal',
+    saveProposal: 'planner:saveProposal',
+    publishProposal: 'planner:publishProposal'
+  },
+  dispatch: {
+    status: 'dispatch:status',
+    releaseTask: 'dispatch:releaseTask',
+    retryTask: 'dispatch:retryTask',
+    event: 'dispatch:event'
+  },
+  role: {
+    listTemplates: 'role:listTemplates',
+    listTemplateVersions: 'role:listTemplateVersions',
+    listBindings: 'role:listBindings',
+    createBinding: 'role:createBinding',
+    updateBinding: 'role:updateBinding',
+    getBindingTasks: 'role:getBindingTasks',
+    getBindingReports: 'role:getBindingReports'
   },
   task: {
     create: 'task:create',
@@ -594,6 +633,28 @@ export interface DistillSuggestHit {
   };
 }
 
+export interface RuntimeEventDTO {
+  at: string;
+  type: string;
+  runtime?: RuntimeDescriptor;
+  snapshot?: RuntimeRegistrySnapshot;
+}
+
+export interface DispatchEventDTO {
+  at: string;
+  type: string;
+  lease?: TaskLease;
+  report?: ImplementationReport;
+  snapshot?: DispatchSnapshot;
+}
+
+export interface RoleEventDTO {
+  at: string;
+  type: string;
+  binding?: ProjectRoleBinding;
+  templates?: RoleTemplate[];
+}
+
 export interface DailyReviewDTO {
   date: string;
   path: string;
@@ -724,6 +785,37 @@ export interface OrbitApi {
     getTasks(uid: string): Promise<TaskRecord[]>;
     listTemplates(): Promise<TemplateMetaDTO[]>;
     ensureMcpConfig(uid: string): Promise<EnsureMcpConfigResultDTO>;
+  };
+  runtime: {
+    list(): Promise<RuntimeDescriptor[]>;
+    refresh(): Promise<RuntimeRegistrySnapshot>;
+    get(runtimeId: string): Promise<RuntimeDescriptor | null>;
+    onEvent(cb: (ev: RuntimeEventDTO) => void): () => void;
+  };
+  planner: {
+    listProposals(projectUid: string): Promise<PlanProposal[]>;
+    getProposal(projectUid: string, proposalId: string): Promise<PlanProposal | null>;
+    saveProposal(proposal: PlanProposal): Promise<PlanProposal>;
+    publishProposal(projectUid: string, proposalId: string): Promise<PlanPublishResult>;
+  };
+  dispatch: {
+    status(projectUid?: string): Promise<DispatchSnapshot>;
+    releaseTask(taskId: string, reason?: string): Promise<TaskLease | null>;
+    retryTask(taskId: string): Promise<TaskLease | null>;
+    onEvent(cb: (ev: DispatchEventDTO) => void): () => void;
+  };
+  role: {
+    listTemplates(): Promise<RoleTemplate[]>;
+    listTemplateVersions(templateId: string): Promise<RoleTemplateVersion[]>;
+    listBindings(projectUid: string): Promise<ProjectRoleBinding[]>;
+    createBinding(projectUid: string, binding: ProjectRoleBinding): Promise<ProjectRoleBinding>;
+    updateBinding(
+      projectUid: string,
+      bindingId: string,
+      patch: Partial<ProjectRoleBinding>
+    ): Promise<ProjectRoleBinding>;
+    getBindingTasks(projectUid: string, bindingId: string): Promise<TaskRecord[]>;
+    getBindingReports(projectUid: string, bindingId: string): Promise<ImplementationReport[]>;
   };
   task: {
     create(args: CreateTaskArgsDTO): Promise<CreateTaskResultDTO>;

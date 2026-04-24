@@ -77,12 +77,12 @@ describe('review.generateDailyReview (R6)', () => {
     await writeTask(vault, 'beta', {
       uid: 'taskbeta0001',
       title: 'Design beta API',
-      status: 'today'
+      status: 'todo'
     });
     await writeTask(vault, 'alpha', {
       uid: 'taskalpha002',
       title: 'Inbox item',
-      status: 'inbox'
+      status: 'backlog'
     });
 
     const stubGit = async (args: string[], cwd: string): Promise<string> => {
@@ -104,7 +104,7 @@ describe('review.generateDailyReview (R6)', () => {
     expect(res.content).toContain('fedcba0');
     expect(res.content).toContain('Ship alpha feature');
     expect(res.content).toContain('## 明日建议');
-    // Recommendations should be among open tasks (today + inbox).
+    // Recommendations should be among open tasks (todo + backlog).
     expect(res.recommendedTaskUids.length).toBeGreaterThan(0);
     expect(res.recommendedTaskUids).toContain('taskbeta0001');
     // frontmatter on journal file
@@ -126,7 +126,7 @@ describe('review.generateDailyReview (R6)', () => {
     const raw = await fs.readFile(betaTask, 'utf8');
     const { data } = frontmatter.read(raw);
     expect(data['recommended']).toBe(true);
-    expect(data['status']).toBe('today');
+    expect(data['status']).toBe('todo');
   });
 
   it('template path works without any API key (LLM fallback)', async () => {
@@ -135,7 +135,7 @@ describe('review.generateDailyReview (R6)', () => {
     await writeTask(vault, 'gamma', {
       uid: 'taskgamma001',
       title: 'Gamma task',
-      status: 'inbox'
+        status: 'backlog'
     });
     const res = await generateDailyReview(vault, today, {
       runGit: async () => ''
@@ -153,7 +153,7 @@ describe('review.generateDailyReview (R6)', () => {
     await writeTask(vault, 'delta', {
       uid: 'taskdelta001',
       title: 'Delta one',
-      status: 'inbox'
+        status: 'backlog'
     });
     const fakeLlm = `# Daily Review ${today}
 ## 今日做了什么

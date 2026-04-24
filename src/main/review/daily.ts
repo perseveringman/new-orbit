@@ -161,7 +161,7 @@ export async function collectDailyData(
         (typeof fm['title'] === 'string' && (fm['title'] as string)) ||
         path.basename(abs, '.md');
       const status =
-        typeof fm['status'] === 'string' ? (fm['status'] as string) : 'inbox';
+        typeof fm['status'] === 'string' ? (fm['status'] as string) : 'backlog';
       const updatedAt =
         typeof fm['updated_at'] === 'string' ? (fm['updated_at'] as string) : '';
       const createdAt =
@@ -225,7 +225,7 @@ function renderTemplate(d: DailyData): { content: string; recommended: string[] 
     arr.push(t);
     byStatus.set(t.status, arr);
   }
-  const prio = ['today', 'doing', 'inbox'];
+  const prio = ['todo', 'doing', 'backlog'];
   outer: for (const s of prio) {
     for (const t of byStatus.get(s) ?? []) {
       if (!t.uid) continue;
@@ -419,7 +419,7 @@ export async function generateDailyReview(
           if (!p) continue;
           await updateTaskFrontmatter(p, {
             recommended: true,
-            status: 'today',
+            status: 'todo',
             updated_at: new Date().toISOString()
           } as Record<string, unknown>);
         }

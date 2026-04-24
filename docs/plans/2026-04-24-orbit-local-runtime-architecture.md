@@ -1,13 +1,13 @@
 ---
-status: draft
+status: completed
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-04-25
 ---
 
 # Orbit Local Runtime Architecture（借鉴 Multica Runtime/Daemon）
 
 > 日期：2026-04-24
-> 状态：Draft
+> 状态：Completed
 > 范围：runtime 发现、注册、通信、任务认领、provider 执行、恢复模型
 
 ---

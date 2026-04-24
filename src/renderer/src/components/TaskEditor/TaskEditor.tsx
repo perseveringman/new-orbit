@@ -214,7 +214,7 @@ export function TaskEditor({
     }
   }, [path, relinkUid, toast, onFrontmatterChanged]);
 
-  const status = (fm['status'] as TaskStatus) ?? 'inbox';
+  const status = (fm['status'] as TaskStatus) ?? 'backlog';
   const title = (fm['title'] as string) ?? task.title;
   const priority = (fm['priority'] as string) ?? '';
   const due = (fm['due'] as string) ?? '';

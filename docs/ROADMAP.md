@@ -40,6 +40,7 @@
 | GitHub Integration | 以 `gh` CLI 为基础的 GitHub 连接、导入、发布、PR 创建、状态读取 |
 | Project Session History | 终端 agent 会话作为项目级历史记录，支持 Claude/Codex transcript 导入，Session History tab |
 | Area Room + Vision System | Area 升级为独立工作单元（Kanban / Terminal / Sessions）；内置 Vision 模板、笔记接入、Vision 冷启动与 review 工作流 |
+| Orchestration System | 落地 Planner proposal 历史与发布、Local Runtime registry、Dispatch lease/report 流、Global Role Templates/Bindings，以及 Project Room 的 Planner/Roles 工作面板 |
 
 ---
 
@@ -49,9 +50,9 @@
 | --- | --- | --- |
 | Agent Context System | `docs/plans/2026-04-22-orbit-agent-context-architecture.md`（+ scheme-a/c/d） | 设计中，待选型落地 |
 | Capture & Knowledge Funnel | `docs/plans/2026-04-24-capture-knowledge-funnel.md` | 设计中 |
-| Planner Agent + Agent Dispatching | `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md` | 设计中 |
-| Local Runtime Architecture | `docs/plans/2026-04-24-orbit-local-runtime-architecture.md` | 设计中 |
-| Global Role Template Agents | `docs/plans/2026-04-25-orbit-role-template-agent-design.md` | 设计中 |
+| Planner Agent + Agent Dispatching | `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md` | 已落地 |
+| Local Runtime Architecture | `docs/plans/2026-04-24-orbit-local-runtime-architecture.md` | 已落地 |
+| Global Role Template Agents | `docs/plans/2026-04-25-orbit-role-template-agent-design.md` | 已落地 |
 
 ---
 

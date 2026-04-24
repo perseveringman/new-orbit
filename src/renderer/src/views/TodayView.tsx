@@ -11,7 +11,7 @@ function todayIso(): string {
 }
 
 /**
- * Today view: union of tasks explicitly flagged `status: today` and tasks
+ * Today view: union of tasks explicitly flagged `status: todo` and tasks
  * whose `due` is on or before today (excluding already-done).
  */
 export function TodayView(): JSX.Element {
@@ -31,7 +31,7 @@ export function TodayView(): JSX.Element {
       .then((r) => setOverdue(r.filter((t) => t.status !== 'done')));
   }, [today, tasks]);
 
-  const explicit = tasks.filter((t) => t.status === 'today');
+  const explicit = tasks.filter((t) => t.status === 'todo');
   const merged = [...new Map([...explicit, ...overdue].map((t) => [t.id, t])).values()];
 
   return (

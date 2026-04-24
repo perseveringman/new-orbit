@@ -6,7 +6,8 @@ import {
   type ParaEntityType,
   type TaskRecord,
   type TaskStatus,
-  TASK_STATUSES
+  TASK_STATUSES,
+  normalizeTaskStatus
 } from '@shared/schemas';
 import { toPosix } from './pathGuard';
 
@@ -29,10 +30,8 @@ function asEffort(v: unknown): Effort | undefined {
   return undefined;
 }
 
-function asTaskStatus(v: unknown, fallback: TaskStatus = 'inbox'): TaskStatus {
-  return (TASK_STATUSES as readonly string[]).includes(v as string)
-    ? (v as TaskStatus)
-    : fallback;
+function asTaskStatus(v: unknown, fallback: TaskStatus = 'backlog'): TaskStatus {
+  return normalizeTaskStatus(v) ?? fallback;
 }
 
 /**
@@ -50,11 +49,11 @@ export function parseInlineTasks(
     if (!m) continue;
     const checked = m[2] !== ' ';
     let rest = (m[3] ?? '').trim();
-    let status: TaskStatus = checked ? 'done' : 'inbox';
+    let status: TaskStatus = checked ? 'done' : 'backlog';
     const sc = rest.match(STATUS_COMMENT_RE);
     if (sc) {
       rest = rest.replace(STATUS_COMMENT_RE, '').trim();
-      if (!checked) status = asTaskStatus(sc[1], 'inbox');
+      if (!checked) status = asTaskStatus(sc[1], 'backlog');
     }
     out.push({ line: i + 1, status, title: rest });
   }
@@ -101,6 +100,44 @@ export function tasksOfFile(
     if (effort) rec.effort = effort;
     const tags = asStringArr(data['tags']);
     if (tags) rec.tags = tags;
+    const priority = asString(data['priority']);
+    if (priority === 'low' || priority === 'med' || priority === 'high') rec.priority = priority;
+    const executionStrategy = asString(data['execution_strategy']);
+    if (executionStrategy === 'manual' || executionStrategy === 'autonomous') {
+      rec.execution_strategy = executionStrategy;
+    }
+    const preConditions = asStringArr(data['pre_conditions']);
+    if (preConditions) rec.pre_conditions = preConditions;
+    const origin = asString(data['origin']);
+    if (origin === 'human' || origin === 'agent' || origin === 'system' || origin === 'imported') {
+      rec.origin = origin;
+    }
+    const createdBy = asString(data['created_by']);
+    if (createdBy) rec.created_by = createdBy;
+    const assignedTo = asString(data['assigned_to']);
+    if (assignedTo) rec.assigned_to = assignedTo;
+    const ownerType = asString(data['owner_type']);
+    if (ownerType === 'agent' || ownerType === 'binding' || ownerType === 'human') {
+      rec.owner_type = ownerType;
+    }
+    const ownerId = asString(data['owner_id']);
+    if (ownerId) rec.owner_id = ownerId;
+    const claimedAt = asString(data['claimed_at']);
+    if (claimedAt) rec.claimed_at = claimedAt;
+    const activeRunId = asString(data['active_run_id']);
+    if (activeRunId) rec.active_run_id = activeRunId;
+    const parentTaskUid = asString(data['parent_task_uid']);
+    if (parentTaskUid) rec.parent_task_uid = parentTaskUid;
+    const generatedFromTaskUid = asString(data['generated_from_task_uid']);
+    if (generatedFromTaskUid) rec.generated_from_task_uid = generatedFromTaskUid;
+    const roleBindingId = asString(data['role_binding_id']);
+    if (roleBindingId) rec.role_binding_id = roleBindingId;
+    const recommendedRole = asString(data['recommended_role']);
+    if (recommendedRole) rec.recommended_role = recommendedRole;
+    const candidateRoleSlugs = asStringArr(data['candidate_role_slugs']);
+    if (candidateRoleSlugs) rec.candidate_role_slugs = candidateRoleSlugs;
+    const blockedReason = asString(data['blocked_reason'] ?? data['agent_block_reason']);
+    if (blockedReason) rec.blocked_reason = blockedReason;
     if (data['recommended'] === true) rec.recommended = true;
     out.push(rec);
   }

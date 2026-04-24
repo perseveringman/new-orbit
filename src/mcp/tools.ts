@@ -47,8 +47,9 @@ export interface ToolContext {
 }
 
 const VALID_TASK_STATUSES = new Set([
-  'inbox',
-  'today',
+  'backlog',
+  'waiting',
+  'todo',
   'doing',
   'blocked',
   'done'
@@ -159,7 +160,7 @@ export function buildTaskMarkdown(args: {
     uid: args.uid,
     type: 'task',
     title: args.title,
-    status: 'inbox',
+    status: 'backlog',
     project_uid: args.projectUid,
     created_at: args.createdAt
   };
@@ -256,7 +257,7 @@ export async function updateTaskStatusTool(
   if (!taskUid) return errorResult('update_task_status: "task_uid" required');
   if (!VALID_TASK_STATUSES.has(status)) {
     return errorResult(
-      `update_task_status: invalid status "${status}" (allowed: inbox|today|doing|blocked|done)`
+      `update_task_status: invalid status "${status}" (allowed: backlog|waiting|todo|doing|blocked|done)`
     );
   }
   const abs = await resolveTaskPath(ctx, taskUid);
@@ -416,7 +417,7 @@ async function listTaskRecords(ctx: ToolContext): Promise<
       const uid = typeof data['uid'] === 'string' ? (data['uid'] as string) : '';
       const title = typeof data['title'] === 'string' ? (data['title'] as string) : name;
       const status =
-        typeof data['status'] === 'string' ? (data['status'] as string) : 'inbox';
+        typeof data['status'] === 'string' ? (data['status'] as string) : 'backlog';
       const created_at =
         typeof data['created_at'] === 'string' ? (data['created_at'] as string) : undefined;
       tasks.push({ uid, title, status, path: abs, ...(created_at ? { created_at } : {}) });
@@ -545,14 +546,14 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: 'update_task_status',
     description:
-      "Update a task's status. Status must be one of: inbox, today, doing, blocked, done. The task must belong to the current project.",
+      "Update a task's status. Status must be one of: backlog, waiting, todo, doing, blocked, done. The task must belong to the current project.",
     inputSchema: {
       type: 'object',
       properties: {
         task_uid: { type: 'string' },
         status: {
           type: 'string',
-          enum: ['inbox', 'today', 'doing', 'blocked', 'done']
+          enum: ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done']
         }
       },
       required: ['task_uid', 'status']

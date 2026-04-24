@@ -100,7 +100,7 @@ describe('experience wake-up', () => {
       const fakeTask = {
         id: 'inline:x.md:1',
         source: 'inline' as const,
-        status: 'inbox' as const,
+        status: 'backlog' as const,
         title: 'orbit distill',
         filePath: '/x',
         relPath: 'x.md'

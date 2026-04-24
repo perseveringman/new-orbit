@@ -461,7 +461,7 @@ function registerBudgetWatch(): void {
  * Build + spawn a runner for a specific task. Returns a structured
  * error object (not throw) so the renderer can render install hints.
  */
-async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
+export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
   const sess = currentSession();
   if (!sess) return { kind: 'error', code: 'no_vault', message: 'No vault is open.' };
 

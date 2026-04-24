@@ -6,6 +6,8 @@
 
 ### Added
 
+- **Orchestration Core Runtime / Planner / Roles**：新增 `src/shared/orchestration.ts` 与 main-process orchestration 模块，落地 runtime registry、plan proposal 存储与发布、dispatch/lease/report 状态流、全局角色模板与项目 binding 持久化；任务状态升级为 `backlog / waiting / todo / doing / blocked / done`，并补齐 ownership、recommended role、implementation report 等编排字段
+
 - **Orchestration UI Integration**：在 Project Room 中新增 Planner 和 Roles 两个 tab，提供计划管理和角色绑定的可视化界面；Planner tab 支持加载/创建/编辑/发布计划提案，显示节点依赖图和发布结果摘要；Roles tab 支持列出角色模板、创建项目绑定、配置调度模式/运行时偏好/覆盖指令/健康状态，查看绑定任务列表和实施报告；在 TaskRow 和 TaskCard 中展示任务的 origin、owner、blocked/ready 状态标记，帮助用户理解编排上下文
 
 - **Global Role Template Agents 设计方案**：新增 `docs/plans/2026-04-25-orbit-role-template-agent-design.md`，将 Orbit 的 agent 设计收敛为全局角色模板 + 项目角色绑定 + 运行实例三层模型，明确模板版本化、binding 调度模式、历史任务双入口、binding 健康状态，以及与 planner / dispatch / runtime 方案的衔接

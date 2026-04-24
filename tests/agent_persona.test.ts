@@ -22,7 +22,7 @@ describe('agent persona composition', () => {
       const task: TaskRecord = {
         id: 'file:01_Projects/P1.md',
         source: 'file',
-        status: 'today',
+        status: 'todo',
         title: 'Ship vessel',
         filePath: '/tmp/fake',
         relPath: '01_Projects/P1.md',

@@ -7,7 +7,7 @@ import { usePara } from '../store/para';
 import { VisionEditorModal } from '../components/Modals/VisionEditorModal';
 import { NightShiftModal } from '../components/Modals/NightShiftModal';
 
-const STATUSES: TaskStatus[] = ['inbox', 'today', 'doing', 'blocked', 'done'];
+const STATUSES: TaskStatus[] = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'];
 
 const cardCls =
   'rounded-lg border border-neutral-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/60';
@@ -64,7 +64,7 @@ export function DashboardView(): JSX.Element {
     const active = projects.filter((p) => p.status !== 'archived' && !p.legacy);
     const byUid = new Map<string, Record<TaskStatus, TaskRecord[]>>();
     for (const p of active) {
-      byUid.set(p.uid, { inbox: [], today: [], doing: [], blocked: [], done: [] });
+      byUid.set(p.uid, { backlog: [], waiting: [], todo: [], doing: [], blocked: [], done: [] });
     }
     for (const t of tasks) {
       if (!t.project_uid) continue;
@@ -74,12 +74,13 @@ export function DashboardView(): JSX.Element {
     }
     return active.map((p) => ({
       project: p,
-      buckets: byUid.get(p.uid) ?? {
-        inbox: [],
-        today: [],
-        doing: [],
-        blocked: [],
-        done: []
+        buckets: byUid.get(p.uid) ?? {
+          backlog: [],
+          waiting: [],
+          todo: [],
+          doing: [],
+          blocked: [],
+          done: []
       }
     }));
   }, [projects, tasks]);

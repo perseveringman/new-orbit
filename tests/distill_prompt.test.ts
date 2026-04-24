@@ -61,7 +61,7 @@ describe('composeDistillPrompt', () => {
       ],
       tasks: [
         task({ title: 'Wire IPC', relPath: '04_Archives/2025/Orbit-M7.md' }),
-        task({ title: 'Draft tests', status: 'inbox' })
+        task({ title: 'Draft tests', status: 'backlog' })
       ],
       gitLog: [
         { at: '2025-05-01T00:00:00Z', kind: 'commit', message: 'init', sha: 'abc' }

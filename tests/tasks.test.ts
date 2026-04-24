@@ -14,7 +14,7 @@ describe('inline task parsing', () => {
     ].join('\n');
     const parsed = parseInlineTasks(body);
     expect(parsed).toEqual([
-      { line: 1, status: 'inbox', title: 'first' },
+      { line: 1, status: 'backlog', title: 'first' },
       { line: 2, status: 'done', title: 'nested done' },
       { line: 4, status: 'doing', title: 'doing now' },
       { line: 5, status: 'blocked', title: 'blocked by X' }
@@ -34,7 +34,7 @@ describe('inline task parsing', () => {
     const inline = list.filter((t) => t.source === 'inline');
     expect(inline.map((t) => t.title)).toEqual(['first task', 'done task']);
     expect(inline.every((t) => t.project_uid === 'ABCDEFGH1234')).toBe(true);
-    expect(inline[0]?.status).toBe('inbox');
+    expect(inline[0]?.status).toBe('backlog');
     expect(inline[1]?.status).toBe('done');
     expect(inline[0]?.line).toBe(1);
     expect(inline[1]?.line).toBe(2);
@@ -42,11 +42,11 @@ describe('inline task parsing', () => {
 
   it('tasksOfFile produces a file task when type === task', () => {
     const content =
-      '---\nuid: TASKUID12345\ntype: task\ntitle: Buy beans\nstatus: today\neffort: s\n---\n';
+       '---\nuid: TASKUID12345\ntype: task\ntitle: Buy beans\nstatus: todo\neffort: s\n---\n';
     const list = tasksOfFile('/x/y.md', '01_Projects/y.md', content);
     const file = list.find((t) => t.source === 'file');
     expect(file).toBeDefined();
-    expect(file?.status).toBe('today');
+    expect(file?.status).toBe('todo');
     expect(file?.effort).toBe('s');
     expect(file?.id).toBe('file:01_Projects/y.md');
   });
@@ -55,7 +55,7 @@ describe('inline task parsing', () => {
 describe('inline task mutation', () => {
   it('toggles binary states and strips comments', () => {
     expect(setInlineTaskStatus('- [ ] a', 'done')).toBe('- [x] a');
-    expect(setInlineTaskStatus('- [x] a', 'inbox')).toBe('- [ ] a');
+    expect(setInlineTaskStatus('- [x] a', 'backlog')).toBe('- [ ] a');
     expect(setInlineTaskStatus('- [ ] a <!-- orbit:status=doing -->', 'done')).toBe(
       '- [x] a'
     );
@@ -65,7 +65,7 @@ describe('inline task mutation', () => {
     expect(setInlineTaskStatus('- [ ] a', 'doing')).toBe(
       '- [ ] a <!-- orbit:status=doing -->'
     );
-    expect(setInlineTaskStatus('- [ ] a <!-- orbit:status=today -->', 'blocked')).toBe(
+    expect(setInlineTaskStatus('- [ ] a <!-- orbit:status=todo -->', 'blocked')).toBe(
       '- [ ] a <!-- orbit:status=blocked -->'
     );
   });

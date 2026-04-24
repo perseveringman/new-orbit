@@ -11,7 +11,7 @@ const tasks: TaskRecord[] = [
   {
     id: 'file:01_Projects/orbit-app/.agent/tasks/task-1.md',
     source: 'file',
-    status: 'today',
+    status: 'todo',
     title: 'Setup auth',
     filePath: '/vault/01_Projects/orbit-app/.agent/tasks/task-1.md',
     relPath: '01_Projects/orbit-app/.agent/tasks/task-1.md',
@@ -21,7 +21,7 @@ const tasks: TaskRecord[] = [
   {
     id: 'file:01_Projects/orbit-app/.agent/tasks/task-2.md',
     source: 'file',
-    status: 'inbox',
+    status: 'backlog',
     title: 'Polish GitHub UI',
     filePath: '/vault/01_Projects/orbit-app/.agent/tasks/task-2.md',
     relPath: '01_Projects/orbit-app/.agent/tasks/task-2.md',
