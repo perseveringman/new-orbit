@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BacklinkItem, FileNode, FsEvent, SearchHit } from '@shared/types';
+import type { BacklinkItem, FileNode, FsEvent, ProjectFileNode, SearchHit } from '@shared/types';
 
 interface OpenFile {
   path: string;
@@ -10,6 +10,7 @@ interface OpenFile {
 
 interface FilesState {
   tree: FileNode | null;
+  projectTree: ProjectFileNode | null;
   active: OpenFile | null;
   backlinks: BacklinkItem[];
   unsubscribe: (() => void) | null;
@@ -18,6 +19,7 @@ interface FilesState {
   init(vaultPath: string): Promise<void>;
   teardown(): void;
   refreshTree(vaultPath: string): Promise<void>;
+  refreshProjectTree(rootPath: string): Promise<void>;
   openPath(absPath: string): Promise<void>;
   setContent(content: string): void;
   save(): Promise<void>;
@@ -34,6 +36,7 @@ let initToken = 0;
 
 export const useFiles = create<FilesState>((set, get) => ({
   tree: null,
+  projectTree: null,
   active: null,
   backlinks: [],
   unsubscribe: null,
@@ -82,12 +85,17 @@ export const useFiles = create<FilesState>((set, get) => ({
   teardown() {
     initToken += 1;
     get().unsubscribe?.();
-    set({ unsubscribe: null, tree: null, active: null, backlinks: [] });
+    set({ unsubscribe: null, tree: null, projectTree: null, active: null, backlinks: [] });
   },
 
   async refreshTree(vaultPath: string) {
     const tree = await window.orbit.fs.listTree(vaultPath);
     set({ tree });
+  },
+
+  async refreshProjectTree(rootPath: string) {
+    const projectTree = await window.orbit.fs.listProjectTree(rootPath);
+    set({ projectTree });
   },
 
   async openPath(absPath: string) {

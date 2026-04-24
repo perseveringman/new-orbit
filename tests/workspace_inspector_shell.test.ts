@@ -59,9 +59,9 @@ describe('WorkspaceInspectorPane shell', () => {
     expect(html).toContain('inspector-accent');
   });
 
-  it('shows the files placeholder message when activeTab is files', () => {
+  it('renders the files panel with a search input when activeTab is files', () => {
     const html = renderToStaticMarkup(createElement(WorkspaceInspectorPane));
-    expect(html).toContain('Files tree');
+    expect(html).toContain('Search files');
   });
 
   it('shows the changes placeholder when activeTab is changes', () => {

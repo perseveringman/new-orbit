@@ -17,6 +17,7 @@ interface WorkspaceInspectorState {
   setSelectedPath(path: string | null): void;
   setCommitMessage(msg: string): void;
   toggleExpanded(path: string): void;
+  collapseAll(): void;
 }
 
 function createDefaultState(): Omit<
@@ -28,6 +29,7 @@ function createDefaultState(): Omit<
   | 'setSelectedPath'
   | 'setCommitMessage'
   | 'toggleExpanded'
+  | 'collapseAll'
 > {
   return {
     activeTab: 'files',
@@ -69,5 +71,9 @@ export const useWorkspaceInspector = create<WorkspaceInspectorState>((set, get) 
   toggleExpanded(path) {
     const prev = get().expanded;
     set({ expanded: { ...prev, [path]: !prev[path] } });
+  },
+
+  collapseAll() {
+    set({ expanded: {} });
   }
 }));
