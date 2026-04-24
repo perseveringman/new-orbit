@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- **discardPaths 修复（Task 5 spec）**：`indexStatus='A'`（新增暂存文件）在 discard 时不再尝试 `git restore --source=HEAD`（因 HEAD 中不存在该文件会失败），改为 unstage 后直接删除文件；新增回归测试覆盖此路径
+- **diff 层兼容导出（Task 5 spec）**：`diff.ts` 新增 `getStagedFileSummary`，封装 `git diff --cached --numstat`，供 Changes 面板使用；`git_diff.test.ts` 新增对应集成测试
+
 - **终端可读性主题**：xterm 终端补齐完整 ANSI 调色板，修复浅色模式下白色系输出接近白底白字的问题；同时提高终端字号/行高，并让 `system` 主题下的终端配色跟随实际界面明暗
 - **Vision 启动提示词投递**：Vision 的启动 / review 动作不再把中文提示词直接写进 shell；现在会先启动 `claude`，等待进入交互态后再自动发送 prompt
 - **Vision 页浏览器兼容性**：移除 renderer 里的 `gray-matter` 依赖，改为浏览器安全的 frontmatter 解析，修复 `Buffer is not defined`
