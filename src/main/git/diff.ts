@@ -181,3 +181,18 @@ export async function computeMergeBaseDiff(opts: DiffOptions): Promise<DiffResul
     totalDeletions
   };
 }
+
+/**
+ * Return a numstat summary of currently staged changes.
+ * Wraps `git diff --cached --numstat`, making the existing `parseNumstat`
+ * helper available to the staged-aware Changes panel pipeline.
+ */
+export async function getStagedFileSummary(
+  cwd: string,
+  pathspec?: string[]
+): Promise<NumstatEntry[]> {
+  const git = simpleGit(cwd);
+  const ps = pathspec && pathspec.length > 0 ? ['--', ...pathspec] : [];
+  const raw = await git.raw(['diff', '--cached', '--numstat', ...ps]);
+  return parseNumstat(raw);
+}

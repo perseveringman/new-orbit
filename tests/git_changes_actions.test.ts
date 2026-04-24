@@ -226,6 +226,41 @@ describe('discardPaths', () => {
     }
   });
 
+  it('discards a newly staged-added file (indexStatus=A) without attempting HEAD restore', async () => {
+    // Regression: previously discardPaths would call `git restore --source=HEAD`
+    // for staged-added files, which fails because no HEAD version exists.
+    const { dir, g } = await makeTmpRepo();
+    try {
+      // Initial commit so HEAD exists (but does NOT contain new-file.ts)
+      await fs.writeFile(path.join(dir, 'existing.ts'), 'x\n');
+      await g.add('.');
+      await g.commit('init');
+
+      // Create and stage a brand-new file
+      const newFilePath = path.join(dir, 'new-file.ts');
+      await fs.writeFile(newFilePath, 'brand new\n');
+      await g.add('new-file.ts');
+
+      // Verify it is staged as 'A'
+      const before = await getChanges({ cwd: dir });
+      const entry = before.files.find((f) => f.path === 'new-file.ts');
+      expect(entry?.indexStatus).toBe('A');
+
+      // discardPaths should succeed and leave no trace of the file
+      await discardPaths({ cwd: dir, paths: ['new-file.ts'] });
+
+      // File must be gone from disk
+      await expect(fs.access(newFilePath)).rejects.toThrow();
+
+      // Index must be clean
+      const after = await getChanges({ cwd: dir });
+      expect(after.stagedCount).toBe(0);
+      expect(after.files.find((f) => f.path === 'new-file.ts')).toBeUndefined();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('unstages and then restores staged file', async () => {
     const { dir, g } = await makeTmpRepo();
     try {

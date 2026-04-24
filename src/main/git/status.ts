@@ -163,15 +163,22 @@ export async function discardPaths(args: PathsArgs): Promise<void> {
   const lines = raw.split(/\r?\n/).filter(Boolean);
   const status = parsePorcelainStatus(lines);
 
-  const stagedPaths: string[] = [];
+  // Newly staged files (indexStatus='A') have no HEAD version — they must be
+  // deleted after unstage rather than restored from HEAD.
+  const stagedAddedPaths: string[] = [];
+  // Staged files that exist in HEAD — safe to restore after unstage.
+  const stagedModifiedPaths: string[] = [];
   const trackedDirtyPaths: string[] = [];
   const untrackedPaths: string[] = [];
 
   for (const entry of status.files) {
     if (entry.indexStatus === '?' && entry.workTreeStatus === '?') {
       untrackedPaths.push(entry.path);
+    } else if (entry.indexStatus === 'A') {
+      // New file staged for addition — no HEAD revision exists.
+      stagedAddedPaths.push(entry.path);
     } else {
-      if (entry.indexStatus !== ' ') stagedPaths.push(entry.path);
+      if (entry.indexStatus !== ' ') stagedModifiedPaths.push(entry.path);
       // Worktree needs restore if it differs from index/HEAD
       if (entry.workTreeStatus !== ' ') trackedDirtyPaths.push(entry.path);
     }
@@ -179,18 +186,25 @@ export async function discardPaths(args: PathsArgs): Promise<void> {
 
   // Paths requested but not appearing in status (already clean): skip silently.
 
-  // 1. Unstage staged paths
-  if (stagedPaths.length > 0) {
+  // 1. Unstage all staged paths
+  const allStagedPaths = [...stagedAddedPaths, ...stagedModifiedPaths];
+  if (allStagedPaths.length > 0) {
     try {
-      await g.raw(['restore', '--staged', '--', ...stagedPaths]);
+      await g.raw(['restore', '--staged', '--', ...allStagedPaths]);
     } catch {
-      await g.raw(['reset', 'HEAD', '--', ...stagedPaths]);
+      await g.raw(['reset', 'HEAD', '--', ...allStagedPaths]);
     }
   }
 
-  // 2. Restore tracked worktree files to HEAD
+  // 2. Delete newly-added files — they have no HEAD version to restore from.
+  for (const p of stagedAddedPaths) {
+    const abs = path.resolve(args.cwd, p);
+    await fs.rm(abs, { recursive: true, force: true });
+  }
+
+  // 3. Restore tracked worktree files to HEAD (excludes staged-added paths).
   const toRestoreWorktree = Array.from(
-    new Set([...stagedPaths, ...trackedDirtyPaths])
+    new Set([...stagedModifiedPaths, ...trackedDirtyPaths])
   );
   if (toRestoreWorktree.length > 0) {
     try {
@@ -200,7 +214,7 @@ export async function discardPaths(args: PathsArgs): Promise<void> {
     }
   }
 
-  // 3. Delete untracked files
+  // 4. Delete untracked files
   for (const p of untrackedPaths) {
     const abs = path.resolve(args.cwd, p);
     await fs.rm(abs, { recursive: true, force: true });

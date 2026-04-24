@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
-import { computeMergeBaseDiff, parseNumstat } from '../src/main/git/diff';
+import { computeMergeBaseDiff, parseNumstat, getStagedFileSummary } from '../src/main/git/diff';
 
 describe('parseNumstat', () => {
   it('parses happy path', () => {
@@ -96,6 +96,53 @@ describe('computeMergeBaseDiff', () => {
       await g.commit('init');
 
       await expect(computeMergeBaseDiff({ worktreePath: dir })).rejects.toThrow('no_base_ref');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('getStagedFileSummary', () => {
+  it('returns numstat entries for currently staged changes', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-staged-'));
+    try {
+      const g = await initRepo(dir);
+
+      // Initial commit
+      await fs.writeFile(path.join(dir, 'a.ts'), 'line1\n');
+      await g.add('.');
+      await g.commit('init');
+
+      // Stage a modification and a new file
+      await fs.writeFile(path.join(dir, 'a.ts'), 'line1\nline2\n');
+      await fs.writeFile(path.join(dir, 'b.ts'), 'new\n');
+      await g.add(['a.ts', 'b.ts']);
+
+      const entries = await getStagedFileSummary(dir);
+
+      expect(entries.length).toBe(2);
+      const aEntry = entries.find((e) => e.path === 'a.ts');
+      const bEntry = entries.find((e) => e.path === 'b.ts');
+      expect(aEntry?.additions).toBeGreaterThan(0);
+      expect(bEntry?.additions).toBeGreaterThan(0);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns empty array when nothing is staged', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-staged-empty-'));
+    try {
+      const g = await initRepo(dir);
+      await fs.writeFile(path.join(dir, 'a.ts'), 'v1\n');
+      await g.add('.');
+      await g.commit('init');
+
+      // Modify but do not stage
+      await fs.writeFile(path.join(dir, 'a.ts'), 'v2\n');
+
+      const entries = await getStagedFileSummary(dir);
+      expect(entries).toEqual([]);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
