@@ -77,4 +77,10 @@ describe('WorkspaceInspectorPane shell', () => {
     expect(INSPECTOR_THEME.gitAdded).toContain('inspector-git');
     expect(INSPECTOR_THEME.tabActive).toContain('inspector-accent');
   });
+
+  it('panel token includes a border-width utility so the border actually renders', () => {
+    // border-inspector-border-subtle alone sets only the colour; without a
+    // border-width class (border / border-l / etc.) nothing is visible.
+    expect(INSPECTOR_THEME.panel).toMatch(/\bborder\b/);
+  });
 });

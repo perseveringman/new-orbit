@@ -9,7 +9,7 @@
 
 export const INSPECTOR_THEME = {
   // Container / surface hierarchy
-  panel: 'bg-inspector-surface-0 border-inspector-border-subtle',
+  panel: 'bg-inspector-surface-0 border border-inspector-border-subtle',
   tabBar: 'bg-inspector-surface-1 border-b border-inspector-border-subtle',
   body: 'bg-inspector-surface-0 text-inspector-text-primary',
   sectionHeader: 'text-inspector-text-dim text-xs font-medium uppercase tracking-wide',
