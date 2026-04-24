@@ -81,3 +81,33 @@ export interface DiffResult {
   totalAdditions: number;
   totalDeletions: number;
 }
+
+// --- Inspector: staged-aware changes types ----------------------------------
+
+export interface ChangesFileEntry {
+  /** Index (staged) column character from `git status --short`. Space = unmodified. */
+  indexStatus: string;
+  /** Worktree column character. Space = unmodified. */
+  workTreeStatus: string;
+  path: string;
+  origPath?: string;
+}
+
+export interface ChangesSummary {
+  dirty: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  untrackedCount: number;
+  files: ChangesFileEntry[];
+}
+
+export interface StagePathsArgs {
+  cwd: string;
+  paths: string[];
+}
+
+export interface CommitSelectionArgs {
+  cwd: string;
+  message: string;
+  author?: string;
+}

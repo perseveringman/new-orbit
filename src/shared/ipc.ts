@@ -33,7 +33,10 @@ import type {
 } from './agent';
 import type { BudgetSettings } from './schemas';
 import type {
+  ChangesFileEntry,
+  ChangesSummary,
   CheckReport,
+  CommitSelectionArgs,
   DiffResult,
   EnvQueueStatus,
   GitStatusSummary,
@@ -41,6 +44,7 @@ import type {
   MergeResult,
   MergeStrategy,
   ResetAllResult,
+  StagePathsArgs,
   WorktreeRecord
 } from './git';
 import type {
@@ -138,7 +142,12 @@ export const IPC = {
     resetAll: 'git:resetAll',
     ghostCommit: 'git:ghostCommit',
     preMergeCheck: 'git:preMergeCheck',
-    mergeGhost: 'git:mergeGhost'
+    mergeGhost: 'git:mergeGhost',
+    getChanges: 'git:getChanges',
+    stagePaths: 'git:stagePaths',
+    unstagePaths: 'git:unstagePaths',
+    discardPaths: 'git:discardPaths',
+    commitSelection: 'git:commitSelection'
   },
   env: {
     status: 'env:status',
@@ -755,6 +764,16 @@ export interface OrbitApi {
       worktreeId: string,
       opts: { strategy: MergeStrategy }
     ): Promise<MergeResult>;
+    /** Inspector: staged-aware change summary for a given cwd. */
+    getChanges(args: { cwd: string }): Promise<ChangesSummary>;
+    /** Inspector: stage specific paths. */
+    stagePaths(args: StagePathsArgs): Promise<void>;
+    /** Inspector: unstage specific paths. */
+    unstagePaths(args: StagePathsArgs): Promise<void>;
+    /** Inspector: discard changes for specific paths (tracked: restore; untracked: delete). */
+    discardPaths(args: StagePathsArgs): Promise<void>;
+    /** Inspector: commit currently staged changes without implicit add -A. */
+    commitSelection(args: CommitSelectionArgs): Promise<{ sha: string }>;
   };
   env: {
     status(): Promise<EnvQueueStatus>;

@@ -31,6 +31,7 @@ import {
 } from '@shared/constants';
 import type { ToolCallResult, ToolDefinition } from './protocol';
 import { readAllOperationLogEntries, writeOpLog } from './oplog';
+import { parsePorcelainStatus } from '../main/git/status';
 
 export interface ToolContext {
   vault: string;
@@ -435,32 +436,6 @@ export async function listTasksTool(
   return jsonResult({ count: tasks.length, tasks });
 }
 
-function countStatusLines(lines: string[]): {
-  dirty: boolean;
-  staged: number;
-  unstaged: number;
-  untracked: number;
-} {
-  let staged = 0;
-  let unstaged = 0;
-  let untracked = 0;
-  for (const line of lines) {
-    if (!line || line.startsWith('##')) continue;
-    if (line.startsWith('??')) {
-      untracked++;
-      continue;
-    }
-    if (line[0] && line[0] !== ' ') staged++;
-    if (line[1] && line[1] !== ' ') unstaged++;
-  }
-  return {
-    dirty: lines.some((line) => line.trim().length > 0 && !line.startsWith('##')),
-    staged,
-    unstaged,
-    untracked
-  };
-}
-
 export async function getProjectStateTool(
   ctx: ToolContext,
   _args: Record<string, unknown>
@@ -486,14 +461,17 @@ export async function getProjectStateTool(
     git(['rev-parse', 'HEAD'], cwd)
   ]);
   const statusLines = statusRes.stdout.split(/\r?\n/).filter(Boolean);
-  const counts = countStatusLines(statusLines);
+  const { dirty, stagedCount, unstagedCount, untrackedCount } = parsePorcelainStatus(statusLines);
 
   return jsonResult({
     git: {
       isRepo: true,
       branch: branchRes.code === 0 ? branchRes.stdout.trim() : '',
       head: headRes.code === 0 ? headRes.stdout.trim() : '',
-      ...counts
+      dirty,
+      staged: stagedCount,
+      unstaged: unstagedCount,
+      untracked: untrackedCount
     },
     activeTasks
   });

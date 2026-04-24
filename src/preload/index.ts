@@ -42,6 +42,7 @@ import {
   type V3MigrationReport,
   type VaultExtConfigDTO
 } from '@shared/ipc';
+import type { CommitSelectionArgs, StagePathsArgs } from '@shared/git';
 import type {
   GitHubConnection,
   GitHubProjectDetails,
@@ -171,7 +172,13 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.git.ghostCommit, args),
     preMergeCheck: (id: string) => ipcRenderer.invoke(IPC.git.preMergeCheck, id),
     mergeGhost: (id: string, opts: { strategy: 'fast-forward' | 'squash' }) =>
-      ipcRenderer.invoke(IPC.git.mergeGhost, id, opts)
+      ipcRenderer.invoke(IPC.git.mergeGhost, id, opts),
+    getChanges: (args: { cwd: string }) => ipcRenderer.invoke(IPC.git.getChanges, args),
+    stagePaths: (args: StagePathsArgs) => ipcRenderer.invoke(IPC.git.stagePaths, args),
+    unstagePaths: (args: StagePathsArgs) => ipcRenderer.invoke(IPC.git.unstagePaths, args),
+    discardPaths: (args: StagePathsArgs) => ipcRenderer.invoke(IPC.git.discardPaths, args),
+    commitSelection: (args: CommitSelectionArgs) =>
+      ipcRenderer.invoke(IPC.git.commitSelection, args)
   },
   env: {
     status: () => ipcRenderer.invoke(IPC.env.status),

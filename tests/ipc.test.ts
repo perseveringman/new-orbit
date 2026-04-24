@@ -58,12 +58,15 @@ describe('IPC contract', () => {
     for (const v of Object.values(IPC.agent)) expect(v.startsWith('agent:')).toBe(true);
   });
 
-  it('git namespace declares M5 worktree + merge channels', () => {
+  it('git namespace declares M5 worktree + merge channels + inspector changes channels', () => {
     const keys = Object.keys(IPC.git).sort();
     expect(keys).toEqual(
       [
         'commit',
+        'commitSelection',
         'createWorktree',
+        'discardPaths',
+        'getChanges',
         'getDiff',
         'ghostCommit',
         'listWorktrees',
@@ -71,7 +74,9 @@ describe('IPC contract', () => {
         'preMergeCheck',
         'removeWorktree',
         'resetAll',
-        'status'
+        'stagePaths',
+        'status',
+        'unstagePaths'
       ].sort()
     );
     for (const v of Object.values(IPC.git)) expect(v.startsWith('git:')).toBe(true);

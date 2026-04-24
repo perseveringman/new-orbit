@@ -7,11 +7,14 @@ import {
   ORBIT_WORKTREES_DIR
 } from '@shared/constants';
 import type {
+  ChangesSummary,
   CheckReport,
+  CommitSelectionArgs,
   GitStatusSummary,
   MergeResult,
   MergeStrategy,
   ResetAllResult,
+  StagePathsArgs,
   WorktreeRecord
 } from '@shared/git';
 import { currentSession, blockTask } from '../fs';
@@ -22,6 +25,13 @@ import { getGitQueue } from './queue';
 import { getInstallLock } from '../env/install_lock';
 import { CheckCache } from './check_cache';
 import { computeMergeBaseDiff } from './diff';
+import {
+  getChanges as gitGetChanges,
+  stagePaths as gitStagePaths,
+  unstagePaths as gitUnstagePaths,
+  discardPaths as gitDiscardPaths,
+  commitSelection as gitCommitSelection
+} from './status';
 
 let wired = false;
 let manager: WorktreeManager | null = null;
@@ -281,6 +291,51 @@ export function registerGitIpc(): void {
     await appendGitLog(sess.vault, { op: 'commit', cwd: sess.vault });
     return { ok: true };
   });
+
+  // --- Inspector: staged-aware change actions --------------------------------
+
+  ipcMain.handle(
+    IPC.git.getChanges,
+    async (_e, args: { cwd: string }): Promise<ChangesSummary> => {
+      return gitGetChanges({ cwd: args.cwd });
+    }
+  );
+
+  ipcMain.handle(
+    IPC.git.stagePaths,
+    async (_e, args: StagePathsArgs): Promise<void> => {
+      return gitStagePaths(args);
+    }
+  );
+
+  ipcMain.handle(
+    IPC.git.unstagePaths,
+    async (_e, args: StagePathsArgs): Promise<void> => {
+      return gitUnstagePaths(args);
+    }
+  );
+
+  ipcMain.handle(
+    IPC.git.discardPaths,
+    async (_e, args: StagePathsArgs): Promise<void> => {
+      return gitDiscardPaths(args);
+    }
+  );
+
+  ipcMain.handle(
+    IPC.git.commitSelection,
+    async (_e, args: CommitSelectionArgs): Promise<{ sha: string }> => {
+      const sess = currentSession();
+      if (!sess) throw new Error('no vault');
+      const result = await gitCommitSelection(args);
+      await appendGitLog(sess.vault, {
+        op: 'commitSelection',
+        cwd: args.cwd,
+        sha: result.sha
+      });
+      return result;
+    }
+  );
 }
 
 async function defaultBranchOf(vault: string): Promise<string> {
