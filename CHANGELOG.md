@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Local Runtime Architecture 设计方案**：新增 `docs/plans/2026-04-24-orbit-local-runtime-architecture.md`，分析 Multica 的 runtime discovery / communication / runtime-aware orchestration，并为 Orbit 设计 Electron 本机本进程方案（LocalRuntimeManager、RuntimeProbe、DispatchService、ProviderAdapter），同时预留向本地 sidecar daemon 扩展的接口
 - **Planner Agent + Agent Dispatching 设计方案**：新增 `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md`，明确规划画布、依赖图、`waiting` 列、任务 ownership、事务性认领与 Night Shift 向 agent dispatching 演进的路线
 
 - **Workspace Inspector Files + Changes（Task 4 / Task 6）**：右侧栏新增统一 `inspector` 面板；Files tab 在 project surface 下切换到完整项目树（`fs:listProjectTree`），提供搜索、刷新、折叠和二进制文件保护；Changes tab 提供按目录分组的变更树、行级 stage / unstage / discard、统一 diff 预览、staged-only commit bar，以及与 GitHub 发布 / Create PR 共用的受控表单流

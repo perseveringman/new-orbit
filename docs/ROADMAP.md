@@ -50,6 +50,7 @@
 | Agent Context System | `docs/plans/2026-04-22-orbit-agent-context-architecture.md`（+ scheme-a/c/d） | 设计中，待选型落地 |
 | Capture & Knowledge Funnel | `docs/plans/2026-04-24-capture-knowledge-funnel.md` | 设计中 |
 | Planner Agent + Agent Dispatching | `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md` | 设计中 |
+| Local Runtime Architecture | `docs/plans/2026-04-24-orbit-local-runtime-architecture.md` | 设计中 |
 
 ---
 
@@ -80,19 +81,26 @@
 - 看板新增 `waiting` 列；`todo` 任务支持 agent 自动认领
 - 任务引入 owner / release / retry 语义，逐步替代 Night Shift 作为主执行入口
 
-### P4 — GitHub 深度集成
+### P4 — Local Runtime Architecture
+
+- 引入 LocalRuntimeManager / RuntimeProbe / ProviderAdapter / DispatchService
+- 将 Claude-only runner 泛化为多 provider runtime registry
+- 用进程内 runtime 协议替代直接散落的 `startTask` 触发
+- 为未来本地 sidecar daemon 预留 transport / lease / execution 接口
+
+### P5 — GitHub 深度集成
 
 - Issue → Task 双向同步
 - PR review 状态在 Project Room 展示
 - Night Shift 结果直接推到指定远程分支
 
-### P5 — 性能与稳定性
+### P6 — 性能与稳定性
 
 - 大 vault（>1000 文件）的索引性能优化
 - Electron 启动时间优化
 - 自动崩溃恢复改善
 
-### P6 — 跨平台支持
+### P7 — 跨平台支持
 
 - Linux（AppImage/snap）
 - Windows（NSIS installer）
