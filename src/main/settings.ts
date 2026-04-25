@@ -3,8 +3,10 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { AppSettings, Theme } from '@shared/types';
 import {
+  type AutoRunnerSettings,
   type BudgetSettings,
   DEFAULT_BUDGET,
+  parseAutoRunnerSettings,
   parseAppSettings,
   parseBudgetSettings
 } from '@shared/schemas';
@@ -58,6 +60,20 @@ export async function updateBudget(
   s.budget = parseBudgetSettings({ ...s.budget, ...partial });
   await writeRaw(s);
   return s.budget;
+}
+
+export async function getAutoRunnerSettings(): Promise<AutoRunnerSettings> {
+  const s = await readRaw();
+  return parseAutoRunnerSettings(s.autoRunner);
+}
+
+export async function updateAutoRunnerSettings(
+  partial: Partial<AutoRunnerSettings>
+): Promise<AutoRunnerSettings> {
+  const s = await readRaw();
+  s.autoRunner = parseAutoRunnerSettings({ ...s.autoRunner, ...partial });
+  await writeRaw(s);
+  return s.autoRunner;
 }
 
 /**

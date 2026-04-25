@@ -1,6 +1,6 @@
 export type Theme = 'light' | 'dark' | 'system';
 
-import type { BudgetSettings } from './schemas';
+import type { AutoRunnerSettings, BudgetSettings } from './schemas';
 
 export interface AppSettings {
   lastVaultPath: string | null;
@@ -14,6 +14,8 @@ export interface AppSettings {
   anthropicApiKey: string;
   /** Score threshold (0..1) for wake-up experience injection. */
   vectorWakeThreshold: number;
+  /** v2: 24x7 dispatcher settings. Disabled by default for user safety. */
+  autoRunner: AutoRunnerSettings;
   /** R6: auto-generate daily review. */
   autoDailyReview?: boolean;
   /** R6: HH:MM local time for auto daily review. */

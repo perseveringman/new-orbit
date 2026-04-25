@@ -8,6 +8,7 @@ import { EXIT_SUCCESS, normalizeCliError, usageError, type CliExitCode } from '.
 import { errorPayload } from './errors';
 import { formatJsonError, formatJsonSuccess } from './output';
 import {
+  generateAutoRunnerHelp,
   generateCatHelp,
   generateSearchHelp,
   generateTaskHelp,
@@ -40,7 +41,6 @@ const FUTURE_COMMANDS = new Set([
   'activity',
   'memory',
   'approval',
-  'auto-runner',
   'agent',
   'run'
 ]);
@@ -151,6 +151,35 @@ function formatDependencyTree(data: unknown): string {
   return `${lines.join('\n')}\n`;
 }
 
+function formatAutoRunnerStatus(data: unknown): string {
+  const status = data as {
+    attached?: boolean;
+    enabled?: boolean;
+    readyTaskCount?: number;
+    hourlyStarted?: number;
+    hourlyRemaining?: number;
+    running?: Array<{ taskUid?: string; taskId: string; title: string; runId: string }>;
+    settings?: { maxConcurrent?: number; hourlyTaskLimit?: number; tickIntervalMs?: number };
+    lastError?: string;
+  };
+  const running = status.running ?? [];
+  const lines = [
+    `enabled\t${status.enabled ? 'yes' : 'no'}`,
+    `attached\t${status.attached ? 'yes' : 'no'}`,
+    `ready\t${status.readyTaskCount ?? 0}`,
+    `running\t${running.length}`,
+    `max_concurrent\t${status.settings?.maxConcurrent ?? '-'}`,
+    `hourly\t${status.hourlyStarted ?? 0}/${status.settings?.hourlyTaskLimit ?? '-'}`,
+    `hourly_remaining\t${status.hourlyRemaining ?? 0}`,
+    `tick_interval_ms\t${status.settings?.tickIntervalMs ?? '-'}`,
+    status.lastError ? `last_error\t${status.lastError}` : ''
+  ].filter(Boolean);
+  for (const run of running) {
+    lines.push(`run\t${run.taskUid ?? run.taskId}\t${run.runId}\t${run.title}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 async function runSearch(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
   if (flags.help) return generateSearchHelp();
   const { limit, rest } = parseLimit(flags.args.slice(1));
@@ -249,6 +278,18 @@ async function runTask(flags: ParsedGlobalFlags, options: CliRunOptions): Promis
   throw usageError(`orbit task ${subcommand} is not implemented`);
 }
 
+async function runAutoRunner(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
+  if (flags.help || !flags.args[1]) return generateAutoRunnerHelp();
+  const subcommand = flags.args[1];
+  let method: string;
+  if (subcommand === 'status') method = 'autoRunner.status';
+  else if (subcommand === 'start') method = 'autoRunner.start';
+  else if (subcommand === 'stop') method = 'autoRunner.stop';
+  else throw usageError(`Unknown auto-runner subcommand: ${subcommand}`);
+  const data = await createBridge(flags, options).request(method, {});
+  return flags.json ? formatJsonSuccess(data) : formatAutoRunnerStatus(data);
+}
+
 export async function runCli(argv: string[], options: CliRunOptions = {}): Promise<CliExitCode> {
   const stdout = options.stdout ?? ((text: string) => process.stdout.write(text));
   const stderr = options.stderr ?? ((text: string) => process.stderr.write(text));
@@ -265,6 +306,7 @@ export async function runCli(argv: string[], options: CliRunOptions = {}): Promi
     if (command === 'search') output = await runSearch(flags, options);
     else if (command === 'cat') output = await runCat(flags, options);
     else if (command === 'task') output = await runTask(flags, options);
+    else if (command === 'auto-runner') output = await runAutoRunner(flags, options);
     else if (FUTURE_COMMANDS.has(command)) {
       if (flags.help) output = generateUnavailableHelp(command);
       else throw usageError(`orbit ${command} is unavailable in Phase 0`, 'command_unavailable');

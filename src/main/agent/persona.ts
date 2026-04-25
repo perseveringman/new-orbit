@@ -67,15 +67,19 @@ export function composePrompt({ persona, taskContext, userAsk, taskBoundary }: C
 export const TASK_EXECUTION_FOOTER = `# Task execution contract
 Before writing code or changing files, inspect the current project context and judge whether the task information is sufficient.
 
-- Read the relevant local context first (task file, nearby code, README, AGENT, and Orbit MCP project context when helpful)
+- Read the relevant local context first (task file, nearby code, README, AGENT, and Orbit CLI project context when helpful)
 - If requirements are ambiguous or information is missing, ask concise clarification questions instead of pretending the task is finished
-- When you need user input, keep the task in a non-done state and use Orbit MCP \`update_task_status\` with \`blocked\` or \`waiting\`
-- When you start real implementation work, move the task to \`doing\` through Orbit MCP
+- Record your internal substeps (thinking, coding, testing, debugging) in the current task Execution Log; do not create Kanban tasks for them
+- If you discover independent work that should be tracked on the Kanban, use \`orbit task propose\` for user approval; do not create tasks directly
+- If you need to expand this task's scope, use \`orbit task propose-scope\` for approval
+- When you need user input, keep the task in a non-done state and use \`orbit inbox help\`
+- When you start real implementation work, move the task to \`doing\` through Orbit CLI
 - Only mark the task \`done\` after the requested outcome is truly complete
+- When the result is ready for review, use \`orbit run request-merge\`
 - A clean process exit does not mean the task is done; if you asked questions or are waiting on clarification, leave the task open`;
 
 export const ORBIT_RUNTIME_FOOTER = `# Orbit runtime
-Prefer Orbit MCP tools and local project context when they are available in the working directory. Do not invent custom stdout protocols to ask for more context.`;
+Prefer the \`orbit\` CLI and local project context when they are available in the working directory. Do not invent custom stdout protocols to ask for more context.`;
 export const HYDRATION_FOOTER = ORBIT_RUNTIME_FOOTER;
 
 function buildTaskBoundary(task: { title: string; uid?: string }): string {
@@ -83,7 +87,7 @@ function buildTaskBoundary(task: { title: string; uid?: string }): string {
 You are currently responsible for exactly this task: "${task.title}"${task.uid ? ` (uid: ${task.uid})` : ''}.
 
 - Only do work that is within this task's scope
-- If more work is needed, create a new task instead of expanding scope in this run
+- If more work is needed, propose it with \`orbit task propose\` instead of creating a task directly or expanding scope in this run
 - Do not change the status of other tasks
 - If information is missing, pause and ask for clarification before implementation
 - End with a concise completion summary`;

@@ -46,6 +46,7 @@ import {
   type VaultExtConfigDTO
 } from '@shared/ipc';
 import type { CommitSelectionArgs, StagePathsArgs } from '@shared/git';
+import type { AutoRunnerStatusDTO } from '@shared/auto_runner';
 import type {
   GitHubConnection,
   GitHubProjectDetails,
@@ -456,6 +457,16 @@ const api: OrbitApi = {
       const listener = (_: unknown, ev: NightShiftDoneEventDTO): void => cb(ev);
       ipcRenderer.on(IPC.nightShift.done, listener);
       return () => ipcRenderer.removeListener(IPC.nightShift.done, listener);
+    }
+  },
+  autoRunner: {
+    status: (): Promise<AutoRunnerStatusDTO> => ipcRenderer.invoke(IPC.autoRunner.status),
+    start: (): Promise<AutoRunnerStatusDTO> => ipcRenderer.invoke(IPC.autoRunner.start),
+    stop: (): Promise<AutoRunnerStatusDTO> => ipcRenderer.invoke(IPC.autoRunner.stop),
+    onEvent: (cb: (ev: { type: string; event: unknown }) => void) => {
+      const listener = (_: unknown, ev: { type: string; event: unknown }): void => cb(ev);
+      ipcRenderer.on(IPC.autoRunner.event, listener);
+      return () => ipcRenderer.removeListener(IPC.autoRunner.event, listener);
     }
   },
   envExt: {

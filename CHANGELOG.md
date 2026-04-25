@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit v2 阶段 4 Auto-runner 调度器**：新增 `src/main/auto_runner/` dispatcher / scheduler / event bridge / settings，按 ready-set 自动拾取已授权且依赖满足的 `todo` task，支持并发与小时限额、Sandbox unsupported Inbox 求助事件、Activity Log 运行事件，以及 `orbit auto-runner status/start/stop` 控制。
 - **Orbit v2 阶段 3 任务依赖系统**：新增 `depends_on` 拓扑图、循环检测、ready-set 计算、依赖删除/归档级联阻塞与 C1 Inbox 警示，并让 Planner publish 物化依赖边。
 - **Orbit v2 阶段 2 Inbox 枢纽**：完成 Inbox v2 的 message/capture/archive 存储、事件 emitter、Activity Log 接入、Proposal 双通道同步、IPC 合约与 renderer 的 Capture/Messages/Archive + Stage View 基础 UI。
 - **Inbox v2 架构基础**：新增 Inbox Messages/Capture/Archive NDJSON store、事件 service、Proposal 双通道同步、IPC/preload 类型与 Capture/Messages/Archive Stage View 壳，覆盖消息/捕获计数规则和基础渲染测试。

@@ -261,7 +261,32 @@ export const DEFAULT_BUDGET: BudgetSettings = {
   hardStop: true
 };
 
-// --- App settings schema (M8) ---
+// --- Auto-runner settings (v2 Phase 4) ---
+
+export const AutoRunnerSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  maxConcurrent: z.number().int().min(1).max(10).default(2),
+  hourlyTaskLimit: z.number().int().min(1).max(100).default(10),
+  tickIntervalMs: z.number().int().min(1000).max(60_000).default(5000)
+});
+export type AutoRunnerSettings = z.infer<typeof AutoRunnerSettingsSchema>;
+
+export const DEFAULT_AUTO_RUNNER_SETTINGS: AutoRunnerSettings = {
+  enabled: false,
+  maxConcurrent: 2,
+  hourlyTaskLimit: 10,
+  tickIntervalMs: 5000
+};
+
+export function parseAutoRunnerSettings(input: unknown): AutoRunnerSettings {
+  if (!input || typeof input !== 'object') return { ...DEFAULT_AUTO_RUNNER_SETTINGS };
+  const merged = {
+    ...DEFAULT_AUTO_RUNNER_SETTINGS,
+    ...(input as Record<string, unknown>)
+  };
+  const parsed = AutoRunnerSettingsSchema.safeParse(merged);
+  return parsed.success ? parsed.data : { ...DEFAULT_AUTO_RUNNER_SETTINGS };
+}
 
 /**
  * Parse a persisted budget value, tolerating missing keys and returning
@@ -287,6 +312,7 @@ export const AppSettingsSchema = z.object({
   claudePath: z.string().default(''),
   anthropicApiKey: z.string().default(''),
   vectorWakeThreshold: z.number().min(0).max(1).default(0.2),
+  autoRunner: AutoRunnerSettingsSchema.default(DEFAULT_AUTO_RUNNER_SETTINGS),
   autoDailyReview: z.boolean().optional(),
   autoDailyReviewAt: z
     .string()
@@ -306,6 +332,7 @@ export const DEFAULT_APP_SETTINGS: z.infer<typeof AppSettingsSchema> = {
   claudePath: '',
   anthropicApiKey: '',
   vectorWakeThreshold: 0.2,
+  autoRunner: { ...DEFAULT_AUTO_RUNNER_SETTINGS },
   worktreeGcEnabled: true,
   worktreeGcDays: 7
 };
@@ -330,6 +357,7 @@ export function parseAppSettings(input: unknown): z.infer<typeof AppSettingsSche
     merged.theme = 'dark';
   }
   merged.budget = parseBudgetSettings(merged.budget);
+  merged.autoRunner = parseAutoRunnerSettings(merged.autoRunner);
 
   const r = AppSettingsSchema.safeParse(merged);
   return r.success ? r.data : base;

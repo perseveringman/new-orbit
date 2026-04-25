@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   generateCatHelp,
+  generateAutoRunnerHelp,
   generateSearchHelp,
   generateTaskHelp,
   generateTopLevelHelp,
@@ -14,6 +15,7 @@ describe('CLI help', () => {
     expect(help).toContain('search       Search the open vault (Phase 0)');
     expect(help).toContain('cat          Read a vault file or UID (Phase 0)');
     expect(help).toContain('task         Task commands: list, get, update, deps');
+    expect(help).toContain('auto-runner  Auto-runner controls: status, start, stop');
     expect(help).toContain('Phase 5 unavailable');
     expect(help).toContain('Global flags: --json');
   });
@@ -23,6 +25,7 @@ describe('CLI help', () => {
     expect(generateCatHelp()).toContain('Usage: orbit cat <path-or-uid>');
     expect(generateTaskHelp()).toContain('orbit task list --status todo');
     expect(generateTaskHelp()).toContain('orbit task deps task_uid');
+    expect(generateAutoRunnerHelp()).toContain('Usage: orbit auto-runner <subcommand>');
   });
 
   it('marks future domains unavailable', () => {

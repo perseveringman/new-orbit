@@ -15,6 +15,7 @@ import {
   dependencyRefs
 } from '../dependencies/graph';
 import { taskReadyState } from '../auto_runner/ready_set';
+import { getAutoRunnerDispatcher } from '../auto_runner/dispatcher';
 import { cliServerError } from './errors';
 import type { CliHandlerRegistry } from './registry';
 
@@ -213,4 +214,8 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     }
     return resolveTask(uid);
   });
+
+  registry.register('autoRunner.status', () => getAutoRunnerDispatcher().status());
+  registry.register('autoRunner.start', () => getAutoRunnerDispatcher().start());
+  registry.register('autoRunner.stop', () => getAutoRunnerDispatcher().stop());
 }

@@ -25,6 +25,8 @@ import { configureActivityEmitter } from './activity';
 import { registerActivityIpc } from './activity/ipc';
 import { registerApprovalIpc } from './approval';
 import { registerInboxIpc } from './inbox';
+import { getAutoRunnerDispatcher } from './auto_runner';
+import { registerAutoRunnerIpc } from './auto_runner/ipc';
 import * as terminal from './terminal/pty_manager';
 import { runWorktreeGc, startWorktreeGcScheduler } from './worktree_gc';
 import {
@@ -112,6 +114,7 @@ async function attachVaultRuntime(vaultPath: string): Promise<void> {
   await startCliServerForVault(vaultPath);
   await reconcileOnStart(vaultPath);
   await ensureOrchestrationForVault(vaultPath);
+  await getAutoRunnerDispatcher().attach(vaultPath);
   await ensureTerminalAgentRuntimeForVault(vaultPath);
   void ensureVectorStore(vaultPath);
   void runWorktreeGc(vaultPath).catch(() => undefined);
@@ -244,6 +247,7 @@ function registerIpc(): void {
     await closeVectorStore();
     await stopCliServer();
     shutdownOrchestration();
+    getAutoRunnerDispatcher().detach();
     await closeFsSession();
     await setLastVaultPath(null);
   });
@@ -328,6 +332,7 @@ function registerIpc(): void {
   registerActivityIpc(() => currentVault?.path ?? null);
   registerApprovalIpc(() => currentVault?.path ?? null);
   registerInboxIpc(() => currentVault?.path ?? null);
+  registerAutoRunnerIpc();
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);
 

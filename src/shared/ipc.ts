@@ -31,6 +31,7 @@ import type {
   StartTaskResult,
   TailQuery
 } from './agent';
+import type { AutoRunnerStatusDTO } from './auto_runner';
 import type { ActivityEvent, ActivityQueryFilter } from './activity';
 import type {
   Proposal,
@@ -292,6 +293,12 @@ export const IPC = {
     list: 'nightShift:list',
     progress: 'nightShift:progress',
     done: 'nightShift:done'
+  },
+  autoRunner: {
+    status: 'autoRunner:status',
+    start: 'autoRunner:start',
+    stop: 'autoRunner:stop',
+    event: 'autoRunner:event'
   },
   envExt: {
     hasGhCli: 'env:hasGhCli'
@@ -1030,6 +1037,12 @@ export interface OrbitApi {
     list(): Promise<NightShiftRunDTO[]>;
     onProgress(cb: (ev: NightShiftProgressEventDTO) => void): () => void;
     onDone(cb: (ev: NightShiftDoneEventDTO) => void): () => void;
+  };
+  autoRunner: {
+    status(): Promise<AutoRunnerStatusDTO>;
+    start(): Promise<AutoRunnerStatusDTO>;
+    stop(): Promise<AutoRunnerStatusDTO>;
+    onEvent(cb: (ev: { type: string; event: unknown }) => void): () => void;
   };
   envExt: {
     hasGhCli(): Promise<boolean>;

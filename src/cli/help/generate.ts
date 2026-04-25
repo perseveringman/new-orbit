@@ -17,7 +17,7 @@ Available commands:
   activity     Activity log commands (${FUTURE})
   memory       Memory commands (${FUTURE})
   approval     Approval commands (${FUTURE})
-  auto-runner  Auto-runner commands (${FUTURE})
+  auto-runner  Auto-runner controls: status, start, stop
   agent        Agent run commands (${FUTURE})
   run          Agent self-reporting commands (${FUTURE})
 
@@ -66,6 +66,21 @@ Examples:
   orbit task get task_uid --json
   orbit task update task_uid --depends-on task_a,task_b
   orbit task deps task_uid
+`;
+}
+
+export function generateAutoRunnerHelp(): string {
+  return `Usage: orbit auto-runner <subcommand> [--json]
+
+Available subcommands:
+  status      Show dispatcher settings, ready count, running runs, and hourly limit
+  start       Enable Auto-runner and trigger one dispatcher tick
+  stop        Disable Auto-runner scheduling (does not kill already-running agents)
+
+Examples:
+  orbit auto-runner status
+  orbit auto-runner start --json
+  orbit auto-runner stop
 `;
 }
 

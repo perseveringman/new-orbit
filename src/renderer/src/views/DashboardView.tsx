@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ProjectSummaryDTO } from '@shared/ipc';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
+import type { AutoRunnerStatusDTO } from '@shared/auto_runner';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
 import { VisionEditorModal } from '../components/Modals/VisionEditorModal';
-import { NightShiftModal } from '../components/Modals/NightShiftModal';
 
 const STATUSES: TaskStatus[] = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'];
 
@@ -28,7 +28,8 @@ export function DashboardView(): JSX.Element {
   const [editVision, setEditVision] = useState(false);
   const [journalExists, setJournalExists] = useState<string | null>(null);
   const [generatingReview, setGeneratingReview] = useState(false);
-  const [nightShiftOpen, setNightShiftOpen] = useState(false);
+  const [autoRunner, setAutoRunner] = useState<AutoRunnerStatusDTO | null>(null);
+  const [autoRunnerBusy, setAutoRunnerBusy] = useState(false);
   const [drilldown, setDrilldown] = useState<
     { project: ProjectSummaryDTO; status: TaskStatus; rows: TaskRecord[] } | null
   >(null);
@@ -37,6 +38,10 @@ export function DashboardView(): JSX.Element {
     void refreshVision();
     void refreshProjects();
   }, [refreshVision, refreshProjects]);
+
+  useEffect(() => {
+    void window.orbit.autoRunner.status().then(setAutoRunner).catch(() => undefined);
+  }, []);
 
   // today's journal link
   useEffect(() => {
@@ -174,11 +179,25 @@ export function DashboardView(): JSX.Element {
           </div>
           <div className="mt-3 flex justify-end">
             <button
-              onClick={() => setNightShiftOpen(true)}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
-              title="Queue tasks for autonomous night-time execution"
+              disabled={autoRunnerBusy}
+              onClick={async () => {
+                setAutoRunnerBusy(true);
+                try {
+                  const next = autoRunner?.enabled
+                    ? await window.orbit.autoRunner.stop()
+                    : await window.orbit.autoRunner.start();
+                  setAutoRunner(next);
+                  toast(next.enabled ? 'Auto-runner enabled' : 'Auto-runner paused');
+                } catch (e) {
+                  toast(`Auto-runner update failed: ${(e as Error).message}`);
+                } finally {
+                  setAutoRunnerBusy(false);
+                }
+              }}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              title="Toggle 24x7 dependency-ready task execution"
             >
-              🌙 Start Night Shift
+              {autoRunner?.enabled ? '⏸ Stop Auto-runner' : '▶ Start Auto-runner'}
             </button>
           </div>
         </section>
@@ -273,7 +292,6 @@ export function DashboardView(): JSX.Element {
       )}
 
       <VisionEditorModal open={editVision} onClose={() => setEditVision(false)} />
-      <NightShiftModal open={nightShiftOpen} onClose={() => setNightShiftOpen(false)} />
     </div>
   );
 }

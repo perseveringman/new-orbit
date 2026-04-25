@@ -104,20 +104,21 @@ Orbit 任务文件位于 \`.orbit/agent/tasks/\`，采用四段式结构：
 \`backlog -> waiting -> todo -> doing -> blocked -> done\`
 
 ## 推荐工作流
-1. 先判断当前工作是否值得沉淀为 task。
-2. 需要持续跟踪或多步执行时，优先使用 \`create_task\`。
+1. 先判断当前工作是否属于当前 task；内部子步骤写入 \`# Execution Log\`，不要新增看板任务。
+2. 发现有独立用户价值且需要看板跟踪的新工作时，使用 \`orbit task propose\` 请求用户批准；不要直接创建 task。
 3. 先读任务正文、README、AGENT 和近期日志，判断信息是否充分。
-4. 如果信息不足，先提出澄清问题，并把任务保持在 \`waiting\` 或 \`blocked\`，不要直接宣布完成。
-5. 开始执行后用 \`update_task_status\` 进入 \`doing\`。
+4. 如果信息不足，使用 \`orbit inbox help\` 请求用户输入，并把任务保持在 \`waiting\` 或 \`blocked\`，不要直接宣布完成。
+5. 开始执行后用 \`orbit task update <uid> --status doing\` 进入 \`doing\`。
 6. 关键决策写入 \`# Agent Thinking\`，执行进展写入 \`# Execution Log\`。
-7. 结束时补充 \`# Summary\`，并仅在真正完成后更新为 \`done\`。
+7. 结束时补充 \`# Summary\`，并使用 \`orbit run request-merge\` 请求审查；仅在真正完成后更新为 \`done\`。
 
-## 常用 MCP 工具
-- \`create_task\`
-- \`list_tasks\`
-- \`update_task_status\`
-- \`append_execution_log\`
-- \`log_thinking\`
+## 常用 Orbit CLI
+- \`orbit task list\`
+- \`orbit task get <uid>\`
+- \`orbit task update <uid>\`
+- \`orbit task propose\`
+- \`orbit inbox help\`
+- \`orbit run request-merge\`
 `;
 }
 
@@ -172,7 +173,7 @@ function buildMcpTools(): string {
   return `# MCP 工具指南
 
 ## 当前可用工具
-- \`create_task\`：创建任务
+- \`orbit task propose\`：提议创建需要用户批准的新任务（不要直接创建任务）
 - \`list_tasks\`：列出当前项目任务
 - \`update_task_status\`：更新任务状态
 - \`append_execution_log\`：为任务追加执行日志
@@ -185,11 +186,11 @@ function buildMcpTools(): string {
 - \`query_operation_log\`：按条件查询操作日志
 
 ## 推荐协作模式
-1. 创建或确认 task
+1. 确认当前 task；内部子步骤只写 Execution Log
 2. 先确认任务信息是否充分；不足时先用对话提出澄清
 3. 真正开始执行时切换 task 状态到 \`doing\`
 4. 边执行边追加日志和思考
-5. 完成后提交检查点，并只在结果真实落地后更新为 \`done\`
+5. 完成后使用 \`orbit run request-merge\` 请求审查，并只在结果真实落地后更新为 \`done\`
 `;
 }
 
@@ -269,8 +270,8 @@ function buildEntry(target: EntryTarget): string {
 \`.orbit/agent/logs/TIMELINE.md\` 包含本项目的历史操作记录，可用于恢复上下文和了解近期进展。
 \`.orbit/agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了近期项目级 agent 会话，是恢复项目上下文的首选入口之一。
 
-## MCP 工具
-本项目已配置 Orbit MCP server，提供任务管理、代码提交、知识检索等工具。详见 \`.orbit/agent/skills/mcp-tools.md\`。
+## Agent 能力入口
+优先使用 \`orbit\` CLI；MCP server 仍可能存在于旧项目中，但不要通过旧 \`create_task\` 路径直接创建看板任务。
 
 > 此文件面向 ${label} 入口。若需要更深入认知，请从 skills 索引继续阅读。
 `;

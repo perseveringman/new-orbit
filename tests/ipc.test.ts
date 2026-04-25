@@ -148,6 +148,12 @@ describe('IPC contract', () => {
       claudePath: '',
       anthropicApiKey: '',
       vectorWakeThreshold: 0.2,
+      autoRunner: {
+        enabled: false,
+        maxConcurrent: 2,
+        hourlyTaskLimit: 10,
+        tickIntervalMs: 5000
+      },
       worktreeGcEnabled: true,
       worktreeGcDays: 7
     };
