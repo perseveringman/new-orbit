@@ -9,6 +9,8 @@ export interface WorkspaceDestination {
 
 export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
+  { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
   { label: 'GitHub', view: { kind: 'github' }, icon: '⌘' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Today', view: { kind: 'today' }, icon: '☼' },
@@ -25,24 +27,24 @@ export interface TopBarContext {
 
 interface TopBarContextInput {
   view: WorkspaceView;
-  projects: Array<
-    Pick<ProjectSummaryDTO, 'uid' | 'name' | 'description' | 'relPath'>
-  >;
+  projects: Array<Pick<ProjectSummaryDTO, 'uid' | 'name' | 'description' | 'relPath'>>;
   activeProjectUid: string | null;
   activeFile: { relPath: string; dirty: boolean } | null;
   vaultPath: string | null;
 }
 
 const WORKSPACE_DETAILS: Record<
-  'dashboard' | 'github' | 'inbox' | 'today' | 'journals' | 'kanban',
+  'dashboard' | 'agents' | 'github' | 'inbox' | 'today' | 'journals' | 'kanban' | 'runtimes',
   string
 > = {
   dashboard: 'Vision, PARA health, and project activity.',
+  agents: 'Inspect reusable role templates, versions, and cross-project execution coverage.',
   github: 'Connect accounts, import repos, and monitor GitHub delivery state.',
   inbox: 'Capture and sort incoming work before it spreads.',
   today: 'Focus on the tasks scheduled for today.',
   journals: 'Review past daily notes and decisions.',
-  kanban: 'Track task flow across active projects.'
+  kanban: 'Track task flow across active projects.',
+  runtimes: 'Observe local providers, runtime capabilities, and orchestration load.'
 };
 
 export function deriveTopBarContext({
@@ -89,8 +91,7 @@ export function deriveTopBarContext({
     return {
       eyebrow: 'Project board',
       title: project ? `${project.name} Kanban` : 'Project Kanban',
-      detail:
-        cleanText(project?.description) ?? 'Track task flow for the selected project.',
+      detail: cleanText(project?.description) ?? 'Track task flow for the selected project.',
       stateLabel: 'Focused board'
     };
   }
@@ -116,12 +117,14 @@ export function deriveTopBarContext({
   const title = WORKSPACE_DESTINATIONS.find((item) => item.view.kind === view.kind)?.label;
   const detail =
     view.kind === 'dashboard' ||
-      view.kind === 'github' ||
-      view.kind === 'inbox' ||
-      view.kind === 'today' ||
-      view.kind === 'journals' ||
-      view.kind === 'kanban'
-        ? WORKSPACE_DETAILS[view.kind]
+    view.kind === 'agents' ||
+    view.kind === 'github' ||
+    view.kind === 'inbox' ||
+    view.kind === 'today' ||
+    view.kind === 'journals' ||
+    view.kind === 'kanban' ||
+    view.kind === 'runtimes'
+      ? WORKSPACE_DETAILS[view.kind]
       : 'Move through your workbench from the sidebar.';
 
   return {

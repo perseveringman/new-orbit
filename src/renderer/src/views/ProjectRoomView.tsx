@@ -71,27 +71,40 @@ export function ProjectRoomView(): JSX.Element {
   const [outerTab, setOuterTabRaw] = useState<ProjectRoomOuterTab>(() => {
     try {
       const v = localStorage.getItem(outerTabKey);
-      return v === 'terminal' || v === 'sessions' || v === 'github' || v === 'planner' || v === 'roles' ? v : 'kanban';
+      return v === 'terminal' ||
+        v === 'sessions' ||
+        v === 'github' ||
+        v === 'planner' ||
+        v === 'roles'
+        ? v
+        : 'kanban';
     } catch {
       return 'kanban';
     }
   });
 
-  const setOuterTab = useCallback((tab: ProjectRoomOuterTab): void => {
-    setOuterTabRaw(tab);
-    try {
-      localStorage.setItem(outerTabKey, tab);
-    } catch {
-      /* ignore */
-    }
-  }, [outerTabKey]);
+  const setOuterTab = useCallback(
+    (tab: ProjectRoomOuterTab): void => {
+      setOuterTabRaw(tab);
+      try {
+        localStorage.setItem(outerTabKey, tab);
+      } catch {
+        /* ignore */
+      }
+    },
+    [outerTabKey]
+  );
 
   // Reload persisted outer tab when project changes
   useEffect(() => {
     try {
       const key = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
       const v = localStorage.getItem(key);
-      setOuterTabRaw(v === 'terminal' || v === 'sessions' || v === 'github' || v === 'planner' || v === 'roles' ? v : 'kanban');
+      setOuterTabRaw(
+        v === 'terminal' || v === 'sessions' || v === 'github' || v === 'planner' || v === 'roles'
+          ? v
+          : 'kanban'
+      );
     } catch {
       setOuterTabRaw('kanban');
     }
@@ -153,7 +166,15 @@ export function ProjectRoomView(): JSX.Element {
   useEffect(() => {
     if (view.kind !== 'project') return;
     const hint = resolveProjectRoomPaneHint(
-      view.pane as 'task' | 'sessions' | 'github' | 'readme' | 'agent' | undefined
+      view.pane as
+        | 'task'
+        | 'sessions'
+        | 'github'
+        | 'planner'
+        | 'roles'
+        | 'readme'
+        | 'agent'
+        | undefined
     );
     if (hint === 'task') {
       setOuterTab('kanban');
@@ -161,8 +182,12 @@ export function ProjectRoomView(): JSX.Element {
       setOuterTab('sessions');
     } else if (hint === 'github') {
       setOuterTab('github');
+    } else if (hint === 'planner') {
+      setOuterTab('planner');
+    } else if (hint === 'roles') {
+      setOuterTab('roles');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
   const selectedTask = useMemo(
@@ -236,9 +261,7 @@ export function ProjectRoomView(): JSX.Element {
     const t = tasks.find((x) => x.id === taskId);
     if (!t || t.status === target) return;
     // Optimistic update.
-    setTasks((cur) =>
-      cur.map((x) => (x.id === taskId ? { ...x, status: target } : x))
-    );
+    setTasks((cur) => cur.map((x) => (x.id === taskId ? { ...x, status: target } : x)));
     try {
       if (t.source === 'file') {
         await window.orbit.task.updateFrontmatter(t.filePath, { status: target });
@@ -363,7 +386,7 @@ export function ProjectRoomView(): JSX.Element {
         onQueuedTerminalNavigation as EventListener
       );
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectUid, consumePendingNavigation]);
 
   useEffect(() => {
@@ -401,7 +424,7 @@ export function ProjectRoomView(): JSX.Element {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!project) {
@@ -427,9 +450,7 @@ export function ProjectRoomView(): JSX.Element {
             )}
           </div>
           {project.description && (
-            <p className="mt-0.5 truncate text-xs text-neutral-500">
-              {project.description}
-            </p>
+            <p className="mt-0.5 truncate text-xs text-neutral-500">{project.description}</p>
           )}
           {project.tags && project.tags.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -732,11 +753,7 @@ function KanbanColumn({
       <ul className="space-y-1">
         {tasks.map((t) => (
           <li key={t.id}>
-            <TaskCard
-              task={t}
-              selected={t.id === selectedId}
-              onSelect={() => onSelect(t.id)}
-            />
+            <TaskCard task={t} selected={t.id === selectedId} onSelect={() => onSelect(t.id)} />
           </li>
         ))}
       </ul>
@@ -754,9 +771,7 @@ function TaskCard({
   onSelect(): void;
 }): JSX.Element {
   const priority =
-    task.source === 'file'
-      ? ((task as TaskRecord & { priority?: string }).priority ?? null)
-      : null;
+    task.source === 'file' ? ((task as TaskRecord & { priority?: string }).priority ?? null) : null;
   const priorityColor =
     priority === 'high'
       ? 'bg-red-500'
@@ -795,9 +810,7 @@ function TaskCard({
           </span>
         )}
         {task.blocked_reason && (
-          <span className="rounded bg-red-500/15 px-1 text-red-600 dark:text-red-300">
-            blocked
-          </span>
+          <span className="rounded bg-red-500/15 px-1 text-red-600 dark:text-red-300">blocked</span>
         )}
         {task.ready && task.status === 'waiting' && (
           <span className="rounded bg-emerald-500/15 px-1 text-emerald-600 dark:text-emerald-300">
@@ -808,10 +821,7 @@ function TaskCard({
         {task.effort !== undefined && <span>⚡ {String(task.effort)}</span>}
         {task.tags &&
           task.tags.slice(0, 2).map((tg) => (
-            <span
-              key={tg}
-              className="rounded bg-neutral-200 px-1 text-[9px] dark:bg-neutral-800"
-            >
+            <span key={tg} className="rounded bg-neutral-200 px-1 text-[9px] dark:bg-neutral-800">
               {tg}
             </span>
           ))}

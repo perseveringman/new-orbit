@@ -31,6 +31,11 @@ describe('project room model', () => {
     expect(resolveProjectRoomPaneHint('github')).toBe('github');
   });
 
+  it('resolves planner and roles deep links to the matching outer tabs', () => {
+    expect(resolveProjectRoomPaneHint('planner')).toBe('planner');
+    expect(resolveProjectRoomPaneHint('roles')).toBe('roles');
+  });
+
   it('derives a distinct room instance key for each active project', () => {
     expect(deriveProjectRoomInstanceKey(null)).toBe('project-room:none');
     expect(deriveProjectRoomInstanceKey('project-a')).toBe('project-room:project-a');

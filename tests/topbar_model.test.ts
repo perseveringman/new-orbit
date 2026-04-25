@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { deriveTopBarContext, WORKSPACE_DESTINATIONS } from '../src/renderer/src/components/topbarModel';
+import {
+  deriveTopBarContext,
+  WORKSPACE_DESTINATIONS
+} from '../src/renderer/src/components/topbarModel';
 
 describe('top bar model', () => {
   it('keeps workspace destinations in the sidebar navigation model', () => {
     expect(WORKSPACE_DESTINATIONS.map((item) => item.label)).toEqual([
       'Dashboard',
+      'Runtimes',
+      'Agents',
       'GitHub',
       'Inbox',
       'Today',
@@ -87,6 +92,24 @@ describe('top bar model', () => {
       eyebrow: 'Workspace',
       title: 'GitHub',
       detail: 'Orbit Vault · Connect accounts, import repos, and monitor GitHub delivery state.',
+      stateLabel: null
+    });
+  });
+
+  it('describes the workspace runtime control plane', () => {
+    expect(
+      deriveTopBarContext({
+        view: { kind: 'runtimes' },
+        projects: [],
+        activeProjectUid: null,
+        activeFile: null,
+        vaultPath: '/Users/ryan/Orbit Vault'
+      })
+    ).toEqual({
+      eyebrow: 'Workspace',
+      title: 'Runtimes',
+      detail:
+        'Orbit Vault · Observe local providers, runtime capabilities, and orchestration load.',
       stateLabel: null
     });
   });

@@ -24,30 +24,30 @@ it is implemented.
 
 Namespaces:
 
-| Namespace | Status | Owner milestone |
-| --- | --- | --- |
-| `workspace` | implemented | M1 |
-| `settings`  | implemented | M1 |
-| `fs`        | implemented | M2 |
-| `para`      | implemented | M3 |
-| `git`       | stub | M5 |
-| `agent`     | implemented | M4 |
-| `runtime` / `planner` / `dispatch` / `role` | implemented | Orchestration |
+| Namespace                                   | Status      | Owner milestone |
+| ------------------------------------------- | ----------- | --------------- |
+| `workspace`                                 | implemented | M1              |
+| `settings`                                  | implemented | M1              |
+| `fs`                                        | implemented | M2              |
+| `para`                                      | implemented | M3              |
+| `git`                                       | stub        | M5              |
+| `agent`                                     | implemented | M4              |
+| `runtime` / `planner` / `dispatch` / `role` | implemented | Orchestration   |
 
 ### `fs` surface
 
-| Channel | Purpose |
-| --- | --- |
-| `fs:listTree(vault)` | Typed `FileNode` tree of markdown files (ignores `node_modules`, `.git`, `.orbit`). |
-| `fs:readFile(abs)` | Reads a file; injects a uid into frontmatter on first read and rewrites the file. |
-| `fs:writeFile(abs, content)` | Atomic write (temp + rename). |
-| `fs:createFile(dir, name, initial?)` | Creates a new markdown note with a uid in frontmatter. |
-| `fs:rename(old, new)` | OS-level rename + refmap update + **backlink-safe rewrite** of `[[Old]]` → `[[New]]` across the vault. Returns `{ linksUpdated }`. |
-| `fs:deleteFile(abs)` | Moves to `.orbit/trash/` (reversible). |
-| `fs:resolveUid(uid)` / `fs:uidOf(rel)` | Refmap lookups. |
-| `fs:search(q, { limit })` | MiniSearch full-text + title search. |
-| `fs:backlinksOf(abs)` | Files linking to the given file via wikilink. |
-| `fs:event` (push) | Broadcasted `FsEvent { kind, path, relPath, oldPath?, oldRelPath? }`. |
+| Channel                                | Purpose                                                                                                                            |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `fs:listTree(vault)`                   | Typed `FileNode` tree of markdown files (ignores `node_modules`, `.git`, `.orbit`).                                                |
+| `fs:readFile(abs)`                     | Reads a file; injects a uid into frontmatter on first read and rewrites the file.                                                  |
+| `fs:writeFile(abs, content)`           | Atomic write (temp + rename).                                                                                                      |
+| `fs:createFile(dir, name, initial?)`   | Creates a new markdown note with a uid in frontmatter.                                                                             |
+| `fs:rename(old, new)`                  | OS-level rename + refmap update + **backlink-safe rewrite** of `[[Old]]` → `[[New]]` across the vault. Returns `{ linksUpdated }`. |
+| `fs:deleteFile(abs)`                   | Moves to `.orbit/trash/` (reversible).                                                                                             |
+| `fs:resolveUid(uid)` / `fs:uidOf(rel)` | Refmap lookups.                                                                                                                    |
+| `fs:search(q, { limit })`              | MiniSearch full-text + title search.                                                                                               |
+| `fs:backlinksOf(abs)`                  | Files linking to the given file via wikilink.                                                                                      |
+| `fs:event` (push)                      | Broadcasted `FsEvent { kind, path, relPath, oldPath?, oldRelPath? }`.                                                              |
 
 All handlers reject any path that resolves outside the current vault
 (`src/main/pathGuard.ts`).
@@ -133,18 +133,34 @@ Project / editor 右侧栏现在统一走 `inspector` 面板，而不是旧的�
 
 与 Inspector 直接相关的新 IPC / git surface：
 
-| Channel | Purpose |
-| --- | --- |
-| `fs:listProjectTree(root)` | 返回完整项目树（不限于 Markdown），忽略 `.git` / `node_modules` / `.orbit`。 |
-| `fs:createDirectory(parent, name)` | 在 vault/project 边界内安全创建目录。 |
-| `git:getChanges({ cwd })` | 返回 porcelain status 摘要（staged / unstaged / untracked + file entries）。 |
-| `git:getWorkingTreeDiff({ cwd, pathspec? })` | 返回当前 tracked working tree 相对 `HEAD` 的 patch / numstat，用于 Changes 预览。 |
-| `git:stagePaths / git:unstagePaths / git:discardPaths` | 针对选中文件执行精细化 git 动作；untracked discard 由 renderer 二次确认后触发。 |
-| `git:commitSelection({ cwd, message })` | 只提交当前暂存区，不做隐式 `add -A`。 |
+| Channel                                                | Purpose                                                                           |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `fs:listProjectTree(root)`                             | 返回完整项目树（不限于 Markdown），忽略 `.git` / `node_modules` / `.orbit`。      |
+| `fs:createDirectory(parent, name)`                     | 在 vault/project 边界内安全创建目录。                                             |
+| `git:getChanges({ cwd })`                              | 返回 porcelain status 摘要（staged / unstaged / untracked + file entries）。      |
+| `git:getWorkingTreeDiff({ cwd, pathspec? })`           | 返回当前 tracked working tree 相对 `HEAD` 的 patch / numstat，用于 Changes 预览。 |
+| `git:stagePaths / git:unstagePaths / git:discardPaths` | 针对选中文件执行精细化 git 动作；untracked discard 由 renderer 二次确认后触发。   |
+| `git:commitSelection({ cwd, message })`                | 只提交当前暂存区，不做隐式 `add -A`。                                             |
 
 `ProjectGitHubView` 复用与 Inspector Changes 相同的受控发布 / PR 表单；
 `ProjectRoomView` 顶栏的 Publish / Create PR 快捷入口不再弹 prompt，
 而是切到对应 GitHub/Inspector 工作区完成操作。
+
+## Orchestration UI surfaces
+
+Renderer 里的 orchestration 观察面现在拆成两层：
+
+- **Workspace 级控制面**：`RuntimesWorkspaceView` 与 `AgentsLibraryView`
+  提供 list/detail 工作区，分别聚合 runtime registry、capabilities、
+  active leases / reports，以及全局 role templates、版本历史、跨项目
+  bindings / reports。
+- **Project 级执行面**：`ProjectRoomView` 继续承载 `Planner` 与 `Roles`
+  tab；其中 `ProjectPlannerView` 已升级为 React Flow canvas，proposal 节点
+  使用 `position` 坐标落盘，支持平移/缩放与布局保存。
+
+`WorkspaceView` 现支持 `runtimes` / `agents` 顶层页面，以及 project deep
+link 的 `planner` / `roles` pane hint，从 workspace 控制面可直接跳回项目
+执行现场。
 
 ## Vault layout
 
@@ -198,13 +214,13 @@ never mutated by the serializer.
 
 `src/shared/schemas.ts` exports Zod schemas + TypeScript types:
 
-| Schema | Required fields | Optional |
-| --- | --- | --- |
-| `ProjectFrontmatter`  | `uid`, `type: 'project'`, `title`, `status ∈ active | paused | done | archived` | `area_uid`, `started_at`, `due`, `tags` |
-| `AreaFrontmatter`     | `uid`, `type: 'area'`, `title` | `standard`, `tags` |
-| `ResourceFrontmatter` | `uid`, `type: 'resource'`, `title` | `source_project_uid`, `tags` |
-| `ArchiveFrontmatter`  | `uid`, `type: 'archive'`, `title`, `archived_at`, `original_type ∈ project | area | resource` | `tags` |
-| `TaskFrontmatter`     | `uid`, `type: 'task'`, `title`, `status ∈ backlog | waiting | todo | doing | blocked | done` | `project_uid`, `area_uid`, `due`, `effort ∈ xs|s|m|l|xl`, `tags`, orchestration ownership / proposal fields |
+| Schema                | Required fields                                                            | Optional                     |
+| --------------------- | -------------------------------------------------------------------------- | ---------------------------- | --------- | --------- | --------------------------------------- | ----- | ---------------------------------------------- | --- | --- | --- | ------------------------------------------------------ |
+| `ProjectFrontmatter`  | `uid`, `type: 'project'`, `title`, `status ∈ active                        | paused                       | done      | archived` | `area_uid`, `started_at`, `due`, `tags` |
+| `AreaFrontmatter`     | `uid`, `type: 'area'`, `title`                                             | `standard`, `tags`           |
+| `ResourceFrontmatter` | `uid`, `type: 'resource'`, `title`                                         | `source_project_uid`, `tags` |
+| `ArchiveFrontmatter`  | `uid`, `type: 'archive'`, `title`, `archived_at`, `original_type ∈ project | area                         | resource` | `tags`    |
+| `TaskFrontmatter`     | `uid`, `type: 'task'`, `title`, `status ∈ backlog                          | waiting                      | todo      | doing     | blocked                                 | done` | `project_uid`, `area_uid`, `due`, `effort ∈ xs | s   | m   | l   | xl`, `tags`, orchestration ownership / proposal fields |
 
 `inferTypeFromPath(relPath)` maps `01_Projects/…` → `project`, `02_Areas/` →
 `area`, `03_Resources/` → `resource`, `04_Archives/` → `archive`. On first
@@ -259,12 +275,12 @@ These comments are inert in any Obsidian/GitHub renderer.
 
 ### `para` IPC surface
 
-| Channel | Purpose |
-| --- | --- |
-| `para:listEntities({ type? })` | All known PARA entities (projects/areas/resources/archives). |
-| `para:listTasks({ status?, project_uid?, area_uid?, due_before?, tag? })` | Task list, filtered server-side. |
-| `para:updateTaskStatus(id, status)` | For `file:…` ids, rewrites frontmatter; for `inline:relPath:line` ids, toggles the checkbox and writes/removes the status comment. |
-| `para:closeProject(abs)` | Archive a project: move to `04_Archives/<YYYY>/`, set `type: archive`, preserve `uid`, add `archived_at` and `original_type: project`. Calls the M2 rename pipeline to rewrite `[[…]]` references. |
+| Channel                                                                   | Purpose                                                                                                                                                                                            |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `para:listEntities({ type? })`                                            | All known PARA entities (projects/areas/resources/archives).                                                                                                                                       |
+| `para:listTasks({ status?, project_uid?, area_uid?, due_before?, tag? })` | Task list, filtered server-side.                                                                                                                                                                   |
+| `para:updateTaskStatus(id, status)`                                       | For `file:…` ids, rewrites frontmatter; for `inline:relPath:line` ids, toggles the checkbox and writes/removes the status comment.                                                                 |
+| `para:closeProject(abs)`                                                  | Archive a project: move to `04_Archives/<YYYY>/`, set `type: archive`, preserve `uid`, add `archived_at` and `original_type: project`. Calls the M2 rename pipeline to rewrite `[[…]]` references. |
 
 ### Migration registry
 
@@ -342,15 +358,26 @@ working.
 ```ts
 interface AgentEvent {
   idx: number;
-  at: string;                 // ISO timestamp
-  kind: 'message' | 'tool_use' | 'tool_result'
-      | 'thinking' | 'cost' | 'error' | 'done' | 'text' | 'hydrate';
-  data?: unknown;             // raw JSON object when stream-json succeeded
-  text?: string;              // plain text payload for message/text/thinking/error/hydrate
+  at: string; // ISO timestamp
+  kind:
+    | 'message'
+    | 'tool_use'
+    | 'tool_result'
+    | 'thinking'
+    | 'cost'
+    | 'error'
+    | 'done'
+    | 'text'
+    | 'hydrate';
+  data?: unknown; // raw JSON object when stream-json succeeded
+  text?: string; // plain text payload for message/text/thinking/error/hydrate
   toolName?: string;
   // cost-event extras:
-  input_tokens?, output_tokens?, cache_read_input_tokens?,
-  cache_creation_input_tokens?, total_cost_usd?
+  input_tokens?;
+  output_tokens?;
+  cache_read_input_tokens?;
+  cache_creation_input_tokens?;
+  total_cost_usd?;
 }
 ```
 
@@ -472,7 +499,7 @@ throwaway `git worktree` dedicated to that run:
 - `shortId` is an 8-char `nanoid`, **not** derived from the task UID so
   renaming a task doesn't orphan the worktree.
 - The branch checked out is always `orbit/ghost/<shortId>`. This prefix
-  is the *only* thing we'll ever auto-delete or auto-commit onto; code
+  is the _only_ thing we'll ever auto-delete or auto-commit onto; code
   that touches branches (`git.ghostCommit`, `WorktreeManager.remove` with
   `force: true`, `WorktreeManager.resetAll`) asserts the prefix with
   `isGhostBranch()` before acting.
@@ -487,7 +514,7 @@ scope string:
 
 - **`scope = 'global'`** — any op that touches `.git/worktrees` or the
   index (worktree add/remove/prune, merge). Guarantees `git worktree
-  add` can't race another add/remove.
+add` can't race another add/remove.
 - **`scope = 'cwd:<abs-path>'`** — per-worktree ops (`git add`,
   `commit`, status). Scales concurrency across unrelated worktrees
   while serializing ops within one.
@@ -527,7 +554,7 @@ the allocator is advisory.
 
 ```ts
 interface CheckReport {
-  build:   { ok: boolean; exitCode: number | null; logTail: string; skipped?: boolean };
+  build: { ok: boolean; exitCode: number | null; logTail: string; skipped?: boolean };
   secrets: { ok: boolean; findings: { file: string; line: number; rule: string }[] };
   headSha?: string;
   at: string; // ISO8601
@@ -600,14 +627,14 @@ process calls `blockTask(taskId, reason)`:
 the standard user-data `orbit-settings.json` (not per-vault) so a single
 user's caps travel with them across vaults.
 
-| Field            | Type                 | Default    | Meaning                     |
-| ---------------- | -------------------- | ---------- | --------------------------- |
-| `perRunTokens`   | `number \| null`     | 200 000    | Cap for a single agent run  |
-| `perRunUSD`      | `number \| null`     | 5          | USD cap for a single run    |
-| `dailyTokens`    | `number \| null`     | 1 000 000  | Aggregate cap for today UTC |
-| `dailyUSD`       | `number \| null`     | 20         | Aggregate USD cap           |
-| `warnAtPercent`  | `number` (0–100)     | 80         | When to emit `budget_warn`  |
-| `hardStop`       | `boolean`            | `true`     | False = warn-only mode      |
+| Field           | Type             | Default   | Meaning                     |
+| --------------- | ---------------- | --------- | --------------------------- |
+| `perRunTokens`  | `number \| null` | 200 000   | Cap for a single agent run  |
+| `perRunUSD`     | `number \| null` | 5         | USD cap for a single run    |
+| `dailyTokens`   | `number \| null` | 1 000 000 | Aggregate cap for today UTC |
+| `dailyUSD`      | `number \| null` | 20        | Aggregate USD cap           |
+| `warnAtPercent` | `number` (0–100) | 80        | When to emit `budget_warn`  |
+| `hardStop`      | `boolean`        | `true`    | False = warn-only mode      |
 
 `null` on any cap means "unlimited". Missing keys are back-filled by
 `parseBudgetSettings` on load — the schema never throws.
@@ -616,7 +643,7 @@ user's caps travel with them across vaults.
 
 Two independent enforcement points, sharing the same caps:
 
-- **BudgetGate** (`tokens.ts`) — synchronous *pre-spawn* check. Consulted
+- **BudgetGate** (`tokens.ts`) — synchronous _pre-spawn_ check. Consulted
   from `startTask` after `SafetyGate`. Computes `today + estimate` and
   rejects the spawn with `StartError.code === 'budget_blocked'` when any
   cap would be exceeded. When `hardStop=false` it always returns
@@ -667,20 +694,20 @@ Sections in the rendered report:
 
 ### IPC surface (M6 additions)
 
-| Channel                  | Purpose                                    |
-| ------------------------ | ------------------------------------------ |
-| `agent:budget:get`       | Read current `BudgetSettings`              |
-| `agent:budget:update`    | Merge-patch `BudgetSettings`               |
-| `agent:cost:dailyReport` | Return `{ path, markdown, date }`          |
+| Channel                  | Purpose                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `agent:budget:get`       | Read current `BudgetSettings`                                      |
+| `agent:budget:update`    | Merge-patch `BudgetSettings`                                       |
+| `agent:cost:dailyReport` | Return `{ path, markdown, date }`                                  |
 | `agent:costToday`        | **Extended** — returns `CostTodayResult` with `caps` + `remaining` |
 
 ### Storage paths
 
-| What                     | Where                                           |
-| ------------------------ | ----------------------------------------------- |
-| Budget settings          | `app.getPath('userData')/orbit-settings.json`   |
-| Cost NDJSON              | `<vault>/.orbit/cost/YYYY-MM.json`              |
-| Saved daily reports      | `<vault>/03_Resources/cost-reports/YYYY-MM-DD.md` |
+| What                | Where                                             |
+| ------------------- | ------------------------------------------------- |
+| Budget settings     | `app.getPath('userData')/orbit-settings.json`     |
+| Cost NDJSON         | `<vault>/.orbit/cost/YYYY-MM.json`                |
+| Saved daily reports | `<vault>/03_Resources/cost-reports/YYYY-MM-DD.md` |
 
 ### M7 hooks reserved
 
@@ -698,8 +725,8 @@ Sections in the rendered report:
 
 ### Distillation pipeline (closure flow)
 
-When the user clicks "Close project" and leaves *Generate distillation
-summary* checked in `CloseProjectDialog`, the renderer runs two main
+When the user clicks "Close project" and leaves _Generate distillation
+summary_ checked in `CloseProjectDialog`, the renderer runs two main
 IPCs in sequence:
 
 1. `para.closeProject(path)` — M3 flow. Moves the project file into
@@ -714,7 +741,7 @@ IPCs in sequence:
 - **Archived project body** — head + tail clip to 8 000 chars (see
   `clipHeadTail`).
 - **Related files** — any markdown with `frontmatter.project_uid ===
-  projectUid`, body clipped to 1 200 chars each (max 20 files).
+projectUid`, body clipped to 1 200 chars each (max 20 files).
 - **Closed tasks** — `TaskIndex.allTasks()` filtered by project uid and
   `status === 'done'`.
 - **Git activity** — NDJSON from `.orbit/logs/git.log` whose `at`
@@ -879,21 +906,21 @@ path; unlinks remove by relative path.
 
 ### IPC surface (M7 additions)
 
-| Channel                  | Purpose                                          |
-| ------------------------ | ------------------------------------------------ |
-| `distill:project`        | Distill a closed project → new resource file     |
-| `distill:cancel`         | Cancel an in-flight distillation run             |
-| `distill:suggest`        | Preview wake-up hits for a task (TaskRow panel)  |
-| `distill:reindex`        | Clear + rebuild the vector store                 |
-| `distill:experienceFor`  | Return the injection list for a given runId     |
+| Channel                 | Purpose                                         |
+| ----------------------- | ----------------------------------------------- |
+| `distill:project`       | Distill a closed project → new resource file    |
+| `distill:cancel`        | Cancel an in-flight distillation run            |
+| `distill:suggest`       | Preview wake-up hits for a task (TaskRow panel) |
+| `distill:reindex`       | Clear + rebuild the vector store                |
+| `distill:experienceFor` | Return the injection list for a given runId     |
 
 ### Storage paths
 
-| What                         | Where                                     |
-| ---------------------------- | ----------------------------------------- |
-| Vector store (JSON fallback) | `<vault>/.orbit/vectors.json`             |
-| Indexer log                  | `<vault>/.orbit/logs/vector.log`          |
-| Distilled resources          | `<vault>/03_Resources/distilled/*.md`     |
+| What                         | Where                                 |
+| ---------------------------- | ------------------------------------- |
+| Vector store (JSON fallback) | `<vault>/.orbit/vectors.json`         |
+| Indexer log                  | `<vault>/.orbit/logs/vector.log`      |
+| Distilled resources          | `<vault>/03_Resources/distilled/*.md` |
 
 ### M8 hooks reserved
 
@@ -946,6 +973,7 @@ Orbit runs agent CLIs in two complementary modes:
 2. **Headless (Night Shift)** — `src/main/night_shift/dispatcher.ts` fan-outs a chosen batch of tasks, creates an isolated worktree per task (`<vault>/.orbit/night-worktrees/<runId>/<taskUid>/`), spawns a headless `claude` (or injectable `spawnRunner`) with the composed prompt, pre-merge-checks results, and optionally opens a PR. Progress is broadcast over `nightShift.onProgress` / `onDone` events.
 
 Both modes share:
+
 - The same per-project `AGENT.md` persona.
 - The same MCP tool set.
 - The same `git_branch` discipline — ghost/night branches never touch `main` without a `preMergeCheck` pass.
@@ -954,15 +982,15 @@ Both modes share:
 
 `src/mcp/server.ts` implements a stdio-based MCP server (built to `out/mcp/server.cjs` by `npm run build:mcp`) that exposes:
 
-| Tool | Effect |
-| --- | --- |
-| `search_vault` | Full-text search across the PARA vault via the shared refmap. |
-| `get_file` | Read any markdown file by UID or relative path. |
-| `create_task` | Spawn a four-section task into the current project. |
-| `update_task` | Patch frontmatter or any of the four sections. |
-| `search_memories` | Lookup entries in `.agent/memories/`. |
-| `save_memory` | Persist a markdown memory entry for future wake-up. |
-| `query_project_graph` | Return a project's tasks + links in a structured form. |
+| Tool                  | Effect                                                        |
+| --------------------- | ------------------------------------------------------------- |
+| `search_vault`        | Full-text search across the PARA vault via the shared refmap. |
+| `get_file`            | Read any markdown file by UID or relative path.               |
+| `create_task`         | Spawn a four-section task into the current project.           |
+| `update_task`         | Patch frontmatter or any of the four sections.                |
+| `search_memories`     | Lookup entries in `.agent/memories/`.                         |
+| `save_memory`         | Persist a markdown memory entry for future wake-up.           |
+| `query_project_graph` | Return a project's tasks + links in a structured form.        |
 
 Auto-registration: `project.ensureMcpConfig(uid)` writes `.mcp.json` with an absolute path to the bundled server and the vault + project-uid env vars.
 
@@ -979,8 +1007,8 @@ Auto-registration: `project.ensureMcpConfig(uid)` writes `.mcp.json` with an abs
 
 ### R7 IPC additions
 
-| Channel | Purpose |
-| --- | --- |
+| Channel       | Purpose                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `task:relink` | Rewrite a task's `project_uid` + physically move the file into the target project's `.agent/tasks/`. Rejects collisions. |
 
 The V3 migration report gained two fields — `failed: { slug, error }[]` and `snapshotSha: string | null` — without breaking callers that only read `migrated` / `skipped`.

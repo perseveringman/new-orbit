@@ -1,7 +1,13 @@
 import type { SidebarPanelId, SidebarSurfaceId } from './vaultRightSidebarModel';
 
 export type ProjectRoomHeaderAction = 'enable-orbit-tools' | 'archive-project';
-export type ProjectRoomOuterTab = 'kanban' | 'terminal' | 'sessions' | 'github' | 'planner' | 'roles';
+export type ProjectRoomOuterTab =
+  | 'kanban'
+  | 'terminal'
+  | 'sessions'
+  | 'github'
+  | 'planner'
+  | 'roles';
 
 export function deriveProjectRoomInstanceKey(projectUid: string | null): string {
   return `project-room:${projectUid ?? 'none'}`;
@@ -32,16 +38,12 @@ export function deriveProjectRoomKanbanModel(args: {
       panelId: 'task-detail',
       selectedTaskId: args.selectedTaskId,
       emptyStateMessage:
-        args.taskCount === 0
-          ? 'Create a task to begin.'
-          : 'Select a task from the Kanban to edit.'
+        args.taskCount === 0 ? 'Create a task to begin.' : 'Select a task from the Kanban to edit.'
     }
   };
 }
 
-export function resolveProjectRoomSidebarSurface(
-  outerTab: ProjectRoomOuterTab
-): SidebarSurfaceId {
+export function resolveProjectRoomSidebarSurface(outerTab: ProjectRoomOuterTab): SidebarSurfaceId {
   if (outerTab === 'terminal') return 'project.terminal';
   if (outerTab === 'sessions') return 'project.sessions';
   if (outerTab === 'github') return 'project.github';
@@ -59,13 +61,15 @@ export function resolveProjectRoomSidebarPanel(
 
 export function resolveProjectRoomPaneHint(pane?: 'task'): 'task' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'sessions' | 'github' | 'readme' | 'agent'
-): 'task' | 'sessions' | 'github' | null;
+  pane?: 'task' | 'sessions' | 'github' | 'planner' | 'roles' | 'readme' | 'agent'
+): 'task' | 'sessions' | 'github' | 'planner' | 'roles' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'sessions' | 'github' | 'readme' | 'agent'
-): 'task' | 'sessions' | 'github' | null {
+  pane?: 'task' | 'sessions' | 'github' | 'planner' | 'roles' | 'readme' | 'agent'
+): 'task' | 'sessions' | 'github' | 'planner' | 'roles' | null {
   if (pane === 'task') return 'task';
   if (pane === 'sessions') return 'sessions';
   if (pane === 'github') return 'github';
+  if (pane === 'planner') return 'planner';
+  if (pane === 'roles') return 'roles';
   return null;
 }

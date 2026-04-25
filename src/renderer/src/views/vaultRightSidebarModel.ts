@@ -1,5 +1,6 @@
 export type VaultViewKind =
   | 'editor'
+  | 'agents'
   | 'github'
   | 'inbox'
   | 'today'
@@ -7,6 +8,7 @@ export type VaultViewKind =
   | 'journals'
   | 'project'
   | 'kanban'
+  | 'runtimes'
   | 'area'
   | 'areaRoom';
 
@@ -14,12 +16,14 @@ export type ProjectRoomMode = 'kanban' | 'terminal' | 'sessions' | 'github';
 
 export type SidebarSurfaceId =
   | 'editor'
+  | 'agents'
   | 'github'
   | 'inbox'
   | 'today'
   | 'dashboard'
   | 'journals'
   | 'kanban'
+  | 'runtimes'
   | 'area'
   | 'areaRoom'
   | 'project.kanban'
@@ -98,6 +102,12 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
       { id: 'execution', title: 'Execution', panels: ['agent', 'runlog', 'diff'] }
     ]
   },
+  agents: {
+    intents: [
+      { id: 'overview', title: 'Overview', panels: ['inspector', 'review'] },
+      { id: 'execution', title: 'Execution', panels: ['runlog', 'diff'] }
+    ]
+  },
   journals: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
   },
@@ -107,11 +117,23 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
       { id: 'focus', title: 'Focus', panels: ['task-detail'] }
     ]
   },
+  runtimes: {
+    intents: [
+      { id: 'overview', title: 'Overview', panels: ['inspector', 'worktrees'] },
+      { id: 'execution', title: 'Execution', panels: ['runlog', 'review'] }
+    ]
+  },
   area: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
   },
   areaRoom: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['area-config', 'files', 'sessions', 'inspector'] }]
+    intents: [
+      {
+        id: 'overview',
+        title: 'Overview',
+        panels: ['area-config', 'files', 'sessions', 'inspector']
+      }
+    ]
   },
   'project.kanban': {
     intents: [
@@ -186,9 +208,7 @@ export function findSidebarIntentForPanel(
   surface: SidebarSurfaceId,
   panelId: SidebarPanelId
 ): SidebarIntentId | null {
-  const match = SURFACE_PROFILES[surface].intents.find((intent) =>
-    intent.panels.includes(panelId)
-  );
+  const match = SURFACE_PROFILES[surface].intents.find((intent) => intent.panels.includes(panelId));
   return match?.id ?? null;
 }
 
@@ -201,7 +221,5 @@ export function resolveSidebarPanelTab(
   const fallback = visiblePanels[0]?.id ?? 'files';
   if (!activePanelId) return fallback;
 
-  return visiblePanels.some((panel) => panel.id === activePanelId)
-    ? activePanelId
-    : fallback;
+  return visiblePanels.some((panel) => panel.id === activePanelId) ? activePanelId : fallback;
 }

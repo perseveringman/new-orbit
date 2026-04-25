@@ -8,6 +8,8 @@ interface Item {
 
 const ITEMS: Item[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
+  { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Today', view: { kind: 'today' }, icon: '☼' },
   { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }

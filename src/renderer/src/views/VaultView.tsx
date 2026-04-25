@@ -25,11 +25,13 @@ import { DashboardView } from './DashboardView';
 import { GitHubWorkspaceView } from './GitHubWorkspaceView';
 import { ProjectRoomView } from './ProjectRoomView';
 import { JournalHistoryView } from './JournalHistoryView';
+import { RuntimesWorkspaceView } from './RuntimesWorkspaceView';
 import { NightShiftHistoryDrawer } from '../components/NightShiftHistoryDrawer';
 import { NewProjectModal } from '../components/Modals/NewProjectModal';
 import { NewAreaModal } from '../components/Modals/NewAreaModal';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { ReviewInboxView } from './ReviewInboxView';
+import { AgentsLibraryView } from './AgentsLibraryView';
 import { RunLogPane } from '../components/RunLogPane';
 import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
 import { WorkspaceInspectorPane } from '../components/Inspector/WorkspaceInspectorPane';
@@ -130,7 +132,7 @@ export function VaultView(): JSX.Element {
     setSidebarSurface(resolveSidebarSurface(view));
     setSidebarFocus({
       task: null,
-      filePath: view.kind === 'editor' ? active?.path ?? null : null,
+      filePath: view.kind === 'editor' ? (active?.path ?? null) : null,
       projectUid: view.kind === 'kanban' ? view.projectUid : null,
       runId: null,
       worktreeId: null
@@ -172,20 +174,21 @@ export function VaultView(): JSX.Element {
       if (detail === 'night-shift-history') setNsHistoryOpen(true);
     }
     window.addEventListener('orbit:open-drawer', onOpenDrawer as EventListener);
-    return () =>
-      window.removeEventListener('orbit:open-drawer', onOpenDrawer as EventListener);
+    return () => window.removeEventListener('orbit:open-drawer', onOpenDrawer as EventListener);
   }, []);
 
   useEffect(() => {
     function onOpenRightTab(e: Event): void {
-      const raw = (e as CustomEvent<
-        | string
-        | {
-            tab: string;
-            runId?: string;
-            worktreeId?: string;
-          }
-      >).detail;
+      const raw = (
+        e as CustomEvent<
+          | string
+          | {
+              tab: string;
+              runId?: string;
+              worktreeId?: string;
+            }
+        >
+      ).detail;
       const detail = (typeof raw === 'string' ? { tab: raw } : raw) ?? { tab: '' };
       if (!isSidebarPanelId(detail.tab)) return;
       openSidebarPanel({
@@ -299,12 +302,17 @@ export function VaultView(): JSX.Element {
   function renderSidebarPanel(): JSX.Element {
     if (sidebarPanel === 'inspector') return <WorkspaceInspectorPane />;
     if (sidebarPanel === 'files') {
-      return tree ? <FileTree root={tree} /> : <p className="text-xs text-neutral-500">Scanning…</p>;
+      return tree ? (
+        <FileTree root={tree} />
+      ) : (
+        <p className="text-xs text-neutral-500">Scanning…</p>
+      );
     }
     if (sidebarPanel === 'area-config') return <AreaConfigPanel />;
     if (sidebarPanel === 'backlinks') return <BacklinksPanel />;
     if (sidebarPanel === 'task-detail') return <TaskDetailPanel />;
-    if (sidebarPanel === 'task-tree') return <ProjectTaskTreePanel projectUid={sidebarProjectUid} />;
+    if (sidebarPanel === 'task-tree')
+      return <ProjectTaskTreePanel projectUid={sidebarProjectUid} />;
     if (sidebarPanel === 'agent') return <AgentPanel />;
     if (sidebarPanel === 'review') return <ReviewInboxView />;
     if (sidebarPanel === 'runlog') return <RunLogPane />;
@@ -363,6 +371,10 @@ export function VaultView(): JSX.Element {
           <GitHubWorkspaceView />
         ) : view.kind === 'dashboard' ? (
           <DashboardView />
+        ) : view.kind === 'runtimes' ? (
+          <RuntimesWorkspaceView />
+        ) : view.kind === 'agents' ? (
+          <AgentsLibraryView />
         ) : view.kind === 'journals' ? (
           <JournalHistoryView />
         ) : view.kind === 'project' ? (
