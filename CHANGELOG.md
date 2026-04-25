@@ -8,6 +8,7 @@
 
 - **ExecutionContext 抽象基础**：新增 `src/main/execution/`，以 `WorktreeExecutionContext` 适配现有 worktree 行为，并在项目配置中支持 `execution_context: worktree | sandbox`（默认 `worktree`，`sandbox` 暂为未实现上下文）。
 - **Activity Log 基础设施**：新增 `src/main/activity/`，提供 Activity Event 类型、NDJSON 按日存储、fire-and-forget emitter、查询过滤与只读 IPC，并补充 emit / query / concurrency 单元测试。
+- **Orbit CLI Phase 0 脚手架**：新增 `src/cli/` 命令行入口、稳定 help / `--json` 输出、退出码与本地 socket bridge；新增 `src/main/cli_server/` 薄协议层，先暴露 `search`、`cat`、`task list`，并保留 MCP 启动流程不变
 
 - **Orbit v2 方向确立（2026-04-26）**：经过一次完整 Onboard 对话（~29 轮），确立 v2 演进方向。产出：
   - 新增 `docs/overview.md` — v2 完整架构总览

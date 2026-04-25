@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build:mcp": "esbuild src/mcp/server.ts --bundle --platform=node --target=node18 --format=cjs --outfile=out/mcp/server.cjs --alias:@shared=./src/shared --external:electron --external:fsevents",
-    "build": "npm run typecheck && electron-vite build && npm run build:mcp",
+    "build": "npm run typecheck && electron-vite build && npm run build:mcp && npm run build:cli",
     "start": "electron-vite preview",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
@@ -22,7 +22,9 @@
     "e2e": "npm run build && playwright test",
     "test:all": "npm run test && npm run e2e",
     "postinstall": "electron-rebuild -f -w node-pty || true",
-    "rebuild:native": "electron-rebuild -f -w node-pty"
+    "rebuild:native": "electron-rebuild -f -w node-pty",
+    "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=out/cli/index.js --alias:@shared=./src/shared",
+    "cli": "npm run build:cli -- --log-level=warning && node out/cli/index.js"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
@@ -86,5 +88,8 @@
     "onlyBuiltDependencies": [
       "electron"
     ]
+  },
+  "bin": {
+    "orbit": "bin/orbit"
   }
 }

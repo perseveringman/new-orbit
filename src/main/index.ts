@@ -32,6 +32,7 @@ import {
   type CrashOrigin
 } from './crash';
 import { detectClaude, resetDetectCache } from './agent/cli';
+import { startCliServerForVault, stopCliServer } from './cli_server';
 
 // --- userData override (for e2e + isolation) ---
 // If ORBIT_USER_DATA is set before app is ready, point Electron's userData
@@ -106,6 +107,7 @@ async function attachVaultRuntime(vaultPath: string): Promise<void> {
   configureActivityEmitter(vaultPath);
   terminal.setVaultRoot(vaultPath);
   await openFsSession(vaultPath);
+  await startCliServerForVault(vaultPath);
   await reconcileOnStart(vaultPath);
   await ensureOrchestrationForVault(vaultPath);
   await ensureTerminalAgentRuntimeForVault(vaultPath);
@@ -238,6 +240,7 @@ function registerIpc(): void {
     await terminal.killAll();
     terminal.setVaultRoot(null);
     await closeVectorStore();
+    await stopCliServer();
     shutdownOrchestration();
     await closeFsSession();
     await setLastVaultPath(null);
@@ -362,4 +365,8 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  void stopCliServer();
 });

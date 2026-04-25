@@ -49,6 +49,14 @@ and an `OrbitApi` interface whose shape matches. Both main and preload import
 from the same module so adding a channel fails to compile on either end until
 it is implemented.
 
+### CLI bridge (v2 Phase 0)
+
+The main process also starts a thin local socket server at
+`<vault>/.orbit/cli-socket` when a vault is attached. The `orbit` Node CLI uses
+this bridge for agent-facing commands while MCP remains enabled during the
+migration window. Phase 0 exposes only `search`, `cat`, and `task list`; later
+phases fill out the remaining domains described in ADR-008.
+
 Namespaces:
 
 | Namespace                                   | Status      | Owner milestone |
