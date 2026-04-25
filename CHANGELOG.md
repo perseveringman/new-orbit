@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit v2 阶段 2 Inbox 枢纽**：完成 Inbox v2 的 message/capture/archive 存储、事件 emitter、Activity Log 接入、Proposal 双通道同步、IPC 合约与 renderer 的 Capture/Messages/Archive + Stage View 基础 UI。
 - **Inbox v2 架构基础**：新增 Inbox Messages/Capture/Archive NDJSON store、事件 service、Proposal 双通道同步、IPC/preload 类型与 Capture/Messages/Archive Stage View 壳，覆盖消息/捕获计数规则和基础渲染测试。
 - **Orbit v2 阶段 1 授权链路**：完成 task 授权 frontmatter 字段与一次性迁移脚本，并新增 Proposal 审批状态机、持久化 store、Activity Log 接入、只读/处理 IPC 与最小 chat 审批卡片模型，建立 `propose → approve/reject → materialize` 基础闭环。
 - **Proposal 审批系统**：新增 `src/main/approval/`，提供 proposal schema、pending/archive NDJSON 存储、状态机、chat/Inbox `proposal_id` 同步占位、IPC 合约与 `new_task` 审批后任务物化。
