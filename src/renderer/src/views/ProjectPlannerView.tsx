@@ -30,6 +30,37 @@ const plannerNodeTypes: NodeTypes = {
   planNode: PlannerCanvasNode
 };
 
+type PlannerAgentId = 'plan-agent' | 'architect-agent' | 'executor-agent';
+
+type PlannerChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  agentId?: PlannerAgentId;
+  content: string;
+};
+
+const PLANNER_AGENTS: Array<{
+  id: PlannerAgentId;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'plan-agent',
+    label: 'Plan Agent',
+    description: 'Brainstorm requirements and turn decisions into task splits.'
+  },
+  {
+    id: 'architect-agent',
+    label: 'Architect Agent',
+    description: 'Stress-test scope, dependencies, and implementation boundaries.'
+  },
+  {
+    id: 'executor-agent',
+    label: 'Executor Agent',
+    description: 'Review whether the split is executable by runtime agents.'
+  }
+];
+
 export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX.Element {
   const toast = useFiles((s) => s.toast);
   const [proposals, setProposals] = useState<PlanProposal[]>([]);
@@ -38,6 +69,17 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
   const [editedJson, setEditedJson] = useState('');
   const [publishResult, setPublishResult] = useState<PlanPublishResult | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [activeAgentId, setActiveAgentId] = useState<PlannerAgentId>('plan-agent');
+  const [composer, setComposer] = useState('');
+  const [chatMessages, setChatMessages] = useState<PlannerChatMessage[]>([
+    {
+      id: 'planner-welcome',
+      role: 'assistant',
+      agentId: 'plan-agent',
+      content:
+        'Tell me the outcome you want. I will help brainstorm the requirement first; once the split is clear, generate a task artifact on the right.'
+    }
+  ]);
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<PlannerFlowNode>([]);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -86,42 +128,92 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
     );
   }, [editMode, selected, setFlowEdges, setFlowNodes]);
 
-  async function createDraft(): Promise<void> {
+  async function createDraft(inputSummary = ''): Promise<void> {
     try {
       const tasks = await window.orbit.project.getTasks(projectUid);
-      const nodes: PlanProposalNode[] = tasks
-        .filter((task) => task.status !== 'done')
-        .map((task, index) => ({
-          taskUid: task.uid || `temp-${task.id}`,
-          title: task.title || '(untitled)',
-          status: task.status as PlanProposalNode['status'],
-          executionStrategy: 'manual',
-          priority: 'med',
-          tags: task.tags,
-          position: suggestedNodePosition(index)
-        }));
+      const unfinishedTasks = tasks.filter((task) => task.status !== 'done');
+      const nodes: PlanProposalNode[] =
+        unfinishedTasks.length > 0
+          ? unfinishedTasks.map((task, index) => ({
+              taskUid: task.uid || `temp-${task.id}`,
+              title: task.title || '(untitled)',
+              status: task.status as PlanProposalNode['status'],
+              executionStrategy: 'manual',
+              priority: 'med',
+              tags: task.tags,
+              position: suggestedNodePosition(index)
+            }))
+          : buildSeedNodesFromConversation(inputSummary);
+      const nextVersion = Math.max(0, ...proposals.map((proposal) => proposal.version)) + 1;
+      const trimmedInput = inputSummary.trim();
 
       const draft: PlanProposal = {
         proposalId: `draft-${Date.now()}`,
         projectUid,
-        version: 1,
-        title: 'Draft Proposal',
-        summary: 'Draft generated from current project tasks',
+        version: nextVersion,
+        title: trimmedInput
+          ? `Plan: ${clipText(trimmedInput, 48)}`
+          : `Planner Proposal v${nextVersion}`,
+        summary: trimmedInput
+          ? `Generated from planner conversation: ${trimmedInput}`
+          : 'Draft generated from current project tasks',
         status: 'draft',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        source: 'human',
+        source: trimmedInput ? 'planner' : 'human',
         nodes,
-        edges: []
+        edges: unfinishedTasks.length > 0 ? [] : buildSeedEdges(nodes),
+        inputSummary: trimmedInput || undefined
       };
 
       const saved = await window.orbit.planner.saveProposal(draft);
-      toast('Draft proposal created');
+      toast('Task split proposal created');
       await refresh();
       setSelectedProposalId(saved.proposalId);
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: makeMessageId('assistant'),
+          role: 'assistant',
+          agentId: activeAgentId,
+          content: `Created artifact v${saved.version} with ${saved.nodes.length} tasks. You can inspect, rearrange, or publish it from the right panel.`
+        }
+      ]);
     } catch (e) {
-      toast(`Create draft failed: ${(e as Error).message}`);
+      toast(`Create task split failed: ${(e as Error).message}`);
     }
+  }
+
+  function sendMessage(): void {
+    const text = composer.trim();
+    if (!text) return;
+    setComposer('');
+    setChatMessages((current) => [
+      ...current,
+      { id: makeMessageId('user'), role: 'user', content: text },
+      {
+        id: makeMessageId('assistant'),
+        role: 'assistant',
+        agentId: activeAgentId,
+        content:
+          activeAgentId === 'plan-agent'
+            ? 'Captured. Keep refining the goal, constraints, and acceptance criteria; when the split feels stable, generate a task artifact.'
+            : 'Captured. I will keep this perspective in mind while reviewing the eventual task split.'
+      }
+    ]);
+  }
+
+  async function generateArtifact(): Promise<void> {
+    const text = composer.trim();
+    if (text) {
+      setComposer('');
+      setChatMessages((current) => [
+        ...current,
+        { id: makeMessageId('user'), role: 'user', content: text }
+      ]);
+    }
+    const latestInput = text || latestUserInput(chatMessages) || selected?.inputSummary || '';
+    await createDraft(latestInput);
   }
 
   async function saveEdited(): Promise<void> {
@@ -185,218 +277,276 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
-        <h2 className="text-sm font-semibold">Project Planner</h2>
+    <div className="flex h-full min-h-0 flex-col bg-neutral-50 dark:bg-neutral-950">
+      <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+        <div>
+          <h2 className="text-sm font-semibold">Project Planner</h2>
+          <p className="text-xs text-neutral-500">
+            Brainstorm in chat first. The task artifact appears when a split is ready.
+          </p>
+        </div>
         <button
-          onClick={() => void createDraft()}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          onClick={() => void generateArtifact()}
+          className="rounded-full border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
         >
-          + Create Draft from Tasks
+          Generate Task Split
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-64 shrink-0 border-r border-neutral-200 p-2 dark:border-neutral-800">
-          <h3 className="mb-2 px-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-            Proposals
-          </h3>
-          {proposals.length === 0 ? (
-            <p className="px-2 text-xs text-neutral-500">No proposals yet.</p>
-          ) : (
-            <ul className="space-y-1">
-              {proposals.map((proposal) => (
-                <li key={proposal.proposalId}>
-                  <button
-                    onClick={() => setSelectedProposalId(proposal.proposalId)}
-                    className={`block w-full rounded px-2 py-1.5 text-left text-xs ${
-                      proposal.proposalId === selectedProposalId
-                        ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
-                        : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate font-medium">{proposal.title}</span>
-                      <ProposalStatusBadge status={proposal.status} />
-                    </div>
-                    <div className="mt-0.5 text-[10px] text-neutral-500">
-                      v{proposal.version} · {proposal.source} · {proposal.nodes.length} nodes
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
-
-        <main className="flex min-h-0 flex-1 flex-col">
-          {!selected ? (
-            <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-              {proposals.length === 0
-                ? 'Create a draft proposal to get started.'
-                : 'Select a proposal to view details.'}
-            </div>
-          ) : (
-            <>
-              <header className="shrink-0 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-semibold">{selected.title}</h3>
-                      <ProposalStatusBadge status={selected.status} />
-                    </div>
-                    <p className="mt-1 text-xs text-neutral-500">{selected.summary}</p>
-                    <div className="mt-2 flex items-center gap-3 text-[10px] text-neutral-500">
-                      <span>Version {selected.version}</span>
-                      <span>Source: {selected.source}</span>
-                      <span>Created: {new Date(selected.createdAt).toLocaleString()}</span>
-                      {selected.publishedAt && (
-                        <span>Published: {new Date(selected.publishedAt).toLocaleString()}</span>
-                      )}
-                    </div>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <main
+          className={`flex min-h-0 flex-col ${
+            selected ? 'w-[44%] min-w-[420px]' : 'mx-auto w-full max-w-4xl'
+          }`}
+        >
+          <section className="flex min-h-0 flex-1 flex-col">
+            <header className="shrink-0 border-b border-neutral-200 bg-white px-5 py-3 dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                    Planning Chat
                   </div>
-                  <div className="flex gap-2">
-                    {editMode ? (
-                      <>
-                        <button
-                          onClick={() => void saveEdited()}
-                          className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => setEditMode(false)}
-                          className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => void saveLayout()}
-                          className="rounded border border-violet-300 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-950/30"
-                        >
-                          Save Layout
-                        </button>
-                        <button
-                          onClick={() => setEditMode(true)}
-                          className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                        >
-                          Edit JSON
-                        </button>
-                        {selected.status === 'draft' && (
-                          <button
-                            onClick={() => void publish()}
-                            className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
-                          >
-                            Publish
-                          </button>
-                        )}
-                      </>
+                  <h3 className="mt-1 text-lg font-semibold">Brainstorm the requirement</h3>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-neutral-500">
+                  Agent
+                  <select
+                    value={activeAgentId}
+                    onChange={(event) => setActiveAgentId(event.target.value as PlannerAgentId)}
+                    className="rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-xs text-neutral-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                  >
+                    {PLANNER_AGENTS.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="mt-2 text-xs text-neutral-500">
+                {PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.description}
+              </p>
+            </header>
+
+            <div className="flex-1 space-y-4 overflow-auto px-5 py-5">
+              {chatMessages.map((message) => (
+                <PlannerChatBubble
+                  key={message.id}
+                  message={message}
+                  agentLabel={
+                    message.agentId
+                      ? PLANNER_AGENTS.find((agent) => agent.id === message.agentId)?.label
+                      : undefined
+                  }
+                />
+              ))}
+              {!selected && (
+                <div className="rounded-2xl border border-dashed border-neutral-300 bg-white/70 p-4 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60">
+                  No task split artifact yet. Continue the conversation, then generate a versioned
+                  React Flow artifact when the scope is clear.
+                </div>
+              )}
+            </div>
+
+            <form
+              className="shrink-0 border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950"
+              onSubmit={(event) => {
+                event.preventDefault();
+                sendMessage();
+              }}
+            >
+              <textarea
+                value={composer}
+                onChange={(event) => setComposer(event.target.value)}
+                placeholder={`Message ${PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.label ?? 'agent'}...`}
+                className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
+              />
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs text-neutral-500">
+                  Generate creates a new artifact version from the current conversation.
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void generateArtifact()}
+                    className="rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white"
+                  >
+                    Generate Split
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            </form>
+          </section>
+        </main>
+
+        {selected && (
+          <aside className="flex min-h-0 flex-1 flex-col border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+            <header className="shrink-0 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="truncate text-lg font-semibold">Task Split Artifact</h3>
+                    <ProposalStatusBadge status={selected.status} />
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs text-neutral-500">{selected.summary}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-neutral-500">
+                    <span>Source: {selected.source}</span>
+                    <span>Created: {new Date(selected.createdAt).toLocaleString()}</span>
+                    {selected.publishedAt && (
+                      <span>Published: {new Date(selected.publishedAt).toLocaleString()}</span>
                     )}
                   </div>
                 </div>
-              </header>
-
-              <div className="flex-1 overflow-auto p-4">
-                {editMode ? (
-                  <textarea
-                    value={editedJson}
-                    onChange={(e) => setEditedJson(e.target.value)}
-                    className="h-full w-full resize-none rounded border border-neutral-300 bg-neutral-50 p-3 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                    spellCheck={false}
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    {publishResult && publishResult.proposalId === selected.proposalId && (
-                      <PublishResultPanel
-                        result={publishResult}
-                        onClose={() => setPublishResult(null)}
-                      />
-                    )}
-
-                    <section className="grid min-h-[560px] gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-                      <div className="overflow-hidden rounded border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-                        {flowNodes.length === 0 ? (
-                          <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-                            No nodes in this proposal yet.
-                          </div>
-                        ) : (
-                          <ReactFlow<PlannerFlowNode, Edge>
-                            className="orbit-flow"
-                            nodes={flowNodes}
-                            edges={flowEdges}
-                            nodeTypes={plannerNodeTypes}
-                            fitView
-                            minZoom={0.35}
-                            maxZoom={1.5}
-                            onNodesChange={onNodesChange}
-                            onEdgesChange={onEdgesChange}
-                            onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
-                            onSelectionChange={({ nodes }) =>
-                              setSelectedNodeId(nodes[0]?.id ?? null)
-                            }
-                            nodesConnectable={false}
-                          >
-                            <MiniMap pannable zoomable className="!bg-white dark:!bg-neutral-950" />
-                            <Controls />
-                            <Background gap={18} size={1} color="#a3a3a3" />
-                          </ReactFlow>
-                        )}
-                      </div>
-
-                      <div className="space-y-4">
-                        <section className="rounded border border-neutral-200 bg-white p-3 text-xs dark:border-neutral-800 dark:bg-neutral-950">
-                          <h4 className="text-sm font-semibold">Canvas Summary</h4>
-                          <div className="mt-3 grid grid-cols-2 gap-3">
-                            <StatChip label="Nodes" value={selected.nodes.length} />
-                            <StatChip label="Edges" value={selected.edges.length} />
-                            <StatChip
-                              label="Todo"
-                              value={selected.nodes.filter((node) => node.status === 'todo').length}
-                            />
-                            <StatChip
-                              label="Waiting"
-                              value={
-                                selected.nodes.filter((node) => node.status === 'waiting').length
-                              }
-                            />
-                          </div>
-                        </section>
-
-                        <section className="rounded border border-neutral-200 bg-white p-3 text-xs dark:border-neutral-800 dark:bg-neutral-950">
-                          <h4 className="text-sm font-semibold">Selected Node</h4>
-                          {selectedPlanNode ? (
-                            <div className="mt-3 space-y-3">
-                              <NodeCard node={selectedPlanNode} compact />
-                              <RelationList
-                                title="Depends on"
-                                edges={incomingEdges}
-                                lookup={nodeLookup}
-                                keyField="fromTaskUid"
-                              />
-                              <RelationList
-                                title="Unblocks"
-                                edges={outgoingEdges}
-                                lookup={nodeLookup}
-                                keyField="toTaskUid"
-                              />
-                            </div>
-                          ) : (
-                            <p className="mt-3 text-neutral-500">
-                              Select a node on the canvas to inspect it.
-                            </p>
-                          )}
-                        </section>
-                      </div>
-                    </section>
-                  </div>
-                )}
+                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  <select
+                    value={selectedProposalId ?? ''}
+                    onChange={(event) => setSelectedProposalId(event.target.value)}
+                    className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                    aria-label="Switch artifact version"
+                  >
+                    {proposals.map((proposal) => (
+                      <option key={proposal.proposalId} value={proposal.proposalId}>
+                        v{proposal.version} · {proposal.title}
+                      </option>
+                    ))}
+                  </select>
+                  {editMode ? (
+                    <>
+                      <button
+                        onClick={() => void saveEdited()}
+                        className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditMode(false)}
+                        className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => void saveLayout()}
+                        className="rounded border border-violet-300 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-950/30"
+                      >
+                        Save Layout
+                      </button>
+                      <button
+                        onClick={() => setEditMode(true)}
+                        className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                      >
+                        Edit JSON
+                      </button>
+                      {selected.status === 'draft' && (
+                        <button
+                          onClick={() => void publish()}
+                          className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                        >
+                          Publish
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </>
-          )}
-        </main>
+            </header>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+              {publishResult && publishResult.proposalId === selected.proposalId && (
+                <PublishResultPanel result={publishResult} onClose={() => setPublishResult(null)} />
+              )}
+
+              {editMode ? (
+                <textarea
+                  value={editedJson}
+                  onChange={(event) => setEditedJson(event.target.value)}
+                  className="min-h-[520px] flex-1 resize-none rounded border border-neutral-300 bg-neutral-50 p-3 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                  spellCheck={false}
+                />
+              ) : (
+                <>
+                  <div className="min-h-[480px] flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
+                    {flowNodes.length === 0 ? (
+                      <div className="flex h-full items-center justify-center text-sm text-neutral-500">
+                        No nodes in this artifact yet.
+                      </div>
+                    ) : (
+                      <ReactFlow<PlannerFlowNode, Edge>
+                        className="orbit-flow"
+                        nodes={flowNodes}
+                        edges={flowEdges}
+                        nodeTypes={plannerNodeTypes}
+                        fitView
+                        minZoom={0.35}
+                        maxZoom={1.5}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
+                        onSelectionChange={({ nodes }) => setSelectedNodeId(nodes[0]?.id ?? null)}
+                        nodesConnectable={false}
+                      >
+                        <MiniMap pannable zoomable className="!bg-white dark:!bg-neutral-950" />
+                        <Controls />
+                        <Background gap={18} size={1} color="#a3a3a3" />
+                      </ReactFlow>
+                    )}
+                  </div>
+
+                  <section className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+                    <div className="rounded border border-neutral-200 bg-white p-3 text-xs dark:border-neutral-800 dark:bg-neutral-950">
+                      <h4 className="text-sm font-semibold">Artifact Summary</h4>
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        <StatChip label="Nodes" value={selected.nodes.length} />
+                        <StatChip label="Edges" value={selected.edges.length} />
+                        <StatChip
+                          label="Todo"
+                          value={selected.nodes.filter((node) => node.status === 'todo').length}
+                        />
+                        <StatChip
+                          label="Waiting"
+                          value={selected.nodes.filter((node) => node.status === 'waiting').length}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-neutral-200 bg-white p-3 text-xs dark:border-neutral-800 dark:bg-neutral-950">
+                      <h4 className="text-sm font-semibold">Selected Node</h4>
+                      {selectedPlanNode ? (
+                        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px]">
+                          <NodeCard node={selectedPlanNode} compact />
+                          <RelationList
+                            title="Depends on"
+                            edges={incomingEdges}
+                            lookup={nodeLookup}
+                            keyField="fromTaskUid"
+                          />
+                          <RelationList
+                            title="Unblocks"
+                            edges={outgoingEdges}
+                            lookup={nodeLookup}
+                            keyField="toTaskUid"
+                          />
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-neutral-500">
+                          Select a node on the canvas to inspect it.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
@@ -418,6 +568,34 @@ function ProposalStatusBadge({ status }: { status: PlanProposal['status'] }): JS
     >
       {status}
     </span>
+  );
+}
+
+function PlannerChatBubble({
+  message,
+  agentLabel
+}: {
+  message: PlannerChatMessage;
+  agentLabel?: string;
+}): JSX.Element {
+  const isUser = message.role === 'user';
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
+          isUser
+            ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-950'
+            : 'border border-neutral-200 bg-white text-neutral-800 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100'
+        }`}
+      >
+        {!isUser && (
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-sky-500">
+            {agentLabel ?? 'Planner'}
+          </div>
+        )}
+        <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+      </div>
+    </div>
   );
 }
 
@@ -610,6 +788,73 @@ function suggestedNodePosition(index: number): { x: number; y: number } {
   const column = index % columns;
   const row = Math.floor(index / columns);
   return { x: column * 320, y: row * 190 };
+}
+
+function makeMessageId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function latestUserInput(messages: PlannerChatMessage[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === 'user') return message.content;
+  }
+  return null;
+}
+
+function clipText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function buildSeedNodesFromConversation(inputSummary: string): PlanProposalNode[] {
+  const seed = inputSummary.trim() || 'Clarify and deliver the requested outcome';
+  return [
+    {
+      taskUid: `plan-discovery-${Date.now()}`,
+      title: 'Clarify scope and success criteria',
+      description: seed,
+      status: 'todo',
+      executionStrategy: 'manual',
+      recommendedOwnerType: 'human',
+      priority: 'high',
+      tags: ['planning'],
+      position: suggestedNodePosition(0)
+    },
+    {
+      taskUid: `plan-implementation-${Date.now()}`,
+      title: 'Implement the agreed task split',
+      description: 'Turn the accepted scope into concrete implementation work.',
+      status: 'waiting',
+      executionStrategy: 'autonomous',
+      recommendedOwnerType: 'agent',
+      recommendedRole: 'executor',
+      priority: 'med',
+      tags: ['implementation'],
+      position: suggestedNodePosition(1)
+    },
+    {
+      taskUid: `plan-validation-${Date.now()}`,
+      title: 'Validate and prepare handoff',
+      description: 'Run checks, summarize outcomes, and capture follow-up work.',
+      status: 'waiting',
+      executionStrategy: 'manual',
+      recommendedOwnerType: 'either',
+      recommendedRole: 'reviewer',
+      priority: 'med',
+      tags: ['validation'],
+      position: suggestedNodePosition(2)
+    }
+  ];
+}
+
+function buildSeedEdges(nodes: PlanProposalNode[]): PlanProposal['edges'] {
+  return nodes.slice(1).map((node, index) => ({
+    id: `edge-${nodes[index].taskUid}-${node.taskUid}`,
+    fromTaskUid: nodes[index].taskUid,
+    toTaskUid: node.taskUid,
+    kind: 'depends_on'
+  }));
 }
 
 function buildCanvasNodes(nodes: PlanProposalNode[]): Array<PlannerFlowNode> {

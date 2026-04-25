@@ -23,6 +23,10 @@
 - **Workspace Inspector 骨架（Task 2）**：安装 `lucide-react`；新增 `useWorkspaceInspector` Zustand store（activeTab / fileQuery / changeQuery / selectedPath / commitMessage / expanded）；新增 `inspectorTheme.ts` 语义化 class token 映射；扩展 Tailwind 配置和 `styles.css`，添加 `inspector-surface-0/1/2/3`、`inspector-border-subtle/strong`、`inspector-text-primary/secondary/dim`、`inspector-git-added/modified/deleted/renamed`、`inspector-accent` CSS 变量与颜色 token（支持 light / dark 双主题）；重写 `WorkspaceInspectorPane` 展示 Files / Changes 两个 tab（含 lucide 图标），不再使用原始 `neutral-*` 类名
 - **Project FS IPC（Task 3）**：新增 `ProjectFileNode` 类型；新增 `fs:listProjectTree` 与 `fs:createDirectory` IPC 通道；`src/main/project_fs.ts` 实现全量文件树（含非 Markdown 文件，忽略 `.git` / `node_modules` / `.orbit`）和安全目录创建（拒绝 `..`、`/`、`\`）；原有 vault `fs:listTree` Markdown-only 行为不变
 
+### Changed
+
+- **Planner 交互模型**：Project Planner 从“左侧 proposal 列表 + 主画布”调整为“中间 planner chat + 右侧产物画布”；默认对话 agent 为 Plan Agent，可切换 Architect / Executor 视角，只有生成任务拆分后才显示右侧 React Flow artifact，并在 artifact header 中切换 proposal 版本
+
 ### Fixed
 
 - **GUI 启动 PATH 修复**：main process 启动最前面新增 PATH bootstrap，macOS / Linux 从 Dock / Launchpad 启动时会先恢复 login shell 的 PATH，并补齐 `/opt/homebrew/bin`、`/usr/local/bin`、`~/.local/bin` fallback，避免 `claude` / `codex` / `git` 等 CLI 因 `ENOENT` 无法拉起
