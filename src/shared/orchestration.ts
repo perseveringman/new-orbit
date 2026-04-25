@@ -193,6 +193,38 @@ export interface PlannerProposalReply extends PlannerChatReply {
   proposal: PlanProposal;
 }
 
+export interface ConversationTurn {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  segmentId?: string;
+  createdAt: string;
+}
+
+export interface RunSegment {
+  id: string;
+  taskId: string;
+  runId: string;
+  leaseId?: string;
+  bindingId?: string;
+  vendorSessionId?: string;
+  trigger: 'dispatch' | 'manual';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  summary?: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface TaskConversation {
+  taskId: string;
+  taskUid: string;
+  projectUid?: string;
+  segments: RunSegment[];
+  turns: ConversationTurn[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PlanPublishResult {
   proposalId: string;
   projectUid: string;

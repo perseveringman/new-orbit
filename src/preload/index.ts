@@ -57,6 +57,7 @@ import type {
 import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
+  ConversationTurn,
   DispatchSnapshot,
   ImplementationReport,
   PlanProposal,
@@ -66,6 +67,7 @@ import type {
   PlannerChatReply,
   PlannerProposalReply,
   ProjectRoleBinding,
+  TaskConversation,
   RoleTemplate,
   RoleTemplateVersion,
   RuntimeDescriptor,
@@ -178,6 +180,20 @@ const api: OrbitApi = {
       messages: PlannerChatMessage[]
     ): Promise<PlannerProposalReply> =>
       ipcRenderer.invoke(IPC.planner.generateProposal, projectUid, agentId, messages)
+  },
+  conversation: {
+    get: (taskId: string): Promise<TaskConversation | null> =>
+      ipcRenderer.invoke(IPC.conversation.get, taskId),
+    send: (
+      taskId: string,
+      message: string
+    ): Promise<{ turnId: string; runId: string; segmentId: string }> =>
+      ipcRenderer.invoke(IPC.conversation.send, taskId, message),
+    onEvent: (cb: (ev: { taskId: string; turn: ConversationTurn }) => void) => {
+      const listener = (_: unknown, ev: { taskId: string; turn: ConversationTurn }): void => cb(ev);
+      ipcRenderer.on(IPC.conversation.event, listener);
+      return () => ipcRenderer.removeListener(IPC.conversation.event, listener);
+    }
   },
   dispatch: {
     status: (projectUid?: string): Promise<DispatchSnapshot> =>

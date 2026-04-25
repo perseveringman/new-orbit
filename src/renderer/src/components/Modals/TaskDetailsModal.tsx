@@ -5,6 +5,9 @@ interface TaskDetailsModalProps {
   title: string;
   detail?: string;
   onClose(): void;
+  tabs?: Array<{ id: string; label: string }>;
+  activeTab?: string;
+  onTabChange?(tabId: string): void;
   children?: React.ReactNode;
 }
 
@@ -18,6 +21,9 @@ export function TaskDetailsModal({
   title,
   detail,
   onClose,
+  tabs,
+  activeTab,
+  onTabChange,
   children
 }: TaskDetailsModalProps): JSX.Element | null {
   useEffect(() => {
@@ -39,9 +45,9 @@ export function TaskDetailsModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-      >
-        <header className="flex items-start gap-3 border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-          <div className="min-w-0 flex-1">
+        >
+          <header className="flex items-start gap-3 border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
+            <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-semibold">{title}</h2>
             {detail && (
               <p className="mt-0.5 truncate text-xs text-neutral-500">{detail}</p>
@@ -54,6 +60,24 @@ export function TaskDetailsModal({
             Close
           </button>
         </header>
+        {tabs && tabs.length > 0 && (
+          <div className="flex shrink-0 gap-2 border-b border-neutral-200 px-4 py-2 dark:border-neutral-700">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => onTabChange?.(tab.id)}
+                className={
+                  'rounded-full border px-3 py-1 text-xs transition-colors ' +
+                  (activeTab === tab.id
+                    ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                    : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800')
+                }
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
       </div>
     </div>

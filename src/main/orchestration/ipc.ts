@@ -3,6 +3,7 @@ import { IPC } from '@shared/ipc';
 import type { PlanProposal, PlannerChatMessage, ProjectRoleBinding } from '@shared/orchestration';
 import { isPlannerAgentId } from './planner_agent';
 import { currentSession } from '../fs';
+import { conversationEvents, getConversation, getOrCreateConversation, sendAndRun } from './conversation';
 import { getDispatchService, listBindingReportsForProject } from './dispatch';
 import { plannerChat, plannerGenerateProposal } from './planner_agent';
 import { getPlanProposal, listPlanProposals, publishPlanProposal, savePlanProposal } from './planner';
@@ -33,6 +34,7 @@ export function registerOrchestrationIpc(): void {
   const runtimeManager = getLocalRuntimeManager();
   runtimeManager.on('event', (event) => broadcast(IPC.runtime.event, event));
   getDispatchService().on('event', (event) => broadcast(IPC.dispatch.event, event));
+  conversationEvents.on('turn', (event) => broadcast(IPC.conversation.event, event));
 
   ipcMain.handle(IPC.runtime.list, () => getLocalRuntimeManager().list());
   ipcMain.handle(IPC.runtime.refresh, () => getLocalRuntimeManager().refresh());
@@ -72,6 +74,22 @@ export function registerOrchestrationIpc(): void {
       return plannerGenerateProposal(projectUid, agentId, messages);
     }
   );
+
+  ipcMain.handle(IPC.conversation.get, async (_e, taskId: string) => {
+    const sess = currentSession();
+    if (!sess) return null;
+    const task = sess.tasks.allTasks().find((entry) => entry.id === taskId);
+    if (!task?.uid) return null;
+    const conversation = await getConversation(sess.vault, task.uid);
+    return conversation ?? getOrCreateConversation(sess.vault, task);
+  });
+  ipcMain.handle(IPC.conversation.send, async (_e, taskId: string, message: string) => {
+    const sess = currentSession();
+    if (!sess) throw new Error('no vault');
+    const task = sess.tasks.allTasks().find((entry) => entry.id === taskId);
+    if (!task || task.source !== 'file') throw new Error(`task not found: ${taskId}`);
+    return sendAndRun(sess.vault, task, message);
+  });
 
   ipcMain.handle(IPC.dispatch.status, async (_e, projectUid?: string) => {
     return getDispatchService().status(projectUid);

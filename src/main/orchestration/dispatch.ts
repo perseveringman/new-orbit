@@ -20,6 +20,13 @@ import { readTaskFile, updateTaskFrontmatter } from '../task';
 import { getPool, type PoolEvent } from '../agent/pool';
 import { startTask } from '../agent/ipc';
 import {
+  appendReleaseTurn,
+  appendTurn,
+  getOrCreateConversation,
+  recordRunCompletion,
+  startSegment
+} from './conversation';
+import {
   createProjectRoleBinding,
   listBindingReports,
   listProjectRoleBindings,
@@ -139,6 +146,7 @@ export class DispatchService extends EventEmitter {
     });
     await refreshTaskFileInSession(task.filePath);
     await persistLeases(vaultPath, this.leases);
+    await appendReleaseTurn(vaultPath, task, reason);
     this.emit('event', { at: new Date().toISOString(), type: 'dispatch:released', lease: nextLease });
     return nextLease;
   }
@@ -314,6 +322,22 @@ export class DispatchService extends EventEmitter {
     this.reports = [...this.reports, report];
     await updateTaskFrontmatter(task.filePath, { active_run_id: startResult.runId });
     await refreshTaskFileInSession(task.filePath);
+    if (task.uid) {
+      await getOrCreateConversation(vaultPath, task);
+      const segment = await startSegment(vaultPath, task.uid, {
+        taskId: task.id,
+        runId: startResult.runId,
+        leaseId,
+        bindingId: binding.id,
+        trigger: 'dispatch',
+        status: 'running'
+      });
+      await appendTurn(vaultPath, task.uid, {
+        role: 'system',
+        content: `🤖 ${binding.id} 认领了任务，开始执行...`,
+        segmentId: segment.id
+      });
+    }
     await persistLeases(vaultPath, this.leases);
     await persistReports(vaultPath, this.reports);
     this.emit('event', {
@@ -363,6 +387,22 @@ export class DispatchService extends EventEmitter {
     };
     this.leases = [...this.leases, lease];
     this.reports = [...this.reports, report];
+    if (task.uid) {
+      await getOrCreateConversation(vaultPath, task);
+      const segment = await startSegment(vaultPath, task.uid, {
+        taskId: task.id,
+        runId: '',
+        leaseId,
+        bindingId: binding.id,
+        trigger: 'dispatch',
+        status: 'failed'
+      });
+      await appendTurn(vaultPath, task.uid, {
+        role: 'system',
+        content: `❌ ${binding.id} 执行启动失败: ${result.message}`,
+        segmentId: segment.id
+      });
+    }
     await updateProjectRoleBinding(vaultPath, binding.projectUid, binding.id, {
       health: 'degraded'
     });
@@ -379,19 +419,32 @@ export class DispatchService extends EventEmitter {
   private async handlePoolEvent(event: PoolEvent): Promise<void> {
     if (!this.vaultPath) return;
     if (event.event.kind !== 'done' && event.event.kind !== 'error') return;
+    const snapshot = getPool().get(event.runId)?.snapshot();
+    const timeline = summarizeEvents(snapshot?.events ?? [event.event]);
+    const wasKilled = snapshot?.summary.status === 'killed';
+    await recordRunCompletion(this.vaultPath, event.runId, {
+      status: wasKilled
+        ? 'cancelled'
+        : event.event.kind === 'done'
+          ? 'completed'
+          : 'failed',
+      summary: timeline.summary,
+      events: snapshot?.events ?? [event.event]
+    });
     const lease = this.leases.find(
       (entry) => entry.runId === event.runId && entry.status === 'running'
     );
     if (!lease) return;
     const task = currentSession()?.tasks.allTasks().find((entry) => entry.id === lease.taskId);
     if (!task || task.source !== 'file') return;
-    const snapshot = getPool().get(event.runId)?.snapshot();
-    const timeline = summarizeEvents(snapshot?.events ?? [event.event]);
     const completedAt = new Date().toISOString();
     const nextLease: TaskLease = {
       ...lease,
-      status: event.event.kind === 'done' ? 'completed' : 'needs_attention',
-      failureReason: event.event.kind === 'error' ? event.event.text ?? 'execution failed' : undefined
+      status: wasKilled ? 'released' : event.event.kind === 'done' ? 'completed' : 'needs_attention',
+      failureReason:
+        wasKilled || event.event.kind === 'error'
+          ? event.event.text ?? 'execution failed'
+          : undefined
     };
     const report = this.reports.find((entry) => entry.reportId === lease.reportId);
     const nextReport: ImplementationReport = {
@@ -403,9 +456,13 @@ export class DispatchService extends EventEmitter {
       bindingId: lease.bindingId,
       runtimeId: lease.runtimeId,
       runId: event.runId,
-      status: event.event.kind === 'done' ? 'completed' : 'failed',
+      status: wasKilled ? 'released' : event.event.kind === 'done' ? 'completed' : 'failed',
       summary: timeline.summary,
-      direction: event.event.kind === 'done' ? 'completed' : 'needs attention',
+      direction: wasKilled
+        ? 'cancelled'
+        : event.event.kind === 'done'
+          ? 'completed'
+          : 'needs attention',
       details: timeline.details,
       createdAt: report?.createdAt ?? completedAt,
       updatedAt: completedAt,
@@ -414,21 +471,26 @@ export class DispatchService extends EventEmitter {
     this.leases = this.leases.map((entry) => (entry.leaseId === lease.leaseId ? nextLease : entry));
     this.reports = [...this.reports.filter((entry) => entry.reportId !== nextReport.reportId), nextReport];
     await updateTaskFrontmatter(task.filePath, {
-      status: event.event.kind === 'done' ? 'done' : 'blocked',
+      status: wasKilled ? 'blocked' : event.event.kind === 'done' ? 'done' : 'blocked',
       active_run_id: undefined,
-      blocked_reason: event.event.kind === 'error' ? timeline.summary : undefined
+      blocked_reason:
+        wasKilled || event.event.kind === 'error' ? timeline.summary : undefined
     });
     await refreshTaskFileInSession(task.filePath);
     if (lease.bindingId && task.project_uid) {
       await updateProjectRoleBinding(this.vaultPath, task.project_uid, lease.bindingId, {
-        health: event.event.kind === 'done' ? 'healthy' : 'degraded'
+        health: wasKilled ? 'paused' : event.event.kind === 'done' ? 'healthy' : 'degraded'
       });
     }
     await persistLeases(this.vaultPath, this.leases);
     await persistReports(this.vaultPath, this.reports);
     this.emit('event', {
       at: completedAt,
-      type: event.event.kind === 'done' ? 'dispatch:completed' : 'dispatch:needs_attention',
+      type: wasKilled
+        ? 'dispatch:released'
+        : event.event.kind === 'done'
+          ? 'dispatch:completed'
+          : 'dispatch:needs_attention',
       lease: nextLease,
       report: nextReport
     });

@@ -35,6 +35,7 @@ import { AgentsLibraryView } from './AgentsLibraryView';
 import { RunLogPane } from '../components/RunLogPane';
 import { DiffWorkspacePane } from '../components/DiffWorkspacePane';
 import { WorkspaceInspectorPane } from '../components/Inspector/WorkspaceInspectorPane';
+import { TaskDetailsHost } from '../components/Tasks/TaskDetailsHost';
 import { applyTerminalPaneEvent } from '../components/Terminal/terminalAgentStatus';
 import { terminalPaneStatusRegistry } from '../components/Terminal/terminalPaneStatusRegistry';
 import { useReviewQueue } from '../store/reviewQueue';
@@ -441,6 +442,7 @@ export function VaultView(): JSX.Element {
         onCancel={() => setCloseOpen(false)}
         onConfirm={(opts) => void confirmClose(opts)}
       />
+      <TaskDetailsHost />
     </div>
   );
 }

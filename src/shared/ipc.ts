@@ -60,6 +60,7 @@ import type {
   NightShiftGitHubOptions
 } from './github';
 import type {
+  ConversationTurn,
   DispatchSnapshot,
   ImplementationReport,
   PlanProposal,
@@ -69,6 +70,7 @@ import type {
   PlannerChatReply,
   PlannerProposalReply,
   ProjectRoleBinding,
+  TaskConversation,
   RoleTemplate,
   RoleTemplateVersion,
   RuntimeDescriptor,
@@ -146,6 +148,11 @@ export const IPC = {
     publishProposal: 'planner:publishProposal',
     chat: 'planner:chat',
     generateProposal: 'planner:generateProposal'
+  },
+  conversation: {
+    get: 'conversation:get',
+    send: 'conversation:send',
+    event: 'conversation:event'
   },
   dispatch: {
     status: 'dispatch:status',
@@ -813,6 +820,15 @@ export interface OrbitApi {
       agentId: PlannerAgentId,
       messages: PlannerChatMessage[]
     ): Promise<PlannerProposalReply>;
+  };
+  conversation: {
+    get(taskId: string): Promise<TaskConversation | null>;
+    send(taskId: string, message: string): Promise<{
+      turnId: string;
+      runId: string;
+      segmentId: string;
+    }>;
+    onEvent(cb: (ev: { taskId: string; turn: ConversationTurn }) => void): () => void;
   };
   dispatch: {
     status(projectUid?: string): Promise<DispatchSnapshot>;

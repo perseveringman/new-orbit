@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import type { DistillSuggestHit } from '@shared/ipc';
 import { useFiles } from '../store/files';
-import { usePara } from '../store/para';
 import { useAgent } from '../store/agent';
+import { useTaskDetails } from '../store/taskDetails';
 
 interface Props {
   task: TaskRecord;
@@ -29,10 +29,10 @@ async function fetchSuggest(taskId: string): Promise<DistillSuggestHit[]> {
 
 export function TaskRow({ task, onStatus }: Props): JSX.Element {
   const openPath = useFiles((s) => s.openPath);
-  const setView = usePara((s) => s.setView);
   const startForTask = useAgent((s) => s.startForTask);
   const toast = useFiles((s) => s.toast);
   const detect = useAgent((s) => s.detect);
+  const openTask = useTaskDetails((s) => s.openTask);
   // Default: ON for file-tracked project tasks; OFF for inline checklist items.
   const defaultWorktree = task.source === 'file' && Boolean(task.project_uid);
   const [useWorktree, setUseWorktree] = useState<boolean>(defaultWorktree);
@@ -50,9 +50,8 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
     };
   }, [expanded, task.id]);
 
-  async function jump(): Promise<void> {
-    await openPath(task.filePath);
-    setView({ kind: 'editor' });
+  function jump(): void {
+    openTask(task, task.project_uid ?? null);
   }
 
   async function dispatch(e: React.MouseEvent): Promise<void> {

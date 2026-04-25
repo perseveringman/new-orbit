@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Task Conversation UI**：任务详情弹窗新增 `Detail / Chat` 双 tab；任务卡片点击会直接进入详情弹窗，Chat tab 统一承载自动 dispatch 执行记录与手动 task chat，对话数据持久化到 `.orbit/orchestration/conversations/*.json`，并复用 `agent:event` 展示运行中的实时输出
 - **Orchestration Core Runtime / Planner / Roles**：新增 `src/shared/orchestration.ts` 与 main-process orchestration 模块，落地 runtime registry、plan proposal 存储与发布、dispatch/lease/report 状态流、全局角色模板与项目 binding 持久化；任务状态升级为 `backlog / waiting / todo / doing / blocked / done`，并补齐 ownership、recommended role、implementation report 等编排字段
 
 - **Orchestration UI Integration**：在 Project Room 中新增 Planner 和 Roles 两个 tab，提供计划管理和角色绑定的可视化界面；Planner tab 支持加载/创建/编辑/发布计划提案，显示节点依赖图和发布结果摘要；Roles tab 支持列出角色模板、创建项目绑定、配置调度模式/运行时偏好/覆盖指令/健康状态，查看绑定任务列表和实施报告；在 TaskRow 和 TaskCard 中展示任务的 origin、owner、blocked/ready 状态标记，帮助用户理解编排上下文
@@ -25,6 +26,7 @@
 
 ### Changed
 
+- **任务执行 Prompt 边界**：agent task prompt 追加 `# Boundary` 段，明确只能处理当前任务范围、越界工作需新建任务、不得修改其他任务状态，并要求输出完成摘要
 - **Planner 交互模型**：Project Planner 从“左侧 proposal 列表 + 主画布”调整为“中间 planner chat + 右侧产物画布”；默认对话 agent 为 Plan Agent，可切换 Architect / Executor 视角，只有生成任务拆分后才显示右侧 React Flow artifact，并在 artifact header 中切换 proposal 版本
 - **Planner Agent 接入**：Project Planner 的 `Send` / `Generate Split` 已接入真实 planner agent；中间 chat 会把完整对话历史发给 main-process planner service 生成回复，`Generate Split` 会让 agent 直接产出并保存 versioned proposal，再同步到右侧 React Flow artifact panel
 

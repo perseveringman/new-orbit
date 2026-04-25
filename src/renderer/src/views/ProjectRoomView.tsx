@@ -6,6 +6,7 @@ import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
 import { useSidebar } from '../store/sidebar';
+import { useTaskDetails } from '../store/taskDetails';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { NightShiftModal } from '../components/Modals/NightShiftModal';
 import { MigrationDialog } from '../components/Modals/MigrationDialog';
@@ -58,6 +59,7 @@ export function ProjectRoomView(): JSX.Element {
   const setSidebarSurface = useSidebar((s) => s.setSurface);
   const setSidebarFocus = useSidebar((s) => s.setFocus);
   const openSidebarPanel = useSidebar((s) => s.openPanel);
+  const openTaskDetails = useTaskDetails((s) => s.openTask);
 
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [githubState, setGitHubState] = useState<GitHubProjectState | null>(null);
@@ -604,7 +606,11 @@ export function ProjectRoomView(): JSX.Element {
                     status={s}
                     tasks={columns[s]}
                     selectedId={selectedTaskId}
-                    onSelect={(id) => setSelectedTaskId(id)}
+                    onSelect={(id) => {
+                      setSelectedTaskId(id);
+                      const nextTask = tasks.find((entry) => entry.id === id);
+                      if (nextTask) openTaskDetails(nextTask, project.uid);
+                    }}
                     onDrop={(taskId) => void onDropTask(taskId, s)}
                   />
                 ))}

@@ -5,6 +5,7 @@ import { ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_DIR } from '@shared/c
 
 export const ORBIT_ORCHESTRATION_DIR = 'orchestration';
 export const ORBIT_PLANS_DIR = 'plans';
+export const ORBIT_CONVERSATIONS_DIR = 'conversations';
 
 export function vaultOrchestrationDir(vaultPath: string): string {
   return path.join(vaultPath, ORBIT_DIR, ORBIT_ORCHESTRATION_DIR);
@@ -20,6 +21,14 @@ export function vaultLeasesFile(vaultPath: string): string {
 
 export function vaultReportsFile(vaultPath: string): string {
   return path.join(vaultOrchestrationDir(vaultPath), 'reports.json');
+}
+
+export function vaultConversationsDir(vaultPath: string): string {
+  return path.join(vaultOrchestrationDir(vaultPath), ORBIT_CONVERSATIONS_DIR);
+}
+
+export function taskConversationFile(vaultPath: string, taskUid: string): string {
+  return path.join(vaultConversationsDir(vaultPath), `${taskUid}.json`);
 }
 
 export function vaultPlansDir(vaultPath: string, projectUid: string): string {

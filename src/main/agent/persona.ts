@@ -42,21 +42,36 @@ export interface ComposeArgs {
   persona: string;
   taskContext: string;
   userAsk: string;
+  taskBoundary?: {
+    title: string;
+    uid?: string;
+  };
 }
 
 /**
  * Compose the final prompt sent to `claude -p`. Format is stable so tests
  * can assert on its three sections.
  */
-export function composePrompt({ persona, taskContext, userAsk }: ComposeArgs): string {
+export function composePrompt({ persona, taskContext, userAsk, taskBoundary }: ComposeArgs): string {
   const parts = [
     `# Persona\n${persona.trim()}`,
     `# Task context\n${taskContext.trim()}`,
     `# Your ask\n${userAsk.trim() || '(proceed with the task as described above)'}`,
+    taskBoundary ? buildTaskBoundary(taskBoundary) : null,
     HYDRATION_FOOTER
-  ];
+  ].filter(Boolean);
   return parts.join('\n\n');
 }
 
 export const HYDRATION_FOOTER = `# Context hydration
 You may request more context at any time by emitting a single line that starts with \`@orbit:search <query>\`. Orbit will respond with the top search hits from the vault as a follow-up message. Use this sparingly.`;
+
+function buildTaskBoundary(task: { title: string; uid?: string }): string {
+  return `# Boundary
+You are currently responsible for exactly this task: "${task.title}"${task.uid ? ` (uid: ${task.uid})` : ''}.
+
+- Only do work that is within this task's scope
+- If more work is needed, create a new task instead of expanding scope in this run
+- Do not change the status of other tasks
+- End with a concise completion summary`;
+}

@@ -42,7 +42,11 @@ describe('agent persona composition', () => {
       const prompt = composePrompt({
         persona,
         taskContext: ctx,
-        userAsk: 'Draft a plan.'
+        userAsk: 'Draft a plan.',
+        taskBoundary: {
+          title: task.title,
+          uid: task.uid
+        }
       });
       expect(prompt).toContain('# Persona');
       expect(prompt).toContain('meticulous and kind');
@@ -50,6 +54,8 @@ describe('agent persona composition', () => {
       expect(prompt).toContain('TASKUID00001');
       expect(prompt).toContain('PROJUID00001');
       expect(prompt).toContain('Orbit M4');
+      expect(prompt).toContain('# Boundary');
+      expect(prompt).toContain('Only do work that is within this task');
       expect(prompt).toContain(HYDRATION_FOOTER);
     } finally {
       await fs.rm(vault, { recursive: true, force: true });

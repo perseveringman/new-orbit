@@ -8,6 +8,7 @@ describe('IPC contract', () => {
       [
         'agent',
         'area',
+        'conversation',
         'dispatch',
         'distill',
         'env',
@@ -37,6 +38,14 @@ describe('IPC contract', () => {
   it('workspace + settings channels are typed strings', () => {
     expect(typeof IPC.workspace.pickAndOpen).toBe('string');
     expect(typeof IPC.settings.setTheme).toBe('string');
+  });
+
+  it('conversation namespace declares task chat channels', () => {
+    const keys = Object.keys(IPC.conversation).sort();
+    expect(keys).toEqual(['event', 'get', 'send'].sort());
+    for (const v of Object.values(IPC.conversation)) {
+      expect(v.startsWith('conversation:')).toBe(true);
+    }
   });
 
   it('agent namespace declares the M4 + M5 + M6 channels', () => {

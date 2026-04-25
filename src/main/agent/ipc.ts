@@ -507,7 +507,11 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
   const prompt = composePrompt({
     persona,
     taskContext,
-    userAsk
+    userAsk,
+    taskBoundary: {
+      title: task.title,
+      uid: task.uid
+    }
   });
 
   const budget = await getBudget();
