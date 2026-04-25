@@ -27,16 +27,20 @@ async function main() {
   }
 
   process.stdout.write(JSON.stringify({
-    type: 'message',
-    role: 'assistant',
-    content: [{ text: 'Starting fake task stream…' }]
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Starting fake task stream…' }]
+    }
   }) + '\\n');
   await sleep(900);
 
   process.stdout.write(JSON.stringify({
-    type: 'message',
-    role: 'assistant',
-    content: [{ text: 'Streaming fake implementation update.' }]
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Streaming fake implementation update.' }]
+    }
   }) + '\\n');
   await sleep(1_400);
 

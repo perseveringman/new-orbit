@@ -277,6 +277,10 @@ interface RawEventShape {
   role?: string;
   content?: unknown;
   text?: unknown;
+  message?: {
+    role?: string;
+    content?: unknown;
+  };
   name?: unknown;
   input_tokens?: number;
   output_tokens?: number;
@@ -348,7 +352,7 @@ function toKind(type: string, r: RawEventShape): AgentEventKind {
 
 function extractText(r: RawEventShape): string {
   if (typeof r.text === 'string') return r.text;
-  const c = r.content;
+  const c = r.content ?? r.message?.content;
   if (typeof c === 'string') return c;
   if (Array.isArray(c)) {
     return c

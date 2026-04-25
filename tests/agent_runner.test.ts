@@ -92,6 +92,20 @@ describe('mapStreamJson', () => {
     expect(ev.kind).toBe('message');
     expect(ev.text).toBe('hi');
   });
+  it('extracts nested assistant text from real Claude stream-json events', () => {
+    const ev = mapStreamJson(
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'hello from nested message' }]
+        }
+      },
+      2
+    );
+    expect(ev.kind).toBe('message');
+    expect(ev.text).toBe('hello from nested message');
+  });
 });
 
 describe('RunnerPool', () => {
