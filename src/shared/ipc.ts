@@ -32,6 +32,13 @@ import type {
   TailQuery
 } from './agent';
 import type { ActivityEvent, ActivityQueryFilter } from './activity';
+import type {
+  Proposal,
+  ProposalListFilter,
+  ProposalResolveInput,
+  ProposalSubmitInput,
+  ProposalSyncSnapshot
+} from './approval';
 import type { BudgetSettings } from './schemas';
 import type {
   ChangesSummary,
@@ -231,6 +238,13 @@ export const IPC = {
   },
   activity: {
     query: 'activity:query'
+  },
+  approval: {
+    submit: 'approval:submit',
+    resolve: 'approval:resolve',
+    list: 'approval:list',
+    get: 'approval:get',
+    event: 'approval:event'
   },
   terminal: {
     open: 'terminal:open',
@@ -938,6 +952,21 @@ export interface OrbitApi {
   };
   activity: {
     query(filter?: ActivityQueryFilter): Promise<ActivityEvent[]>;
+  };
+  approval: {
+    submit(input: ProposalSubmitInput): Promise<Proposal>;
+    resolve(
+      id: string,
+      input: ProposalResolveInput
+    ): Promise<{
+      proposal: Proposal;
+      sync: ProposalSyncSnapshot;
+    }>;
+    list(filter?: ProposalListFilter): Promise<Proposal[]>;
+    get(id: string): Promise<Proposal | null>;
+    onEvent(
+      cb: (event: { type: string; proposal: Proposal; snapshot: ProposalSyncSnapshot }) => void
+    ): () => void;
   };
   terminal: {
     open(args: TerminalOpenArgsDTO): Promise<TerminalSessionInfoDTO>;

@@ -23,6 +23,7 @@ import { registerR6Ipc, startDailyReviewScheduler } from './r6_ipc';
 import { ensureOrchestrationForVault, registerOrchestrationIpc, shutdownOrchestration } from './orchestration/ipc';
 import { configureActivityEmitter } from './activity';
 import { registerActivityIpc } from './activity/ipc';
+import { registerApprovalIpc } from './approval';
 import * as terminal from './terminal/pty_manager';
 import { runWorktreeGc, startWorktreeGcScheduler } from './worktree_gc';
 import {
@@ -324,6 +325,7 @@ function registerIpc(): void {
   registerOrchestrationIpc();
   registerAreaIpc(() => currentVault?.path ?? null);
   registerActivityIpc(() => currentVault?.path ?? null);
+  registerApprovalIpc(() => currentVault?.path ?? null);
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);
 

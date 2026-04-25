@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Proposal 审批系统**：新增 `src/main/approval/`，提供 proposal schema、pending/archive NDJSON 存储、状态机、chat/Inbox `proposal_id` 同步占位、IPC 合约与 `new_task` 审批后任务物化。
 - **Task v2 授权链路 schema**：扩展 task frontmatter / TaskRecord 的授权、proposal 与依赖兼容字段，并新增一次性迁移为既有 task 回填用户授权默认值。
 - **Orbit v2 阶段 0 基础设施**：完成 ExecutionContext 抽象、Activity Log 基础设施与 `orbit` CLI Phase 0 脚手架，为后续授权链路、Inbox、依赖调度与 Auto-runner 改造铺底。
 - **ExecutionContext 抽象基础**：新增 `src/main/execution/`，以 `WorktreeExecutionContext` 适配现有 worktree 行为，并在项目配置中支持 `execution_context: worktree | sandbox`（默认 `worktree`，`sandbox` 暂为未实现上下文）。

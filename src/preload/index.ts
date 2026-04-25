@@ -56,6 +56,13 @@ import type {
 } from '@shared/github';
 import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
 import type { ActivityEvent, ActivityQueryFilter } from '@shared/activity';
+import type {
+  Proposal,
+  ProposalListFilter,
+  ProposalResolveInput,
+  ProposalSubmitInput,
+  ProposalSyncSnapshot
+} from '@shared/approval';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   ConversationTurn,
@@ -332,6 +339,32 @@ const api: OrbitApi = {
   activity: {
     query: (filter?: ActivityQueryFilter): Promise<ActivityEvent[]> =>
       ipcRenderer.invoke(IPC.activity.query, filter)
+  },
+  approval: {
+    submit: (input: ProposalSubmitInput): Promise<Proposal> =>
+      ipcRenderer.invoke(IPC.approval.submit, input),
+    resolve: (
+      id: string,
+      input: ProposalResolveInput
+    ): Promise<{ proposal: Proposal; sync: ProposalSyncSnapshot }> =>
+      ipcRenderer.invoke(IPC.approval.resolve, id, input),
+    list: (filter?: ProposalListFilter): Promise<Proposal[]> =>
+      ipcRenderer.invoke(IPC.approval.list, filter),
+    get: (id: string): Promise<Proposal | null> =>
+      ipcRenderer.invoke(IPC.approval.get, id),
+    onEvent: (cb: (event: {
+      type: string;
+      proposal: Proposal;
+      snapshot: ProposalSyncSnapshot;
+    }) => void) => {
+      const listener = (_: unknown, event: {
+        type: string;
+        proposal: Proposal;
+        snapshot: ProposalSyncSnapshot;
+      }): void => cb(event);
+      ipcRenderer.on(IPC.approval.event, listener);
+      return () => ipcRenderer.removeListener(IPC.approval.event, listener);
+    }
   },
   terminal: {
     open: (args: TerminalOpenArgsDTO): Promise<TerminalSessionInfoDTO> =>
