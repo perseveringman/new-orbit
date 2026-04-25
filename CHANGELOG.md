@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit v2 阶段 1 授权链路**：完成 task 授权 frontmatter 字段与一次性迁移脚本，并新增 Proposal 审批状态机、持久化 store、Activity Log 接入、只读/处理 IPC 与最小 chat 审批卡片模型，建立 `propose → approve/reject → materialize` 基础闭环。
 - **Proposal 审批系统**：新增 `src/main/approval/`，提供 proposal schema、pending/archive NDJSON 存储、状态机、chat/Inbox `proposal_id` 同步占位、IPC 合约与 `new_task` 审批后任务物化。
 - **Task v2 授权链路 schema**：扩展 task frontmatter / TaskRecord 的授权、proposal 与依赖兼容字段，并新增一次性迁移为既有 task 回填用户授权默认值。
 - **Orbit v2 阶段 0 基础设施**：完成 ExecutionContext 抽象、Activity Log 基础设施与 `orbit` CLI Phase 0 脚手架，为后续授权链路、Inbox、依赖调度与 Auto-runner 改造铺底。
