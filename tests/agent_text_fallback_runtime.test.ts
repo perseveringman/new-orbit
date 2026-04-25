@@ -64,7 +64,16 @@ describe('AgentRunner tool-invocation fallback (R6)', () => {
 
       expect(invokedName).toBe('create_task');
       expect(invokedArgs).toEqual({ title: 'Hello' });
-      expect(stdinChunks.join('')).toContain('"uid":"taskabc"');
+      const stdinMessages = stdinChunks
+        .join('')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { role: string; content: string });
+      expect(stdinMessages[0]).toEqual({ role: 'user', content: 'p' });
+      expect(stdinMessages[1]).toEqual({
+        role: 'user',
+        content: '{"ok":true,"uid":"taskabc"}'
+      });
 
       const snap = runner.snapshot();
       expect(snap.events.some((e) => e.kind === 'text' && e.text?.includes('[tool] create_task')))

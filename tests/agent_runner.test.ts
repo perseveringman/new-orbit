@@ -45,6 +45,25 @@ function delayedCloseSpawner(): { spawn: typeof nodeSpawn; last: () => FakeChild
   return { spawn: s, last: () => last as FakeChild };
 }
 
+function capturingSpawner(): {
+  spawn: typeof nodeSpawn;
+  last: () => FakeChild;
+  lastArgs: () => string[];
+} {
+  let last: FakeChild | null = null;
+  let lastArgs: string[] = [];
+  const s = ((_: string, args?: readonly string[]): FakeChild => {
+    last = new FakeChild();
+    lastArgs = [...(args ?? [])];
+    return last;
+  }) as unknown as typeof nodeSpawn;
+  return {
+    spawn: s,
+    last: () => last as FakeChild,
+    lastArgs: () => lastArgs
+  };
+}
+
 describe('mapStreamJson', () => {
   it('normalizes a cost/result event', () => {
     const ev = mapStreamJson(
@@ -150,6 +169,72 @@ describe('AgentRunner stream parsing', () => {
       expect(parsed.some((ev) => ev.kind === 'message')).toBe(true);
       expect(parsed.some((ev) => ev.kind === 'cost')).toBe(true);
       expect(parsed.some((ev) => ev.kind === 'done')).toBe(true);
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('starts Claude in stream-json input mode and sends the initial prompt over stdin', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-input-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, last, lastArgs } = capturingSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/true',
+        prompt: 'plan the change',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000
+      });
+
+      await runner.start();
+      const child = last();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const stdinPayload = String(child.stdin.read() ?? '');
+
+      expect(lastArgs()).toContain('--input-format');
+      expect(lastArgs()).toContain('stream-json');
+      expect(stdinPayload).toContain('"role":"user"');
+      expect(stdinPayload).toContain('"content":"plan the change"');
+
+      await runner.stop('test');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('treats stderr lines as stream text instead of terminal errors', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-stderr-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, last } = fakeSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/true',
+        prompt: 'p',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000
+      });
+
+      await runner.start();
+      const child = last();
+      child.stderr.write('Warning: no stdin data received in 3s\n');
+      child.emit('close', 0);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const stderrEvent = runner
+        .snapshot()
+        .events.find((event) => event.text?.includes('no stdin data received in 3s'));
+      expect(stderrEvent?.kind).toBe('text');
+      expect(stderrEvent?.data).toEqual({ stream: 'stderr' });
+
+      await runner.stop('test');
     } finally {
       await fs.rm(vault, { recursive: true, force: true });
     }

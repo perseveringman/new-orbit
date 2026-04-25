@@ -420,6 +420,9 @@ export class DispatchService extends EventEmitter {
     if (!this.vaultPath) return;
     if (event.event.kind !== 'done' && event.event.kind !== 'error') return;
     const snapshot = getPool().get(event.runId)?.snapshot();
+    // Ignore intermediate stderr warnings — only act when the process has
+    // actually reached a terminal status (done/error/killed).
+    if (snapshot && snapshot.summary.status === 'running') return;
     const timeline = summarizeEvents(snapshot?.events ?? [event.event]);
     const wasKilled = snapshot?.summary.status === 'killed';
     await recordRunCompletion(this.vaultPath, event.runId, {

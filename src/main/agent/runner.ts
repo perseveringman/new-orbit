@@ -447,7 +447,6 @@ export class AgentRunner extends EventEmitter {
 
     const args = [
       '-p',
-      this.opts.prompt,
       '--output-format',
       'stream-json',
       '--input-format',
@@ -486,6 +485,7 @@ export class AgentRunner extends EventEmitter {
       this.flushStderr();
       void this.finish(code === 0 ? 'done' : 'error', undefined, code);
     });
+    this.writeStdin(this.opts.prompt);
   }
 
   private onStdout(chunk: string): void {
@@ -520,8 +520,9 @@ export class AgentRunner extends EventEmitter {
         this.push({
           idx: this.eventIdx++,
           at: new Date().toISOString(),
-          kind: 'error',
-          text: line
+          kind: 'text',
+          text: line,
+          data: { stream: 'stderr' }
         });
       }
       nl = this.stderrBuf.indexOf('\n');
@@ -535,8 +536,9 @@ export class AgentRunner extends EventEmitter {
       this.push({
         idx: this.eventIdx++,
         at: new Date().toISOString(),
-        kind: 'error',
-        text: line
+        kind: 'text',
+        text: line,
+        data: { stream: 'stderr' }
       });
     }
   }
@@ -634,7 +636,7 @@ export class AgentRunner extends EventEmitter {
 
   private writeStdin(text: string): void {
     if (!this.child || this.child.stdin.destroyed) return;
-    const payload = text.endsWith('\n') ? text : `${text}\n`;
+    const payload = `${JSON.stringify({ role: 'user', content: text })}\n`;
     try {
       this.child.stdin.write(payload);
       this.logRaw(`# orbit stdin -> ${payload}`);
