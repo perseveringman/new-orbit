@@ -149,6 +149,21 @@ Agent 在完成任务时需遵循：
 3. **发现过期文档**——如果在执行任务过程中发现某个文档描述与代码不符，主动更新该文档或标记为过期
 4. **不创建冗余文档**——如果信息已存在于某个文档中，更新它而不是新建一个
 
+## Spec Kit Workflow
+
+仓库已接入 GitHub Copilot Spec Kit：
+
+- Copilot 命令文件在 `.github/agents/`，prompt 映射在 `.github/prompts/`
+- 共享模板、脚本和工作流在 `.specify/`
+- 长期治理约束在 `.specify/memory/constitution.md`
+
+使用规则：
+
+1. **中大型改动**——先走 `/speckit.specify` → `/speckit.plan` → `/speckit.tasks`，信息不充分时先用 `/speckit.clarify`，不要跳过规格直接实现
+2. `specs/` 是 Spec Kit 的执行期产物；**长期沉淀仍以 `docs/` + `CHANGELOG.md` 为准**，完成后必须按上面的文档分级规则回写
+3. 如需调整长期约束，优先更新 `.specify/memory/constitution.md`，并同步检查 `AGENTS.md`、Copilot instructions 与 `.specify/templates/` 是否仍一致
+4. **小改动**可以直接实施，但只要变更跨 `main / preload / shared / renderer / tests / docs` 多个 surface，就按中等及以上改动处理，先补齐 spec / plan
+
 ## Workflow Checklist
 
 完成任务时按以下顺序：

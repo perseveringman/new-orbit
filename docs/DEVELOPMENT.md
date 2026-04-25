@@ -34,6 +34,19 @@ orbit/
 └── tests/                 # Vitest unit tests
 ```
 
+## Spec Kit workflow
+
+- GitHub Copilot integration files live in `.github/agents/` and
+  `.github/prompts/`; shared templates, scripts, and workflow metadata live in
+  `.specify/`.
+- `.specify/memory/constitution.md` is the long-lived Spec Kit governance file
+  for this repository. Keep it aligned with `AGENTS.md`.
+- Use Spec Kit for medium and large changes. `specs/` is the working directory
+  for feature artifacts, not a replacement for the repository's durable docs.
+- For lasting documentation, follow `AGENTS.md`: large cross-module work updates
+  `docs/plans/` plus the affected core docs, medium work updates the affected
+  docs in place, and all changes append to `CHANGELOG.md`.
+
 ## Testing
 
 - Unit tests live in `tests/` and run under Node (no DOM). Where UI behaviour

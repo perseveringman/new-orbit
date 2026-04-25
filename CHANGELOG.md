@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Spec Kit 集成**：新增 GitHub Copilot Spec Kit 脚手架（`.github/agents/`、`.github/prompts/`、`.specify/`），补齐项目级 constitution，并把 Orbit 的文档分级、验证命令、Electron 边界和提交约束纳入 Spec Kit 治理与模板
 - **Task Chat 流式执行 e2e**：新增 `e2e/task-chat-stream.spec.ts`，会自动创建测试 project/task，把任务前置为 `todo + autonomous`，打开 task 详情 Chat tab，发送一条消息并等待 live stream 文案出现，覆盖 task conversation 的真实 Electron 执行链
 - **Task Conversation UI**：任务详情弹窗新增 `Detail / Chat` 双 tab；任务卡片点击会直接进入详情弹窗，Chat tab 统一承载自动 dispatch 执行记录与手动 task chat，对话数据持久化到 `.orbit/orchestration/conversations/*.json`，并复用 `agent:event` 展示运行中的实时输出
 - **Orchestration Core Runtime / Planner / Roles**：新增 `src/shared/orchestration.ts` 与 main-process orchestration 模块，落地 runtime registry、plan proposal 存储与发布、dispatch/lease/report 状态流、全局角色模板与项目 binding 持久化；任务状态升级为 `backlog / waiting / todo / doing / blocked / done`，并补齐 ownership、recommended role、implementation report 等编排字段

@@ -24,6 +24,21 @@ npm run package
 
 Artifacts land in `dist-electron/`. Signing + notarization are intentionally disabled in `electron-builder.yml`; enable them by setting a real `mac.identity` and wiring `afterSign`.
 
+## Spec Kit workflow
+
+This repository ships GitHub Copilot Spec Kit scaffolding in `.github/agents/`,
+`.github/prompts/`, and `.specify/`.
+
+- Use `.specify/memory/constitution.md` for long-lived AI development
+  guardrails.
+- For medium and large changes, run `/speckit.clarify` (when needed) →
+  `/speckit.specify` → `/speckit.plan` → `/speckit.tasks` →
+  `/speckit.implement`.
+- Treat `specs/` as execution artifacts for Spec Kit. Durable product and
+  architecture documentation still lives in `docs/` and `CHANGELOG.md`.
+- The repository-level operational rules remain in `AGENTS.md`; Spec Kit is
+  wired in to reinforce them, not replace them.
+
 ## Concepts
 
 - **Vault** — a folder you pick (or create) containing PARA directories + a `.orbit/` control folder (`config.json`, search index, agent logs, crash logs, vector store).
