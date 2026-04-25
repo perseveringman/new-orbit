@@ -25,12 +25,11 @@ export interface BridgeOptions {
 
 function findVaultRoot(start: string): string | null {
   let current = path.resolve(start);
-  while (true) {
+  while (current !== path.dirname(current)) {
     if (existsSync(path.join(current, '.orbit', 'config.json'))) return current;
-    const parent = path.dirname(current);
-    if (parent === current) return null;
-    current = parent;
+    current = path.dirname(current);
   }
+  return existsSync(path.join(current, '.orbit', 'config.json')) ? current : null;
 }
 
 export function resolveCliSocketPath(options: BridgeOptions = {}): string {
