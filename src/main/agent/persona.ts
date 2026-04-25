@@ -58,10 +58,21 @@ export function composePrompt({ persona, taskContext, userAsk, taskBoundary }: C
     `# Task context\n${taskContext.trim()}`,
     `# Your ask\n${userAsk.trim() || '(proceed with the task as described above)'}`,
     taskBoundary ? buildTaskBoundary(taskBoundary) : null,
+    TASK_EXECUTION_FOOTER,
     ORBIT_RUNTIME_FOOTER
   ].filter(Boolean);
   return parts.join('\n\n');
 }
+
+export const TASK_EXECUTION_FOOTER = `# Task execution contract
+Before writing code or changing files, inspect the current project context and judge whether the task information is sufficient.
+
+- Read the relevant local context first (task file, nearby code, README, AGENT, and Orbit MCP project context when helpful)
+- If requirements are ambiguous or information is missing, ask concise clarification questions instead of pretending the task is finished
+- When you need user input, keep the task in a non-done state and use Orbit MCP \`update_task_status\` with \`blocked\` or \`waiting\`
+- When you start real implementation work, move the task to \`doing\` through Orbit MCP
+- Only mark the task \`done\` after the requested outcome is truly complete
+- A clean process exit does not mean the task is done; if you asked questions or are waiting on clarification, leave the task open`;
 
 export const ORBIT_RUNTIME_FOOTER = `# Orbit runtime
 Prefer Orbit MCP tools and local project context when they are available in the working directory. Do not invent custom stdout protocols to ask for more context.`;
@@ -74,5 +85,6 @@ You are currently responsible for exactly this task: "${task.title}"${task.uid ?
 - Only do work that is within this task's scope
 - If more work is needed, create a new task instead of expanding scope in this run
 - Do not change the status of other tasks
+- If information is missing, pause and ask for clarification before implementation
 - End with a concise completion summary`;
 }

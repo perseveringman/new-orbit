@@ -254,6 +254,10 @@ export async function updateTaskStatusTool(
 ): Promise<ToolCallResult> {
   const taskUid = typeof args['task_uid'] === 'string' ? args['task_uid'] : '';
   const status = typeof args['status'] === 'string' ? args['status'] : '';
+  const reason =
+    typeof args['reason'] === 'string' && args['reason'].trim()
+      ? args['reason'].trim()
+      : undefined;
   if (!taskUid) return errorResult('update_task_status: "task_uid" required');
   if (!VALID_TASK_STATUSES.has(status)) {
     return errorResult(
@@ -267,9 +271,12 @@ export async function updateTaskStatusTool(
     );
   }
   const raw = await fs.readFile(abs, 'utf8');
-  const upd = frontmatter.update(raw, { status });
+  const upd = frontmatter.update(raw, {
+    status,
+    blocked_reason: status === 'blocked' ? reason : undefined
+  });
   if (upd.changed) await fs.writeFile(abs, upd.content, 'utf8');
-  return jsonResult({ uid: taskUid, status, path: abs });
+  return jsonResult({ uid: taskUid, status, path: abs, ...(reason ? { reason } : {}) });
 }
 
 export async function appendExecutionLogTool(
@@ -546,7 +553,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: 'update_task_status',
     description:
-      "Update a task's status. Status must be one of: backlog, waiting, todo, doing, blocked, done. The task must belong to the current project.",
+      "Update a task's status. Status must be one of: backlog, waiting, todo, doing, blocked, done. Optionally include a reason when blocking a task. The task must belong to the current project.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -554,7 +561,8 @@ export const TOOLS: ToolDefinition[] = [
         status: {
           type: 'string',
           enum: ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done']
-        }
+        },
+        reason: { type: 'string' }
       },
       required: ['task_uid', 'status']
     }

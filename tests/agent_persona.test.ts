@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadPersona, composePrompt, HYDRATION_FOOTER } from '../src/main/agent/persona';
+import {
+  loadPersona,
+  composePrompt,
+  HYDRATION_FOOTER,
+  TASK_EXECUTION_FOOTER
+} from '../src/main/agent/persona';
 import { buildTaskContext } from '../src/main/agent/context';
 import type { TaskRecord, EntitySummary } from '../src/shared/schemas';
 
@@ -56,6 +61,8 @@ describe('agent persona composition', () => {
       expect(prompt).toContain('Orbit M4');
       expect(prompt).toContain('# Boundary');
       expect(prompt).toContain('Only do work that is within this task');
+      expect(prompt).toContain('If information is missing, pause and ask for clarification');
+      expect(prompt).toContain(TASK_EXECUTION_FOOTER);
       expect(prompt).toContain(HYDRATION_FOOTER);
     } finally {
       await fs.rm(vault, { recursive: true, force: true });

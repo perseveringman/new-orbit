@@ -168,6 +168,8 @@ function SegmentDivider({ segment }: { segment: RunSegment }): JSX.Element {
       ? 'Running'
       : segment.status === 'completed'
         ? 'Completed'
+        : segment.status === 'needs_attention'
+          ? 'Needs input'
         : segment.status === 'cancelled'
           ? 'Cancelled'
           : 'Failed';

@@ -38,6 +38,7 @@ import { refreshTaskFileInSession } from './session';
 import { arePreConditionsMet, buildTaskGraph, materializeTaskGraph } from './task_graph';
 import { getLocalRuntimeManager } from './runtime';
 import { readJsonFile, vaultLeasesFile, vaultReportsFile, writeJsonFile } from './storage';
+import { classifyDispatchCompletion } from './dispatch_completion';
 
 function summarizeEvents(events: AgentEvent[]): { summary: string; details: string[] } {
   const lines = events
@@ -46,6 +47,21 @@ function summarizeEvents(events: AgentEvent[]): { summary: string; details: stri
     .slice(-8);
   const summary = lines.at(-1) ?? 'Execution completed without a textual summary.';
   return { summary, details: lines };
+}
+
+function normalizeTaskStatus(value: unknown): TaskRecord['status'] | null {
+  return value === 'backlog' ||
+    value === 'waiting' ||
+    value === 'todo' ||
+    value === 'doing' ||
+    value === 'blocked' ||
+    value === 'done'
+    ? value
+    : null;
+}
+
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 async function persistLeases(vaultPath: string, leases: TaskLease[]): Promise<void> {
@@ -425,29 +441,30 @@ export class DispatchService extends EventEmitter {
     if (snapshot && snapshot.summary.status === 'running') return;
     const timeline = summarizeEvents(snapshot?.events ?? [event.event]);
     const wasKilled = snapshot?.summary.status === 'killed';
-    await recordRunCompletion(this.vaultPath, event.runId, {
-      status: wasKilled
-        ? 'cancelled'
-        : event.event.kind === 'done'
-          ? 'completed'
-          : 'failed',
-      summary: timeline.summary,
-      events: snapshot?.events ?? [event.event]
-    });
     const lease = this.leases.find(
       (entry) => entry.runId === event.runId && entry.status === 'running'
     );
     if (!lease) return;
     const task = currentSession()?.tasks.allTasks().find((entry) => entry.id === lease.taskId);
     if (!task || task.source !== 'file') return;
+    const taskFile = await readTaskFile(task.filePath);
+    const completion = classifyDispatchCompletion({
+      processOutcome: wasKilled ? 'cancelled' : event.event.kind,
+      taskStatus: normalizeTaskStatus(taskFile.frontmatter['status']),
+      blockedReason: asOptionalString(taskFile.frontmatter['blocked_reason']),
+      summary: timeline.summary
+    });
+    await recordRunCompletion(this.vaultPath, event.runId, {
+      status: completion.segmentStatus,
+      summary: timeline.summary,
+      events: snapshot?.events ?? [event.event]
+    });
     const completedAt = new Date().toISOString();
     const nextLease: TaskLease = {
       ...lease,
-      status: wasKilled ? 'released' : event.event.kind === 'done' ? 'completed' : 'needs_attention',
+      status: completion.leaseStatus,
       failureReason:
-        wasKilled || event.event.kind === 'error'
-          ? event.event.text ?? 'execution failed'
-          : undefined
+        completion.leaseStatus === 'completed' ? undefined : event.event.text ?? timeline.summary
     };
     const report = this.reports.find((entry) => entry.reportId === lease.reportId);
     const nextReport: ImplementationReport = {
@@ -459,13 +476,9 @@ export class DispatchService extends EventEmitter {
       bindingId: lease.bindingId,
       runtimeId: lease.runtimeId,
       runId: event.runId,
-      status: wasKilled ? 'released' : event.event.kind === 'done' ? 'completed' : 'failed',
+      status: completion.reportStatus,
       summary: timeline.summary,
-      direction: wasKilled
-        ? 'cancelled'
-        : event.event.kind === 'done'
-          ? 'completed'
-          : 'needs attention',
+      direction: completion.direction,
       details: timeline.details,
       createdAt: report?.createdAt ?? completedAt,
       updatedAt: completedAt,
@@ -474,26 +487,21 @@ export class DispatchService extends EventEmitter {
     this.leases = this.leases.map((entry) => (entry.leaseId === lease.leaseId ? nextLease : entry));
     this.reports = [...this.reports.filter((entry) => entry.reportId !== nextReport.reportId), nextReport];
     await updateTaskFrontmatter(task.filePath, {
-      status: wasKilled ? 'blocked' : event.event.kind === 'done' ? 'done' : 'blocked',
+      status: completion.taskStatus,
       active_run_id: undefined,
-      blocked_reason:
-        wasKilled || event.event.kind === 'error' ? timeline.summary : undefined
+      blocked_reason: completion.blockedReason
     });
     await refreshTaskFileInSession(task.filePath);
     if (lease.bindingId && task.project_uid) {
       await updateProjectRoleBinding(this.vaultPath, task.project_uid, lease.bindingId, {
-        health: wasKilled ? 'paused' : event.event.kind === 'done' ? 'healthy' : 'degraded'
+        health: completion.bindingHealth
       });
     }
     await persistLeases(this.vaultPath, this.leases);
     await persistReports(this.vaultPath, this.reports);
     this.emit('event', {
       at: completedAt,
-      type: wasKilled
-        ? 'dispatch:released'
-        : event.event.kind === 'done'
-          ? 'dispatch:completed'
-          : 'dispatch:needs_attention',
+      type: completion.eventType,
       lease: nextLease,
       report: nextReport
     });

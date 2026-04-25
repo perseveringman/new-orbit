@@ -868,6 +868,13 @@ embed it, and call `store.search(query, 3, { kind: ['resource',
 formatted as a `# Relevant past experience` block and appended to
 `userAsk` before `composePrompt`.
 
+Orbit 的 autonomous task lifecycle 现在遵循一个额外约束：agent 必须先检查
+项目上下文和任务信息是否充分；如果需要澄清，应该在对话中提出问题，并通过
+Orbit MCP 把任务保留在 `waiting` / `blocked` / `doing` 之外的合适非 `done`
+状态。dispatch service 在 run 退出后会重新读取任务文件；只有 agent 已显式把
+任务写成 `done` 时，lease / report / conversation segment 才会进入 completed，
+否则统一视为 `needs_attention`，避免把“提了问题就退出”的 run 误判成完成。
+
 #### Threshold rationale
 
 - Below ~0.15 the hash-trick embedding returns effectively-random

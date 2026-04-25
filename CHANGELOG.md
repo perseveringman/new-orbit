@@ -28,12 +28,14 @@
 ### Changed
 
 - **任务执行 Prompt 边界**：agent task prompt 追加 `# Boundary` 段，明确只能处理当前任务范围、越界工作需新建任务、不得修改其他任务状态，并要求输出完成摘要
+- **Agent 任务生命周期契约**：task prompt 与内置 executor 角色现在都会先要求 agent 审视项目上下文和任务信息是否充分；若信息不足，必须先提出澄清、把任务保留在非 `done` 状态，并在真正完成后才通过 Orbit MCP 标记 `done`
 - **Planner 交互模型**：Project Planner 从“左侧 proposal 列表 + 主画布”调整为“中间 planner chat + 右侧产物画布”；默认对话 agent 为 Plan Agent，可切换 Architect / Executor 视角，只有生成任务拆分后才显示右侧 React Flow artifact，并在 artifact header 中切换 proposal 版本
 - **Planner Agent 接入**：Project Planner 的 `Send` / `Generate Split` 已接入真实 planner agent；中间 chat 会把完整对话历史发给 main-process planner service 生成回复，`Generate Split` 会让 agent 直接产出并保存 versioned proposal，再同步到右侧 React Flow artifact panel
 
 ### Fixed
 
 - **Claude 对话流正文缺失**：runner 现在会解析真实 Claude stream-json 的嵌套 `assistant.message.content[]` 文本，不再把 live 对话误判成空字符串；task chat 会显示 agent 的逐步输出，而不是只剩 `✅ 执行完成: exit 0`
+- **自主任务误判完成**：dispatch 结束时不再按进程 `exit 0` 自动把任务写成 `done`；现在会先读回任务文件，只有 agent 通过 MCP 明确标记 `done` 才算真正完成，否则会落到 `needs_attention` / 非 done 流程，并在 task chat 里显示“等待补充信息”
 - **Task Chat 首次发送空白态**：首次对一个还没有 conversation 文件的任务发消息后，前端现在会立即重新拉取并 hydrate 新建的 conversation，确保 running segment 和 live stream 不会因为 store 里还没有 conversation 而整块缺失
 - **自动认领任务卡死启动态**：Claude runner 改为默认 one-shot 执行，不再把 task / planner / distill run 混入 stdin 回写协议；子进程现在以 `-p <prompt> --output-format stream-json` 启动并直接忽略 stdin，避免进程活着却一直不产出首条事件
 - **任务执行上下文挂载**：task run 会优先在所属 worktree / project / area 目录启动，而不是退回 vault 根目录；runner 还会显式注入本地 `.orbit/.mcp.json`，即使项目处于 isolated agent exposure，也能稳定拿到 Orbit MCP 工具；dispatch 仍会忽略运行中的中间 stderr warning，避免被误判成失败

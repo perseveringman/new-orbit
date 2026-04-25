@@ -108,6 +108,37 @@ describe('mcp/tools — update_task_status', () => {
     expect(raw).toMatch(/status: doing/);
   });
 
+  it('records a blocked reason and clears it after the task resumes', async () => {
+    const proj = await createProject(vault, {
+      slug: 'p1',
+      template: 'blank',
+      name: 'P1'
+    });
+    const c = ctx(vault, 'p1', proj.uid);
+    const created = (await readJsonResult(
+      (await callTool(c, 'create_task', { title: 'T1' })).content
+    )) as { uid: string; path: string };
+
+    const blocked = await callTool(c, 'update_task_status', {
+      task_uid: created.uid,
+      status: 'blocked',
+      reason: 'Need the API contract before implementation'
+    });
+    expect(blocked.isError).toBeFalsy();
+    const blockedRaw = await fs.readFile(created.path, 'utf8');
+    expect(blockedRaw).toMatch(/status: blocked/);
+    expect(blockedRaw).toMatch(/blocked_reason: Need the API contract before implementation/);
+
+    const resumed = await callTool(c, 'update_task_status', {
+      task_uid: created.uid,
+      status: 'doing'
+    });
+    expect(resumed.isError).toBeFalsy();
+    const resumedRaw = await fs.readFile(created.path, 'utf8');
+    expect(resumedRaw).toMatch(/status: doing/);
+    expect(resumedRaw).not.toMatch(/blocked_reason:/);
+  });
+
   it('refuses cross-project task uids (project scope guard)', async () => {
     const a = await createProject(vault, {
       slug: 'alpha',

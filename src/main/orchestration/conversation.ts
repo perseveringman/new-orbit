@@ -197,7 +197,9 @@ export async function recordRunCompletion(
       ? '✅ 执行完成'
       : result.status === 'cancelled'
         ? '⚫ 执行已停止'
-        : '❌ 执行失败';
+        : result.status === 'needs_attention'
+          ? '🟡 等待补充信息'
+          : '❌ 执行失败';
   await appendTurn(vaultPath, match.taskUid, {
     role: 'system',
     content: `${prefix}: ${result.summary}`,

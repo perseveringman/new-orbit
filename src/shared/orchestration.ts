@@ -209,7 +209,7 @@ export interface RunSegment {
   bindingId?: string;
   vendorSessionId?: string;
   trigger: 'dispatch' | 'manual';
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_attention';
   summary?: string;
   startedAt: string;
   endedAt?: string;
