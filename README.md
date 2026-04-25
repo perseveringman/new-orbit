@@ -1,6 +1,10 @@
 # Orbit
 
-Orbit is a personal-vision AI collaboration workbench: a local, Obsidian-compatible Markdown + Git workbench that orchestrates Claude Code CLI sub-agents in parallel worktrees. Your knowledge lives as plain Markdown in a PARA-shaped vault (`01_Projects`, `02_Areas`, `03_Resources`, `04_Archives`); all app state lives in a `.orbit/` folder inside the vault — never in the app source.
+Orbit is a **complete local implementation of Building a Second Brain (BASB)** — with AI agents as the execution engine for the Express stage of the CODE workflow. Your knowledge lives as plain Markdown in a PARA-shaped vault (`01_Projects`, `02_Areas`, `03_Resources`, `04_Archives`); all app state lives in a `.orbit/` folder inside the vault — never in the app source.
+
+Under the hood, Orbit is an Electron + React workbench that orchestrates Claude Code CLI sub-agents in isolated execution contexts (worktrees for code projects, sandboxes for note projects). It is Obsidian-compatible Markdown + Git — no vendor lock-in, no proprietary format.
+
+> **🚧 v2 direction being implemented.** As of 2026-04-26, Orbit has entered a major architectural evolution. See [`docs/overview.md`](docs/overview.md) for the new direction and [`docs/decisions/`](docs/decisions/) for the 10 core ADRs. The code in this repo still reflects v1 (which [`docs/architecture.md`](docs/architecture.md) describes accurately).
 
 ## Quickstart
 
@@ -76,6 +80,12 @@ See [docs/architecture.md](docs/architecture.md) for internals and [docs/USER_GU
 - [Development](docs/DEVELOPMENT.md) — scripts, layout, testing notes.
 - [User guide](docs/USER_GUIDE.md) — walkthrough of the UI.
 - [Migration (legacy → v3)](docs/MIGRATION.md) — moving single-file projects to folders, rollback.
+- [Changelog](CHANGELOG.md) — change history.
+
+## License
+
+MIT — see `package.json`.
+back.
 - [Changelog](CHANGELOG.md) — change history.
 
 ## License

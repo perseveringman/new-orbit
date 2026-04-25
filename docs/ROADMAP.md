@@ -1,124 +1,162 @@
 # Orbit — Roadmap
 
-> 本文档记录 Orbit 各阶段的目标、当前状态和下一步计划。随每个里程碑更新。
+> **Status**: v2 方向确立（2026-04-26）
+> **Update cadence**: 每个里程碑落地后更新；大方向调整随 ADR 同步刷新。
+
+本文记录 Orbit 各阶段的目标、当前状态和下一步计划。**v2 方向的完整说明在 `docs/overview.md`，决策记录在 `docs/decisions/`。**
 
 ---
 
 ## 已完成
 
-### M1–M7：核心基础设施
+### v1 基础设施（M1–M7）
 
-| 里程碑 | 内容                                                                                                              |
-| ------ | ----------------------------------------------------------------------------------------------------------------- |
-| M1     | Electron 骨架、workspace/settings IPC、WelcomeView                                                                |
-| M2     | 文件系统层（`fs:*`）、refmap、chokidar 监听、MiniSearch 索引、CodeMirror 编辑器                                   |
-| M3     | PARA 目录结构、Zod schemas、任务索引、`para:*` IPC、Kanban                                                        |
-| M4     | Claude Code agent runner、hydration protocol、cost NDJSON 记录、RunnerPool                                        |
-| M5     | Git worktree 管理、ghost-commit 流程、pre-merge check（构建 + 密钥扫描）、safety gate、InstallLock、PortAllocator |
-| M6     | Token 预算系统（BudgetGate + BudgetWatch）、每日 cost 报告                                                        |
-| M7     | 项目 Distillation、hash-trick vector store、experience wake-up                                                    |
+| 里程碑 | 内容 |
+| ------ | ---- |
+| M1 | Electron 骨架、workspace/settings IPC、WelcomeView |
+| M2 | 文件系统层 (`fs:*`)、refmap、chokidar 监听、MiniSearch 索引、CodeMirror 编辑器 |
+| M3 | PARA 目录结构、Zod schemas、任务索引、`para:*` IPC、Kanban |
+| M4 | Claude Code agent runner、hydration protocol、cost NDJSON 记录、RunnerPool |
+| M5 | Git worktree 管理、ghost-commit 流程、pre-merge check、safety gate、InstallLock、PortAllocator |
+| M6 | Token 预算系统 (BudgetGate + BudgetWatch)、每日 cost 报告 |
+| M7 | 项目 Distillation、hash-trick vector store、experience wake-up |
 
-### R1–R7：v1.0 二期改造（Project-as-Folder）
+### v1 二期改造（R1–R7，Project-as-Folder）
 
-| 里程碑 | 内容                                                                                                                                    |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| R1     | 项目即文件夹（`01_Projects/<slug>/`）、per-project git repo                                                                             |
-| R2     | Vision-first Dashboard、+ New Project wizard（blank/web-app/research/writing 模板）                                                     |
-| R3     | 四段式 Task Editor（Description/Thinking/Execution Log/Summary）                                                                        |
-| R4     | Project Room（Kanban + 嵌入式终端 + Sessions），xterm.js + node-pty                                                                     |
-| R5     | Orbit Hooks MCP server（7 个工具：search_vault、get_file、create_task、update_task、search_memories、save_memory、query_project_graph） |
-| R6     | Night Shift 批处理调度器、worktree-per-task、自动 PR                                                                                    |
-| R7     | Worktree GC（launch + 24h 周期）、Daily Review 生成与历史                                                                               |
+| 里程碑 | 内容 |
+| ------ | ---- |
+| R1 | 项目即文件夹 (`01_Projects/<slug>/`)、per-project git repo |
+| R2 | Vision-first Dashboard、+ New Project wizard |
+| R3 | 四段式 Task Editor (Description/Thinking/Execution Log/Summary) |
+| R4 | Project Room (Kanban + 嵌入式终端 + Sessions) |
+| R5 | Orbit Hooks MCP server（7 个工具）**⚠️ v2 中废弃，见 ADR-008** |
+| R6 | Night Shift 批处理 **⚠️ v2 中废弃，见 ADR-001** |
+| R7 | Worktree GC + Daily Review |
 
-### 近期交付（2026-04）
+### v1 近期交付（2026-04 前半月）
 
-| 功能                          | 描述                                                                                                                                                            |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contextual Right Sidebar      | 右侧栏跟随当前页面上下文（Editor/Dashboard/Project Room），三级 tab（Overview/Focus/Execution）                                                                 |
-| Workspace Inspector           | 右侧统一 `Files / Changes` 工作台：完整项目树、目录分组变更树、staged-only commit、GitHub publish / PR 表单                                                     |
-| `.orbit`-First Agent Exposure | 项目 Orbit 数据收敛到 `.orbit/`；`agent_exposure` 策略（isolated/bridge/compatible）；社区规范文件兼容                                                          |
-| GitHub Integration            | 以 `gh` CLI 为基础的 GitHub 连接、导入、发布、PR 创建、状态读取                                                                                                 |
-| Project Session History       | 终端 agent 会话作为项目级历史记录，支持 Claude/Codex transcript 导入，Session History tab                                                                       |
-| Area Room + Vision System     | Area 升级为独立工作单元（Kanban / Terminal / Sessions）；内置 Vision 模板、笔记接入、Vision 冷启动与 review 工作流                                              |
-| Orchestration System          | 落地 Planner proposal 历史与发布、Local Runtime registry、Dispatch lease/report 流、Global Role Templates/Bindings，以及 Project Room 的 Planner/Roles 工作面板 |
-| Orchestration Workspace UI    | 新增 workspace 级 Runtimes / Agents 工作面板，并将 Project Planner 升级为 React Flow proposal canvas                                                            |
+| 功能 | 描述 |
+| ---- | ---- |
+| Contextual Right Sidebar | 右侧栏跟随当前页面上下文 |
+| Workspace Inspector | Files / Changes 工作台：项目树、staged-only commit、GitHub publish |
+| `.orbit`-First Agent Exposure | Orbit 数据收敛 `.orbit/`、agent_exposure 策略 |
+| GitHub Integration | `gh` CLI 驱动的 GitHub 连接、PR 创建、状态读取 |
+| Project Session History | 终端会话作为项目级历史 + Session History tab |
+| Area Room + Vision System | Area 升级为独立工作单元；Vision 冷启动与 review 工作流 |
+| Orchestration System (v1) | Planner proposal 历史、Local Runtime registry、Dispatch lease/report 流、Role Templates/Bindings |
+| Orchestration Workspace UI | workspace 级 Runtimes / Agents 面板，React Flow proposal canvas |
 
 ---
 
-## 进行中
+## 进行中 — v2 方向确立 (2026-04-26)
 
-| 功能                              | 文档                                                                          | 状态               |
-| --------------------------------- | ----------------------------------------------------------------------------- | ------------------ |
-| Agent Context System              | `docs/plans/2026-04-22-orbit-agent-context-architecture.md`（+ scheme-a/c/d） | 设计中，待选型落地 |
-| Capture & Knowledge Funnel        | `docs/plans/2026-04-24-capture-knowledge-funnel.md`                           | 设计中             |
-| Planner Agent + Agent Dispatching | `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md`                | 已落地             |
-| Local Runtime Architecture        | `docs/plans/2026-04-24-orbit-local-runtime-architecture.md`                   | 已落地             |
-| Global Role Template Agents       | `docs/plans/2026-04-25-orbit-role-template-agent-design.md`                   | 已落地             |
+### 🎯 Orbit v2 演进
+
+**触发**：2026-04-26 的 v2 方向 Onboard 对话，确立 10 项核心决策（ADR-001 ~ ADR-010）。
+
+**状态**：方案落地（ADR + plans 已写完），待开始实施。
+
+| 子系统 | ADR | Plan | 状态 |
+|--------|-----|------|------|
+| 废弃 Night Shift → Auto-runner | [ADR-001](decisions/ADR-001-deprecate-night-shift.md) | [auto-runner-dispatcher](plans/2026-04-26-auto-runner-dispatcher.md) | draft |
+| Agent 自主边界：子任务折叠 | [ADR-002](decisions/ADR-002-agent-autonomy-scope.md) | 同上 | draft |
+| ExecutionContext 分化 | [ADR-003](decisions/ADR-003-execution-context-split.md) | [execution-model-migration](plans/2026-04-26-execution-model-migration.md) | draft |
+| Inbox 作为人机协作枢纽 | [ADR-004](decisions/ADR-004-inbox-as-hub.md) | [inbox-v2-architecture](plans/2026-04-26-inbox-v2-architecture.md) | draft |
+| Plan Chat 定位修正 | [ADR-005](decisions/ADR-005-plan-chat-reframing.md) | （合入 inbox-v2） | draft |
+| 任务授权链路 (propose-approve) | [ADR-006](decisions/ADR-006-task-authorization-model.md) | 同 auto-runner | draft |
+| 任务依赖模型 | [ADR-007](decisions/ADR-007-task-dependency-model.md) | [task-dependency-system](plans/2026-04-26-task-dependency-system.md) | draft |
+| AI-Native + CLI-first | [ADR-008](decisions/ADR-008-ai-native-cli-first.md) | [cli-migration](plans/2026-04-26-cli-migration.md) | draft |
+| Activity Log 基础设施 | [ADR-009](decisions/ADR-009-activity-log-infrastructure.md) | [activity-log-infrastructure](plans/2026-04-26-activity-log-infrastructure.md) | draft |
+| Capture 三分 (Feed/Library/Thoughts) | [ADR-010](decisions/ADR-010-capture-tri-partition.md) | [capture-foundation](plans/2026-04-26-capture-foundation.md) | draft |
+| Quick Capture MVP | 004 + 010 | [quick-capture-mvp](plans/2026-04-26-quick-capture-mvp.md) | draft |
+
+### v1 遗留中的 "进行中" 项（仍有效）
+
+| 功能 | 文档 | 状态 |
+| ---- | ---- | ---- |
+| Planner Agent + Agent Dispatching | `plans/2026-04-24-orbit-planner-agent-dispatch-design.md` | 已落地 (v1)，v2 中接受依赖增强 |
+| Local Runtime Architecture | `plans/2026-04-24-orbit-local-runtime-architecture.md` | 已落地 (v1) |
+| Global Role Template Agents | `plans/2026-04-25-orbit-role-template-agent-design.md` | 已落地 (v1) |
+
+---
+
+## 显式废弃 / 被覆盖
+
+| 项目 | 状态 | 被什么替代 |
+|------|------|-----------|
+| **Night Shift** (`src/main/night_shift/`) | 废弃 | 24×7 Auto-runner (ADR-001) |
+| **MCP Server** (`src/mcp/`) | 废弃观察期 | `orbit` CLI (ADR-008) |
+| **Agent 直接 `create_task` 入库** | 废弃 | `propose_new_task` 两阶段 (ADR-006) |
+| **Agent 自主创建入看板的 subtask** | 废弃 | 折叠进主任务 Execution Log (ADR-002) |
+| `plans/2026-04-22-orbit-agent-context-*.md` | superseded | ADR-008 (CLI-first 取代 context wrapper 路线) |
+| `plans/2026-04-24-capture-knowledge-funnel.md` | superseded | ADR-010 + `capture-foundation` |
 
 ---
 
 ## 计划中
 
-> 按优先级排列（随实际情况调整）
+> 按优先级排列。
 
-### P1 — Agent Context System（落地优先）
+### P1 — v2 本期实施（见"进行中"）
 
-让 Orbit 终端中运行的任意 agent（claude/codex/gemini）都能稳定理解：
+**目标**：在未来若干迭代内落地 ADR-001 ~ ADR-010 的全部内容。顺序建议见 `plans/2026-04-26-execution-model-migration.md` 的总览章节。
 
-- Orbit 是什么、能提供哪些工具
-- 当前项目的目标、状态、任务
-- 推荐的工作方式（AGENT.md persona + .orbit/ context）
+### P2 — Review 页面 UI
 
-参考 `docs/plans/` 中的设计方案。
+Activity Log 基础设施已经是 v2 本期内容（ADR-009），但它的用户可视化（"Review 页面，时间轴看今天/本周做了什么"）留到下一期。
 
-### P2 — Capture & Knowledge Funnel
+### P3 — Sandbox ExecutionContext 详细设计
 
-- Universal Quick Capture（`Task / Note / Link`）
-- Resource Workspace（captured / imported / distilled 统一入口）
-- Reading Capture（URL / 摘录 → resource）
-- Voice transcript-first（延后）
+ADR-003 确立了抽象分化，Worktree 侧 v2 本期落地，**Sandbox 的详细实现**单独开一期设计。
 
-### P3 — Planner Agent + Agent Dispatching
+### P4 — Thinking Trail 子系统
 
-- Planner Agent 将高层目标拆分为任务图与依赖图
-- 规划画布支持版本切换、图结构 diff 与人工确认发布
-- 看板新增 `waiting` 列；`todo` 任务支持 agent 自动认领
-- 任务引入 owner / release / retry 语义，逐步替代 Night Shift 作为主执行入口
+AI 对话记录的结构化留痕。2026-04-26 的 v2 对话已经以手动方式实践了一次（见 `docs/thinking-trail/`），未来自动化。
 
-### P4 — Local Runtime Architecture
+### P5 — Capture 能力扩展
 
-- 引入 LocalRuntimeManager / RuntimeProbe / ProviderAdapter / DispatchService
-- 将 Claude-only runner 泛化为多 provider runtime registry
-- 用进程内 runtime 协议替代直接散落的 `startTask` 触发
-- 为未来本地 sidecar daemon 预留 transport / lease / execution 接口
+- 手机 share endpoint
+- Voice Log + 本地转写
+- 浏览器插件一键 save
+- Feed 多来源（Twitter / GitHub / HN / Substack …）
+- 剪贴板粘贴自动识别 URL / 长文本
 
-### P5 — Global Role Template Agents
+### P6 — Orbit 自我进化
 
-- 全局沉淀 `planner / executor / reviewer / researcher` 等角色模板
-- 项目通过 binding 引用模板，并支持轻量 project overlay
-- 角色模板版本化发布，项目显式升级
-- 任务 owner / history / run detail 围绕 binding 而非单一 agent 展开
+基于 Activity Log + Thinking Trail + Distillation 的三向数据融合，agent 主动提出优化建议。长期方向。
 
-### P6 — GitHub 深度集成
+### P7 — GitHub 深度集成
 
 - Issue → Task 双向同步
 - PR review 状态在 Project Room 展示
-- Night Shift 结果直接推到指定远程分支
+- Auto-runner 结果直接推远程分支
 
-### P7 — 性能与稳定性
+### P8 — 性能与稳定性
 
-- 大 vault（>1000 文件）的索引性能优化
-- Electron 启动时间优化
-- 自动崩溃恢复改善
+- 大 vault（>1000 文件）索引性能
+- Electron 启动时间
+- 崩溃恢复改善
 
-### P8 — 跨平台支持
+### P9 — 跨平台支持
 
-- Linux（AppImage/snap）
-- Windows（NSIS installer）
-- MCP server 跨平台路径处理
+- Linux (AppImage/snap)
+- Windows (NSIS installer)
+- CLI 跨平台路径处理
+
+### P10 — MCP 观察期决策
+
+v2 上线后观察 agent 对 CLI 的调用准确度，根据实际数据决定是否重新引入 MCP（作为补充 / 替代）。
 
 ---
 
 ## 版本约定
 
-Orbit 目前处于 v1.x 阶段，尚未发布正式语义化版本号。发布策略待定。
+Orbit 目前处于 v1.x 阶段，尚未发布正式语义化版本号。v2 是**架构方向代号**，不一定对应 `package.json` 里的 `2.0.0` —— 版本发布策略待定。
+
+---
+
+## 如何更新本文件
+
+1. 每个 milestone 落地后，把对应条目从"进行中"挪到"已完成"
+2. 每次方向调整（新 ADR accepted），同步更新"计划中"的优先级和"废弃 / 被覆盖"列表
+3. 每两周做一次文档 review（参考 `AGENTS.md`）：清理 `plans/` 中 `completed` 的方案、校验"进行中"列表仍有效

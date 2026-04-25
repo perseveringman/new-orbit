@@ -1,13 +1,31 @@
 ---
-status: draft
+status: superseded
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-04-26
+superseded_by: ADR-010
+superseded_at: 2026-04-26
+---
+
+> ⚠️ **本方案已被 [ADR-010 (Capture 三分 — Feed / Library / Thoughts)](../decisions/ADR-010-capture-tri-partition.md) 覆盖。**
+>
+> 原方案采用 "Task / Note / Link" 三分法 + Resource Workspace + Reading Capture + Draft Mode 的架构。v2 重新组织为：
+>
+> - **Feed**（低信号扫描流，如 RSS）
+> - **Library**（高信号主动阅读）
+> - **Thoughts**（自产灵感笔记）
+>
+> 并统一集成到 Inbox 的 Capture 一级 tab 下。新方案实施见：
+> - [`plans/2026-04-26-capture-foundation.md`](./2026-04-26-capture-foundation.md)
+> - [`plans/2026-04-26-quick-capture-mvp.md`](./2026-04-26-quick-capture-mvp.md)
+>
+> 本文保留作为历史参考。
+
 ---
 
 # Orbit Capture & Knowledge Funnel 设计方案
 
 > 日期：2026-04-24
-> 状态：Draft
+> 状态：~~Draft~~ → Superseded by ADR-010
 > 范围：Quick Capture、Resource Workspace、Reading Capture、Draft Mode、Voice（延后）
 
 ---

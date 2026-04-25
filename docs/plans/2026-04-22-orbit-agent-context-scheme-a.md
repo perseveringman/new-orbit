@@ -1,7 +1,17 @@
 ---
-status: draft
+status: superseded
 created: 2026-04-22
-updated: 2026-04-22
+updated: 2026-04-26
+superseded_by: ADR-008
+superseded_at: 2026-04-26
+---
+
+> ⚠️ **本方案已被 [ADR-008 (AI-Native 与 CLI-first)](../decisions/ADR-008-ai-native-cli-first.md) 覆盖。**
+>
+> 方案 A 原本设计标准化的 Context Pack + CLI 适配层让 agent 在启动时拿到结构化的 Orbit 世界观。v2 改为纯 CLI 路线，不再需要 context pack 生成管线。新方案见 [`plans/2026-04-26-cli-migration.md`](./2026-04-26-cli-migration.md)。
+>
+> 本文保留作为历史参考。
+
 ---
 
 # Orbit Agent Context Architecture — 方案 A 详细设计

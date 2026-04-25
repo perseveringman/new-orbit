@@ -88,6 +88,8 @@ docs/
 | **小改动**（bug fix、UI 微调、配置变更） | 仅在 `CHANGELOG.md` 追加记录 | 修复侧边栏溢出、调整暗色模式颜色 |
 | **中等改动**（新组件、新 IPC 通道、模块重构） | `CHANGELOG.md` + 更新受影响的现有文档（如 `architecture.md`） | 新增 terminal session 模块 |
 | **大需求**（新子系统、架构变更、跨模块功能） | `CHANGELOG.md` + 在 `docs/plans/` 新建方案文档 + 更新 `ROADMAP.md` | GitHub 集成、Agent 编排系统 |
+| **方向性决策**（新原则、废弃模块、长期走向） | `CHANGELOG.md` + 新建 ADR（`docs/decisions/`）+ 对应 plan + 更新 `overview.md` 和 `ROADMAP.md` | v2 方向确立（2026-04-26） |
+| **重大设计对话**（引起 3+ ADR 或 plans 的对话） | 上述加上在 `docs/thinking-trail/` 下保留对话 | v2 方向 Onboard 对话 |
 
 ### CHANGELOG 格式
 
@@ -127,6 +129,38 @@ updated: 2026-04-23
 ```
 
 - **draft**：设计中，尚未开始实施
+- **active**：正在实施
+- **completed**：已实施完成，等待归档
+- **archived**：已移入 `archive/` 或删除
+
+### 定期 Review 机制
+
+**每完成一个里程碑或每两周（取先到者），执行一次文档 Review：**
+
+1. **扫描 `docs/plans/`**——将 `status: completed` 的方案移入 `docs/archive/` 或直接删除（如核心信息已沉淀到 `architecture.md`）
+2. **校验核心文档**——确认 `architecture.md`、`DEVELOPMENT.md`、`ROADMAP.md` 与代码现状一致；删除过时章节
+3. **清理 `archive/`**——超过 3 个月且无参考价值的归档文档直接删除
+4. **更新 `ROADMAP.md`**——标记已完成项，补充新的待办项
+
+### Agent 文档职责
+
+Agent 在完成任务时需遵循：
+
+1. **小改动**——在 commit 后，将变更摘要追加到 `CHANGELOG.md` 的 `[Unreleased]` 区
+2. **大需求**——实施前先在 `docs/plans/` 创建方案文档；实施完成后更新 status 为 `completed`
+3. **发现过期文档**——如果在执行任务过程中发现某个文档描述与代码不符，主动更新该文档或标记为过期
+4. **不创建冗余文档**——如果信息已存在于某个文档中，更新它而不是新建一个
+
+## Workflow Checklist
+
+完成任务时按以下顺序：
+
+1. **阅读**——先读懂要改的文件，理解上下文和约定
+2. **最小改动**——只改需要改的，不做额外重构
+3. **验证**——运行 `npm run typecheck` 确认无类型错误
+4. **文档**——按变更分级规则更新 `CHANGELOG.md` 及相关文档
+5. **提交**——`git add <相关文件>` → `git commit -m "<semantic message>"`
+�尚未开始实施
 - **active**：正在实施
 - **completed**：已实施完成，等待归档
 - **archived**：已移入 `archive/` 或删除

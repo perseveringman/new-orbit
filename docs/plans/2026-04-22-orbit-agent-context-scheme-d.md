@@ -1,7 +1,17 @@
 ---
-status: draft
+status: superseded
 created: 2026-04-22
-updated: 2026-04-22
+updated: 2026-04-26
+superseded_by: ADR-008
+superseded_at: 2026-04-26
+---
+
+> ⚠️ **本方案已被 [ADR-008 (AI-Native 与 CLI-first)](../decisions/ADR-008-ai-native-cli-first.md) 覆盖。**
+>
+> 方案 D 是 A/C 的折中，让 agent 按需申请上下文片段。v2 方向确立后，"按需获取上下文"的需求由 `orbit <command> --help` + 纯 CLI 自发现覆盖——更简单，且 token 开销最小。新方案见 [`plans/2026-04-26-cli-migration.md`](./2026-04-26-cli-migration.md)。
+>
+> 本文保留作为历史参考。
+
 ---
 
 # Orbit Agent Context Architecture — 方案 D 详细设计

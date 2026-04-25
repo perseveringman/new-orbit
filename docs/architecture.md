@@ -1,4 +1,31 @@
-# Orbit architecture (M1 → M2)
+# Orbit Architecture
+
+> ⚠️ **v2 演进中（自 2026-04-26 起）**
+>
+> 本文档描述 **Orbit v1 的现状代码架构**——进程模型、IPC 表面、文件系统布局、核心模块等。这些描述**现在仍然准确**，因为 v2 改造还未实施。
+>
+> 但 Orbit 已经有新的架构方向 (Orbit v2)，若干子系统会被增强或替换。阅读本文前请先看：
+>
+> - [`overview.md`](./overview.md) — v2 完整方向总览
+> - [`decisions/`](./decisions/) — 10 份核心 ADR
+> - [`plans/2026-04-26-*.md`](./plans/) — v2 本期实施方案
+>
+> 当前本文与 v2 方向的关键差异：
+>
+> | 本文描述的现状 | v2 方向 | 参考 |
+> |---------------|---------|------|
+> | Night Shift 批量调度器 | 24×7 Auto-runner Dispatcher | ADR-001 |
+> | Worktree 是唯一执行隔离 | Worktree + Sandbox (ExecutionContext 抽象) | ADR-003 |
+> | MCP Server 暴露 agent 能力 | `orbit` CLI 替代（废弃 MCP） | ADR-008 |
+> | `create_task` 直接入库 | `propose_new_task` 两阶段审批 | ADR-006 |
+> | Review Queue / 分散审批入口 | 统一 Inbox 架构（Capture + Messages） | ADR-004 |
+> | 无显式任务依赖 | `depends_on` + 拓扑解锁 | ADR-007 |
+> | 无统一活动留痕 | Activity Log 基础设施 | ADR-009 |
+> | Capture 还只是 plan | Feed / Library / Thoughts 三分 | ADR-010 |
+>
+> **实施完成后本文件会整体重写**。在此之前，本文仍然是 v1 代码的权威参考。
+
+---
 
 ## Process model
 

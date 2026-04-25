@@ -6,6 +6,17 @@
 
 ### Added
 
+- **Orbit v2 方向确立（2026-04-26）**：经过一次完整 Onboard 对话（~29 轮），确立 v2 演进方向。产出：
+  - 新增 `docs/overview.md` — v2 完整架构总览
+  - 新增 `docs/decisions/` 目录（10 份 ADR + README）：ADR-001 (废弃 Night Shift) / ADR-002 (Agent 子任务折叠) / ADR-003 (ExecutionContext 双轨) / ADR-004 (Inbox 枢纽) / ADR-005 (Plan Chat 定位) / ADR-006 (propose-approve) / ADR-007 (depends_on) / ADR-008 (AI-Native CLI-first) / ADR-009 (Activity Log) / ADR-010 (Capture 三分)
+  - 新增 `docs/plans/2026-04-26-*.md` 共 8 份实施方案：execution-model-migration / auto-runner-dispatcher / task-dependency-system / inbox-v2-architecture / capture-foundation / activity-log-infrastructure / cli-migration / quick-capture-mvp
+  - 新增 `docs/thinking-trail/2026-04-26-v2-direction/` — 完整对话留痕 + key-pivots + decisions-traced
+  - 新增 `docs/open-questions.md` — 已识别但本期不做的 16 项待议事项
+  - 重写 `docs/VISION.md` 和 `docs/ROADMAP.md`，对齐 v2 方向
+  - `docs/architecture.md` 顶部加 v2 演进索引段（原文保留作为 v1 现状权威参考）
+  - 原有 plans 中 `2026-04-22-orbit-agent-context-*.md` 4 份和 `2026-04-24-capture-knowledge-funnel.md` 标记为 `superseded`
+  - `README.md` 和 `AGENTS.md` 更新：引入 BASB 定位、ADR / Thinking Trail 文档规范
+
 - **Project Brainstorm Skill**：新增 `.github/skills/project-brainstorm/` workspace skill，提供项目脑暴、项目接手考古、演进规划与文档体检四种模式，并附带 phases / checklists / templates / proactive patterns 等参考资料
 - **Task Chat 流式执行 e2e**：新增 `e2e/task-chat-stream.spec.ts`，会自动创建测试 project/task，把任务前置为 `todo + autonomous`，打开 task 详情 Chat tab，发送一条消息并等待 live stream 文案出现，覆盖 task conversation 的真实 Electron 执行链
 - **Task Conversation UI**：任务详情弹窗新增 `Detail / Chat` 双 tab；任务卡片点击会直接进入详情弹窗，Chat tab 统一承载自动 dispatch 执行记录与手动 task chat，对话数据持久化到 `.orbit/orchestration/conversations/*.json`，并复用 `agent:event` 展示运行中的实时输出

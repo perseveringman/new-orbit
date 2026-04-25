@@ -1,7 +1,17 @@
 ---
-status: draft
+status: superseded
 created: 2026-04-22
-updated: 2026-04-22
+updated: 2026-04-26
+superseded_by: ADR-008
+superseded_at: 2026-04-26
+---
+
+> ⚠️ **本方案已被 [ADR-008 (AI-Native 与 CLI-first)](../decisions/ADR-008-ai-native-cli-first.md) 覆盖。**
+>
+> 方案 C 设想 Orbit 成为 agent 的运行时控制平面（启动器 + 上下文提供者 + 能力分发器）。v2 简化为"Orbit 运行时继续用 Claude Code CLI，能力通过 `orbit` CLI 暴露"——不需要 Agent Daemon / Broker 架构。新方案见 [`plans/2026-04-26-cli-migration.md`](./2026-04-26-cli-migration.md)。
+>
+> 本文保留作为历史参考。
+
 ---
 
 # Orbit Agent Context Architecture — 方案 C 详细设计
