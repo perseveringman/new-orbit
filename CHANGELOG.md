@@ -34,6 +34,7 @@
 
 ### Fixed
 
+- **Task Chat / Agent 日志重复 key warning**：事件流列表不再把 `event.idx` 当成唯一 React key；`TaskConversationTab` 与 `AgentPanel` 现在使用稳定组合 key，避免 live output 中出现重复 key warning
 - **Claude 对话流正文缺失**：runner 现在会解析真实 Claude stream-json 的嵌套 `assistant.message.content[]` 文本，不再把 live 对话误判成空字符串；task chat 会显示 agent 的逐步输出，而不是只剩 `✅ 执行完成: exit 0`
 - **自主任务误判完成**：dispatch 结束时不再按进程 `exit 0` 自动把任务写成 `done`；现在会先读回任务文件，只有 agent 通过 MCP 明确标记 `done` 才算真正完成，否则会落到 `needs_attention` / 非 done 流程，并在 task chat 里显示“等待补充信息”
 - **任务上下文补全与完成守门**：task prompt 现在会携带任务正文、当前 summary 和最近执行日志，agent 能先判断信息是否充分；conversation completion 也新增兜底，只要任务文件还没被明确标成 `done`，成功退出也会显示为“等待补充信息”而不是 `✅ 执行完成: exit 0`

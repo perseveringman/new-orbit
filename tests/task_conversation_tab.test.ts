@@ -1,9 +1,11 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { AgentEvent } from '../src/shared/agent';
 import type { TaskConversation } from '../src/shared/orchestration';
 import type { TaskRecord } from '../src/shared/schemas';
 import { TaskConversationTimeline } from '../src/renderer/src/components/Tasks/TaskConversationTab';
+import { buildAgentEventKey } from '../src/renderer/src/lib/agentEventKeys';
 
 const task: TaskRecord = {
   id: 'task-1',
@@ -83,5 +85,29 @@ describe('TaskConversationTimeline', () => {
     expect(html).toContain('再补上对话输入框');
     expect(html).toContain('Task Chat');
     expect(html).toContain('Agent is starting');
+  });
+
+  it('builds unique live event keys when events share the same idx', () => {
+    const events: AgentEvent[] = [
+      {
+        idx: 5,
+        at: '2026-04-25T12:06:06.000Z',
+        kind: 'text',
+        text: '先检查任务上下文。'
+      },
+      {
+        idx: 5,
+        at: '2026-04-25T12:06:07.000Z',
+        kind: 'message',
+        text: '再补一条流式输出。'
+      }
+    ];
+    const keys = events.map((event, order) => buildAgentEventKey('segment-2', event, order));
+
+    expect(keys).toEqual([
+      'segment-2:text:5:2026-04-25T12:06:06.000Z:0',
+      'segment-2:message:5:2026-04-25T12:06:07.000Z:1'
+    ]);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });

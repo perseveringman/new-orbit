@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AgentEvent } from '@shared/agent';
 import type { RunSegment, TaskConversation } from '@shared/orchestration';
 import type { TaskRecord } from '@shared/schemas';
+import { buildAgentEventKey } from '../../lib/agentEventKeys';
 import { useAgent } from '../../store/agent';
 import { useTaskConversation } from '../../store/taskConversation';
 
@@ -248,8 +249,11 @@ function LiveEventStream({ segment }: { segment: RunSegment }): JSX.Element | nu
         {events.length === 0 ? (
           <p className="text-xs text-neutral-500">Waiting for live output…</p>
         ) : (
-          events.map((event) => (
-            <p key={event.idx} className="whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-400">
+          events.map((event, order) => (
+            <p
+              key={buildAgentEventKey(segment.id, event, order)}
+              className="whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-400"
+            >
               {event.text}
             </p>
           ))

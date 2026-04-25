@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAgent } from '../../store/agent';
 import type { AgentEvent } from '@shared/agent';
 import type { DistillSuggestHit } from '@shared/ipc';
+import { buildAgentEventKey } from '../../lib/agentEventKeys';
+import { useAgent } from '../../store/agent';
 
 /**
  * Right-sidebar Agent panel. Shows install banner when Claude Code is not
@@ -113,7 +114,7 @@ export function AgentPanel(): JSX.Element {
               )}
             </div>
           </div>
-          <LogStream events={active.events} />
+          <LogStream scope={active.summary.runId} events={active.events} />
           <CostRow />
         </div>
       )}
@@ -133,7 +134,7 @@ function StatusPill({ status }: { status: string }): JSX.Element {
   return <span className={`inline-block h-2 w-2 rounded-full ${color}`} />;
 }
 
-function LogStream({ events }: { events: AgentEvent[] }): JSX.Element {
+function LogStream({ scope, events }: { scope: string; events: AgentEvent[] }): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = ref.current;
@@ -147,8 +148,8 @@ function LogStream({ events }: { events: AgentEvent[] }): JSX.Element {
       {events.length === 0 ? (
         <p className="text-neutral-500">(no events)</p>
       ) : (
-        events.map((e) => (
-          <div key={e.idx} className="whitespace-pre-wrap break-words">
+        events.map((e, order) => (
+          <div key={buildAgentEventKey(scope, e, order)} className="whitespace-pre-wrap break-words">
             <span className="text-neutral-500">[{e.kind}]</span>{' '}
             {renderEventText(e)}
           </div>
