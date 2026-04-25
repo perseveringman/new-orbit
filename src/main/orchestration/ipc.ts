@@ -1,8 +1,10 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { PlanProposal, ProjectRoleBinding } from '@shared/orchestration';
+import type { PlanProposal, PlannerChatMessage, ProjectRoleBinding } from '@shared/orchestration';
+import { isPlannerAgentId } from './planner_agent';
 import { currentSession } from '../fs';
 import { getDispatchService, listBindingReportsForProject } from './dispatch';
+import { plannerChat, plannerGenerateProposal } from './planner_agent';
 import { getPlanProposal, listPlanProposals, publishPlanProposal, savePlanProposal } from './planner';
 import {
   createProjectRoleBinding,
@@ -56,6 +58,20 @@ export function registerOrchestrationIpc(): void {
     if (!vaultPath) throw new Error('no vault');
     return publishPlanProposal(vaultPath, projectUid, proposalId);
   });
+  ipcMain.handle(
+    IPC.planner.chat,
+    async (_e, projectUid: string, agentId: string, messages: PlannerChatMessage[]) => {
+      if (!isPlannerAgentId(agentId)) throw new Error(`unknown planner agent: ${agentId}`);
+      return plannerChat(projectUid, agentId, messages);
+    }
+  );
+  ipcMain.handle(
+    IPC.planner.generateProposal,
+    async (_e, projectUid: string, agentId: string, messages: PlannerChatMessage[]) => {
+      if (!isPlannerAgentId(agentId)) throw new Error(`unknown planner agent: ${agentId}`);
+      return plannerGenerateProposal(projectUid, agentId, messages);
+    }
+  );
 
   ipcMain.handle(IPC.dispatch.status, async (_e, projectUid?: string) => {
     return getDispatchService().status(projectUid);

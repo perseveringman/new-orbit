@@ -64,6 +64,10 @@ import type {
   ImplementationReport,
   PlanProposal,
   PlanPublishResult,
+  PlannerAgentId,
+  PlannerChatMessage,
+  PlannerChatReply,
+  PlannerProposalReply,
   ProjectRoleBinding,
   RoleTemplate,
   RoleTemplateVersion,
@@ -139,7 +143,9 @@ export const IPC = {
     listProposals: 'planner:listProposals',
     getProposal: 'planner:getProposal',
     saveProposal: 'planner:saveProposal',
-    publishProposal: 'planner:publishProposal'
+    publishProposal: 'planner:publishProposal',
+    chat: 'planner:chat',
+    generateProposal: 'planner:generateProposal'
   },
   dispatch: {
     status: 'dispatch:status',
@@ -797,6 +803,16 @@ export interface OrbitApi {
     getProposal(projectUid: string, proposalId: string): Promise<PlanProposal | null>;
     saveProposal(proposal: PlanProposal): Promise<PlanProposal>;
     publishProposal(projectUid: string, proposalId: string): Promise<PlanPublishResult>;
+    chat(
+      projectUid: string,
+      agentId: PlannerAgentId,
+      messages: PlannerChatMessage[]
+    ): Promise<PlannerChatReply>;
+    generateProposal(
+      projectUid: string,
+      agentId: PlannerAgentId,
+      messages: PlannerChatMessage[]
+    ): Promise<PlannerProposalReply>;
   };
   dispatch: {
     status(projectUid?: string): Promise<DispatchSnapshot>;

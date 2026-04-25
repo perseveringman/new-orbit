@@ -34,6 +34,9 @@ export type PlanProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 export const IMPLEMENTATION_REPORT_STATUSES = ['running', 'completed', 'failed', 'released'] as const;
 export type ImplementationReportStatus = (typeof IMPLEMENTATION_REPORT_STATUSES)[number];
 
+export const PLANNER_AGENT_IDS = ['plan-agent', 'architect-agent', 'executor-agent'] as const;
+export type PlannerAgentId = (typeof PLANNER_AGENT_IDS)[number];
+
 export interface RuntimeDescriptor {
   runtimeId: string;
   mode: 'local';
@@ -171,6 +174,23 @@ export interface PlanProposal {
   acceptedAt?: string;
   rejectedAt?: string;
   publishedAt?: string;
+}
+
+export interface PlannerChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  agentId?: PlannerAgentId;
+  content: string;
+}
+
+export interface PlannerChatReply {
+  runId: string;
+  agentId: PlannerAgentId;
+  message: string;
+}
+
+export interface PlannerProposalReply extends PlannerChatReply {
+  proposal: PlanProposal;
 }
 
 export interface PlanPublishResult {

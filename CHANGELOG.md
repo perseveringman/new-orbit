@@ -26,6 +26,7 @@
 ### Changed
 
 - **Planner 交互模型**：Project Planner 从“左侧 proposal 列表 + 主画布”调整为“中间 planner chat + 右侧产物画布”；默认对话 agent 为 Plan Agent，可切换 Architect / Executor 视角，只有生成任务拆分后才显示右侧 React Flow artifact，并在 artifact header 中切换 proposal 版本
+- **Planner Agent 接入**：Project Planner 的 `Send` / `Generate Split` 已接入真实 planner agent；中间 chat 会把完整对话历史发给 main-process planner service 生成回复，`Generate Split` 会让 agent 直接产出并保存 versioned proposal，再同步到右侧 React Flow artifact panel
 
 ### Fixed
 

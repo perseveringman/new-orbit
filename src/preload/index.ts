@@ -61,6 +61,10 @@ import type {
   ImplementationReport,
   PlanProposal,
   PlanPublishResult,
+  PlannerAgentId,
+  PlannerChatMessage,
+  PlannerChatReply,
+  PlannerProposalReply,
   ProjectRoleBinding,
   RoleTemplate,
   RoleTemplateVersion,
@@ -162,7 +166,18 @@ const api: OrbitApi = {
     saveProposal: (proposal: PlanProposal): Promise<PlanProposal> =>
       ipcRenderer.invoke(IPC.planner.saveProposal, proposal),
     publishProposal: (projectUid: string, proposalId: string): Promise<PlanPublishResult> =>
-      ipcRenderer.invoke(IPC.planner.publishProposal, projectUid, proposalId)
+      ipcRenderer.invoke(IPC.planner.publishProposal, projectUid, proposalId),
+    chat: (
+      projectUid: string,
+      agentId: PlannerAgentId,
+      messages: PlannerChatMessage[]
+    ): Promise<PlannerChatReply> => ipcRenderer.invoke(IPC.planner.chat, projectUid, agentId, messages),
+    generateProposal: (
+      projectUid: string,
+      agentId: PlannerAgentId,
+      messages: PlannerChatMessage[]
+    ): Promise<PlannerProposalReply> =>
+      ipcRenderer.invoke(IPC.planner.generateProposal, projectUid, agentId, messages)
   },
   dispatch: {
     status: (projectUid?: string): Promise<DispatchSnapshot> =>

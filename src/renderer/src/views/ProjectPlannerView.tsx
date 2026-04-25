@@ -13,7 +13,13 @@ import {
   type NodeProps,
   type NodeTypes
 } from '@xyflow/react';
-import type { PlanProposal, PlanProposalNode, PlanPublishResult } from '@shared/orchestration';
+import type {
+  PlanProposal,
+  PlanProposalNode,
+  PlanPublishResult,
+  PlannerAgentId,
+  PlannerChatMessage
+} from '@shared/orchestration';
 import { useFiles } from '../store/files';
 
 interface ProjectPlannerViewProps {
@@ -28,15 +34,6 @@ type PlannerFlowNode = Node<PlannerFlowNodeData, 'planNode'>;
 
 const plannerNodeTypes: NodeTypes = {
   planNode: PlannerCanvasNode
-};
-
-type PlannerAgentId = 'plan-agent' | 'architect-agent' | 'executor-agent';
-
-type PlannerChatMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  agentId?: PlannerAgentId;
-  content: string;
 };
 
 const PLANNER_AGENTS: Array<{
@@ -71,6 +68,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [activeAgentId, setActiveAgentId] = useState<PlannerAgentId>('plan-agent');
   const [composer, setComposer] = useState('');
+  const [pendingMode, setPendingMode] = useState<'chat' | 'proposal' | null>(null);
   const [chatMessages, setChatMessages] = useState<PlannerChatMessage[]>([
     {
       id: 'planner-welcome',
@@ -128,92 +126,65 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
     );
   }, [editMode, selected, setFlowEdges, setFlowNodes]);
 
-  async function createDraft(inputSummary = ''): Promise<void> {
+  async function sendMessage(): Promise<void> {
+    if (pendingMode) return;
+    const text = composer.trim();
+    if (!text) return;
+    const nextMessages: PlannerChatMessage[] = [
+      ...chatMessages,
+      { id: makeMessageId('user'), role: 'user', content: text }
+    ];
+    setComposer('');
+    setChatMessages(nextMessages);
+    setPendingMode('chat');
     try {
-      const tasks = await window.orbit.project.getTasks(projectUid);
-      const unfinishedTasks = tasks.filter((task) => task.status !== 'done');
-      const nodes: PlanProposalNode[] =
-        unfinishedTasks.length > 0
-          ? unfinishedTasks.map((task, index) => ({
-              taskUid: task.uid || `temp-${task.id}`,
-              title: task.title || '(untitled)',
-              status: task.status as PlanProposalNode['status'],
-              executionStrategy: 'manual',
-              priority: 'med',
-              tags: task.tags,
-              position: suggestedNodePosition(index)
-            }))
-          : buildSeedNodesFromConversation(inputSummary);
-      const nextVersion = Math.max(0, ...proposals.map((proposal) => proposal.version)) + 1;
-      const trimmedInput = inputSummary.trim();
-
-      const draft: PlanProposal = {
-        proposalId: `draft-${Date.now()}`,
-        projectUid,
-        version: nextVersion,
-        title: trimmedInput
-          ? `Plan: ${clipText(trimmedInput, 48)}`
-          : `Planner Proposal v${nextVersion}`,
-        summary: trimmedInput
-          ? `Generated from planner conversation: ${trimmedInput}`
-          : 'Draft generated from current project tasks',
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        source: trimmedInput ? 'planner' : 'human',
-        nodes,
-        edges: unfinishedTasks.length > 0 ? [] : buildSeedEdges(nodes),
-        inputSummary: trimmedInput || undefined
-      };
-
-      const saved = await window.orbit.planner.saveProposal(draft);
-      toast('Task split proposal created');
-      await refresh();
-      setSelectedProposalId(saved.proposalId);
-      setChatMessages((current) => [
-        ...current,
+      const reply = await window.orbit.planner.chat(projectUid, activeAgentId, nextMessages);
+      setChatMessages([
+        ...nextMessages,
         {
-          id: makeMessageId('assistant'),
+          id: `assistant-${reply.runId}`,
           role: 'assistant',
-          agentId: activeAgentId,
-          content: `Created artifact v${saved.version} with ${saved.nodes.length} tasks. You can inspect, rearrange, or publish it from the right panel.`
+          agentId: reply.agentId,
+          content: reply.message
         }
       ]);
     } catch (e) {
-      toast(`Create task split failed: ${(e as Error).message}`);
+      toast(`Planner chat failed: ${(e as Error).message}`);
+    } finally {
+      setPendingMode(null);
     }
-  }
-
-  function sendMessage(): void {
-    const text = composer.trim();
-    if (!text) return;
-    setComposer('');
-    setChatMessages((current) => [
-      ...current,
-      { id: makeMessageId('user'), role: 'user', content: text },
-      {
-        id: makeMessageId('assistant'),
-        role: 'assistant',
-        agentId: activeAgentId,
-        content:
-          activeAgentId === 'plan-agent'
-            ? 'Captured. Keep refining the goal, constraints, and acceptance criteria; when the split feels stable, generate a task artifact.'
-            : 'Captured. I will keep this perspective in mind while reviewing the eventual task split.'
-      }
-    ]);
   }
 
   async function generateArtifact(): Promise<void> {
+    if (pendingMode) return;
     const text = composer.trim();
+    const nextMessages: PlannerChatMessage[] = text
+      ? [...chatMessages, { id: makeMessageId('user'), role: 'user', content: text }]
+      : chatMessages;
     if (text) {
       setComposer('');
-      setChatMessages((current) => [
-        ...current,
-        { id: makeMessageId('user'), role: 'user', content: text }
-      ]);
+      setChatMessages(nextMessages);
     }
-    const latestInput = text || latestUserInput(chatMessages) || selected?.inputSummary || '';
-    await createDraft(latestInput);
+    setPendingMode('proposal');
+    try {
+      const reply = await window.orbit.planner.generateProposal(projectUid, activeAgentId, nextMessages);
+      setChatMessages([
+        ...nextMessages,
+        {
+          id: `assistant-${reply.runId}`,
+          role: 'assistant',
+          agentId: reply.agentId,
+          content: reply.message
+        }
+      ]);
+      toast('Task split proposal created');
+      await refresh();
+      setSelectedProposalId(reply.proposal.proposalId);
+    } catch (e) {
+      toast(`Generate task split failed: ${(e as Error).message}`);
+    } finally {
+      setPendingMode(null);
+    }
   }
 
   async function saveEdited(): Promise<void> {
@@ -287,9 +258,10 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
         </div>
         <button
           onClick={() => void generateArtifact()}
+          disabled={pendingMode !== null}
           className="rounded-full border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
         >
-          Generate Task Split
+          {pendingMode === 'proposal' ? 'Generating…' : 'Generate Task Split'}
         </button>
       </div>
 
@@ -340,6 +312,12 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                   }
                 />
               ))}
+              {pendingMode && (
+                <div className="text-xs text-neutral-500">
+                  {PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.label} is{' '}
+                  {pendingMode === 'proposal' ? 'generating a task split…' : 'thinking…'}
+                </div>
+              )}
               {!selected && (
                 <div className="rounded-2xl border border-dashed border-neutral-300 bg-white/70 p-4 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60">
                   No task split artifact yet. Continue the conversation, then generate a versioned
@@ -350,14 +328,15 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
 
             <form
               className="shrink-0 border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950"
-              onSubmit={(event) => {
-                event.preventDefault();
-                sendMessage();
-              }}
-            >
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void sendMessage();
+                }}
+              >
               <textarea
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
+                disabled={pendingMode !== null}
                 placeholder={`Message ${PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.label ?? 'agent'}...`}
                 className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
               />
@@ -369,15 +348,17 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                   <button
                     type="button"
                     onClick={() => void generateArtifact()}
+                    disabled={pendingMode !== null}
                     className="rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white"
                   >
-                    Generate Split
+                    {pendingMode === 'proposal' ? 'Generating…' : 'Generate Split'}
                   </button>
                   <button
                     type="submit"
+                    disabled={pendingMode !== null}
                     className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   >
-                    Send
+                    {pendingMode === 'chat' ? 'Thinking…' : 'Send'}
                   </button>
                 </div>
               </div>
@@ -792,69 +773,6 @@ function suggestedNodePosition(index: number): { x: number; y: number } {
 
 function makeMessageId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function latestUserInput(messages: PlannerChatMessage[]): string | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === 'user') return message.content;
-  }
-  return null;
-}
-
-function clipText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 1)}…`;
-}
-
-function buildSeedNodesFromConversation(inputSummary: string): PlanProposalNode[] {
-  const seed = inputSummary.trim() || 'Clarify and deliver the requested outcome';
-  return [
-    {
-      taskUid: `plan-discovery-${Date.now()}`,
-      title: 'Clarify scope and success criteria',
-      description: seed,
-      status: 'todo',
-      executionStrategy: 'manual',
-      recommendedOwnerType: 'human',
-      priority: 'high',
-      tags: ['planning'],
-      position: suggestedNodePosition(0)
-    },
-    {
-      taskUid: `plan-implementation-${Date.now()}`,
-      title: 'Implement the agreed task split',
-      description: 'Turn the accepted scope into concrete implementation work.',
-      status: 'waiting',
-      executionStrategy: 'autonomous',
-      recommendedOwnerType: 'agent',
-      recommendedRole: 'executor',
-      priority: 'med',
-      tags: ['implementation'],
-      position: suggestedNodePosition(1)
-    },
-    {
-      taskUid: `plan-validation-${Date.now()}`,
-      title: 'Validate and prepare handoff',
-      description: 'Run checks, summarize outcomes, and capture follow-up work.',
-      status: 'waiting',
-      executionStrategy: 'manual',
-      recommendedOwnerType: 'either',
-      recommendedRole: 'reviewer',
-      priority: 'med',
-      tags: ['validation'],
-      position: suggestedNodePosition(2)
-    }
-  ];
-}
-
-function buildSeedEdges(nodes: PlanProposalNode[]): PlanProposal['edges'] {
-  return nodes.slice(1).map((node, index) => ({
-    id: `edge-${nodes[index].taskUid}-${node.taskUid}`,
-    fromTaskUid: nodes[index].taskUid,
-    toTaskUid: node.taskUid,
-    kind: 'depends_on'
-  }));
 }
 
 function buildCanvasNodes(nodes: PlanProposalNode[]): Array<PlannerFlowNode> {
