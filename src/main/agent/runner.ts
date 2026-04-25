@@ -1,9 +1,9 @@
-import { ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { promises as fs, createWriteStream, WriteStream } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { nanoid } from 'nanoid';
-import { ORBIT_DIR, ORBIT_LOGS_DIR } from '@shared/constants';
+import { ORBIT_DIR, ORBIT_LOGS_DIR, PROJECT_ORBIT_DIR, PROJECT_ORBIT_MCP_CONFIG } from '@shared/constants';
 import {
   ORBIT_HOOK_PORT_ENV,
   ORBIT_HOOK_TOKEN_ENV,
@@ -52,6 +52,8 @@ export interface SpawnOpts {
   vaultPath: string;
   /** 10-minute idle timeout override (ms). */
   idleTimeoutMs?: number;
+  /** Input contract for the Claude subprocess. */
+  inputMode?: 'one-shot' | 'stream-json';
   /**
    * Hydration resolver. Called when the subprocess emits
    * `@orbit:search <query>`. Should return a plain-text reply that will
@@ -370,7 +372,7 @@ export class AgentRunner extends EventEmitter {
   private readonly opts: SpawnOpts;
   private readonly donePromise: Promise<void>;
   private resolveDone!: () => void;
-  private child: ChildProcessWithoutNullStreams | null = null;
+  private child: ReturnType<typeof spawn> | null = null;
   private stdoutBuf = '';
   private stderrBuf = '';
   private events: AgentEvent[] = [];
@@ -426,6 +428,7 @@ export class AgentRunner extends EventEmitter {
   async start(): Promise<void> {
     const spawner = this.opts.spawner ?? spawn;
     const env: NodeJS.ProcessEnv = { ...process.env };
+    const inputMode = this.opts.inputMode ?? 'one-shot';
     if (this.opts.apiKey) env['ANTHROPIC_API_KEY'] = this.opts.apiKey;
     if (this.opts.hookConfig) {
       await ensureClaudeHookFiles(this.opts.cwd, this.runId, this.opts.hookConfig);
@@ -450,16 +453,21 @@ export class AgentRunner extends EventEmitter {
       this.opts.prompt,
       '--output-format',
       'stream-json',
-      '--input-format',
-      'stream-json',
       '--verbose'
     ];
+    const mcpConfigPath = await resolveOrbitMcpConfig(this.opts.cwd);
+    if (mcpConfigPath) {
+      args.push('--mcp-config', mcpConfigPath);
+    }
+    if (inputMode === 'stream-json') {
+      args.push('--input-format', 'stream-json');
+    }
     try {
       this.child = spawner(this.opts.claudePath, args, {
         cwd: this.opts.cwd,
         env,
-        stdio: ['pipe', 'pipe', 'pipe']
-      }) as ChildProcessWithoutNullStreams;
+        stdio: [inputMode === 'stream-json' ? 'pipe' : 'ignore', 'pipe', 'pipe']
+      });
     } catch (e) {
       await this.finish('error', (e as Error).message, null);
       throw e;
@@ -469,10 +477,10 @@ export class AgentRunner extends EventEmitter {
     this.status = 'running';
     this.armIdleTimer();
 
-    this.child.stdout.setEncoding('utf8');
-    this.child.stderr.setEncoding('utf8');
-    this.child.stdout.on('data', (chunk: string) => this.onStdout(chunk));
-    this.child.stderr.on('data', (chunk: string) => this.onStderr(chunk));
+    this.child.stdout?.setEncoding('utf8');
+    this.child.stderr?.setEncoding('utf8');
+    this.child.stdout?.on('data', (chunk: string) => this.onStdout(chunk));
+    this.child.stderr?.on('data', (chunk: string) => this.onStderr(chunk));
     this.child.on('error', (e) => {
       this.push({
         idx: this.eventIdx++,
@@ -544,8 +552,9 @@ export class AgentRunner extends EventEmitter {
   }
 
   private handleLine(line: string): void {
-    // Hydration interception fires regardless of encoding.
-    const hyd = parseHydrationLine(line);
+    const stdinProtocolEnabled = (this.opts.inputMode ?? 'one-shot') === 'stream-json';
+    // Hydration / tool fallback is only active for explicit stdin-interactive runs.
+    const hyd = stdinProtocolEnabled ? parseHydrationLine(line) : null;
     if (hyd && this.opts.hydrate) {
       void this.opts
         .hydrate(hyd.query)
@@ -567,7 +576,7 @@ export class AgentRunner extends EventEmitter {
       return;
     }
     // R6: tool invocation fallback — parsed from a bare stdout line.
-    const inv = parseToolInvocationLine(line);
+    const inv = stdinProtocolEnabled ? parseToolInvocationLine(line) : null;
     if (inv && this.opts.onToolInvocation) {
       void this.opts
         .onToolInvocation(inv.name, inv.args)
@@ -635,7 +644,7 @@ export class AgentRunner extends EventEmitter {
   }
 
   private writeStdin(text: string): void {
-    if (!this.child || this.child.stdin.destroyed) return;
+    if (!this.child?.stdin || this.child.stdin.destroyed) return;
     const payload = `${JSON.stringify({ role: 'user', content: text })}\n`;
     try {
       this.child.stdin.write(payload);
@@ -790,6 +799,16 @@ export class AgentRunner extends EventEmitter {
       delete map[this.runId];
       await writeActive(this.opts.vaultPath, map);
     }
+  }
+}
+
+async function resolveOrbitMcpConfig(cwd: string): Promise<string | null> {
+  const configPath = path.join(cwd, PROJECT_ORBIT_DIR, PROJECT_ORBIT_MCP_CONFIG);
+  try {
+    await fs.access(configPath);
+    return configPath;
+  } catch {
+    return null;
   }
 }
 

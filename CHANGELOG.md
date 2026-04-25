@@ -32,8 +32,8 @@
 
 ### Fixed
 
-- **自动认领任务空白运行态**：恢复 Claude runner 的 `-p <prompt>` 启动方式，避免 dispatch 认领后进程挂在“等 stdin”状态不真正起跑；Task Chat 同时补上运行中占位态，不再依赖首条 agent event 才显示“正在启动/执行中”
-- **Claude runner stdin / stderr 误判**：runner 改为使用 `stream-json` stdin 并在启动时立即发送首条 user message，避免 Claude CLI 因空 pipe 打出 `no stdin data received` warning；同时 dispatch 完成判定会忽略运行中的中间 error event，避免 stderr warning 被误判成任务失败
+- **自动认领任务卡死启动态**：Claude runner 改为默认 one-shot 执行，不再把 task / planner / distill run 混入 stdin 回写协议；子进程现在以 `-p <prompt> --output-format stream-json` 启动并直接忽略 stdin，避免进程活着却一直不产出首条事件
+- **任务执行上下文挂载**：task run 会优先在所属 worktree / project / area 目录启动，而不是退回 vault 根目录；runner 还会显式注入本地 `.orbit/.mcp.json`，即使项目处于 isolated agent exposure，也能稳定拿到 Orbit MCP 工具；dispatch 仍会忽略运行中的中间 stderr warning，避免被误判成失败
 - **GUI 启动 PATH 修复**：main process 启动最前面新增 PATH bootstrap，macOS / Linux 从 Dock / Launchpad 启动时会先恢复 login shell 的 PATH，并补齐 `/opt/homebrew/bin`、`/usr/local/bin`、`~/.local/bin` fallback，避免 `claude` / `codex` / `git` 等 CLI 因 `ENOENT` 无法拉起
 - **Dashboard Areas 计数口径**：Dashboard 的 `Areas` 卡片改为按真实 area 目录（`workspace.areas`）计数，不再把 `02_Areas/` 下 frontmatter 为 `type: area` 的文档文件重复算进总数
 - **Changes 面板浏览器兼容性**：移除 `buildChangeRows.ts` 对 renderer 中 `node:path` 的依赖，改用浏览器安全的 POSIX 风格字符串路径处理，修复 Workspace Inspector 的 Changes tab 打开即崩溃

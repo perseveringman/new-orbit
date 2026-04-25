@@ -58,13 +58,14 @@ export function composePrompt({ persona, taskContext, userAsk, taskBoundary }: C
     `# Task context\n${taskContext.trim()}`,
     `# Your ask\n${userAsk.trim() || '(proceed with the task as described above)'}`,
     taskBoundary ? buildTaskBoundary(taskBoundary) : null,
-    HYDRATION_FOOTER
+    ORBIT_RUNTIME_FOOTER
   ].filter(Boolean);
   return parts.join('\n\n');
 }
 
-export const HYDRATION_FOOTER = `# Context hydration
-You may request more context at any time by emitting a single line that starts with \`@orbit:search <query>\`. Orbit will respond with the top search hits from the vault as a follow-up message. Use this sparingly.`;
+export const ORBIT_RUNTIME_FOOTER = `# Orbit runtime
+Prefer Orbit MCP tools and local project context when they are available in the working directory. Do not invent custom stdout protocols to ask for more context.`;
+export const HYDRATION_FOOTER = ORBIT_RUNTIME_FOOTER;
 
 function buildTaskBoundary(task: { title: string; uid?: string }): string {
   return `# Boundary

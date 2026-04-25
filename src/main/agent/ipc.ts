@@ -21,10 +21,7 @@ import { LIMITS } from '@shared/limits';
 import { detectClaude } from './cli';
 import { getPool, type PoolEvent } from './pool';
 import { loadPersona, composePrompt } from './persona';
-import {
-  buildTaskContext,
-  formatHydrationReply
-} from './context';
+import { buildTaskContext } from './context';
 import {
   BudgetGate,
   SafetyGate,
@@ -128,6 +125,25 @@ async function resolveTerminalRoom(
   const area = areas.find((item) => item.uid === uid);
   if (area) return { kind: 'area', path: area.path };
   return null;
+}
+
+async function resolveTaskCwd(
+  vaultPath: string,
+  task: { project_uid?: string; area_uid?: string },
+  worktreePath?: string
+): Promise<string> {
+  if (worktreePath) return worktreePath;
+  if (task.project_uid) {
+    const projects = await listProjects(vaultPath);
+    const project = projects.find((item) => item.uid === task.project_uid);
+    if (project) return project.legacy ? path.dirname(project.path) : project.path;
+  }
+  if (task.area_uid) {
+    const areas = await listAreas(vaultPath);
+    const area = areas.find((item) => item.uid === task.area_uid);
+    if (area) return area.path;
+  }
+  return vaultPath;
 }
 
 async function ensureHookRuntime(): Promise<HookServer> {
@@ -556,7 +572,7 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
     (settings as unknown as { anthropicApiKey?: string }).anthropicApiKey ??
     process.env['ANTHROPIC_API_KEY'];
 
-  const cwd = args.worktreePath ?? sess.vault;
+  const cwd = await resolveTaskCwd(sess.vault, task, args.worktreePath);
 
   const safety = SafetyGate.check({ cwd, prompt, vaultPath: sess.vault });
   if (!safety.ok) {
@@ -582,13 +598,7 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       title: task.title,
       vaultPath: sess.vault,
       hookConfig: await getHookRuntimeConfig(),
-      extraEnv,
-      hydrate: async (query: string): Promise<string> => {
-        const s = currentSession();
-        if (!s) return formatHydrationReply(query, []);
-        const hits = await s.search.search(query, 8);
-        return formatHydrationReply(query, hits);
-      }
+      extraEnv
     } as const;
     const opts = apiKey ? { ...spawnOpts, apiKey } : { ...spawnOpts };
     const runner = await getPool().spawn(opts);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { spawn as nodeSpawn } from 'node:child_process';
+import type { SpawnOptions, spawn as nodeSpawn } from 'node:child_process';
 import * as nodeFs from 'node:fs';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -49,18 +49,22 @@ function capturingSpawner(): {
   spawn: typeof nodeSpawn;
   last: () => FakeChild;
   lastArgs: () => string[];
+  lastOptions: () => SpawnOptions | undefined;
 } {
   let last: FakeChild | null = null;
   let lastArgs: string[] = [];
-  const s = ((_: string, args?: readonly string[]): FakeChild => {
+  let lastOptions: SpawnOptions | undefined;
+  const s = ((_: string, args?: readonly string[], options?: SpawnOptions): FakeChild => {
     last = new FakeChild();
     lastArgs = [...(args ?? [])];
+    lastOptions = options;
     return last;
   }) as unknown as typeof nodeSpawn;
   return {
     spawn: s,
     last: () => last as FakeChild,
-    lastArgs: () => lastArgs
+    lastArgs: () => lastArgs,
+    lastOptions: () => lastOptions
   };
 }
 
@@ -174,11 +178,12 @@ describe('AgentRunner stream parsing', () => {
     }
   });
 
-  it('starts Claude with -p prompt while keeping stream-json stdin available for later messages', async () => {
+  it('starts Claude with -p prompt in one-shot mode and auto-loads local MCP config', async () => {
     const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-input-'));
     try {
       await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
-      const { spawn, last, lastArgs } = capturingSpawner();
+      await fs.writeFile(path.join(vault, '.orbit', '.mcp.json'), '{"mcpServers":{}}\n', 'utf8');
+      const { spawn, last, lastArgs, lastOptions } = capturingSpawner();
 
       const runner = new AgentRunner({
         claudePath: '/bin/true',
@@ -193,13 +198,14 @@ describe('AgentRunner stream parsing', () => {
       await runner.start();
       const child = last();
       await new Promise((resolve) => setTimeout(resolve, 20));
-      const stdinPayload = String(child.stdin.read() ?? '');
 
       expect(lastArgs()).toContain('-p');
       expect(lastArgs()).toContain('plan the change');
-      expect(lastArgs()).toContain('--input-format');
-      expect(lastArgs()).toContain('stream-json');
-      expect(stdinPayload).toBe('');
+      expect(lastArgs()).not.toContain('--input-format');
+      expect(lastArgs()).toContain('--mcp-config');
+      expect(lastArgs()).toContain(path.join(vault, '.orbit', '.mcp.json'));
+      expect(lastOptions()?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+      expect(child.stdin.read()).toBeNull();
 
       await runner.stop('test');
     } finally {

@@ -30,7 +30,7 @@ function fakeSpawner(): { spawn: typeof nodeSpawn; last: () => FakeChild } {
 }
 
 describe('AgentRunner tool-invocation fallback (R6)', () => {
-  it('routes `@orbit:tool:<name> <json>` stdout lines to onToolInvocation and writes reply to stdin', async () => {
+  it('routes `@orbit:tool:<name> <json>` stdout lines to onToolInvocation and writes reply to stdin when stream-json input is enabled', async () => {
     const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-tool-'));
     try {
       await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
@@ -46,6 +46,7 @@ describe('AgentRunner tool-invocation fallback (R6)', () => {
         taskId: null,
         vaultPath: vault,
         spawner: spawn,
+        inputMode: 'stream-json',
         onToolInvocation: async (name, args) => {
           invokedName = name;
           invokedArgs = args;
