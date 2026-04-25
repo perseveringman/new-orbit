@@ -21,6 +21,8 @@ import { registerEnvIpc } from './env/ipc';
 import { registerDistillIpc, ensureVectorStore, closeVectorStore } from './distill/ipc';
 import { registerR6Ipc, startDailyReviewScheduler } from './r6_ipc';
 import { ensureOrchestrationForVault, registerOrchestrationIpc, shutdownOrchestration } from './orchestration/ipc';
+import { configureActivityEmitter } from './activity';
+import { registerActivityIpc } from './activity/ipc';
 import * as terminal from './terminal/pty_manager';
 import { runWorktreeGc, startWorktreeGcScheduler } from './worktree_gc';
 import {
@@ -101,6 +103,7 @@ async function pickDirectory(mode: 'open' | 'create'): Promise<string | null> {
 }
 
 async function attachVaultRuntime(vaultPath: string): Promise<void> {
+  configureActivityEmitter(vaultPath);
   terminal.setVaultRoot(vaultPath);
   await openFsSession(vaultPath);
   await reconcileOnStart(vaultPath);
@@ -231,6 +234,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.workspace.current, () => currentVault);
   ipcMain.handle(IPC.workspace.close, async () => {
     currentVault = null;
+    configureActivityEmitter(null);
     await terminal.killAll();
     terminal.setVaultRoot(null);
     await closeVectorStore();
@@ -316,6 +320,7 @@ function registerIpc(): void {
   registerR6Ipc();
   registerOrchestrationIpc();
   registerAreaIpc(() => currentVault?.path ?? null);
+  registerActivityIpc(() => currentVault?.path ?? null);
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);
 

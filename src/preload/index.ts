@@ -55,6 +55,7 @@ import type {
   GitHubWorkspaceRepository
 } from '@shared/github';
 import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
+import type { ActivityEvent, ActivityQueryFilter } from '@shared/activity';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   ConversationTurn,
@@ -327,6 +328,10 @@ const api: OrbitApi = {
     reindex: (): Promise<{ count: number }> => ipcRenderer.invoke(IPC.distill.reindex),
     experienceFor: (runId: string): Promise<DistillSuggestHit[]> =>
       ipcRenderer.invoke(IPC.distill.experienceFor, runId)
+  },
+  activity: {
+    query: (filter?: ActivityQueryFilter): Promise<ActivityEvent[]> =>
+      ipcRenderer.invoke(IPC.activity.query, filter)
   },
   terminal: {
     open: (args: TerminalOpenArgsDTO): Promise<TerminalSessionInfoDTO> =>

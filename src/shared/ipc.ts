@@ -31,6 +31,7 @@ import type {
   StartTaskResult,
   TailQuery
 } from './agent';
+import type { ActivityEvent, ActivityQueryFilter } from './activity';
 import type { BudgetSettings } from './schemas';
 import type {
   ChangesSummary,
@@ -227,6 +228,9 @@ export const IPC = {
     suggest: 'distill:suggest',
     reindex: 'distill:reindex',
     experienceFor: 'distill:experienceFor'
+  },
+  activity: {
+    query: 'activity:query'
   },
   terminal: {
     open: 'terminal:open',
@@ -931,6 +935,9 @@ export interface OrbitApi {
     suggest(taskId: string): Promise<DistillSuggestHit[]>;
     reindex(): Promise<{ count: number }>;
     experienceFor(runId: string): Promise<DistillSuggestHit[]>;
+  };
+  activity: {
+    query(filter?: ActivityQueryFilter): Promise<ActivityEvent[]>;
   };
   terminal: {
     open(args: TerminalOpenArgsDTO): Promise<TerminalSessionInfoDTO>;
