@@ -63,6 +63,16 @@ import type {
   ProposalSubmitInput,
   ProposalSyncSnapshot
 } from '@shared/approval';
+import type {
+  InboxCaptureInput,
+  InboxDismissInput,
+  InboxEvent,
+  InboxItem,
+  InboxListFilter,
+  InboxListResult,
+  InboxMessageInput,
+  InboxResolveInput
+} from '@shared/inbox';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   ConversationTurn,
@@ -364,6 +374,31 @@ const api: OrbitApi = {
       }): void => cb(event);
       ipcRenderer.on(IPC.approval.event, listener);
       return () => ipcRenderer.removeListener(IPC.approval.event, listener);
+    }
+  },
+  inbox: {
+    emitMessage: (input: InboxMessageInput): Promise<InboxItem> =>
+      ipcRenderer.invoke(IPC.inbox.emitMessage, input),
+    emitCapture: (input: InboxCaptureInput): Promise<InboxItem> =>
+      ipcRenderer.invoke(IPC.inbox.emitCapture, input),
+    list: (filter?: InboxListFilter): Promise<InboxListResult> =>
+      ipcRenderer.invoke(IPC.inbox.list, filter),
+    get: (id: string): Promise<InboxItem | null> => ipcRenderer.invoke(IPC.inbox.get, id),
+    resolve: (
+      id: string,
+      input?: InboxResolveInput
+    ): Promise<{ item: InboxItem; proposal?: Proposal | null }> =>
+      ipcRenderer.invoke(IPC.inbox.resolve, id, input),
+    dismiss: (
+      id: string,
+      input?: InboxDismissInput
+    ): Promise<{ item: InboxItem; proposal?: Proposal | null }> =>
+      ipcRenderer.invoke(IPC.inbox.dismiss, id, input),
+    archive: (id: string): Promise<InboxItem> => ipcRenderer.invoke(IPC.inbox.archive, id),
+    onEvent: (cb: (event: InboxEvent) => void) => {
+      const listener = (_: unknown, event: InboxEvent): void => cb(event);
+      ipcRenderer.on(IPC.inbox.event, listener);
+      return () => ipcRenderer.removeListener(IPC.inbox.event, listener);
     }
   },
   terminal: {

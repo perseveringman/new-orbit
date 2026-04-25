@@ -4,6 +4,7 @@ import { emitActivity } from '../activity';
 import { createTaskFromApprovedProposal, type NewTaskApprovalResult } from './actions';
 import { resolveProposalState } from './state';
 import { createApprovalStore, type ApprovalStore } from './store';
+import { createProposalInboxSync, type ProposalInboxSync } from '../inbox/proposal';
 import {
   ProposalResolveInputSchema,
   ProposalSchema,
@@ -35,6 +36,7 @@ export interface ApprovalServiceOptions {
   emitActivity?: ProposalActivityEmitter;
   materializeNewTask?: NewTaskMaterializer;
   onSync?: ProposalSyncListener;
+  syncInbox?: ProposalInboxSync | false;
 }
 
 export interface ResolveProposalResult {
@@ -48,6 +50,7 @@ export class ApprovalService {
   private readonly activity: ProposalActivityEmitter;
   private readonly materializeNewTask?: NewTaskMaterializer;
   private readonly onSync?: ProposalSyncListener;
+  private readonly syncInbox?: ProposalInboxSync | false;
 
   constructor(
     private readonly store: ApprovalStore,
@@ -58,6 +61,7 @@ export class ApprovalService {
     this.activity = options.emitActivity ?? emitActivity;
     this.materializeNewTask = options.materializeNewTask;
     this.onSync = options.onSync;
+    this.syncInbox = options.syncInbox;
   }
 
   async submit(input: ProposalSubmitInput): Promise<Proposal> {
@@ -80,6 +84,7 @@ export class ApprovalService {
       })
     );
     const stored = await this.store.submit(proposal);
+    if (this.syncInbox) await this.syncInbox.submit(stored);
     this.emitSubmitted(stored);
     this.emitSync(stored);
     return stored;
@@ -105,6 +110,7 @@ export class ApprovalService {
       }
       return draft;
     });
+    if (this.syncInbox) await this.syncInbox.resolve(proposal);
     this.emitResolved(proposal);
     this.emitSync(proposal);
     return { proposal, sync: toProposalSyncSnapshot(proposal) };
@@ -170,6 +176,13 @@ export function createApprovalServiceForVault(
 ): ApprovalService {
   return new ApprovalService(createApprovalStore(vaultPath), {
     ...options,
+    syncInbox:
+      options.syncInbox === undefined
+        ? createProposalInboxSync(vaultPath, {
+            now: options.now,
+            emitActivity: options.emitActivity
+          })
+        : options.syncInbox,
     materializeNewTask: (proposal, approvedAt) =>
       createTaskFromApprovedProposal(vaultPath, proposal, approvedAt)
   });

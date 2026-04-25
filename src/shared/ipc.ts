@@ -39,6 +39,16 @@ import type {
   ProposalSubmitInput,
   ProposalSyncSnapshot
 } from './approval';
+import type {
+  InboxCaptureInput,
+  InboxDismissInput,
+  InboxEvent,
+  InboxItem,
+  InboxListFilter,
+  InboxListResult,
+  InboxMessageInput,
+  InboxResolveInput
+} from './inbox';
 import type { BudgetSettings } from './schemas';
 import type {
   ChangesSummary,
@@ -245,6 +255,16 @@ export const IPC = {
     list: 'approval:list',
     get: 'approval:get',
     event: 'approval:event'
+  },
+  inbox: {
+    emitMessage: 'inbox:emitMessage',
+    emitCapture: 'inbox:emitCapture',
+    list: 'inbox:list',
+    get: 'inbox:get',
+    resolve: 'inbox:resolve',
+    dismiss: 'inbox:dismiss',
+    archive: 'inbox:archive',
+    event: 'inbox:event'
   },
   terminal: {
     open: 'terminal:open',
@@ -967,6 +987,22 @@ export interface OrbitApi {
     onEvent(
       cb: (event: { type: string; proposal: Proposal; snapshot: ProposalSyncSnapshot }) => void
     ): () => void;
+  };
+  inbox: {
+    emitMessage(input: InboxMessageInput): Promise<InboxItem>;
+    emitCapture(input: InboxCaptureInput): Promise<InboxItem>;
+    list(filter?: InboxListFilter): Promise<InboxListResult>;
+    get(id: string): Promise<InboxItem | null>;
+    resolve(
+      id: string,
+      input?: InboxResolveInput
+    ): Promise<{ item: InboxItem; proposal?: Proposal | null }>;
+    dismiss(
+      id: string,
+      input?: InboxDismissInput
+    ): Promise<{ item: InboxItem; proposal?: Proposal | null }>;
+    archive(id: string): Promise<InboxItem>;
+    onEvent(cb: (event: InboxEvent) => void): () => void;
   };
   terminal: {
     open(args: TerminalOpenArgsDTO): Promise<TerminalSessionInfoDTO>;

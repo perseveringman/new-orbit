@@ -24,6 +24,7 @@ import { ensureOrchestrationForVault, registerOrchestrationIpc, shutdownOrchestr
 import { configureActivityEmitter } from './activity';
 import { registerActivityIpc } from './activity/ipc';
 import { registerApprovalIpc } from './approval';
+import { registerInboxIpc } from './inbox';
 import * as terminal from './terminal/pty_manager';
 import { runWorktreeGc, startWorktreeGcScheduler } from './worktree_gc';
 import {
@@ -326,6 +327,7 @@ function registerIpc(): void {
   registerAreaIpc(() => currentVault?.path ?? null);
   registerActivityIpc(() => currentVault?.path ?? null);
   registerApprovalIpc(() => currentVault?.path ?? null);
+  registerInboxIpc(() => currentVault?.path ?? null);
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);
 
