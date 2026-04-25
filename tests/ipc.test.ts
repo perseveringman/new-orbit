@@ -6,8 +6,11 @@ describe('IPC contract', () => {
   it('exposes the required namespaces', () => {
     expect(Object.keys(IPC).sort()).toEqual(
       [
+        'activity',
         'agent',
+        'approval',
         'area',
+        'autoRunner',
         'conversation',
         'dispatch',
         'distill',
@@ -16,6 +19,7 @@ describe('IPC contract', () => {
         'fs',
         'git',
         'github',
+        'inbox',
         'migrations',
         'nightShift',
         'para',
