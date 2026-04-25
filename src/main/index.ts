@@ -1,5 +1,5 @@
 import './path_bootstrap_init';
-import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, dialog, globalShortcut, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { IPC } from '@shared/ipc';
@@ -25,6 +25,7 @@ import { configureActivityEmitter } from './activity';
 import { registerActivityIpc } from './activity/ipc';
 import { registerApprovalIpc } from './approval';
 import { registerInboxIpc } from './inbox';
+import { QUICK_CAPTURE_ACCELERATOR, broadcastQuickCaptureOpen, registerCaptureIpc } from './capture';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
 import * as terminal from './terminal/pty_manager';
@@ -91,6 +92,16 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
+}
+
+function registerQuickCaptureShortcut(): void {
+  globalShortcut.register(QUICK_CAPTURE_ACCELERATOR, () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+    broadcastQuickCaptureOpen();
+  });
 }
 
 function notImplemented(): never {
@@ -332,6 +343,7 @@ function registerIpc(): void {
   registerActivityIpc(() => currentVault?.path ?? null);
   registerApprovalIpc(() => currentVault?.path ?? null);
   registerInboxIpc(() => currentVault?.path ?? null);
+  registerCaptureIpc(() => currentVault?.path ?? null);
   registerAutoRunnerIpc();
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);
@@ -366,6 +378,7 @@ app.whenReady().then(async () => {
     currentVault = null;
   }
   createWindow();
+  registerQuickCaptureShortcut();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -377,5 +390,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  globalShortcut.unregister(QUICK_CAPTURE_ACCELERATOR);
   void stopCliServer();
 });

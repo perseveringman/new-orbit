@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Capture / Quick Capture 基础能力**：新增 Feed RSS 订阅与去重刷新、Feed History 淡出、Library 保存/阅读进度/Promote to Resource、Thoughts 生命周期与 `⌘⇧I` Thought-only Quick Capture 浮层，并接入 Inbox v2、IPC/preload 类型和 Activity Log。
 - **Orbit v2 阶段 4 Auto-runner 调度器**：新增 `src/main/auto_runner/` dispatcher / scheduler / event bridge / settings，按 ready-set 自动拾取已授权且依赖满足的 `todo` task，支持并发与小时限额、Sandbox unsupported Inbox 求助事件、Activity Log 运行事件，以及 `orbit auto-runner status/start/stop` 控制。
 - **Orbit v2 阶段 3 任务依赖系统**：新增 `depends_on` 拓扑图、循环检测、ready-set 计算、依赖删除/归档级联阻塞与 C1 Inbox 警示，并让 Planner publish 物化依赖边。
 - **Orbit v2 阶段 2 Inbox 枢纽**：完成 Inbox v2 的 message/capture/archive 存储、事件 emitter、Activity Log 接入、Proposal 双通道同步、IPC 合约与 renderer 的 Capture/Messages/Archive + Stage View 基础 UI。

@@ -50,6 +50,20 @@ import type {
   InboxMessageInput,
   InboxResolveInput
 } from './inbox';
+import type {
+  AddFeedSubscriptionInput,
+  CreateThoughtInput,
+  FeedRefreshResult,
+  FeedSubscription,
+  LibraryReadingUpdateInput,
+  LinkThoughtInput,
+  PromoteLibraryArticleInput,
+  PromoteResult,
+  PromoteThoughtInput,
+  SaveFeedItemInput,
+  SaveLibraryArticleInput,
+  UpdateThoughtInput
+} from './capture';
 import type { BudgetSettings } from './schemas';
 import type {
   ChangesSummary,
@@ -266,6 +280,39 @@ export const IPC = {
     dismiss: 'inbox:dismiss',
     archive: 'inbox:archive',
     event: 'inbox:event'
+  },
+  capture: {
+    feed: {
+      listSubscriptions: 'capture:feed:listSubscriptions',
+      addSubscription: 'capture:feed:addSubscription',
+      removeSubscription: 'capture:feed:removeSubscription',
+      refresh: 'capture:feed:refresh',
+      listPending: 'capture:feed:listPending',
+      fadeOut: 'capture:feed:fadeOut',
+      saveToLibrary: 'capture:feed:saveToLibrary',
+      history: 'capture:feed:history'
+    },
+    library: {
+      save: 'capture:library:save',
+      list: 'capture:library:list',
+      get: 'capture:library:get',
+      readContent: 'capture:library:readContent',
+      updateReading: 'capture:library:updateReading',
+      promote: 'capture:library:promote',
+      dismiss: 'capture:library:dismiss'
+    },
+    thought: {
+      create: 'capture:thought:create',
+      list: 'capture:thought:list',
+      get: 'capture:thought:get',
+      update: 'capture:thought:update',
+      promote: 'capture:thought:promote',
+      link: 'capture:thought:link',
+      dismiss: 'capture:thought:dismiss'
+    }
+  },
+  quickCapture: {
+    open: 'quickCapture:open'
   },
   terminal: {
     open: 'terminal:open',
@@ -1010,6 +1057,39 @@ export interface OrbitApi {
     ): Promise<{ item: InboxItem; proposal?: Proposal | null }>;
     archive(id: string): Promise<InboxItem>;
     onEvent(cb: (event: InboxEvent) => void): () => void;
+  };
+  capture: {
+    feed: {
+      listSubscriptions(): Promise<FeedSubscription[]>;
+      addSubscription(input: AddFeedSubscriptionInput): Promise<FeedSubscription>;
+      removeSubscription(id: string): Promise<FeedSubscription | null>;
+      refresh(subscriptionId?: string): Promise<FeedRefreshResult[]>;
+      listPending(): Promise<InboxItem[]>;
+      fadeOut(id: string): Promise<InboxItem>;
+      saveToLibrary(id: string, input?: SaveFeedItemInput): Promise<InboxItem>;
+      history(): Promise<InboxItem[]>;
+    };
+    library: {
+      save(input: SaveLibraryArticleInput): Promise<InboxItem>;
+      list(status?: InboxItem['status']): Promise<InboxItem[]>;
+      get(id: string): Promise<InboxItem | null>;
+      readContent(id: string): Promise<string>;
+      updateReading(id: string, input: LibraryReadingUpdateInput): Promise<InboxItem>;
+      promote(id: string, input?: PromoteLibraryArticleInput): Promise<PromoteResult>;
+      dismiss(id: string, actor?: 'user' | 'agent'): Promise<InboxItem>;
+    };
+    thought: {
+      create(input: CreateThoughtInput): Promise<InboxItem>;
+      list(): Promise<InboxItem[]>;
+      get(id: string): Promise<InboxItem | null>;
+      update(id: string, input: UpdateThoughtInput): Promise<InboxItem>;
+      promote(id: string, input?: PromoteThoughtInput): Promise<PromoteResult>;
+      link(id: string, input: LinkThoughtInput): Promise<InboxItem>;
+      dismiss(id: string, actor?: 'user' | 'agent'): Promise<InboxItem>;
+    };
+  };
+  quickCapture: {
+    onOpen(cb: () => void): () => void;
   };
   terminal: {
     open(args: TerminalOpenArgsDTO): Promise<TerminalSessionInfoDTO>;

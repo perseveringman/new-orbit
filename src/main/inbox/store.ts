@@ -69,6 +69,24 @@ export class InboxStore {
     return this.finalize(id, next);
   }
 
+  async update(id: string, next: InboxItem): Promise<InboxItem> {
+    return this.withWriteLock(async () => {
+      const pending = await this.readActiveWithPathUnlocked();
+      const match = pending.find((entry) => entry.item.id === id);
+      if (!match) throw new Error(`inbox item not found: ${id}`);
+      const parsed = InboxItemSchema.parse(next);
+      if (parsed.id !== id) throw new Error(`inbox update changed id: ${id} -> ${parsed.id}`);
+      if (parsed.category !== match.item.category || parsed.subtype !== match.item.subtype) {
+        throw new Error(`inbox update changed item kind: ${id}`);
+      }
+      await this.replacePendingFileUnlocked(
+        match.filePath,
+        match.items.map((item) => (item.id === id ? parsed : item))
+      );
+      return parsed;
+    });
+  }
+
   async archive(id: string, at: string): Promise<InboxItem> {
     return this.withWriteLock(async () => {
       const pending = await this.readActiveWithPathUnlocked();

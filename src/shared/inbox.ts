@@ -73,6 +73,7 @@ export const FeedItemPayloadSchema = z
     article_excerpt: z.string(),
     published_at: z.string().min(1),
     source: z.string().min(1),
+    guid: z.string().min(1).optional(),
     image_url: z.string().min(1).optional()
   })
   .strict();

@@ -1,6 +1,7 @@
 import type { InboxItem } from '@shared/inbox';
 import { ApprovalDiffRenderer } from './renderers/ApprovalDiffRenderer';
 import { DefaultRenderer } from './renderers/DefaultRenderer';
+import { FeedItemRenderer } from './renderers/FeedItemRenderer';
 import { HelpRequestRenderer } from './renderers/HelpRequestRenderer';
 import { LibraryArticleRenderer } from './renderers/LibraryArticleRenderer';
 import { ProposalPreviewRenderer } from './renderers/ProposalPreviewRenderer';
@@ -70,6 +71,7 @@ function renderItem(item: InboxItem): JSX.Element {
     return <ProposalPreviewRenderer item={item} />;
   }
   if (item.subtype === 'B1') return <HelpRequestRenderer item={item} />;
+  if (item.subtype === 'feed_item') return <FeedItemRenderer item={item} />;
   if (item.subtype === 'library_article') return <LibraryArticleRenderer item={item} />;
   if (item.subtype === 'thought') return <ThoughtRenderer item={item} />;
   return <DefaultRenderer item={item} />;

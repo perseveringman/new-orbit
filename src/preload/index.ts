@@ -74,6 +74,17 @@ import type {
   InboxMessageInput,
   InboxResolveInput
 } from '@shared/inbox';
+import type {
+  AddFeedSubscriptionInput,
+  CreateThoughtInput,
+  LibraryReadingUpdateInput,
+  LinkThoughtInput,
+  PromoteLibraryArticleInput,
+  PromoteThoughtInput,
+  SaveFeedItemInput,
+  SaveLibraryArticleInput,
+  UpdateThoughtInput
+} from '@shared/capture';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   ConversationTurn,
@@ -400,6 +411,52 @@ const api: OrbitApi = {
       const listener = (_: unknown, event: InboxEvent): void => cb(event);
       ipcRenderer.on(IPC.inbox.event, listener);
       return () => ipcRenderer.removeListener(IPC.inbox.event, listener);
+    }
+  },
+  capture: {
+    feed: {
+      listSubscriptions: () => ipcRenderer.invoke(IPC.capture.feed.listSubscriptions),
+      addSubscription: (input: AddFeedSubscriptionInput) =>
+        ipcRenderer.invoke(IPC.capture.feed.addSubscription, input),
+      removeSubscription: (id: string) => ipcRenderer.invoke(IPC.capture.feed.removeSubscription, id),
+      refresh: (subscriptionId?: string) => ipcRenderer.invoke(IPC.capture.feed.refresh, subscriptionId),
+      listPending: () => ipcRenderer.invoke(IPC.capture.feed.listPending),
+      fadeOut: (id: string) => ipcRenderer.invoke(IPC.capture.feed.fadeOut, id),
+      saveToLibrary: (id: string, input?: SaveFeedItemInput) =>
+        ipcRenderer.invoke(IPC.capture.feed.saveToLibrary, id, input),
+      history: () => ipcRenderer.invoke(IPC.capture.feed.history)
+    },
+    library: {
+      save: (input: SaveLibraryArticleInput) => ipcRenderer.invoke(IPC.capture.library.save, input),
+      list: (status?: InboxItem['status']) => ipcRenderer.invoke(IPC.capture.library.list, status),
+      get: (id: string) => ipcRenderer.invoke(IPC.capture.library.get, id),
+      readContent: (id: string) => ipcRenderer.invoke(IPC.capture.library.readContent, id),
+      updateReading: (id: string, input: LibraryReadingUpdateInput) =>
+        ipcRenderer.invoke(IPC.capture.library.updateReading, id, input),
+      promote: (id: string, input?: PromoteLibraryArticleInput) =>
+        ipcRenderer.invoke(IPC.capture.library.promote, id, input),
+      dismiss: (id: string, actor?: 'user' | 'agent') =>
+        ipcRenderer.invoke(IPC.capture.library.dismiss, id, actor)
+    },
+    thought: {
+      create: (input: CreateThoughtInput) => ipcRenderer.invoke(IPC.capture.thought.create, input),
+      list: () => ipcRenderer.invoke(IPC.capture.thought.list),
+      get: (id: string) => ipcRenderer.invoke(IPC.capture.thought.get, id),
+      update: (id: string, input: UpdateThoughtInput) =>
+        ipcRenderer.invoke(IPC.capture.thought.update, id, input),
+      promote: (id: string, input?: PromoteThoughtInput) =>
+        ipcRenderer.invoke(IPC.capture.thought.promote, id, input),
+      link: (id: string, input: LinkThoughtInput) =>
+        ipcRenderer.invoke(IPC.capture.thought.link, id, input),
+      dismiss: (id: string, actor?: 'user' | 'agent') =>
+        ipcRenderer.invoke(IPC.capture.thought.dismiss, id, actor)
+    }
+  },
+  quickCapture: {
+    onOpen: (cb: () => void) => {
+      const listener = (): void => cb();
+      ipcRenderer.on(IPC.quickCapture.open, listener);
+      return () => ipcRenderer.removeListener(IPC.quickCapture.open, listener);
     }
   },
   terminal: {
