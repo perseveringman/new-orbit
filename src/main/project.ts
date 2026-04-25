@@ -164,6 +164,7 @@ export async function createProject(
     slug: args.slug,
     name: args.name,
     template: args.template,
+    execution_context: 'worktree',
     created_at: createdAt,
     vision_linked: true,
     setup: [],

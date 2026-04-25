@@ -9,6 +9,7 @@ import {
 import type { GitHubRepoBinding } from '@shared/github';
 
 export type AgentExposureMode = 'isolated' | 'bridge' | 'compatible';
+export type ProjectExecutionContext = 'worktree' | 'sandbox';
 
 export interface AgentExposureSettings {
   mode: AgentExposureMode;
@@ -25,6 +26,7 @@ export interface ProjectConfig {
   slug: string;
   name?: string;
   template: string;
+  execution_context: ProjectExecutionContext;
   created_at: string;
   vision_linked?: boolean;
   setup?: string[];
@@ -131,6 +133,10 @@ export function normalizeAgentExposureSettings(raw: unknown): AgentExposureSetti
   };
 }
 
+export function normalizeProjectExecutionContext(raw: unknown): ProjectExecutionContext {
+  return raw === 'sandbox' ? 'sandbox' : 'worktree';
+}
+
 export function normalizeProjectConfig(raw: unknown): ProjectConfig {
   const record = isRecord(raw) ? raw : {};
   return {
@@ -138,6 +144,7 @@ export function normalizeProjectConfig(raw: unknown): ProjectConfig {
     slug: typeof record['slug'] === 'string' ? record['slug'] : '',
     name: typeof record['name'] === 'string' ? record['name'] : undefined,
     template: typeof record['template'] === 'string' ? record['template'] : 'blank',
+    execution_context: normalizeProjectExecutionContext(record['execution_context']),
     created_at: typeof record['created_at'] === 'string' ? record['created_at'] : '',
     vision_linked: typeof record['vision_linked'] === 'boolean' ? record['vision_linked'] : true,
     setup: isStringArray(record['setup']),

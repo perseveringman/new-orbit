@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createVault } from '../src/main/vault';
 import { createProject, readProjectConfig } from '../src/main/project';
+import { normalizeProjectConfig } from '../src/main/project_config';
 
 describe('project config contract', () => {
   it('scaffolds setup and teardown arrays in .orbit/config.json', async () => {
@@ -20,13 +21,18 @@ describe('project config contract', () => {
       expect(cfg).toMatchObject({
         uid: expect.any(String),
         slug: 'demo',
-        name: 'Demo'
+        name: 'Demo',
+        execution_context: 'worktree'
       });
-      const raw = await fs.readFile(path.join(created.projectPath, '.orbit', 'config.json'), 'utf8');
+      const raw = await fs.readFile(
+        path.join(created.projectPath, '.orbit', 'config.json'),
+        'utf8'
+      );
       expect(JSON.parse(raw)).toMatchObject({
         uid: cfg?.uid,
         slug: 'demo',
         name: 'Demo',
+        execution_context: 'worktree',
         agent_exposure: {
           mode: 'isolated',
           exposeMcpBridge: false,
@@ -74,6 +80,7 @@ describe('project config contract', () => {
         uid: 'legacy-uid',
         slug: 'legacy-demo',
         name: 'Legacy Demo',
+        execution_context: 'worktree',
         agent_exposure: {
           mode: 'isolated',
           exposeMcpBridge: false,
@@ -87,5 +94,16 @@ describe('project config contract', () => {
     } finally {
       await fs.rm(project, { recursive: true, force: true });
     }
+  });
+
+  it('normalizes execution_context with worktree default and sandbox opt-in', () => {
+    expect(normalizeProjectConfig({}).execution_context).toBe('worktree');
+    expect(normalizeProjectConfig({ execution_context: 'worktree' }).execution_context).toBe(
+      'worktree'
+    );
+    expect(normalizeProjectConfig({ execution_context: 'sandbox' }).execution_context).toBe(
+      'sandbox'
+    );
+    expect(normalizeProjectConfig({ execution_context: 'git' }).execution_context).toBe('worktree');
   });
 });

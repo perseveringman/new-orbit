@@ -6,6 +6,8 @@
 
 ### Added
 
+- **ExecutionContext 抽象基础**：新增 `src/main/execution/`，以 `WorktreeExecutionContext` 适配现有 worktree 行为，并在项目配置中支持 `execution_context: worktree | sandbox`（默认 `worktree`，`sandbox` 暂为未实现上下文）。
+
 - **Orbit v2 方向确立（2026-04-26）**：经过一次完整 Onboard 对话（~29 轮），确立 v2 演进方向。产出：
   - 新增 `docs/overview.md` — v2 完整架构总览
   - 新增 `docs/decisions/` 目录（10 份 ADR + README）：ADR-001 (废弃 Night Shift) / ADR-002 (Agent 子任务折叠) / ADR-003 (ExecutionContext 双轨) / ADR-004 (Inbox 枢纽) / ADR-005 (Plan Chat 定位) / ADR-006 (propose-approve) / ADR-007 (depends_on) / ADR-008 (AI-Native CLI-first) / ADR-009 (Activity Log) / ADR-010 (Capture 三分)

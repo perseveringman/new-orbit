@@ -48,6 +48,7 @@ export const BASE_CONFIG_JSON = `{
   "slug": "{{slug}}",
   "name": "{{name}}",
   "template": "{{template}}",
+  "execution_context": "worktree",
   "created_at": "{{created_at}}",
   "vision_linked": true,
   "setup": [],

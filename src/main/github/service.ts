@@ -749,6 +749,7 @@ export async function importGitHubRepository(
     slug,
     name: args.name ?? args.repo,
     template: 'imported-github',
+    execution_context: 'worktree' as const,
     created_at: createdAt,
     vision_linked: true,
     setup: [],
