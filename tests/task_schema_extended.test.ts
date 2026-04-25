@@ -29,10 +29,18 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       owner_id: 'binding-1',
       claimed_at: '2026-04-25T00:00:00.000Z',
       active_run_id: 'run-1',
+      approved_by: 'user',
+      approved_at: '2026-04-26T00:00:00.000Z',
+      proposed_by_agent_run: 'run-2',
+      proposed_during_task: 'task-parent',
+      proposal_id: 'proposal-1',
+      approval_decision_note: 'Looks useful',
       role_binding_id: 'binding-1',
       recommended_role: 'executor',
       candidate_role_slugs: ['executor', 'reviewer'],
       pre_conditions: ['a', 'b'],
+      depends_on: ['task-a'],
+      derived_from: 'task-parent',
       priority: 'high',
       effort: 4
     });
@@ -42,6 +50,35 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       expect(r.data.effort).toBe(4);
       expect(r.data.owner_type).toBe('binding');
       expect(r.data.candidate_role_slugs).toEqual(['executor', 'reviewer']);
+      expect(r.data.approved_by).toBe('user');
+      expect(r.data.proposed_by_agent_run).toBe('run-2');
+      expect(r.data.depends_on).toEqual(['task-a']);
+      expect(r.data.derived_from).toBe('task-parent');
+    }
+  });
+
+  it('defaults v2 authorization and dependency fields for legacy tasks', () => {
+    const r = TaskFrontmatter.safeParse({
+      uid: 't2-defaults',
+      type: 'task',
+      title: 'legacy',
+      status: 'todo',
+      pre_conditions: ['legacy-parent'],
+      generated_from_task_uid: 'legacy-source'
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.created_by).toBe('user');
+      expect(r.data.approved_by).toBe('user');
+      expect(r.data.approved_at).toBeNull();
+      expect(r.data.proposed_by_agent_run).toBeNull();
+      expect(r.data.proposed_during_task).toBeNull();
+      expect(r.data.proposal_id).toBeNull();
+      expect(r.data.approval_decision_note).toBeNull();
+      expect(r.data.depends_on).toEqual([]);
+      expect(r.data.derived_from).toBeNull();
+      expect(r.data.pre_conditions).toEqual(['legacy-parent']);
+      expect(r.data.generated_from_task_uid).toBe('legacy-source');
     }
   });
 

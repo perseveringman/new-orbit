@@ -18,6 +18,12 @@ function asString(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
+function asNullableString(v: unknown): string | null | undefined {
+  if (typeof v === 'string') return v;
+  if (v === null) return null;
+  return undefined;
+}
+
 function asStringArr(v: unknown): string[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out: string[] = [];
@@ -114,6 +120,18 @@ export function tasksOfFile(
     }
     const createdBy = asString(data['created_by']);
     if (createdBy) rec.created_by = createdBy;
+    const approvedBy = asNullableString(data['approved_by']);
+    if (approvedBy !== undefined) rec.approved_by = approvedBy;
+    const approvedAt = asNullableString(data['approved_at']);
+    if (approvedAt !== undefined) rec.approved_at = approvedAt;
+    const proposedByAgentRun = asNullableString(data['proposed_by_agent_run']);
+    if (proposedByAgentRun !== undefined) rec.proposed_by_agent_run = proposedByAgentRun;
+    const proposedDuringTask = asNullableString(data['proposed_during_task']);
+    if (proposedDuringTask !== undefined) rec.proposed_during_task = proposedDuringTask;
+    const proposalId = asNullableString(data['proposal_id']);
+    if (proposalId !== undefined) rec.proposal_id = proposalId;
+    const approvalDecisionNote = asNullableString(data['approval_decision_note']);
+    if (approvalDecisionNote !== undefined) rec.approval_decision_note = approvalDecisionNote;
     const assignedTo = asString(data['assigned_to']);
     if (assignedTo) rec.assigned_to = assignedTo;
     const ownerType = asString(data['owner_type']);
@@ -130,6 +148,10 @@ export function tasksOfFile(
     if (parentTaskUid) rec.parent_task_uid = parentTaskUid;
     const generatedFromTaskUid = asString(data['generated_from_task_uid']);
     if (generatedFromTaskUid) rec.generated_from_task_uid = generatedFromTaskUid;
+    const dependsOn = asStringArr(data['depends_on']);
+    if (dependsOn) rec.depends_on = dependsOn;
+    const derivedFrom = asNullableString(data['derived_from']);
+    if (derivedFrom !== undefined) rec.derived_from = derivedFrom;
     const roleBindingId = asString(data['role_binding_id']);
     if (roleBindingId) rec.role_binding_id = roleBindingId;
     const recommendedRole = asString(data['recommended_role']);

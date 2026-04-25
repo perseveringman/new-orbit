@@ -25,6 +25,7 @@ import { toPosix, vaultRel } from './pathGuard';
 import { ensureProjectAgentContext, readProjectAgentContextMeta } from './project_agent_context';
 import { renderTemplate } from './templates';
 import { BASE_AGENT_MD, BASE_CONFIG_JSON } from './templates/common';
+import { migrateV2TaskAuthorization } from './migrations/v2_task_authorization';
 
 export interface MarkdownFile {
   absPath: string;
@@ -66,6 +67,7 @@ export const LATEST_SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1]?.
 const V2_SCHEMA_VERSION = 2;
 const V3_SCHEMA_VERSION = 3;
 const V4_SCHEMA_VERSION = 4;
+const V5_TASK_AUTHORIZATION_SCHEMA_VERSION = 5;
 
 // --- v3: projectsFilesToFolders ---
 
@@ -482,7 +484,8 @@ export async function runMigrations(vault: string): Promise<{
     LATEST_SCHEMA_VERSION,
     V2_SCHEMA_VERSION,
     V3_SCHEMA_VERSION,
-    V4_SCHEMA_VERSION
+    V4_SCHEMA_VERSION,
+    V5_TASK_AUTHORIZATION_SCHEMA_VERSION
   );
   if (from >= to) {
     if (typeof cfg.schemaVersion !== 'number') {
@@ -524,6 +527,10 @@ export async function runMigrations(vault: string): Promise<{
   }
   if (from < V4_SCHEMA_VERSION) {
     await applyV4ProjectAgentContextMigration(vault);
+  }
+  if (from < V5_TASK_AUTHORIZATION_SCHEMA_VERSION) {
+    const result = await migrateV2TaskAuthorization(vault);
+    touched += result.migrated.length;
   }
   await writeConfig(vault, { ...cfg, schemaVersion: to });
   return { from, to, touched };

@@ -98,7 +98,13 @@ export const TaskFrontmatter = z.object({
   github_issue_url: z.string().optional(),
   execution_strategy: z.enum(['manual', 'autonomous']).optional(),
   origin: z.enum(['human', 'agent', 'system', 'imported']).optional(),
-  created_by: z.string().optional(),
+  created_by: z.string().default('user'),
+  approved_by: z.string().nullable().default('user'),
+  approved_at: z.string().nullable().default(null),
+  proposed_by_agent_run: z.string().nullable().default(null),
+  proposed_during_task: z.string().nullable().default(null),
+  proposal_id: z.string().nullable().default(null),
+  approval_decision_note: z.string().nullable().default(null),
   assigned_to: z.string().optional(),
   owner_type: z.enum(['agent', 'binding', 'human']).optional(),
   owner_id: z.string().optional(),
@@ -106,6 +112,8 @@ export const TaskFrontmatter = z.object({
   active_run_id: z.string().optional(),
   parent_task_uid: z.string().optional(),
   generated_from_task_uid: z.string().optional(),
+  depends_on: z.array(z.string()).default([]),
+  derived_from: z.string().nullable().default(null),
   role_binding_id: z.string().optional(),
   recommended_role: z.string().optional(),
   candidate_role_slugs: z.array(z.string()).optional(),
@@ -174,6 +182,12 @@ export interface TaskRecord {
   recommended?: boolean;
   origin?: TaskOrigin;
   created_by?: string;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  proposed_by_agent_run?: string | null;
+  proposed_during_task?: string | null;
+  proposal_id?: string | null;
+  approval_decision_note?: string | null;
   assigned_to?: string;
   owner_type?: TaskOwnerType;
   owner_id?: string;
@@ -181,6 +195,8 @@ export interface TaskRecord {
   active_run_id?: string;
   parent_task_uid?: string;
   generated_from_task_uid?: string;
+  depends_on?: string[];
+  derived_from?: string | null;
   role_binding_id?: string;
   recommended_role?: string;
   candidate_role_slugs?: string[];

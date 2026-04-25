@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Task v2 授权链路 schema**：扩展 task frontmatter / TaskRecord 的授权、proposal 与依赖兼容字段，并新增一次性迁移为既有 task 回填用户授权默认值。
 - **Orbit v2 阶段 0 基础设施**：完成 ExecutionContext 抽象、Activity Log 基础设施与 `orbit` CLI Phase 0 脚手架，为后续授权链路、Inbox、依赖调度与 Auto-runner 改造铺底。
 - **ExecutionContext 抽象基础**：新增 `src/main/execution/`，以 `WorktreeExecutionContext` 适配现有 worktree 行为，并在项目配置中支持 `execution_context: worktree | sandbox`（默认 `worktree`，`sandbox` 暂为未实现上下文）。
 - **Activity Log 基础设施**：新增 `src/main/activity/`，提供 Activity Event 类型、NDJSON 按日存储、fire-and-forget emitter、查询过滤与只读 IPC，并补充 emit / query / concurrency 单元测试。
