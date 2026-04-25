@@ -9,13 +9,27 @@ import { materializeTaskGraph } from '../orchestration/task_graph';
 import { updateTaskFrontmatter } from '../task';
 import { contentHash } from '../content_hash';
 import { emitActivity } from '../activity';
-import {
-  dependencyTree,
-  detectCycleForUpdate,
-  dependencyRefs
-} from '../dependencies/graph';
+import { dependencyTree, detectCycleForUpdate, dependencyRefs } from '../dependencies/graph';
 import { taskReadyState } from '../auto_runner/ready_set';
 import { getAutoRunnerDispatcher } from '../auto_runner/dispatcher';
+import { createApprovalServiceForVault } from '../approval/service';
+import { createInboxServiceForVault } from '../inbox/service';
+import {
+  dismissInboxItemWithProposalSync,
+  resolveInboxItemWithProposalSync
+} from '../inbox/proposal_sync';
+import type {
+  InboxDismissInput,
+  InboxListFilter,
+  InboxMessageInput,
+  InboxResolveInput
+} from '../inbox/types';
+import type { ProposalListFilter, ProposalResolveInput } from '../approval/types';
+import { queryActivities } from '../activity/query';
+import type { ActivityQueryFilter } from '../activity/types';
+import { listProjects } from '../project';
+import { getPool } from '../agent/pool';
+import { appendExecutionLog } from '../task';
 import { cliServerError } from './errors';
 import type { CliHandlerRegistry } from './registry';
 
@@ -44,6 +58,16 @@ function stringParam(params: unknown, key: string): string {
   return params[key];
 }
 
+function optionalStringParam(params: Record<string, unknown>, key: string): string | undefined {
+  return typeof params[key] === 'string' && params[key] ? params[key] : undefined;
+}
+
+function objectParams(params: unknown, method: string): Record<string, unknown> {
+  if (!isRecord(params))
+    throw cliServerError('invalid_params', `${method} params must be an object`);
+  return params;
+}
+
 async function readTarget(
   target: string
 ): Promise<{ path: string; relPath: string; content: string }> {
@@ -64,7 +88,8 @@ function resolveTask(target: string): TaskRecord {
     tasks.find((candidate) => candidate.uid === target) ??
     tasks.find((candidate) => candidate.relPath === rel || candidate.filePath === abs);
   if (!task) throw cliServerError('not_found', `task not found: ${target}`);
-  if (task.source !== 'file') throw cliServerError('invalid_params', 'inline task updates are not supported');
+  if (task.source !== 'file')
+    throw cliServerError('invalid_params', 'inline task updates are not supported');
   return task;
 }
 
@@ -101,7 +126,10 @@ async function refreshTask(absPath: string, content: string): Promise<void> {
 function assertDependencyUpdateAllowed(task: TaskRecord, dependsOn: string[]): void {
   if (!task.uid) throw cliServerError('invalid_params', 'task has no uid');
   if (dependsOn.includes(task.uid)) {
-    throw cliServerError('invalid_params', `cyclic dependency rejected: ${task.uid} cannot depend on itself`);
+    throw cliServerError(
+      'invalid_params',
+      `cyclic dependency rejected: ${task.uid} cannot depend on itself`
+    );
   }
   const tasks = openSession().tasks.allTasks();
   const byUid = new Map<string, TaskRecord>();
@@ -113,17 +141,26 @@ function assertDependencyUpdateAllowed(task: TaskRecord, dependsOn: string[]): v
     if (!dep) throw cliServerError('invalid_params', `dependency not found: ${depUid}`);
     if (task.project_uid || dep.project_uid) {
       if (!task.project_uid || task.project_uid !== dep.project_uid) {
-        throw cliServerError('invalid_params', `cross-project dependencies are not supported: ${depUid}`);
+        throw cliServerError(
+          'invalid_params',
+          `cross-project dependencies are not supported: ${depUid}`
+        );
       }
     } else if (task.area_uid || dep.area_uid) {
       if (!task.area_uid || task.area_uid !== dep.area_uid) {
-        throw cliServerError('invalid_params', `cross-area dependencies are not supported: ${depUid}`);
+        throw cliServerError(
+          'invalid_params',
+          `cross-area dependencies are not supported: ${depUid}`
+        );
       }
     }
   }
   const cycle = detectCycleForUpdate(task.uid, dependsOn, tasks);
   if (cycle) {
-    throw cliServerError('invalid_params', `cyclic dependency rejected: ${cycle.path.join(' -> ')}`);
+    throw cliServerError(
+      'invalid_params',
+      `cyclic dependency rejected: ${cycle.path.join(' -> ')}`
+    );
   }
 }
 
@@ -141,6 +178,36 @@ function taskFilter(params: unknown): TaskFilter {
   if (typeof params.area_uid === 'string') filter.area_uid = params.area_uid;
   if (typeof params.tag === 'string') filter.tag = params.tag;
   return filter;
+}
+
+function approvalService() {
+  return createApprovalServiceForVault(openSession().vault);
+}
+
+function inboxService() {
+  return createInboxServiceForVault(openSession().vault);
+}
+
+function proposalSubmitter(params: Record<string, unknown>): 'agent' | 'user' {
+  return typeof params.run_id === 'string' && params.run_id ? 'agent' : 'user';
+}
+
+function proposalSubject(prefix: string, fallback: string): string {
+  return `${prefix}: ${fallback}`;
+}
+
+function activitySummary(events: Awaited<ReturnType<typeof queryActivities>>): {
+  total: number;
+  byAction: Record<string, number>;
+  byActor: Record<string, number>;
+} {
+  const byAction: Record<string, number> = {};
+  const byActor: Record<string, number> = {};
+  for (const event of events) {
+    byAction[event.action] = (byAction[event.action] ?? 0) + 1;
+    byActor[event.actor] = (byActor[event.actor] ?? 0) + 1;
+  }
+  return { total: events.length, byAction, byActor };
 }
 
 export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
@@ -213,6 +280,202 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       });
     }
     return resolveTask(uid);
+  });
+
+  registry.register('task.propose', async (params) => {
+    const input = objectParams(params, 'task.propose');
+    const title = stringParam(input, 'title');
+    const projectUid = optionalStringParam(input, 'project_uid');
+    const areaUid = optionalStringParam(input, 'area_uid');
+    if (!projectUid && !areaUid) {
+      throw cliServerError('invalid_params', 'task.propose requires project_uid or area_uid');
+    }
+    if (projectUid && areaUid) {
+      throw cliServerError('invalid_params', 'task.propose accepts only one owner');
+    }
+    const payload: Record<string, unknown> = {
+      title,
+      ...(projectUid ? { project_uid: projectUid } : {}),
+      ...(areaUid ? { area_uid: areaUid } : {}),
+      ...(typeof input.description === 'string' ? { description: input.description } : {}),
+      ...(isRecord(input.frontmatter) ? { frontmatter: input.frontmatter } : {})
+    };
+    return approvalService().submit({
+      type: 'new_task',
+      submitted_by: proposalSubmitter(input),
+      ...(typeof input.run_id === 'string' ? { submitted_by_agent_run: input.run_id } : {}),
+      ...(typeof input.during_task_uid === 'string'
+        ? { submitted_during_task: input.during_task_uid }
+        : {}),
+      subject: proposalSubject('New task', title),
+      payload
+    });
+  });
+
+  registry.register('task.proposeScope', async (params) => {
+    const input = objectParams(params, 'task.proposeScope');
+    const currentUid = stringParam(input, 'current_uid');
+    const summary =
+      typeof input.summary === 'string' && input.summary.trim()
+        ? input.summary
+        : `Scope expansion requested for ${currentUid}`;
+    return approvalService().submit({
+      type: 'scope_expansion',
+      submitted_by: proposalSubmitter(input),
+      ...(typeof input.run_id === 'string' ? { submitted_by_agent_run: input.run_id } : {}),
+      submitted_during_task: currentUid,
+      subject: proposalSubject('Scope expansion', currentUid),
+      payload: { current_task_uid: currentUid, summary }
+    });
+  });
+
+  registry.register('project.list', async () => listProjects(openSession().vault));
+
+  registry.register('project.get', async (params) => {
+    const uid = stringParam(params, 'uid');
+    const project = (await listProjects(openSession().vault)).find((item) => item.uid === uid);
+    if (!project) throw cliServerError('not_found', `project not found: ${uid}`);
+    return project;
+  });
+
+  registry.register('project.graph', async (params) => {
+    const input = params === undefined ? {} : objectParams(params, 'project.graph');
+    const uid = optionalStringParam(input, 'uid');
+    const projects = await listProjects(openSession().vault);
+    const filteredProjects = uid ? projects.filter((project) => project.uid === uid) : projects;
+    const projectUids = new Set(filteredProjects.map((project) => project.uid));
+    const tasks = materializeTaskGraph(openSession().tasks.allTasks()).filter(
+      (task) => !uid || (task.project_uid && projectUids.has(task.project_uid))
+    );
+    return { projects: filteredProjects, tasks };
+  });
+
+  registry.register('project.archive', async (params) => {
+    const uid = stringParam(params, 'uid');
+    const project = (await listProjects(openSession().vault)).find((item) => item.uid === uid);
+    if (!project) throw cliServerError('not_found', `project not found: ${uid}`);
+    return approvalService().submit({
+      type: 'archive_project',
+      submitted_by: 'agent',
+      subject: proposalSubject('Archive project', project.name),
+      payload: { project_uid: uid, slug: project.slug, name: project.name }
+    });
+  });
+
+  registry.register('inbox.list', (params) =>
+    inboxService().list((isRecord(params) ? params : {}) as InboxListFilter)
+  );
+  registry.register('inbox.get', async (params) => {
+    const id = stringParam(params, 'id');
+    const item = await inboxService().get(id);
+    if (!item) throw cliServerError('not_found', `inbox item not found: ${id}`);
+    return item;
+  });
+  registry.register('inbox.resolve', (params) => {
+    const input = objectParams(params, 'inbox.resolve');
+    return resolveInboxItemWithProposalSync(
+      openSession().vault,
+      stringParam(input, 'id'),
+      (isRecord(input.input) ? input.input : {}) as InboxResolveInput
+    );
+  });
+  registry.register('inbox.dismiss', (params) => {
+    const input = objectParams(params, 'inbox.dismiss');
+    return dismissInboxItemWithProposalSync(
+      openSession().vault,
+      stringParam(input, 'id'),
+      (isRecord(input.input) ? input.input : {}) as InboxDismissInput
+    );
+  });
+  registry.register('inbox.archive', (params) => inboxService().archive(stringParam(params, 'id')));
+  registry.register('inbox.emitMessage', (params) =>
+    inboxService().emitMessage(params as InboxMessageInput)
+  );
+
+  registry.register('activity.list', (params) =>
+    queryActivities(openSession().vault, (isRecord(params) ? params : {}) as ActivityQueryFilter)
+  );
+  registry.register('activity.summary', async (params) =>
+    activitySummary(
+      await queryActivities(
+        openSession().vault,
+        (isRecord(params) ? params : {}) as ActivityQueryFilter
+      )
+    )
+  );
+
+  registry.register('approval.list', (params) =>
+    approvalService().list((isRecord(params) ? params : {}) as ProposalListFilter)
+  );
+  registry.register('approval.get', async (params) => {
+    const id = stringParam(params, 'id');
+    const proposal = await approvalService().get(id);
+    if (!proposal) throw cliServerError('not_found', `proposal not found: ${id}`);
+    return proposal;
+  });
+  registry.register('approval.resolve', (params) => {
+    const input = objectParams(params, 'approval.resolve');
+    return approvalService().resolve(
+      stringParam(input, 'id'),
+      objectParams(input.input, 'approval.resolve.input') as ProposalResolveInput
+    );
+  });
+
+  registry.register('agent.listRuns', () => getPool().list());
+  registry.register('agent.stop', async (params) => {
+    const runId = stringParam(params, 'run_id');
+    await getPool().kill(runId, 'cli_stop');
+    return { stopped: true, run_id: runId };
+  });
+
+  registry.register('run.requestMerge', (params) => {
+    const input = objectParams(params, 'run.requestMerge');
+    const runId = optionalStringParam(input, 'run_id');
+    const taskUid = optionalStringParam(input, 'task_uid');
+    const summary = typeof input.summary === 'string' ? input.summary : '';
+    return approvalService().submit({
+      type: 'merge',
+      submitted_by: runId ? 'agent' : 'user',
+      ...(runId ? { submitted_by_agent_run: runId } : {}),
+      ...(taskUid ? { submitted_during_task: taskUid } : {}),
+      subject: proposalSubject('Merge request', taskUid ?? runId ?? 'agent run'),
+      payload: {
+        ...(runId ? { run_id: runId } : {}),
+        ...(taskUid ? { task_uid: taskUid } : {}),
+        summary
+      }
+    });
+  });
+
+  registry.register('run.reportProgress', async (params) => {
+    const input = objectParams(params, 'run.reportProgress');
+    const taskUid = stringParam(input, 'task_uid');
+    const message = stringParam(input, 'message');
+    const task = resolveTask(taskUid);
+    await appendExecutionLog(task.filePath, message, undefined, (next) =>
+      refreshTask(task.filePath, next)
+    );
+    return { task_uid: task.uid ?? taskUid, appended: true };
+  });
+
+  registry.register('run.emitInsight', (params) => {
+    const input = objectParams(params, 'run.emitInsight');
+    const content = stringParam(input, 'content');
+    const context: Record<string, string> = {};
+    const runId = optionalStringParam(input, 'run_id');
+    const taskUid = optionalStringParam(input, 'task_uid');
+    const projectUid = optionalStringParam(input, 'project_uid');
+    if (runId) context.run_id = runId;
+    if (taskUid) context.task_uid = taskUid;
+    if (projectUid) context.project_uid = projectUid;
+    return inboxService().emitMessage({
+      subtype: 'C3',
+      title: 'Agent insight',
+      summary: content,
+      context,
+      payload: { content },
+      actor: 'agent'
+    });
   });
 
   registry.register('autoRunner.status', () => getAutoRunnerDispatcher().status());

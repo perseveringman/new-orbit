@@ -9,7 +9,7 @@ import {
   type CliRequest,
   type CliResponse
 } from '@shared/cli_protocol';
-import { businessError, connectionError } from './errors';
+import { connectionError, serverError } from './errors';
 
 export interface BridgeClient {
   request(method: string, params?: unknown): Promise<unknown>;
@@ -80,7 +80,7 @@ export class SocketBridgeClient implements BridgeClient {
         settled = true;
         cleanup();
         if (!response.ok) {
-          reject(businessError(response.error.message, response.error.code));
+          reject(serverError(response.error.code, response.error.message));
           return;
         }
         resolve(response.data);

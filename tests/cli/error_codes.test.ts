@@ -55,4 +55,10 @@ describe('CLI error codes', () => {
       error: { code: 'unknown_command', message: 'Unknown command: unknown' }
     });
   });
+
+  it('uses business exit code for structured unavailable errors', async () => {
+    const io = capture();
+    await expect(runCli(['--json', 'feed', 'list'], io.options)).resolves.toBe(EXIT_BUSINESS_ERROR);
+    expect(JSON.parse(io.stderr.join('')).error.code).toBe('unavailable');
+  });
 });

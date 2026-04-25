@@ -31,10 +31,22 @@ export function businessError(message: string, code = 'business_error'): CliErro
   return new CliError(code, message, EXIT_BUSINESS_ERROR);
 }
 
+export function unavailableError(message: string): CliError {
+  return businessError(message, 'unavailable');
+}
+
 export function connectionError(
   message = 'Orbit main process not running. Please open Orbit first.'
 ): CliError {
   return new CliError('main_process_unavailable', message, EXIT_CONNECTION);
+}
+
+export function serverError(code: string, message: string): CliError {
+  if (code === 'invalid_params' || code === 'unknown_method' || code === 'invalid_request') {
+    return new CliError(code, message, EXIT_USAGE);
+  }
+  if (code === 'unavailable') return unavailableError(message);
+  return businessError(message, code);
 }
 
 export function normalizeCliError(error: unknown): CliError {
