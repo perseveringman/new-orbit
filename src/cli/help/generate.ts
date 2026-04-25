@@ -8,7 +8,7 @@ Usage: orbit <command> [args]
 Available commands:
   search       Search the open vault (Phase 0)
   cat          Read a vault file or UID (Phase 0)
-  task         Task commands: list (Phase 0), other actions unavailable
+  task         Task commands: list, get, update, deps
   project      Project commands (${FUTURE})
   inbox        Inbox event commands (${FUTURE})
   feed         Feed capture commands (${FUTURE})
@@ -52,14 +52,20 @@ export function generateTaskHelp(): string {
   return `Usage: orbit task <subcommand> [args]
 
 Available subcommands:
-  list        List tasks (Phase 0)
+  list        List tasks
+  get         Show task readiness and dependencies
+  update      Update task fields (status / depends_on)
+  deps        Print a task dependency tree
 
-Unavailable in Phase 0:
-  get, update, propose, propose-scope, deps, delete
+Unavailable:
+  propose, propose-scope, delete
 
 Examples:
   orbit task list
   orbit task list --status todo --project project_uid --json
+  orbit task get task_uid --json
+  orbit task update task_uid --depends-on task_a,task_b
+  orbit task deps task_uid
 `;
 }
 

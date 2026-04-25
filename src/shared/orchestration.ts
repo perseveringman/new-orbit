@@ -141,6 +141,8 @@ export interface PlanProposalNode {
   parentTaskUid?: string;
   generatedFromTaskUid?: string;
   preConditions?: string[];
+  dependsOn?: string[];
+  derivedFrom?: string;
   priority?: 'low' | 'med' | 'high';
   due?: string;
   effort?: 'xs' | 's' | 'm' | 'l' | 'xl' | number;

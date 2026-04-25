@@ -13,7 +13,7 @@ describe('CLI help', () => {
     expect(help).toContain('Usage: orbit <command> [args]');
     expect(help).toContain('search       Search the open vault (Phase 0)');
     expect(help).toContain('cat          Read a vault file or UID (Phase 0)');
-    expect(help).toContain('task         Task commands: list (Phase 0)');
+    expect(help).toContain('task         Task commands: list, get, update, deps');
     expect(help).toContain('Phase 5 unavailable');
     expect(help).toContain('Global flags: --json');
   });
@@ -22,6 +22,7 @@ describe('CLI help', () => {
     expect(generateSearchHelp()).toContain('Usage: orbit search <query>');
     expect(generateCatHelp()).toContain('Usage: orbit cat <path-or-uid>');
     expect(generateTaskHelp()).toContain('orbit task list --status todo');
+    expect(generateTaskHelp()).toContain('orbit task deps task_uid');
   });
 
   it('marks future domains unavailable', () => {

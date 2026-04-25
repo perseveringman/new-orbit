@@ -4,6 +4,11 @@ import type { PlanProposal, PlanPublishResult } from '@shared/orchestration';
 import type { TaskRecord } from '@shared/schemas';
 import { listProjectTaskPaths, createTask } from '../project';
 import { readTaskFile, updateTaskFrontmatter } from '../task';
+import {
+  buildDependencyGraph,
+  detectAnyCycle,
+  taskDependencies
+} from '../dependencies/graph';
 import { findProjectPathByUid, refreshTaskFileInSession } from './session';
 import { arePreConditionsMet } from './task_graph';
 import { listJsonFiles, readJsonFile, vaultPlansDir, writeJsonFile } from './storage';
@@ -85,7 +90,14 @@ async function existingProjectTasks(projectPath: string, vaultPath: string): Pro
           uid,
           pre_conditions: Array.isArray(taskFile.frontmatter['pre_conditions'])
             ? ((taskFile.frontmatter['pre_conditions'] as string[]) ?? [])
-            : []
+            : [],
+          depends_on: Array.isArray(taskFile.frontmatter['depends_on'])
+            ? ((taskFile.frontmatter['depends_on'] as string[]) ?? [])
+            : [],
+          derived_from:
+            typeof taskFile.frontmatter['derived_from'] === 'string'
+              ? (taskFile.frontmatter['derived_from'] as string)
+              : null
         }
       });
     } catch {
@@ -93,6 +105,38 @@ async function existingProjectTasks(projectPath: string, vaultPath: string): Pro
     }
   }
   return out;
+}
+
+function dependenciesForProposalNode(
+  taskUid: string,
+  proposal: PlanProposal
+): string[] {
+  const fromEdges = proposal.edges.flatMap((edge) => {
+    if (edge.toTaskUid === taskUid && (edge.kind === 'depends_on' || edge.kind === 'blocks')) {
+      return [edge.fromTaskUid];
+    }
+    return [];
+  });
+  const explicit = proposal.nodes.find((node) => node.taskUid === taskUid)?.dependsOn ?? [];
+  return [...new Set([...fromEdges, ...explicit])];
+}
+
+export function buildPlannerPublishDependencyGraph(
+  proposal: PlanProposal,
+  existingTasks: readonly TaskRecord[] = []
+): Map<string, string[]> {
+  const graph = buildDependencyGraph(existingTasks).edges;
+  for (const node of proposal.nodes) {
+    const existing = existingTasks.find((task) => task.uid === node.taskUid);
+    graph.set(node.taskUid, [
+      ...new Set([
+        ...dependenciesForProposalNode(node.taskUid, proposal),
+        ...(node.preConditions ?? []),
+        ...(existing ? taskDependencies(existing) : [])
+      ])
+    ]);
+  }
+  return graph;
 }
 
 export async function publishPlanProposal(
@@ -109,6 +153,7 @@ export async function publishPlanProposal(
   const graph = new Map<string, TaskRecord>();
   for (const entry of existing.values()) graph.set(entry.task.uid!, entry.task);
   for (const node of proposal.nodes) {
+    const dependsOn = dependenciesForProposalNode(node.taskUid, proposal);
     graph.set(node.taskUid, {
       id: `proposal:${node.taskUid}`,
       source: 'file',
@@ -117,8 +162,18 @@ export async function publishPlanProposal(
       filePath: '',
       relPath: '',
       uid: node.taskUid,
-      pre_conditions: node.preConditions
+      pre_conditions: node.preConditions,
+      depends_on: dependsOn
     });
+  }
+
+  const dependencyGraph = buildPlannerPublishDependencyGraph(
+    proposal,
+    [...existing.values()].map((entry) => entry.task)
+  );
+  const cycle = detectAnyCycle({ edges: dependencyGraph });
+  if (cycle) {
+    throw new Error(`cyclic dependencies in proposal: ${cycle.path.join(' -> ')}`);
   }
 
   const createdTaskUids: string[] = [];
@@ -129,6 +184,7 @@ export async function publishPlanProposal(
 
   for (const node of proposal.nodes) {
     const status = buildInitialStatus(node, graph);
+    const dependsOn = dependenciesForProposalNode(node.taskUid, proposal);
     if (status === 'waiting') waitingTaskUids.push(node.taskUid);
     if (status === 'todo') todoTaskUids.push(node.taskUid);
 
@@ -140,6 +196,8 @@ export async function publishPlanProposal(
       created_by: proposal.source === 'planner' ? 'agent:planner' : 'human:planner',
       parent_task_uid: node.parentTaskUid,
       generated_from_task_uid: node.generatedFromTaskUid,
+      derived_from: node.derivedFrom ?? node.generatedFromTaskUid ?? node.parentTaskUid,
+      depends_on: dependsOn,
       recommended_role: node.recommendedRole,
       candidate_role_slugs: node.candidateRoleSlugs,
       pre_conditions: node.preConditions && node.preConditions.length ? node.preConditions : undefined,

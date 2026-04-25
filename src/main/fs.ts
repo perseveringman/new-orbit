@@ -64,6 +64,12 @@ import {
 } from './task';
 import { relinkTask } from './task_relink';
 import { materializeTaskGraph } from './orchestration/task_graph';
+import { emitActivity } from './activity';
+import {
+  cascadeDependencyUnavailable,
+  detectCycleForUpdate,
+  readTaskIdentity
+} from './dependencies';
 import {
   listProjectTree as _listProjectTree,
   createDirectory as _createDirectory
@@ -323,6 +329,57 @@ async function readUid(abs: string): Promise<string | null> {
   }
 }
 
+function asStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const out = value.filter((entry): entry is string => typeof entry === 'string');
+  return out.length === value.length ? out : null;
+}
+
+function sameTaskProject(target: TaskRecord, dependency: TaskRecord): boolean {
+  if (target.project_uid || dependency.project_uid) {
+    return Boolean(target.project_uid && target.project_uid === dependency.project_uid);
+  }
+  if (target.area_uid || dependency.area_uid) {
+    return Boolean(target.area_uid && target.area_uid === dependency.area_uid);
+  }
+  return true;
+}
+
+function validateTaskDependencyPatch(
+  sess: VaultSession,
+  abs: string,
+  patch: Record<string, unknown>
+): { uid: string; before: string[]; after: string[] } | null {
+  if (!Object.prototype.hasOwnProperty.call(patch, 'depends_on')) return null;
+  const after = asStringArray(patch['depends_on']);
+  if (!after) throw new Error('depends_on must be an array of task uid strings');
+
+  const current = sess.tasks.tasksOf(toPosix(vaultRel(sess.vault, abs))).find((task) => task.source === 'file');
+  if (!current?.uid) return null;
+  if (after.includes(current.uid)) {
+    throw new Error(`cyclic dependency rejected: ${current.uid} cannot depend on itself`);
+  }
+
+  const tasks = sess.tasks.allTasks();
+  const byUid = new Map<string, TaskRecord>();
+  for (const task of tasks) {
+    if (task.uid) byUid.set(task.uid, task);
+  }
+  for (const depUid of after) {
+    const dep = byUid.get(depUid);
+    if (!dep) throw new Error(`dependency not found: ${depUid}`);
+    if (!sameTaskProject(current, dep)) {
+      throw new Error(`cross-project dependencies are not supported: ${depUid}`);
+    }
+  }
+
+  const cycle = detectCycleForUpdate(current.uid, after, tasks);
+  if (cycle) {
+    throw new Error(`cyclic dependency rejected: ${cycle.path.join(' -> ')}`);
+  }
+  return { uid: current.uid, before: current.depends_on ?? [], after };
+}
+
 async function ensureUidOnDisk(sess: VaultSession, abs: string): Promise<string> {
   assertInsideVault(sess.vault, abs);
   const content = await fs.readFile(abs, 'utf8');
@@ -445,6 +502,10 @@ export function registerFsIpc(): void {
       const sess = getSession();
       assertInsideVault(sess.vault, oldPath);
       assertInsideVault(sess.vault, newPath);
+      const dependencyIdentity = oldPath.toLowerCase().endsWith('.md')
+        ? await readTaskIdentity(oldPath)
+        : null;
+      const tasksBeforeRename = dependencyIdentity ? sess.tasks.allTasks() : [];
       await fs.mkdir(path.dirname(newPath), { recursive: true });
       await fs.rename(oldPath, newPath);
       const oldRel = toPosix(vaultRel(sess.vault, oldPath));
@@ -457,6 +518,22 @@ export function registerFsIpc(): void {
         await sess.refmap.flush();
       }
       const linksUpdated = await rewriteBacklinksOnRename(sess, oldPath, newPath);
+      if (dependencyIdentity && newRel.startsWith('04_Archives/')) {
+        await cascadeDependencyUnavailable({
+          vaultPath: sess.vault,
+          dependencyUid: dependencyIdentity.uid,
+          dependencyTitle: dependencyIdentity.title,
+          reason: 'archived',
+          tasks: tasksBeforeRename,
+          refreshTask: async (taskAbs, next) => {
+            const taskRel = toPosix(vaultRel(sess.vault, taskAbs));
+            sess.index.upsert(taskRel, next);
+            sess.search.upsert(taskRel);
+            sess.tasks.upsert(taskRel, next);
+            broadcast({ kind: 'change', path: taskAbs, relPath: taskRel });
+          }
+        });
+      }
       return { newPath, newRelPath: newRel, linksUpdated };
     }
   );
@@ -464,6 +541,8 @@ export function registerFsIpc(): void {
   ipcMain.handle(IPC.fs.deleteFile, async (_e, abs: string) => {
     const sess = getSession();
     assertInsideVault(sess.vault, abs);
+    const dependencyIdentity = abs.toLowerCase().endsWith('.md') ? await readTaskIdentity(abs) : null;
+    const tasksBeforeDelete = dependencyIdentity ? sess.tasks.allTasks() : [];
     const trashDir = path.join(sess.vault, ORBIT_DIR, ORBIT_TRASH_DIR);
     await fs.mkdir(trashDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -475,6 +554,22 @@ export function registerFsIpc(): void {
     sess.search.remove(rel);
     sess.tasks.remove(rel);
     await sess.refmap.flush();
+    if (dependencyIdentity) {
+      await cascadeDependencyUnavailable({
+        vaultPath: sess.vault,
+        dependencyUid: dependencyIdentity.uid,
+        dependencyTitle: dependencyIdentity.title,
+        reason: 'deleted',
+        tasks: tasksBeforeDelete,
+        refreshTask: async (taskAbs, next) => {
+          const taskRel = toPosix(vaultRel(sess.vault, taskAbs));
+          sess.index.upsert(taskRel, next);
+          sess.search.upsert(taskRel);
+          sess.tasks.upsert(taskRel, next);
+          broadcast({ kind: 'change', path: taskAbs, relPath: taskRel });
+        }
+      });
+    }
   });
 
   ipcMain.handle(IPC.fs.resolveUid, async (_e, uid: string) => {
@@ -723,7 +818,23 @@ export function registerFsIpc(): void {
     async (_e, abs: string, patch: Record<string, unknown>): Promise<void> => {
       const sess = getSession();
       assertInsideVault(sess.vault, abs);
+      const dependencyChange = validateTaskDependencyPatch(sess, abs, patch);
       await updateTaskFrontmatter(abs, patch, (next) => refreshAfterTaskWrite(abs, next));
+      if (
+        dependencyChange &&
+        JSON.stringify(dependencyChange.before) !== JSON.stringify(dependencyChange.after)
+      ) {
+        emitActivity({
+          actor: 'user',
+          action: 'task.dependency_changed',
+          context: { task_uid: dependencyChange.uid },
+          payload: {
+            before: dependencyChange.before,
+            after: dependencyChange.after
+          },
+          summary: `Task dependencies updated: ${dependencyChange.uid}`
+        });
+      }
     }
   );
 

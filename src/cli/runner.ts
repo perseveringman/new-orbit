@@ -1,6 +1,8 @@
 import { normalizeTaskStatus } from '@shared/schemas';
 import type { SearchHit } from '@shared/types';
 import type { TaskRecord } from '@shared/schemas';
+import type { DependencyTreeNode } from '../main/dependencies';
+import type { ReadyResult } from '../main/auto_runner/ready_set';
 import { SocketBridgeClient, type BridgeClient } from './bridge';
 import { EXIT_SUCCESS, normalizeCliError, usageError, type CliExitCode } from './errors';
 import { errorPayload } from './errors';
@@ -120,6 +122,35 @@ function formatTasks(data: unknown): string {
   );
 }
 
+function formatTaskGet(data: unknown): string {
+  const payload = data as { task?: TaskRecord; readiness?: ReadyResult };
+  if (!payload.task) return 'Task not found\n';
+  const task = payload.task;
+  const readiness = payload.readiness;
+  return [
+    `${task.uid ?? task.id}\t${task.title}`,
+    `status\t${task.status}`,
+    `ready\t${readiness?.ready ? 'yes' : 'no'}`,
+    readiness?.reason ? `reason\t${readiness.reason}` : '',
+    readiness?.detail ? `detail\t${readiness.detail}` : '',
+    `depends_on\t${(task.depends_on ?? []).join(',') || '-'}`
+  ]
+    .filter(Boolean)
+    .join('\n') + '\n';
+}
+
+function formatDependencyTree(data: unknown): string {
+  const root = data as DependencyTreeNode;
+  const lines: string[] = [];
+  function walk(node: DependencyTreeNode, depth: number): void {
+    const title = node.task?.title ? ` ${node.task.title}` : '';
+    lines.push(`${'  '.repeat(depth)}${depth === 0 ? '' : '↳ '}${node.uid} [${node.status}]${title}`);
+    for (const child of node.children) walk(child, depth + 1);
+  }
+  walk(root, 0);
+  return `${lines.join('\n')}\n`;
+}
+
 async function runSearch(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
   if (flags.help) return generateSearchHelp();
   const { limit, rest } = parseLimit(flags.args.slice(1));
@@ -155,6 +186,31 @@ function parseTaskList(args: string[]): { status?: string; project_uid?: string 
   return filter;
 }
 
+function parseTaskUpdate(
+  uid: string,
+  args: string[]
+): { uid: string; status?: string; depends_on?: string[] } {
+  const patch: { uid: string; status?: string; depends_on?: string[] } = { uid };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? '';
+    if (arg === '--status') {
+      const value = argvValue(args, ++i, '--status');
+      const status = normalizeTaskStatus(value);
+      if (!status) throw usageError(`Unknown task status: ${value}`);
+      patch.status = status;
+    } else if (arg === '--depends-on') {
+      const value = argvValue(args, ++i, '--depends-on');
+      patch.depends_on = value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    } else {
+      throw usageError(`Unknown task update option: ${arg}`);
+    }
+  }
+  return patch;
+}
+
 function argvValue(args: string[], index: number, flag: string): string {
   const value = args[index];
   if (!value) throw usageError(`${flag} requires a value`);
@@ -164,11 +220,33 @@ function argvValue(args: string[], index: number, flag: string): string {
 async function runTask(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
   if (flags.help || !flags.args[1]) return generateTaskHelp();
   const subcommand = flags.args[1];
-  if (subcommand !== 'list')
-    throw usageError(`orbit task ${subcommand} is not implemented in Phase 0`);
-  const filter = parseTaskList(flags.args.slice(2));
-  const data = await createBridge(flags, options).request('task.list', filter);
-  return flags.json ? formatJsonSuccess(data) : formatTasks(data);
+  if (subcommand === 'list') {
+    const filter = parseTaskList(flags.args.slice(2));
+    const data = await createBridge(flags, options).request('task.list', filter);
+    return flags.json ? formatJsonSuccess(data) : formatTasks(data);
+  }
+  if (subcommand === 'get') {
+    const uid = flags.args[2];
+    if (!uid) throw usageError('Usage: orbit task get <uid>');
+    const data = await createBridge(flags, options).request('task.get', { uid });
+    return flags.json ? formatJsonSuccess(data) : formatTaskGet(data);
+  }
+  if (subcommand === 'deps') {
+    const uid = flags.args[2];
+    if (!uid) throw usageError('Usage: orbit task deps <uid>');
+    const data = await createBridge(flags, options).request('task.deps', { uid });
+    return flags.json ? formatJsonSuccess(data) : formatDependencyTree(data);
+  }
+  if (subcommand === 'update') {
+    const uid = flags.args[2];
+    if (!uid) throw usageError('Usage: orbit task update <uid> [--status S] [--depends-on a,b]');
+    const data = await createBridge(flags, options).request(
+      'task.update',
+      parseTaskUpdate(uid, flags.args.slice(3))
+    );
+    return flags.json ? formatJsonSuccess(data) : formatTasks([data]);
+  }
+  throw usageError(`orbit task ${subcommand} is not implemented`);
 }
 
 export async function runCli(argv: string[], options: CliRunOptions = {}): Promise<CliExitCode> {

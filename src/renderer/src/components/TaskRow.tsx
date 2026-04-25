@@ -97,6 +97,14 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
                 🚫 blocked
               </span>
             )}
+            {(task.depends_on ?? []).length > 0 && task.status !== 'done' && (
+              <span
+                title={`Depends on ${(task.depends_on ?? []).join(', ')}`}
+                className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+              >
+                🔒 deps {(task.depends_on ?? []).length}
+              </span>
+            )}
             {task.ready && task.status === 'waiting' && (
               <span
                 title="All pre-conditions met, ready to start"

@@ -148,10 +148,9 @@ export function tasksOfFile(
     if (parentTaskUid) rec.parent_task_uid = parentTaskUid;
     const generatedFromTaskUid = asString(data['generated_from_task_uid']);
     if (generatedFromTaskUid) rec.generated_from_task_uid = generatedFromTaskUid;
-    const dependsOn = asStringArr(data['depends_on']);
-    if (dependsOn) rec.depends_on = dependsOn;
+    rec.depends_on = asStringArr(data['depends_on']) ?? [];
     const derivedFrom = asNullableString(data['derived_from']);
-    if (derivedFrom !== undefined) rec.derived_from = derivedFrom;
+    rec.derived_from = derivedFrom ?? null;
     const roleBindingId = asString(data['role_binding_id']);
     if (roleBindingId) rec.role_binding_id = roleBindingId;
     const recommendedRole = asString(data['recommended_role']);
