@@ -99,6 +99,16 @@ async function pickDirectory(mode: 'open' | 'create'): Promise<string | null> {
   return result.filePaths[0] ?? null;
 }
 
+async function attachVaultRuntime(vaultPath: string): Promise<void> {
+  terminal.setVaultRoot(vaultPath);
+  await openFsSession(vaultPath);
+  await reconcileOnStart(vaultPath);
+  await ensureOrchestrationForVault(vaultPath);
+  await ensureTerminalAgentRuntimeForVault(vaultPath);
+  void ensureVectorStore(vaultPath);
+  void runWorktreeGc(vaultPath).catch(() => undefined);
+}
+
 async function handlePickAndOpen(): Promise<VaultResult> {
   const dir = await pickDirectory('open');
   if (!dir) return { ok: false, reason: 'cancelled' };
@@ -112,14 +122,8 @@ async function handlePickAndOpen(): Promise<VaultResult> {
     }
     const vault = await openVault(dir);
     currentVault = vault;
-    terminal.setVaultRoot(vault.path);
     await setLastVaultPath(dir);
-    await openFsSession(dir);
-    await reconcileOnStart(dir);
-    await ensureOrchestrationForVault(dir);
-    await ensureTerminalAgentRuntimeForVault(dir);
-    void ensureVectorStore(dir);
-    void runWorktreeGc(dir).catch(() => undefined);
+    await attachVaultRuntime(dir);
     return { ok: true, vault };
   } catch (e) {
     return { ok: false, reason: 'error', message: (e as Error).message };
@@ -132,13 +136,8 @@ async function handleCreateNew(): Promise<VaultResult> {
   try {
     const vault = await createVault(dir);
     currentVault = vault;
-    terminal.setVaultRoot(vault.path);
     await setLastVaultPath(dir);
-    await openFsSession(dir);
-    await reconcileOnStart(dir);
-    await ensureOrchestrationForVault(dir);
-    await ensureTerminalAgentRuntimeForVault(dir);
-    void ensureVectorStore(dir);
+    await attachVaultRuntime(dir);
     return { ok: true, vault };
   } catch (e) {
     return { ok: false, reason: 'error', message: (e as Error).message };
@@ -152,13 +151,8 @@ async function handleOpenPath(_: unknown, dir: string): Promise<VaultResult> {
     }
     const vault = await openVault(dir);
     currentVault = vault;
-    terminal.setVaultRoot(vault.path);
     await setLastVaultPath(dir);
-    await openFsSession(dir);
-    await reconcileOnStart(dir);
-    await ensureOrchestrationForVault(dir);
-    await ensureTerminalAgentRuntimeForVault(dir);
-    void ensureVectorStore(dir);
+    await attachVaultRuntime(dir);
     return { ok: true, vault };
   } catch (e) {
     return { ok: false, reason: 'error', message: (e as Error).message };
@@ -348,12 +342,7 @@ app.whenReady().then(async () => {
       (await isVault(settings.lastVaultPath))
     ) {
       currentVault = await openVault(settings.lastVaultPath);
-      terminal.setVaultRoot(currentVault.path);
-      await openFsSession(settings.lastVaultPath);
-      await reconcileOnStart(settings.lastVaultPath);
-      await ensureTerminalAgentRuntimeForVault(settings.lastVaultPath);
-      void ensureVectorStore(settings.lastVaultPath);
-      void runWorktreeGc(settings.lastVaultPath).catch(() => undefined);
+      await attachVaultRuntime(settings.lastVaultPath);
     }
   } catch {
     currentVault = null;
