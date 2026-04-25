@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit v2 阶段 5 Capture + CLI**：完成 Feed / Library / Thoughts 基础数据流、Thought-only Quick Capture 与 `orbit` CLI 对现有 v1 MCP 等价能力和 v2 foundation 的主要命令覆盖，保留 MCP 启动到清理阶段处理。
 - **Capture / Quick Capture 基础能力**：新增 Feed RSS 订阅与去重刷新、Feed History 淡出、Library 保存/阅读进度/Promote to Resource、Thoughts 生命周期与 `⌘⇧I` Thought-only Quick Capture 浮层，并接入 Inbox v2、IPC/preload 类型和 Activity Log。
 - **Orbit v2 阶段 5 CLI 全量覆盖**：补齐 `orbit` CLI 对 v1 MCP 等价能力与现有 v2 foundation 的命令面，包括 project/task/inbox/activity/approval/auto-runner/agent/run；新增 stdin/`--file` 长内容输入、稳定 unavailable 错误与命令覆盖测试，Capture/Memory 后端缺失时仅暴露 help 与结构化不可用错误。
 - **Orbit v2 阶段 4 Auto-runner 调度器**：新增 `src/main/auto_runner/` dispatcher / scheduler / event bridge / settings，按 ready-set 自动拾取已授权且依赖满足的 `todo` task，支持并发与小时限额、Sandbox unsupported Inbox 求助事件、Activity Log 运行事件，以及 `orbit auto-runner status/start/stop` 控制。
