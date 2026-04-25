@@ -7,12 +7,51 @@ import { currentSession } from '../fs';
 import { startTask } from '../agent/ipc';
 import { refreshTaskFileInSession } from './session';
 import { readJsonFile, taskConversationFile, writeJsonFile } from './storage';
-import { updateTaskFrontmatter } from '../task';
+import { readTaskFile, updateTaskFrontmatter } from '../task';
+import type { TaskStatus } from '@shared/schemas';
 
 type NewTurn = Omit<ConversationTurn, 'id' | 'createdAt'>;
 type NewSegment = Omit<RunSegment, 'id' | 'startedAt'>;
 
 export const conversationEvents = new EventEmitter();
+
+function normalizeTaskStatus(value: unknown): TaskStatus | null {
+  return value === 'backlog' ||
+    value === 'waiting' ||
+    value === 'todo' ||
+    value === 'doing' ||
+    value === 'blocked' ||
+    value === 'done'
+    ? value
+    : null;
+}
+
+function defaultIncompleteSummary(taskStatus: TaskStatus | null): string {
+  if (taskStatus === 'waiting') return '任务仍在等待补充信息。';
+  if (taskStatus === 'blocked') return '任务仍被阻塞，尚未标记完成。';
+  return 'Run exited before the task was marked done.';
+}
+
+export function resolveConversationCompletion(args: {
+  resultStatus: RunSegment['status'];
+  taskStatus: TaskStatus | null;
+  blockedReason?: string;
+  summary: string;
+}): { status: RunSegment['status']; summary: string } {
+  const summary = args.summary.trim();
+  if (args.taskStatus === 'done') {
+    return { status: args.resultStatus, summary: summary || 'Task marked done.' };
+  }
+  if (args.resultStatus !== 'completed' && args.resultStatus !== 'needs_attention') {
+    return { status: args.resultStatus, summary: summary || defaultIncompleteSummary(args.taskStatus) };
+  }
+  return {
+    status: 'needs_attention',
+    summary:
+      args.blockedReason ||
+      (summary && summary !== 'exit 0' ? summary : defaultIncompleteSummary(args.taskStatus))
+  };
+}
 
 export async function getConversation(
   vaultPath: string,
@@ -180,6 +219,18 @@ export async function recordRunCompletion(
 ): Promise<void> {
   const match = await findSegmentByRunId(vaultPath, runId);
   if (!match) return;
+  const task = currentSession()?.tasks.allTasks().find((entry) => entry.id === match.taskId);
+  const taskFile =
+    task && task.source === 'file' ? await readTaskFile(task.filePath).catch(() => null) : null;
+  const completion = resolveConversationCompletion({
+    resultStatus: result.status,
+    taskStatus: normalizeTaskStatus(taskFile?.frontmatter['status']),
+    blockedReason:
+      typeof taskFile?.frontmatter['blocked_reason'] === 'string'
+        ? taskFile.frontmatter['blocked_reason']
+        : undefined,
+    summary: result.summary
+  });
   const assistantContent = result.events
     .filter((event) => event.kind === 'message' || event.kind === 'text')
     .map((event) => event.text?.trim())
@@ -193,21 +244,21 @@ export async function recordRunCompletion(
     });
   }
   const prefix =
-    result.status === 'completed'
+    completion.status === 'completed'
       ? '✅ 执行完成'
-      : result.status === 'cancelled'
+      : completion.status === 'cancelled'
         ? '⚫ 执行已停止'
-        : result.status === 'needs_attention'
+        : completion.status === 'needs_attention'
           ? '🟡 等待补充信息'
           : '❌ 执行失败';
   await appendTurn(vaultPath, match.taskUid, {
     role: 'system',
-    content: `${prefix}: ${result.summary}`,
+    content: `${prefix}: ${completion.summary}`,
     segmentId: match.segment.id
   });
   await completeSegment(vaultPath, match.taskUid, match.segment.id, {
-    status: result.status,
-    summary: result.summary
+    status: completion.status,
+    summary: completion.summary
   });
   await clearActiveRunId(match.taskId, runId);
 }

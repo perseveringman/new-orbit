@@ -36,6 +36,7 @@
 
 - **Claude 对话流正文缺失**：runner 现在会解析真实 Claude stream-json 的嵌套 `assistant.message.content[]` 文本，不再把 live 对话误判成空字符串；task chat 会显示 agent 的逐步输出，而不是只剩 `✅ 执行完成: exit 0`
 - **自主任务误判完成**：dispatch 结束时不再按进程 `exit 0` 自动把任务写成 `done`；现在会先读回任务文件，只有 agent 通过 MCP 明确标记 `done` 才算真正完成，否则会落到 `needs_attention` / 非 done 流程，并在 task chat 里显示“等待补充信息”
+- **任务上下文补全与完成守门**：task prompt 现在会携带任务正文、当前 summary 和最近执行日志，agent 能先判断信息是否充分；conversation completion 也新增兜底，只要任务文件还没被明确标成 `done`，成功退出也会显示为“等待补充信息”而不是 `✅ 执行完成: exit 0`
 - **Task Chat 首次发送空白态**：首次对一个还没有 conversation 文件的任务发消息后，前端现在会立即重新拉取并 hydrate 新建的 conversation，确保 running segment 和 live stream 不会因为 store 里还没有 conversation 而整块缺失
 - **自动认领任务卡死启动态**：Claude runner 改为默认 one-shot 执行，不再把 task / planner / distill run 混入 stdin 回写协议；子进程现在以 `-p <prompt> --output-format stream-json` 启动并直接忽略 stdin，避免进程活着却一直不产出首条事件
 - **任务执行上下文挂载**：task run 会优先在所属 worktree / project / area 目录启动，而不是退回 vault 根目录；runner 还会显式注入本地 `.orbit/.mcp.json`，即使项目处于 isolated agent exposure，也能稳定拿到 Orbit MCP 工具；dispatch 仍会忽略运行中的中间 stderr warning，避免被误判成失败

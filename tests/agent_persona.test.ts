@@ -43,7 +43,16 @@ describe('agent persona composition', () => {
           path: '/tmp/fake'
         }
       ];
-      const ctx = buildTaskContext({ task, entities });
+      const ctx = buildTaskContext({
+        task,
+        entities,
+        taskDocument: {
+          blockedReason: 'Need the API contract',
+          description: 'Implement the vessel shipping flow.',
+          summary: 'No code changes yet.',
+          recentExecutionLog: '- [2026-04-25T00:00:00.000Z] Asked for the API schema.'
+        }
+      });
       const prompt = composePrompt({
         persona,
         taskContext: ctx,
@@ -59,6 +68,9 @@ describe('agent persona composition', () => {
       expect(prompt).toContain('TASKUID00001');
       expect(prompt).toContain('PROJUID00001');
       expect(prompt).toContain('Orbit M4');
+      expect(prompt).toContain('## Description');
+      expect(prompt).toContain('Implement the vessel shipping flow.');
+      expect(prompt).toContain('blocked_reason: Need the API contract');
       expect(prompt).toContain('# Boundary');
       expect(prompt).toContain('Only do work that is within this task');
       expect(prompt).toContain('If information is missing, pause and ask for clarification');

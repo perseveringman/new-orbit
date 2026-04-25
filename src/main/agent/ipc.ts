@@ -62,6 +62,7 @@ import {
 import { readCodexSessionMessages } from './codex_sessions';
 import { listProjects } from '../project';
 import { listAreas } from '../area';
+import { readTaskFile } from '../task';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
 const TERMINAL_AGENT_EVENT_CHANNEL = IPC.terminalAgent.event;
@@ -503,9 +504,29 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
   }
 
   const persona = await loadPersona(sess.vault);
+  const taskFile =
+    task.source === 'file'
+      ? await readTaskFile(task.filePath).catch(() => null)
+      : null;
   const taskContext = buildTaskContext({
     task,
-    entities: sess.tasks.allEntities()
+    entities: sess.tasks.allEntities(),
+    taskDocument: taskFile
+      ? {
+          blockedReason:
+            typeof taskFile.frontmatter['blocked_reason'] === 'string'
+              ? taskFile.frontmatter['blocked_reason']
+              : undefined,
+          description: taskFile.sections.description,
+          summary: taskFile.sections.summary,
+          recentExecutionLog: taskFile.sections.executionLog
+            .split('\n')
+            .map((line) => line.trimEnd())
+            .filter(Boolean)
+            .slice(-6)
+            .join('\n')
+        }
+      : undefined
   });
 
   // Experience wake-up: inject past resource/archive hits above threshold.

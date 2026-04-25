@@ -106,9 +106,11 @@ Orbit 任务文件位于 \`.orbit/agent/tasks/\`，采用四段式结构：
 ## 推荐工作流
 1. 先判断当前工作是否值得沉淀为 task。
 2. 需要持续跟踪或多步执行时，优先使用 \`create_task\`。
-3. 开始执行后用 \`update_task_status\` 进入 \`doing\`。
-4. 关键决策写入 \`# Agent Thinking\`，执行进展写入 \`# Execution Log\`。
-5. 结束时补充 \`# Summary\`，并更新最终状态。
+3. 先读任务正文、README、AGENT 和近期日志，判断信息是否充分。
+4. 如果信息不足，先提出澄清问题，并把任务保持在 \`waiting\` 或 \`blocked\`，不要直接宣布完成。
+5. 开始执行后用 \`update_task_status\` 进入 \`doing\`。
+6. 关键决策写入 \`# Agent Thinking\`，执行进展写入 \`# Execution Log\`。
+7. 结束时补充 \`# Summary\`，并仅在真正完成后更新为 \`done\`。
 
 ## 常用 MCP 工具
 - \`create_task\`
@@ -184,9 +186,10 @@ function buildMcpTools(): string {
 
 ## 推荐协作模式
 1. 创建或确认 task
-2. 切换 task 状态到 \`doing\`
-3. 边执行边追加日志和思考
-4. 完成后提交检查点并更新状态
+2. 先确认任务信息是否充分；不足时先用对话提出澄清
+3. 真正开始执行时切换 task 状态到 \`doing\`
+4. 边执行边追加日志和思考
+5. 完成后提交检查点，并只在结果真实落地后更新为 \`done\`
 `;
 }
 

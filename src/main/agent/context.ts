@@ -1,16 +1,24 @@
 import type { EntitySummary, TaskRecord } from '@shared/schemas';
 import type { SearchHit } from '@shared/types';
 
+export interface TaskDocumentContext {
+  blockedReason?: string;
+  description?: string;
+  summary?: string;
+  recentExecutionLog?: string;
+}
+
 export interface TaskContextArgs {
   task: TaskRecord;
   entities: EntitySummary[];
+  taskDocument?: TaskDocumentContext;
 }
 
 /**
  * Render a plaintext task context block for the prompt. Includes the
  * owning project/area titles + UIDs so the agent can cite them back.
  */
-export function buildTaskContext({ task, entities }: TaskContextArgs): string {
+export function buildTaskContext({ task, entities, taskDocument }: TaskContextArgs): string {
   const lines: string[] = [];
   lines.push(`Task: ${task.title}`);
   lines.push(`- id: ${task.id}`);
@@ -32,6 +40,18 @@ export function buildTaskContext({ task, entities }: TaskContextArgs): string {
     : undefined;
   if (task.area_uid) {
     lines.push(`- area_uid: ${task.area_uid}${area ? ` (${area.title})` : ''}`);
+  }
+  if (task.blocked_reason || taskDocument?.blockedReason) {
+    lines.push(`- blocked_reason: ${taskDocument?.blockedReason ?? task.blocked_reason}`);
+  }
+  if (taskDocument?.description?.trim()) {
+    lines.push('', '## Description', taskDocument.description.trim());
+  }
+  if (taskDocument?.summary?.trim()) {
+    lines.push('', '## Current summary', taskDocument.summary.trim());
+  }
+  if (taskDocument?.recentExecutionLog?.trim()) {
+    lines.push('', '## Recent execution log', taskDocument.recentExecutionLog.trim());
   }
   return lines.join('\n');
 }
