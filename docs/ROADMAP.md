@@ -54,6 +54,8 @@
 | Planner Agent + Agent Dispatching | `docs/plans/2026-04-24-orbit-planner-agent-dispatch-design.md`                | 已落地             |
 | Local Runtime Architecture        | `docs/plans/2026-04-24-orbit-local-runtime-architecture.md`                   | 已落地             |
 | Global Role Template Agents       | `docs/plans/2026-04-25-orbit-role-template-agent-design.md`                   | 已落地             |
+| Inbox Attention Architecture      | `docs/plans/2026-04-25-orbit-inbox-attention-architecture.md`                 | 设计中             |
+| Autonomous Workbench              | `docs/plans/2026-04-25-orbit-autonomous-workbench-design.md`                  | 设计中             |
 
 ---
 
@@ -105,13 +107,26 @@
 - PR review 状态在 Project Room 展示
 - Night Shift 结果直接推到指定远程分支
 
-### P7 — 性能与稳定性
+### P7 — Inbox Attention System
+
+- 将 Inbox 从 backlog task 视图升级为用户待处理事项收集箱
+- 引入通用 `InboxEntry`、watch / resolver、domain event projector
+- clarification / approval / completion / scheduled digest 统一进入 Inbox
+- `backlog` task 迁移到 `Backlog` 或 `Capture` 视图
+
+### P8 — Autonomous Workbench Loop
+
+- 将 Planner / Kanban / Dispatch / Inbox / Scheduler 串成持续闭环
+- 用户补充信息后恢复原 autonomous chain，而不是产生新的 manual run
+- Scheduled agents 作为一等自动化对象接入 artifact + inbox 流
+- Distill / Daily Review 反哺下一轮规划与执行
+### P9 — 性能与稳定性
 
 - 大 vault（>1000 文件）的索引性能优化
 - Electron 启动时间优化
 - 自动崩溃恢复改善
 
-### P8 — 跨平台支持
+### P10 — 跨平台支持
 
 - Linux（AppImage/snap）
 - Windows（NSIS installer）

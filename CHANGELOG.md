@@ -24,6 +24,8 @@
 
 - **Workspace Inspector 骨架（Task 2）**：安装 `lucide-react`；新增 `useWorkspaceInspector` Zustand store（activeTab / fileQuery / changeQuery / selectedPath / commitMessage / expanded）；新增 `inspectorTheme.ts` 语义化 class token 映射；扩展 Tailwind 配置和 `styles.css`，添加 `inspector-surface-0/1/2/3`、`inspector-border-subtle/strong`、`inspector-text-primary/secondary/dim`、`inspector-git-added/modified/deleted/renamed`、`inspector-accent` CSS 变量与颜色 token（支持 light / dark 双主题）；重写 `WorkspaceInspectorPane` 展示 Files / Changes 两个 tab（含 lucide 图标），不再使用原始 `neutral-*` 类名
 - **Project FS IPC（Task 3）**：新增 `ProjectFileNode` 类型；新增 `fs:listProjectTree` 与 `fs:createDirectory` IPC 通道；`src/main/project_fs.ts` 实现全量文件树（含非 Markdown 文件，忽略 `.git` / `node_modules` / `.orbit`）和安全目录创建（拒绝 `..`、`/`、`\`）；原有 vault `fs:listTree` Markdown-only 行为不变
+- **Inbox Attention Architecture 设计方案**：新增 `docs/plans/2026-04-25-orbit-inbox-attention-architecture.md`，将 Inbox 重新定义为用户待处理事项收集箱，明确事件投影、watch / resolver、双状态模型、跨业务扩展和 `Backlog` / `Inbox` 的职责分离
+- **Autonomous Workbench 设计方案**：新增 `docs/plans/2026-04-25-orbit-autonomous-workbench-design.md`，定义 Orbit 作为“带持续调度和注意力回路的 autonomous workbench”的整体产品骨架，串联 Planner、Kanban、Dispatch、Inbox、Scheduler 与学习回路
 
 ### Changed
 
