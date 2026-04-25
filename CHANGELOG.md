@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Project Brainstorm Skill**：新增 `.github/skills/project-brainstorm/` workspace skill，提供项目脑暴、项目接手考古、演进规划与文档体检四种模式，并附带 phases / checklists / templates / proactive patterns 等参考资料
 - **Task Chat 流式执行 e2e**：新增 `e2e/task-chat-stream.spec.ts`，会自动创建测试 project/task，把任务前置为 `todo + autonomous`，打开 task 详情 Chat tab，发送一条消息并等待 live stream 文案出现，覆盖 task conversation 的真实 Electron 执行链
 - **Task Conversation UI**：任务详情弹窗新增 `Detail / Chat` 双 tab；任务卡片点击会直接进入详情弹窗，Chat tab 统一承载自动 dispatch 执行记录与手动 task chat，对话数据持久化到 `.orbit/orchestration/conversations/*.json`，并复用 `agent:event` 展示运行中的实时输出
 - **Orchestration Core Runtime / Planner / Roles**：新增 `src/shared/orchestration.ts` 与 main-process orchestration 模块，落地 runtime registry、plan proposal 存储与发布、dispatch/lease/report 状态流、全局角色模板与项目 binding 持久化；任务状态升级为 `backlog / waiting / todo / doing / blocked / done`，并补齐 ownership、recommended role、implementation report 等编排字段
