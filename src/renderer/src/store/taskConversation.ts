@@ -43,11 +43,12 @@ export const useTaskConversation = create<TaskConversationState>((set, get) => (
     set((state) => ({ loading: { ...state.loading, [taskId]: true } }));
     try {
       const conversation = await window.orbit.conversation.get(taskId);
-      if (conversation) {
-        set((state) => ({
-          conversations: { ...state.conversations, [taskId]: conversation }
-        }));
-      }
+      set((state) => {
+        const conversations = { ...state.conversations };
+        if (conversation) conversations[taskId] = conversation;
+        else delete conversations[taskId];
+        return { conversations };
+      });
     } finally {
       set((state) => ({ loading: { ...state.loading, [taskId]: false } }));
     }
@@ -57,6 +58,12 @@ export const useTaskConversation = create<TaskConversationState>((set, get) => (
     set((state) => ({ sending: { ...state.sending, [taskId]: true } }));
     try {
       await window.orbit.conversation.send(taskId, message);
+      const conversation = await window.orbit.conversation.get(taskId);
+      if (conversation) {
+        set((state) => ({
+          conversations: { ...state.conversations, [taskId]: conversation }
+        }));
+      }
     } finally {
       set((state) => ({ sending: { ...state.sending, [taskId]: false } }));
     }

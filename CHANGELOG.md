@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Task Chat 流式执行 e2e**：新增 `e2e/task-chat-stream.spec.ts`，会自动创建测试 project/task，把任务前置为 `todo + autonomous`，打开 task 详情 Chat tab，发送一条消息并等待 live stream 文案出现，覆盖 task conversation 的真实 Electron 执行链
 - **Task Conversation UI**：任务详情弹窗新增 `Detail / Chat` 双 tab；任务卡片点击会直接进入详情弹窗，Chat tab 统一承载自动 dispatch 执行记录与手动 task chat，对话数据持久化到 `.orbit/orchestration/conversations/*.json`，并复用 `agent:event` 展示运行中的实时输出
 - **Orchestration Core Runtime / Planner / Roles**：新增 `src/shared/orchestration.ts` 与 main-process orchestration 模块，落地 runtime registry、plan proposal 存储与发布、dispatch/lease/report 状态流、全局角色模板与项目 binding 持久化；任务状态升级为 `backlog / waiting / todo / doing / blocked / done`，并补齐 ownership、recommended role、implementation report 等编排字段
 
@@ -32,6 +33,7 @@
 
 ### Fixed
 
+- **Task Chat 首次发送空白态**：首次对一个还没有 conversation 文件的任务发消息后，前端现在会立即重新拉取并 hydrate 新建的 conversation，确保 running segment 和 live stream 不会因为 store 里还没有 conversation 而整块缺失
 - **自动认领任务卡死启动态**：Claude runner 改为默认 one-shot 执行，不再把 task / planner / distill run 混入 stdin 回写协议；子进程现在以 `-p <prompt> --output-format stream-json` 启动并直接忽略 stdin，避免进程活着却一直不产出首条事件
 - **任务执行上下文挂载**：task run 会优先在所属 worktree / project / area 目录启动，而不是退回 vault 根目录；runner 还会显式注入本地 `.orbit/.mcp.json`，即使项目处于 isolated agent exposure，也能稳定拿到 Orbit MCP 工具；dispatch 仍会忽略运行中的中间 stderr warning，避免被误判成失败
 - **GUI 启动 PATH 修复**：main process 启动最前面新增 PATH bootstrap，macOS / Linux 从 Dock / Launchpad 启动时会先恢复 login shell 的 PATH，并补齐 `/opt/homebrew/bin`、`/usr/local/bin`、`~/.local/bin` fallback，避免 `claude` / `codex` / `git` 等 CLI 因 `ENOENT` 无法拉起

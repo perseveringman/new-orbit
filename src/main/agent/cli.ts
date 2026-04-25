@@ -62,12 +62,16 @@ export async function detectClaude(force = false): Promise<DetectResult> {
   if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return cached.result;
   }
-  let binPath: string | null = await whichClaude();
+  const overridePath = process.env['ORBIT_CLAUDE_PATH_OVERRIDE']?.trim();
+  let binPath: string | null = overridePath || null;
   if (!binPath) {
-    for (const p of candidatePaths()) {
-      if (await exists(p)) {
-        binPath = p;
-        break;
+    binPath = await whichClaude();
+    if (!binPath) {
+      for (const p of candidatePaths()) {
+        if (await exists(p)) {
+          binPath = p;
+          break;
+        }
       }
     }
   }
