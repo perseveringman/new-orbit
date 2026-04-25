@@ -447,6 +447,7 @@ export class AgentRunner extends EventEmitter {
 
     const args = [
       '-p',
+      this.opts.prompt,
       '--output-format',
       'stream-json',
       '--input-format',
@@ -485,7 +486,6 @@ export class AgentRunner extends EventEmitter {
       this.flushStderr();
       void this.finish(code === 0 ? 'done' : 'error', undefined, code);
     });
-    this.writeStdin(this.opts.prompt);
   }
 
   private onStdout(chunk: string): void {

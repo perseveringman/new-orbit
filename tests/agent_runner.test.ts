@@ -174,7 +174,7 @@ describe('AgentRunner stream parsing', () => {
     }
   });
 
-  it('starts Claude in stream-json input mode and sends the initial prompt over stdin', async () => {
+  it('starts Claude with -p prompt while keeping stream-json stdin available for later messages', async () => {
     const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-input-'));
     try {
       await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
@@ -195,10 +195,11 @@ describe('AgentRunner stream parsing', () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       const stdinPayload = String(child.stdin.read() ?? '');
 
+      expect(lastArgs()).toContain('-p');
+      expect(lastArgs()).toContain('plan the change');
       expect(lastArgs()).toContain('--input-format');
       expect(lastArgs()).toContain('stream-json');
-      expect(stdinPayload).toContain('"role":"user"');
-      expect(stdinPayload).toContain('"content":"plan the change"');
+      expect(stdinPayload).toBe('');
 
       await runner.stop('test');
     } finally {

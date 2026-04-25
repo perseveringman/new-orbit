@@ -69,8 +69,7 @@ describe('AgentRunner tool-invocation fallback (R6)', () => {
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line) as { role: string; content: string });
-      expect(stdinMessages[0]).toEqual({ role: 'user', content: 'p' });
-      expect(stdinMessages[1]).toEqual({
+      expect(stdinMessages[0]).toEqual({
         role: 'user',
         content: '{"ok":true,"uid":"taskabc"}'
       });

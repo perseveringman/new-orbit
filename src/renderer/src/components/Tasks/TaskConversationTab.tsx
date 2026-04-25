@@ -63,7 +63,6 @@ export function TaskConversationTimeline({
   sending = false,
   onSend
 }: TaskConversationTimelineProps): JSX.Element {
-  const runs = useAgent((s) => s.runs);
   const [draft, setDraft] = useState('');
 
   useEffect(() => {
@@ -98,10 +97,8 @@ export function TaskConversationTimeline({
   }, [conversation, segmentById]);
   const runningSegments = useMemo(
     () =>
-      (conversation?.segments ?? []).filter(
-        (segment) => segment.status === 'running' && segment.runId && runs[segment.runId]
-      ),
-    [conversation?.segments, runs]
+      (conversation?.segments ?? []).filter((segment) => segment.status === 'running' && segment.runId),
+    [conversation?.segments]
   );
 
   async function handleSend(): Promise<void> {
@@ -221,7 +218,20 @@ function ChatBubble({
 
 function LiveEventStream({ segment }: { segment: RunSegment }): JSX.Element | null {
   const run = useAgent((s) => (segment.runId ? s.runs[segment.runId] : undefined));
-  if (!run || run.summary.status !== 'running') return null;
+  if (!segment.runId) return null;
+  if (!run) {
+    return (
+      <div className="rounded border border-sky-400/40 bg-sky-500/5 p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-sky-600 dark:text-sky-300">
+          <span className="animate-pulse">●</span> Agent is starting…
+        </div>
+        <div className="space-y-1 border-l-2 border-sky-400/60 pl-3">
+          <p className="text-xs text-neutral-500">Waiting for the first live event…</p>
+        </div>
+      </div>
+    );
+  }
+  if (run.summary.status !== 'running') return null;
   const events = run.events.filter(
     (event): event is AgentEvent =>
       (event.kind === 'message' || event.kind === 'text') && Boolean(event.text?.trim())

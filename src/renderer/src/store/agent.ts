@@ -103,7 +103,20 @@ export const useAgent = create<AgentStore>((set, get) => ({
       }
       const existing = state.runs[runId];
       if (!existing) {
-        // new run arrived mid-stream — pull a fresh summary.
+        // Run spawned by dispatch in the background — bootstrap a
+        // placeholder entry so LiveEventStream can render immediately,
+        // then backfill the full summary list asynchronously.
+        const placeholder: RunState = {
+          summary: {
+            runId,
+            taskId: null,
+            status: 'running',
+            startedAt: event.at,
+            cwd: ''
+          },
+          events: [event]
+        };
+        set({ runs: { ...state.runs, [runId]: placeholder } });
         void get().refreshList();
         return;
       }
