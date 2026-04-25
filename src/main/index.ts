@@ -1,3 +1,4 @@
+import './path_bootstrap_init';
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
