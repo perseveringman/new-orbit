@@ -251,6 +251,7 @@ describe('AgentRunner stream parsing', () => {
 
       expect(lastArgs()).toContain('-p');
       expect(lastArgs()).toContain('plan the change');
+      expect(lastArgs()).toContain('--dangerously-skip-permissions');
       expect(lastArgs()).not.toContain('--input-format');
       expect(lastArgs()).not.toContain('--mcp-config');
       expect(lastOptions()?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
@@ -283,7 +284,13 @@ describe('AgentRunner stream parsing', () => {
       await runner.start();
       const child = last();
       expect(lastArgs()).toEqual(
-        expect.arrayContaining(['--resume', 'session-1', '--input-format', 'stream-json'])
+        expect.arrayContaining([
+          '--resume',
+          'session-1',
+          '--input-format',
+          'stream-json',
+          '--dangerously-skip-permissions'
+        ])
       );
       expect(lastArgs()).not.toContain('continue');
       expect(lastOptions()?.stdio).toEqual(['pipe', 'pipe', 'pipe']);

@@ -8,7 +8,12 @@
       "Bash(rm -rf node_modules/.pnpm/electron@31.7.7)",
       "Bash(pnpm install:*)",
       "Bash(node install.js)",
-      "Bash(pnpm dev:*)"
+      "Bash(pnpm dev:*)",
+      "WebFetch(domain:platform.minimaxi.com)",
+      "Bash(curl -s \"https://platform.minimaxi.com/docs/token-plan/mcp-guide\")",
+      "Bash(claude mcp:*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers',{}\\), indent=2\\)\\)\")",
+      "mcp__MiniMax__web_search"
     ]
   }
 }

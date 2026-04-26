@@ -220,7 +220,7 @@ describe('terminalAgent detail transcript import', () => {
     expect(result).toMatchObject({
       sessionId: recorded!.sessionId,
       resumeSessionId: 'claude-session-7',
-      resumeCommand: 'claude --resume claude-session-7',
+      resumeCommand: 'claude --dangerously-skip-permissions --resume claude-session-7',
       messages: [
         {
           role: 'user',

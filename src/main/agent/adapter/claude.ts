@@ -4,6 +4,7 @@ import { startLineProcess } from './process';
 import type { RuntimeAdapter, RuntimeProcessHandle, RuntimeStartRequest } from './types';
 import os from 'node:os';
 import path from 'node:path';
+import { appendClaudeBypassPermissionsArgs } from '@shared/claude_cli';
 import { createUnifiedAgentEvent } from '@shared/agent-event';
 import type { UnifiedAgentEvent, UnifiedAgentEventContext } from '@shared/agent-event';
 import type { RuntimeDescriptor } from '@shared/orchestration';
@@ -64,7 +65,13 @@ export class ClaudeRuntimeAdapter implements RuntimeAdapter {
     return startLineProcess(
       this,
       request,
-      ['-p', request.prompt, '--output-format', 'stream-json', '--verbose'],
+      appendClaudeBypassPermissionsArgs([
+        '-p',
+        request.prompt,
+        '--output-format',
+        'stream-json',
+        '--verbose'
+      ]),
       false
     );
   }

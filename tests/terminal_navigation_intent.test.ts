@@ -29,12 +29,12 @@ describe('terminal navigation intent', () => {
     });
     queueTerminalNavigation({
       projectUid: 'project-1',
-      initialCommand: 'claude --resume sess-9'
+      initialCommand: 'claude --dangerously-skip-permissions --resume sess-9'
     });
 
     expect(consumePendingTerminalNavigation('project-1')).toEqual({
       projectUid: 'project-1',
-      initialCommand: 'claude --resume sess-9'
+      initialCommand: 'claude --dangerously-skip-permissions --resume sess-9'
     });
   });
 

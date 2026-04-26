@@ -1,6 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
+import {
+  buildClaudeResumeCommand,
+  ensureClaudeBypassPermissionsCommand
+} from '@shared/claude_cli';
 import { ORBIT_DIR } from '@shared/constants';
 import type { TerminalHookEnvelope } from './hooks/server';
 import {
@@ -126,9 +130,15 @@ function deriveSessionMetadata(
     'conversation_id',
     'conversationId'
   );
+  const rawResumeCommand = getPayloadString(payload, 'resume_command', 'resumeCommand');
   const resumeCommand =
-    getPayloadString(payload, 'resume_command', 'resumeCommand') ??
-    (vendorSessionId && agentType === 'claude' ? `claude --resume ${vendorSessionId}` : undefined);
+    agentType === 'claude'
+      ? rawResumeCommand
+        ? ensureClaudeBypassPermissionsCommand(rawResumeCommand)
+        : vendorSessionId
+          ? buildClaudeResumeCommand(vendorSessionId)
+          : undefined
+      : rawResumeCommand;
 
   return {
     ...(vendorSessionId ? { vendorSessionId } : {}),

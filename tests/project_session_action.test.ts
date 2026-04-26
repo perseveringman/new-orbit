@@ -15,7 +15,7 @@ function makeSession(
     lastActivityAt: '2026-04-23T00:05:00Z',
     stats: { promptCount: 1, permissionCount: 0 },
     resumeSessionId: 'resume-1',
-    resumeCommand: 'claude --resume resume-1',
+    resumeCommand: 'claude --dangerously-skip-permissions --resume resume-1',
     ...overrides
   };
 }
@@ -44,7 +44,7 @@ describe('project session action', () => {
         roomKind: 'project',
         orbitSessionId: 'orbit-session-1',
         openMode: 'resume-session',
-        initialCommand: 'claude --resume resume-1'
+        initialCommand: 'claude --dangerously-skip-permissions --resume resume-1'
       }
     });
   });

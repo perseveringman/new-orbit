@@ -1,3 +1,4 @@
+import { DEFAULT_CLAUDE_LAUNCHER_COMMAND } from '@shared/claude_cli';
 import type { TerminalAgentLaunchDTO } from '@shared/ipc';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import YAML from 'yaml';
@@ -120,13 +121,13 @@ export function VisionRoomContent({
               notes-digest，然后从第 1 题开始。
             </p>
             <div className="mt-4">
-              <button
-                onClick={() =>
-                  emitOpenTerminal({
-                    launcherCommand: 'claude',
-                    prompt: startCommand
-                  })
-                }
+                  <button
+                    onClick={() =>
+                      emitOpenTerminal({
+                        launcherCommand: DEFAULT_CLAUDE_LAUNCHER_COMMAND,
+                        prompt: startCommand
+                      })
+                    }
                 className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
               >
                 ✨ 启动愿景访谈
@@ -160,7 +161,7 @@ export function VisionRoomContent({
           <button
             onClick={() =>
               emitOpenTerminal({
-                launcherCommand: 'claude',
+                launcherCommand: DEFAULT_CLAUDE_LAUNCHER_COMMAND,
                 prompt: reviewCommand
               })
             }

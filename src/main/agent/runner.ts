@@ -4,6 +4,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { nanoid } from 'nanoid';
 import { ORBIT_DIR, ORBIT_LOGS_DIR } from '@shared/constants';
+import { appendClaudeBypassPermissionsArgs } from '@shared/claude_cli';
 import {
   ORBIT_HOOK_PORT_ENV,
   ORBIT_HOOK_TOKEN_ENV,
@@ -471,8 +472,9 @@ export class AgentRunner extends EventEmitter {
     if (inputMode === 'stream-json') {
       args.push('--input-format', 'stream-json');
     }
+    const claudeArgs = appendClaudeBypassPermissionsArgs(args);
     try {
-      this.child = spawner(this.opts.claudePath, args, {
+      this.child = spawner(this.opts.claudePath, claudeArgs, {
         cwd: this.opts.cwd,
         env,
         stdio: [inputMode === 'stream-json' ? 'pipe' : 'ignore', 'pipe', 'pipe']

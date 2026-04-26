@@ -2,6 +2,10 @@ import { BrowserWindow, app, ipcMain } from 'electron';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  buildClaudeResumeCommand,
+  ensureClaudeBypassPermissionsCommand
+} from '@shared/claude_cli';
 import { ORBIT_DIR, ORBIT_LOGS_DIR } from '@shared/constants';
 import { IPC } from '@shared/ipc';
 import type {
@@ -148,7 +152,11 @@ async function enrichTerminalAgentSession(
   session: TerminalAgentSession,
   projectPath: string
 ): Promise<TerminalAgentSession> {
-  if (session.resumeCommand) return session;
+  if (session.resumeCommand) {
+    return session.agentType === 'claude'
+      ? { ...session, resumeCommand: ensureClaudeBypassPermissionsCommand(session.resumeCommand) }
+      : session;
+  }
   if (session.agentType !== 'claude') {
     return { ...session, resumeCommand: undefined };
   }
@@ -163,7 +171,7 @@ async function enrichTerminalAgentSession(
   return {
     ...session,
     vendorSessionId: session.vendorSessionId ?? target.sessionId,
-    resumeCommand: `claude --resume ${target.sessionId}`
+    resumeCommand: buildClaudeResumeCommand(target.sessionId)
   };
 }
 
@@ -399,8 +407,7 @@ export function registerAgentIpc(): void {
       ...enriched,
       roomKind: room.kind,
       resumeSessionId: target?.sessionId ?? null,
-      resumeCommand:
-        enriched.resumeCommand ?? (target ? `claude --resume ${target.sessionId}` : null),
+      resumeCommand: enriched.resumeCommand ?? (target ? buildClaudeResumeCommand(target.sessionId) : null),
       messages: detail?.messages ?? []
     };
   });
