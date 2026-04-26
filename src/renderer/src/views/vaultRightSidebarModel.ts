@@ -1,6 +1,7 @@
 export type VaultViewKind =
   | 'editor'
   | 'agents'
+  | 'developerConsole'
   | 'github'
   | 'inbox'
   | 'today'
@@ -17,6 +18,7 @@ export type ProjectRoomMode = 'kanban' | 'terminal' | 'sessions' | 'github';
 export type SidebarSurfaceId =
   | 'editor'
   | 'agents'
+  | 'developerConsole'
   | 'github'
   | 'inbox'
   | 'today'
@@ -107,6 +109,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
       { id: 'overview', title: 'Overview', panels: ['inspector', 'review'] },
       { id: 'execution', title: 'Execution', panels: ['runlog', 'diff'] }
     ]
+  },
+  developerConsole: {
+    intents: [{ id: 'execution', title: 'Execution', panels: ['runlog', 'inspector'] }]
   },
   journals: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]

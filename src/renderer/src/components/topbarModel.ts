@@ -11,6 +11,7 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
   { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
   { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
+  { label: 'Console', view: { kind: 'developerConsole' }, icon: '⌁' },
   { label: 'GitHub', view: { kind: 'github' }, icon: '⌘' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Today', view: { kind: 'today' }, icon: '☼' },
@@ -34,11 +35,20 @@ interface TopBarContextInput {
 }
 
 const WORKSPACE_DETAILS: Record<
-  'dashboard' | 'agents' | 'github' | 'inbox' | 'today' | 'journals' | 'kanban' | 'runtimes',
+  | 'dashboard'
+  | 'agents'
+  | 'developerConsole'
+  | 'github'
+  | 'inbox'
+  | 'today'
+  | 'journals'
+  | 'kanban'
+  | 'runtimes',
   string
 > = {
   dashboard: 'Vision, PARA health, and project activity.',
   agents: 'Inspect reusable role templates, versions, and cross-project execution coverage.',
+  developerConsole: 'Replay traceable agent, inbox, activity, and IPC events.',
   github: 'Connect accounts, import repos, and monitor GitHub delivery state.',
   inbox: 'Capture and sort incoming work before it spreads.',
   today: 'Focus on the tasks scheduled for today.',
@@ -119,6 +129,7 @@ export function deriveTopBarContext({
     view.kind === 'dashboard' ||
     view.kind === 'agents' ||
     view.kind === 'github' ||
+    view.kind === 'developerConsole' ||
     view.kind === 'inbox' ||
     view.kind === 'today' ||
     view.kind === 'journals' ||

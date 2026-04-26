@@ -26,6 +26,7 @@ import { GitHubWorkspaceView } from './GitHubWorkspaceView';
 import { ProjectRoomView } from './ProjectRoomView';
 import { JournalHistoryView } from './JournalHistoryView';
 import { RuntimesWorkspaceView } from './RuntimesWorkspaceView';
+import { DeveloperConsoleView } from './DeveloperConsoleView';
 import { NewProjectModal } from '../components/Modals/NewProjectModal';
 import { NewAreaModal } from '../components/Modals/NewAreaModal';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
@@ -356,6 +357,8 @@ export function VaultView(): JSX.Element {
           <DashboardView />
         ) : view.kind === 'runtimes' ? (
           <RuntimesWorkspaceView />
+        ) : view.kind === 'developerConsole' ? (
+          <DeveloperConsoleView />
         ) : view.kind === 'agents' ? (
           <AgentsLibraryView />
         ) : view.kind === 'journals' ? (
