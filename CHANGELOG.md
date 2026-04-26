@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit Phase 3.4 Event Replay Infrastructure**：新增 TraceableEvent schema、`.orbit/events/` NDJSON 按日写入与 GC、全局事件总线、agent/activity/inbox/ipc 四源接入、agent raw/abstract/ui-render 三层录像，以及 Developer Console 的实时流、trace/source/kind/task 过滤和基础 playback。
 - **Orbit Phase 3.2 / 3.3 Activity + Session + Fallback 基础**：任务详情 Chat tab 改为 Activity 体验，新增 Timeline cards 与流式 Markdown 展示；Task-Session 绑定支持 vendor session reverse scan、Claude resume 参数与运行中 `agent:sendMessage`；Auto-runner settings 扩展默认预算、15 分钟 stale timeout、runtime priority，并新增 fallback / budget guard 基础规则。
 - **Orbit Phase 3.1 Runtime Adapter Layer**：新增 `UnifiedAgentEvent` 通用事件协议、Claude / Codex / Copilot RuntimeAdapter 层、legacy `AgentEvent` 兼容转换、PoolEvent unified 旁路，以及 runtime 选择元数据，为 Activity Timeline、session resume、fallback 和 replay 铺底。
 - **Orbit Phase 3.0 Agent Playground**：新增 9 个 agent scenario fixture、`orbit dev:scenarios` / `orbit dev:golden` 调试命令、三层 run recorder（raw-vendor / abstract / ui-render）与 golden 文件比对测试，为后续 runtime adapter、event replay 和 Dashboard 提供可重复验证基础。
