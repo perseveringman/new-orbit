@@ -265,7 +265,8 @@ export async function migrateProjectsToFolders(
             : '',
         created_at: createdAt,
         template: 'blank',
-        vision_ref: '[[Vision]]'
+        vision_ref: '[[Vision]]',
+        execution_context: 'worktree'
       };
       const agentMd =
         agent && agent.trim().length > 0
@@ -278,7 +279,8 @@ export async function migrateProjectsToFolders(
         slug: c.slug,
         name,
         template: 'blank',
-        created_at: createdAt
+        created_at: createdAt,
+        execution_context: 'worktree'
       });
       await fs.writeFile(
         path.join(c.toDir, PROJECT_ORBIT_DIR, PROJECT_ORBIT_CONFIG),

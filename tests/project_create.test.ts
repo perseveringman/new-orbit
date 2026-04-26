@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createVault } from '../src/main/vault';
-import { createProject, listProjects } from '../src/main/project';
+import { createProject, listProjects, readProjectConfig } from '../src/main/project';
 import { listTemplates } from '../src/main/templates';
 
 async function tmpVault(): Promise<string> {
@@ -40,6 +40,7 @@ describe('project.create (R1)', () => {
     // Expected files
     const agent = await fs.readFile(path.join(res.projectPath, 'AGENT.md'), 'utf8');
     expect(agent).toContain('My Demo');
+    expect(agent).toContain('execution_context: worktree');
     expect(agent).not.toContain('{{');
 
     const readme = await fs.readFile(path.join(res.projectPath, 'README.md'), 'utf8');
@@ -125,6 +126,12 @@ describe('project.create (R1)', () => {
     });
     await fs.stat(path.join(research.projectPath, 'docs'));
     await fs.stat(path.join(research.projectPath, 'notes'));
+    await expect(readProjectConfig(research.projectPath)).resolves.toMatchObject({
+      execution_context: 'sandbox'
+    });
+    await expect(fs.readFile(path.join(research.projectPath, 'AGENT.md'), 'utf8')).resolves.toContain(
+      'execution_context: sandbox'
+    );
 
     const writing = await createProject(vault, {
       slug: 'w1',
@@ -133,6 +140,9 @@ describe('project.create (R1)', () => {
     });
     await fs.stat(path.join(writing.projectPath, 'drafts'));
     await fs.stat(path.join(writing.projectPath, 'final'));
+    await expect(readProjectConfig(writing.projectPath)).resolves.toMatchObject({
+      execution_context: 'sandbox'
+    });
   });
 
   it('rejects existing slugs and invalid slugs', async () => {

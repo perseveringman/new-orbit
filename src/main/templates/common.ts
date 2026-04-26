@@ -17,6 +17,9 @@ You are Orbit, working within the **{{name}}** project.
 ## Project Description
 {{description}}
 
+## Execution Context
+- \`execution_context: {{execution_context}}\`
+
 ## Operating Rules
 - Prefer small, reversible steps.
 - Never fabricate. Surface uncertainty explicitly.
@@ -48,7 +51,7 @@ export const BASE_CONFIG_JSON = `{
   "slug": "{{slug}}",
   "name": "{{name}}",
   "template": "{{template}}",
-  "execution_context": "worktree",
+  "execution_context": "{{execution_context}}",
   "created_at": "{{created_at}}",
   "vision_linked": true,
   "setup": [],

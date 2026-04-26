@@ -25,7 +25,8 @@ import {
   readProjectConfig,
   writeProjectConfig,
   type AgentExposureSettings,
-  type ProjectConfig
+  type ProjectConfig,
+  type ProjectExecutionContext
 } from './project_config';
 import { findAreaByUid } from './area';
 
@@ -96,6 +97,10 @@ export function projectConfigPath(vault: string, slug: string): string {
   return path.join(projectDir(vault, slug), PROJECT_ORBIT_DIR, PROJECT_ORBIT_CONFIG);
 }
 
+export function defaultExecutionContextForTemplate(template: string): ProjectExecutionContext {
+  return template === 'research' || template === 'writing' ? 'sandbox' : 'worktree';
+}
+
 async function initProjectGitRepo(dir: string, slug: string): Promise<void> {
   // `checkIsRepo()` walks up, so a project nested under a vault-level repo is
   // reported as already being inside a repo. Guard against that by checking
@@ -137,6 +142,7 @@ export async function createProject(
   }
   const uid = args.uid ?? newUid();
   const createdAt = new Date().toISOString();
+  const executionContext = defaultExecutionContextForTemplate(args.template);
   const vars: Record<string, string> = {
     uid,
     slug: args.slug,
@@ -144,7 +150,8 @@ export async function createProject(
     description: args.description ?? '',
     created_at: createdAt,
     template: args.template,
-    vision_ref: '[[Vision]]'
+    vision_ref: '[[Vision]]',
+    execution_context: executionContext
   };
   await scaffoldProject(dir, args.template, vars);
   await writeProjectConfig(dir, {
@@ -152,7 +159,7 @@ export async function createProject(
     slug: args.slug,
     name: args.name,
     template: args.template,
-    execution_context: 'worktree',
+    execution_context: executionContext,
     created_at: createdAt,
     vision_linked: true,
     setup: [],

@@ -3,7 +3,11 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createVault } from '../src/main/vault';
-import { createProject, readProjectConfig } from '../src/main/project';
+import {
+  createProject,
+  defaultExecutionContextForTemplate,
+  readProjectConfig
+} from '../src/main/project';
 import { normalizeProjectConfig } from '../src/main/project_config';
 
 describe('project config contract', () => {
@@ -103,5 +107,12 @@ describe('project config contract', () => {
       'sandbox'
     );
     expect(normalizeProjectConfig({ execution_context: 'git' }).execution_context).toBe('worktree');
+  });
+
+  it('selects sandbox defaults for research and writing templates only', () => {
+    expect(defaultExecutionContextForTemplate('blank')).toBe('worktree');
+    expect(defaultExecutionContextForTemplate('web-app')).toBe('worktree');
+    expect(defaultExecutionContextForTemplate('research')).toBe('sandbox');
+    expect(defaultExecutionContextForTemplate('writing')).toBe('sandbox');
   });
 });

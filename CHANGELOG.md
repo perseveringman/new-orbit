@@ -27,6 +27,10 @@
 - **Task Editor 依赖编辑补齐**：任务详情的 Structured 表单现在可以直接编辑 `depends_on`，同时展示 `derived_from`、未完成依赖提示和缺失依赖引用；当循环依赖等保存被拒绝时，表单会自动回滚到磁盘状态，避免前端停留在假成功值。
 - **左侧栏 Inbox 红点计数**：Workspace 左侧导航的 Inbox 入口现在会订阅 Inbox 事件并显示 `sidebarMessagesPending` 红色 badge，这样无需进入 Inbox 页面也能看到待处理消息数。
 
+### Changed
+
+- **项目模板执行上下文默认值**：新建 `research` / `writing` 项目时会按 ADR-003 预填 `execution_context: sandbox`，`blank` / `web-app` 保持 `worktree`；同时 `AGENT.md` 会显式写出当前执行上下文，减少 agent 对隔离方式的猜测。
+
 - **Orbit v2 方向确立（2026-04-26）**：经过一次完整 Onboard 对话（~29 轮），确立 v2 演进方向。产出：
   - 新增 `docs/overview.md` — v2 完整架构总览
   - 新增 `docs/decisions/` 目录（10 份 ADR + README）：ADR-001 (废弃 Night Shift) / ADR-002 (Agent 子任务折叠) / ADR-003 (ExecutionContext 双轨) / ADR-004 (Inbox 枢纽) / ADR-005 (Plan Chat 定位) / ADR-006 (propose-approve) / ADR-007 (depends_on) / ADR-008 (AI-Native CLI-first) / ADR-009 (Activity Log) / ADR-010 (Capture 三分)
