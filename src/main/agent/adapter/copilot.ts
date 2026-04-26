@@ -2,6 +2,7 @@ import { createUnifiedAgentEvent, type UnifiedAgentEvent, type UnifiedAgentEvent
 import type { RuntimeDescriptor } from '@shared/orchestration';
 import { startLineProcess } from './process';
 import type { RuntimeAdapter, RuntimeProcessHandle, RuntimeStartRequest } from './types';
+import { buildAgentOnboardingPrompt, type AgentOnboardingPromptInput } from '../onboarding';
 
 export class CopilotRuntimeAdapter implements RuntimeAdapter {
   readonly capabilities = {
@@ -13,6 +14,10 @@ export class CopilotRuntimeAdapter implements RuntimeAdapter {
   };
 
   constructor(readonly descriptor: RuntimeDescriptor) {}
+
+  buildSystemPrompt(prompt: string, input?: AgentOnboardingPromptInput): string {
+    return input ? `${buildAgentOnboardingPrompt(input)}\n\n${prompt}` : prompt;
+  }
 
   normalizeVendorEvent(
     raw: unknown,

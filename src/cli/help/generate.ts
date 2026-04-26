@@ -11,8 +11,9 @@ Available commands:
   search       Search the open vault
   cat          Read a vault file or UID
   memory      Memory search/save (${MEMORY_UNAVAILABLE})
-  project     Project commands: graph, list, get, archive
-  task        Task commands: list, get, update, propose, propose-scope, deps, delete
+  project     Project commands: overview, graph, list, get, archive
+  kanban      Kanban commands: list
+  task        Task commands: list, get, update, propose, related, transcript, propose-scope, propose-split, deps, delete
   inbox       Inbox commands: list, get, resolve, dismiss, archive, emit-message
   activity    Activity log commands: list, summary
   approval    Approval commands: list, get, resolve
@@ -70,6 +71,7 @@ export function generateProjectHelp(): string {
   return `Usage: orbit project <subcommand> [args]
 
 Available subcommands:
+  overview <slug>         Project vision/current phase/key docs summary
   graph [--uid UID]       Return project/task graph data
   list                    List projects
   get <uid>               Get project metadata
@@ -77,6 +79,7 @@ Available subcommands:
 
 Examples:
   orbit project list --json
+  orbit project overview demo
   orbit project graph --uid project_uid
   orbit project archive project_uid --json
 `;
@@ -89,8 +92,11 @@ Available subcommands:
   list [--status S] [--project UID] [--area UID] [--tag TAG]
   get <uid>
   update <uid> [--status S] [--depends-on a,b]
+  related <uid>
+  transcript <uid>
   propose --title T (--project UID | --area UID) [--run RUN] [--description TEXT|--file F]
   propose-scope <current-uid> [--run RUN] [--summary TEXT|--file F]
+  propose-split <current-uid> [--run RUN] [--summary TEXT|--file F]
   deps <uid>
   delete <uid>            Currently unavailable unless a delete backend is added
 

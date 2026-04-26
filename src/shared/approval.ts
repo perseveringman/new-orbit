@@ -5,6 +5,7 @@ export const PROPOSAL_TYPES = [
   'new_task',
   'planner_publish',
   'scope_expansion',
+  'task_split',
   'merge',
   'archive_project'
 ] as const;
@@ -24,6 +25,7 @@ export const PROPOSAL_INBOX_SUBTYPES = {
   new_task: 'A2',
   planner_publish: 'A3',
   scope_expansion: 'A4',
+  task_split: 'A4',
   merge: 'A1',
   archive_project: 'D2'
 } as const satisfies Record<ProposalType, 'A1' | 'A2' | 'A3' | 'A4' | 'D2'>;

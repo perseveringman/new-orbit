@@ -243,6 +243,49 @@ function formatDependencyTree(data: unknown): string {
   return `${lines.join('\n')}\n`;
 }
 
+function formatRelatedTasks(data: unknown): string {
+  const payload = data as { relatedTasks?: Array<{ task: TaskRecord; score: number }> };
+  const related = payload.relatedTasks ?? [];
+  if (related.length === 0) return 'No related tasks\n';
+  return related.map((entry) => `${entry.score}\t${entry.task.status}\t${entry.task.uid ?? entry.task.id}\t${entry.task.title}`).join('\n') + '\n';
+}
+
+function formatTranscript(data: unknown): string {
+  const payload = data as {
+    segments?: Array<{ id: string; status: string; sessionStatus?: string; runId?: string }>;
+    turns?: Array<{ role: string; content: string; segmentId?: string }>;
+  };
+  const lines: string[] = [];
+  for (const segment of payload.segments ?? []) {
+    lines.push(`## segment ${segment.id} ${segment.status}/${segment.sessionStatus ?? 'idle'} ${segment.runId ?? ''}`.trim());
+  }
+  for (const turn of payload.turns ?? []) {
+    lines.push(`${turn.role}${turn.segmentId ? `(${turn.segmentId})` : ''}: ${turn.content}`);
+  }
+  return `${lines.join('\n') || 'No transcript'}\n`;
+}
+
+function formatProjectOverview(data: unknown): string {
+  const payload = data as {
+    project?: { slug?: string; name?: string; status?: string; description?: string };
+    readme_excerpt?: string;
+    task_counts?: Record<string, number>;
+    key_docs?: string[];
+  };
+  const project = payload.project;
+  if (!project) return 'Project not found\n';
+  const counts = Object.entries(payload.task_counts ?? {})
+    .map(([status, count]) => `${status}:${count}`)
+    .join(' ');
+  return [
+    `${project.slug}\t${project.name}\t${project.status ?? '-'}`,
+    project.description ? `description\t${project.description}` : '',
+    counts ? `tasks\t${counts}` : 'tasks\t-',
+    payload.key_docs?.length ? `key_docs\t${payload.key_docs.join(', ')}` : '',
+    payload.readme_excerpt ? `\n${payload.readme_excerpt}` : ''
+  ].filter(Boolean).join('\n') + '\n';
+}
+
 function formatInbox(data: unknown): string {
   const result = data as InboxListResult;
   if (Array.isArray(result.items)) {
@@ -321,9 +364,16 @@ async function bridgeOutput(
 async function runSearch(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
   if (flags.help) return generateSearchHelp();
   const { limit, rest } = parseLimit(flags.args.slice(1));
-  const query = rest.join(' ').trim();
-  if (!query) throw usageError('Usage: orbit search <query> [--limit N]');
-  return bridgeOutput(flags, options, 'search', { query, limit }, formatSearchHits);
+  const queryParts: string[] = [];
+  let project: string | undefined;
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i] ?? '';
+    if (arg === '--project') project = argvValue(rest, ++i, '--project');
+    else queryParts.push(arg);
+  }
+  const query = queryParts.join(' ').trim();
+  if (!query) throw usageError('Usage: orbit search <query> [--limit N] [--project slug]');
+  return bridgeOutput(flags, options, 'search', { query, limit, ...(project ? { project } : {}) }, formatSearchHits);
 }
 
 async function runCat(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
@@ -438,6 +488,16 @@ async function runTask(flags: ParsedGlobalFlags, options: CliRunOptions): Promis
     if (!uid) throw usageError('Usage: orbit task deps <uid>');
     return bridgeOutput(flags, options, 'task.deps', { uid }, formatDependencyTree);
   }
+  if (subcommand === 'related') {
+    const uid = flags.args[2];
+    if (!uid) throw usageError('Usage: orbit task related <uid>');
+    return bridgeOutput(flags, options, 'task.related', { uid }, formatRelatedTasks);
+  }
+  if (subcommand === 'transcript') {
+    const uid = flags.args[2];
+    if (!uid) throw usageError('Usage: orbit task transcript <uid>');
+    return bridgeOutput(flags, options, 'task.transcript', { uid }, formatTranscript);
+  }
   if (subcommand === 'update') {
     const uid = flags.args[2];
     if (!uid) throw usageError('Usage: orbit task update <uid> [--status S] [--depends-on a,b]');
@@ -469,6 +529,17 @@ async function runTask(flags: ParsedGlobalFlags, options: CliRunOptions): Promis
       formatApprovals
     );
   }
+  if (subcommand === 'propose-split') {
+    const currentUid = flags.args[2];
+    if (!currentUid) throw usageError('Usage: orbit task propose-split <current-uid>');
+    return bridgeOutput(
+      flags,
+      options,
+      'task.proposeSplit',
+      await parseTaskProposeScope(currentUid, flags.args.slice(3), options),
+      formatApprovals
+    );
+  }
   if (subcommand === 'delete') {
     throw unavailableError('orbit task delete is unavailable: no task delete backend is present.');
   }
@@ -483,6 +554,11 @@ async function runProject(flags: ParsedGlobalFlags, options: CliRunOptions): Pro
     const uid = flags.args[2];
     if (!uid) throw usageError('Usage: orbit project get <uid>');
     return bridgeOutput(flags, options, 'project.get', { uid }, formatGeneric);
+  }
+  if (subcommand === 'overview') {
+    const slug = flags.args[2];
+    if (!slug) throw usageError('Usage: orbit project overview <slug>');
+    return bridgeOutput(flags, options, 'project.overview', { slug }, formatProjectOverview);
   }
   if (subcommand === 'archive') {
     const uid = flags.args[2];
@@ -500,6 +576,15 @@ async function runProject(flags: ParsedGlobalFlags, options: CliRunOptions): Pro
     return bridgeOutput(flags, options, 'project.graph', params, formatGeneric);
   }
   throw usageError(`Unknown project subcommand: ${subcommand}`);
+}
+
+async function runKanban(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
+  if (flags.help || !flags.args[1]) return 'Usage: orbit kanban list <project-slug>\n';
+  const subcommand = flags.args[1];
+  if (subcommand !== 'list') throw usageError(`Unknown kanban subcommand: ${subcommand}`);
+  const project = flags.args[2];
+  if (!project) throw usageError('Usage: orbit kanban list <project-slug>');
+  return bridgeOutput(flags, options, 'task.list', { project_uid: project }, formatTasks);
 }
 
 function parseInboxList(args: string[]): Record<string, unknown> {
@@ -882,6 +967,7 @@ export async function runCli(argv: string[], options: CliRunOptions = {}): Promi
     else if (command === 'memory')
       output = await runUnavailableDomain(flags, command, generateMemoryHelp);
     else if (command === 'project') output = await runProject(flags, options);
+    else if (command === 'kanban') output = await runKanban(flags, options);
     else if (command === 'task') output = await runTask(flags, options);
     else if (command === 'inbox') output = await runInbox(flags, options);
     else if (command === 'activity') output = await runActivity(flags, options);

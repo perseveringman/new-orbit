@@ -66,6 +66,7 @@ import { listAreas } from '../area';
 import { readTaskFile } from '../task';
 import { getLocalRuntimeManager } from '../orchestration/runtime';
 import { currentRunRecorder, publishTraceableEvent } from '../events/bus';
+import { buildAgentOnboardingPrompt } from './onboarding';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
 const TERMINAL_AGENT_EVENT_CHANNEL = IPC.terminalAgent.event;
@@ -615,7 +616,10 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
   }
 
   const userAsk = [args.instructions ?? '', experienceBlock].filter(Boolean).join('\n\n');
-  const prompt = composePrompt({
+  const project = task.project_uid
+    ? (await listProjects(sess.vault)).find((item) => item.uid === task.project_uid)
+    : undefined;
+  const basePrompt = composePrompt({
     persona,
     taskContext,
     userAsk,
@@ -624,6 +628,13 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       uid: task.uid
     }
   });
+  const prompt = `${buildAgentOnboardingPrompt({
+    taskTitle: task.title,
+    taskUid: task.uid,
+    projectName: project?.name,
+    projectSlug: project?.slug,
+    keywords: task.tags
+  })}\n\n${basePrompt}`;
 
   const budget = await getBudget();
   const estInputTokens = estimateTokens(prompt);

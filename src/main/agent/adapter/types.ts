@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import type { UnifiedAgentEvent, UnifiedAgentEventContext } from '@shared/agent-event';
 import type { RuntimeDescriptor } from '@shared/orchestration';
+import type { AgentOnboardingPromptInput } from '../onboarding';
 
 export interface RuntimeStartRequest {
   runId: string;
@@ -27,6 +28,7 @@ export interface RuntimeAdapterCapabilities {
 export interface RuntimeAdapter {
   readonly descriptor: RuntimeDescriptor;
   readonly capabilities: RuntimeAdapterCapabilities;
+  buildSystemPrompt?(prompt: string, input?: AgentOnboardingPromptInput): string;
   normalizeVendorEvent(raw: unknown, context: UnifiedAgentEventContext, index: number): UnifiedAgentEvent;
   start(request: RuntimeStartRequest): RuntimeProcessHandle;
 }

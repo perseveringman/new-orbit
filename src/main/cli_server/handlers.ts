@@ -30,6 +30,7 @@ import type { ActivityQueryFilter } from '../activity/types';
 import { listProjects } from '../project';
 import { getPool } from '../agent/pool';
 import { appendExecutionLog } from '../task';
+import { getConversation } from '../orchestration/conversation';
 import { cliServerError } from './errors';
 import type { CliHandlerRegistry } from './registry';
 
@@ -196,6 +197,32 @@ function proposalSubject(prefix: string, fallback: string): string {
   return `${prefix}: ${fallback}`;
 }
 
+async function projectBySlugOrUid(slugOrUid: string) {
+  const project = (await listProjects(openSession().vault)).find(
+    (item) => item.slug === slugOrUid || item.uid === slugOrUid
+  );
+  if (!project) throw cliServerError('not_found', `project not found: ${slugOrUid}`);
+  return project;
+}
+
+async function readProjectReadmeExcerpt(readmePath: string): Promise<string> {
+  const raw = await fs.readFile(readmePath, 'utf8').catch(() => '');
+  return raw
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .slice(0, 24)
+    .join('\n');
+}
+
+async function listProjectKeyDocs(projectPath: string): Promise<string[]> {
+  const entries = await fs.readdir(projectPath, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => toPosix(vaultRel(openSession().vault, path.join(projectPath, entry.name))))
+    .slice(0, 20);
+}
+
 function activitySummary(events: Awaited<ReturnType<typeof queryActivities>>): {
   total: number;
   byAction: Record<string, number>;
@@ -211,21 +238,34 @@ function activitySummary(events: Awaited<ReturnType<typeof queryActivities>>): {
 }
 
 export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
-  registry.register('search', (params) => {
+  registry.register('search', async (params) => {
     const session = openSession();
     const query = stringParam(params, 'query');
     const limit = isRecord(params) ? optionalNumber(params.limit, 30) : 30;
-    return session.search.search(query, limit);
+    const project = isRecord(params) ? optionalStringParam(params, 'project') : undefined;
+    const hits = session.search.search(query, limit);
+    if (!project) return hits;
+    const projectRecord = (await listProjects(session.vault)).find(
+      (entity) => entity.uid === project || entity.slug === project
+    );
+    return hits.filter((hit) =>
+      projectRecord?.relPath ? hit.relPath.startsWith(path.dirname(projectRecord.relPath)) : true
+    );
   });
 
   registry.register('cat', async (params) => readTarget(stringParam(params, 'target')));
 
-  registry.register('task.list', (params) => {
+  registry.register('task.list', async (params) => {
     const session = openSession();
     const filter = taskFilter(params);
+    const projectFilter = filter.project_uid
+      ? (await listProjects(session.vault)).find(
+          (entity) => entity.uid === filter.project_uid || entity.slug === filter.project_uid
+        )?.uid ?? filter.project_uid
+      : undefined;
     let tasks = materializeTaskGraph(session.tasks.allTasks());
     if (filter.status) tasks = tasks.filter((task) => task.status === filter.status);
-    if (filter.project_uid) tasks = tasks.filter((task) => task.project_uid === filter.project_uid);
+    if (projectFilter) tasks = tasks.filter((task) => task.project_uid === projectFilter);
     if (filter.area_uid) tasks = tasks.filter((task) => task.area_uid === filter.area_uid);
     if (filter.tag) tasks = tasks.filter((task) => (task.tags ?? []).includes(filter.tag ?? ''));
     return tasks;
@@ -247,6 +287,47 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     const task = resolveTask(uid);
     if (!task.uid) throw cliServerError('invalid_params', 'task has no uid');
     return dependencyTree(task.uid, taskIndex());
+  });
+
+  registry.register('task.related', async (params) => {
+    const uid = stringParam(params, 'uid');
+    const task = resolveTask(uid);
+    const tasks = materializeTaskGraph(openSession().tasks.allTasks());
+    const keywords = new Set(
+      task.title
+        .toLowerCase()
+        .split(/[^a-z0-9\u4e00-\u9fa5]+/i)
+        .filter((word) => word.length >= 3)
+    );
+    const relatedTasks = tasks
+      .filter((candidate) => candidate.id !== task.id)
+      .map((candidate) => {
+        let score = 0;
+        if (task.project_uid && candidate.project_uid === task.project_uid) score += 2;
+        if (task.area_uid && candidate.area_uid === task.area_uid) score += 1;
+        if (task.uid && (candidate.depends_on ?? []).includes(task.uid)) score += 4;
+        if (candidate.uid && (task.depends_on ?? []).includes(candidate.uid)) score += 4;
+        for (const word of keywords) {
+          if (candidate.title.toLowerCase().includes(word)) score += 1;
+        }
+        return { task: candidate, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12);
+    return { task, relatedTasks };
+  });
+
+  registry.register('task.transcript', async (params) => {
+    const uid = stringParam(params, 'uid');
+    const task = resolveTask(uid);
+    if (!task.uid) throw cliServerError('invalid_params', 'task has no uid');
+    const conversation = await getConversation(openSession().vault, task.uid);
+    return {
+      task,
+      segments: conversation?.segments ?? [],
+      turns: conversation?.turns ?? []
+    };
   });
 
   registry.register('task.update', async (params) => {
@@ -329,6 +410,23 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     });
   });
 
+  registry.register('task.proposeSplit', async (params) => {
+    const input = objectParams(params, 'task.proposeSplit');
+    const currentUid = stringParam(input, 'current_uid');
+    const summary =
+      typeof input.summary === 'string' && input.summary.trim()
+        ? input.summary
+        : `Split requested for ${currentUid}`;
+    return approvalService().submit({
+      type: 'task_split',
+      submitted_by: proposalSubmitter(input),
+      ...(typeof input.run_id === 'string' ? { submitted_by_agent_run: input.run_id } : {}),
+      submitted_during_task: currentUid,
+      subject: proposalSubject('Task split', currentUid),
+      payload: { current_task_uid: currentUid, summary }
+    });
+  });
+
   registry.register('project.list', async () => listProjects(openSession().vault));
 
   registry.register('project.get', async (params) => {
@@ -336,6 +434,24 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     const project = (await listProjects(openSession().vault)).find((item) => item.uid === uid);
     if (!project) throw cliServerError('not_found', `project not found: ${uid}`);
     return project;
+  });
+
+  registry.register('project.overview', async (params) => {
+    const slug = stringParam(params, 'slug');
+    const project = await projectBySlugOrUid(slug);
+    const tasks = materializeTaskGraph(openSession().tasks.allTasks()).filter(
+      (task) => task.project_uid === project.uid
+    );
+    const byStatus = tasks.reduce<Record<string, number>>((acc, task) => {
+      acc[task.status] = (acc[task.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    return {
+      project,
+      readme_excerpt: await readProjectReadmeExcerpt(project.readmePath),
+      task_counts: byStatus,
+      key_docs: project.legacy ? [project.relPath] : await listProjectKeyDocs(project.path)
+    };
   });
 
   registry.register('project.graph', async (params) => {

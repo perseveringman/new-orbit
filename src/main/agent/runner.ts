@@ -25,6 +25,7 @@ import { LIMITS } from '@shared/limits';
 import { renderClaudeSettingsJson, renderNotifyShTemplate } from './hooks/template';
 import { createRingBufferStore } from './ringBuffer';
 import { readLogForReattach } from './reattach';
+import { emitActivity } from '../activity';
 
 export interface SpawnOpts {
   /** Absolute path to the `claude` binary. */
@@ -398,6 +399,7 @@ export class AgentRunner extends EventEmitter {
   private eventLogStream: WriteStream | null = null;
   private eventIdx = 0;
   private fallbackPlain = false;
+  private onboardingChecked = false;
 
   constructor(opts: SpawnOpts) {
     super();
@@ -677,6 +679,7 @@ export class AgentRunner extends EventEmitter {
   }
 
   private push(ev: AgentEvent): void {
+    this.observeOnboarding(ev);
     this.events.push(ev);
     if (this.events.length > MAX_EVENTS) {
       this.events.splice(0, this.events.length - MAX_EVENTS);
@@ -684,6 +687,26 @@ export class AgentRunner extends EventEmitter {
     ringStore.get(this.runId).push(ev);
     this.eventLogStream?.write(JSON.stringify(ev) + '\n');
     this.emit('event', ev);
+  }
+
+  private observeOnboarding(ev: AgentEvent): void {
+    if (this.onboardingChecked) return;
+    if (ev.kind !== 'message' && ev.kind !== 'text') return;
+    const text = ev.text ?? '';
+    this.onboardingChecked = true;
+    const compliant = text.includes('我已了解：') || text.includes('我已了解:');
+    emitActivity({
+      actor: 'system',
+      action: 'agent.onboarding_checked',
+      context: {
+        run_id: this.runId,
+        ...(this.opts.taskId ? { task_id: this.opts.taskId } : {})
+      },
+      payload: { compliant, keyword: '我已了解：' },
+      summary: compliant
+        ? 'Agent first message included onboarding acknowledgement.'
+        : 'Agent first message missed onboarding acknowledgement.'
+    });
   }
 
   private armIdleTimer(): void {

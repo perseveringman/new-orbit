@@ -4,7 +4,7 @@ import { runCli } from '../../src/cli/runner';
 import { capture, RecordingBridge } from './helpers';
 
 describe('CLI task commands', () => {
-  it('maps list/get/update/deps to bridge methods', async () => {
+  it('maps list/get/update/deps/related/transcript to bridge methods', async () => {
     const io = capture();
     const bridge = new RecordingBridge({
       'task.list': [],
@@ -12,7 +12,9 @@ describe('CLI task commands', () => {
         task: { uid: 'task_1', id: 'task_1', title: 'T', status: 'todo', relPath: 'x.md' }
       },
       'task.update': { uid: 'task_1', id: 'task_1', title: 'T', status: 'done', relPath: 'x.md' },
-      'task.deps': { uid: 'task_1', status: 'todo', children: [] }
+      'task.deps': { uid: 'task_1', status: 'todo', children: [] },
+      'task.related': { relatedTasks: [] },
+      'task.transcript': { segments: [], turns: [] }
     });
 
     await expect(
@@ -33,12 +35,20 @@ describe('CLI task commands', () => {
     await expect(runCli(['task', 'deps', 'task_1'], { ...io.options, bridge })).resolves.toBe(
       EXIT_SUCCESS
     );
+    await expect(runCli(['task', 'related', 'task_1'], { ...io.options, bridge })).resolves.toBe(
+      EXIT_SUCCESS
+    );
+    await expect(runCli(['task', 'transcript', 'task_1'], { ...io.options, bridge })).resolves.toBe(
+      EXIT_SUCCESS
+    );
 
     expect(bridge.calls.map((call) => call.method)).toEqual([
       'task.list',
       'task.get',
       'task.update',
-      'task.deps'
+      'task.deps',
+      'task.related',
+      'task.transcript'
     ]);
     expect(bridge.calls[0]?.params).toEqual({ status: 'todo', project_uid: 'project_1' });
     expect(bridge.calls[2]?.params).toEqual({
@@ -48,11 +58,12 @@ describe('CLI task commands', () => {
     });
   });
 
-  it('maps propose and propose-scope to approval-backed handlers', async () => {
+  it('maps propose, propose-scope and propose-split to approval-backed handlers', async () => {
     const io = capture();
     const bridge = new RecordingBridge({
       'task.propose': { id: 'proposal_1' },
-      'task.proposeScope': { id: 'proposal_2' }
+      'task.proposeScope': { id: 'proposal_2' },
+      'task.proposeSplit': { id: 'proposal_3' }
     });
 
     await expect(
@@ -71,6 +82,15 @@ describe('CLI task commands', () => {
         }
       )
     ).resolves.toBe(EXIT_SUCCESS);
+    await expect(
+      runCli(
+        ['task', 'propose-split', 'task_1', '--run', 'run_1', '--summary', 'Split into two'],
+        {
+          ...io.options,
+          bridge
+        }
+      )
+    ).resolves.toBe(EXIT_SUCCESS);
 
     expect(bridge.calls[0]?.params).toEqual({
       title: 'New task',
@@ -83,6 +103,39 @@ describe('CLI task commands', () => {
       run_id: 'run_1',
       summary: 'Need more files'
     });
+    expect(bridge.calls[2]?.params).toEqual({
+      current_uid: 'task_1',
+      run_id: 'run_1',
+      summary: 'Split into two'
+    });
+  });
+
+  it('maps project overview, kanban list and project-scoped search', async () => {
+    const io = capture();
+    const bridge = new RecordingBridge({
+      'project.overview': { project: { slug: 'demo', name: 'Demo', status: 'active' } },
+      'task.list': [],
+      search: []
+    });
+
+    await expect(runCli(['project', 'overview', 'demo'], { ...io.options, bridge })).resolves.toBe(
+      EXIT_SUCCESS
+    );
+    await expect(runCli(['kanban', 'list', 'demo'], { ...io.options, bridge })).resolves.toBe(
+      EXIT_SUCCESS
+    );
+    await expect(
+      runCli(['search', 'roadmap', '--project', 'demo'], { ...io.options, bridge })
+    ).resolves.toBe(EXIT_SUCCESS);
+
+    expect(bridge.calls.map((call) => call.method)).toEqual([
+      'project.overview',
+      'task.list',
+      'search'
+    ]);
+    expect(bridge.calls[0]?.params).toEqual({ slug: 'demo' });
+    expect(bridge.calls[1]?.params).toEqual({ project_uid: 'demo' });
+    expect(bridge.calls[2]?.params).toEqual({ query: 'roadmap', limit: 30, project: 'demo' });
   });
 
   it('returns unavailable for delete without a backend', async () => {
