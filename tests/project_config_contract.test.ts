@@ -35,7 +35,6 @@ describe('project config contract', () => {
         execution_context: 'worktree',
         agent_exposure: {
           mode: 'isolated',
-          exposeMcpBridge: false,
           exposeAgentMdBridge: false,
           exposeAgentsMdBridge: false,
           consumeCommunityAgentMd: false,
@@ -83,7 +82,6 @@ describe('project config contract', () => {
         execution_context: 'worktree',
         agent_exposure: {
           mode: 'isolated',
-          exposeMcpBridge: false,
           exposeAgentMdBridge: false,
           exposeAgentsMdBridge: false,
           consumeCommunityAgentMd: false,

@@ -9,7 +9,7 @@
  *
  * R3 turns those anchors into a structured editing surface. This module is
  * the source of truth for splitting and rejoining those sections so the main
- * process (IPC handlers, MCP append helpers) and the renderer (TaskEditor)
+ * process IPC handlers and the renderer (TaskEditor)
  * never disagree about byte boundaries.
  *
  * Rules:

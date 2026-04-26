@@ -12,7 +12,7 @@ const TTL_MS = 30_000;
  * Detect whether the `gh` CLI is available on PATH.
  *
  * Spawns `gh --version` with a short timeout (default 500ms). Result is
- * memoized for `TTL_MS` so the Night Shift modal doesn't spawn repeatedly.
+ * memoized for `TTL_MS` so UI checks don't spawn repeatedly.
  */
 export async function hasGhCli(deps: HasGhDeps = {}): Promise<boolean> {
   const now = Date.now();

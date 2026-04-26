@@ -3,7 +3,6 @@ import path from 'node:path';
 import {
   PROJECT_AGENT_MD,
   PROJECT_BRIDGE_MANIFEST,
-  PROJECT_MCP_CONFIG,
   PROJECT_ORBIT_BRIDGE_DIR,
   PROJECT_ORBIT_DIR
 } from '@shared/constants';
@@ -35,11 +34,11 @@ async function writeFileIfChanged(file: string, content: string): Promise<void> 
 
 async function publishBridge(
   projectDir: string,
-  name: '.mcp.json' | 'AGENT.md' | 'AGENTS.md',
+  name: 'AGENT.md' | 'AGENTS.md',
   content: string,
   enabled: boolean
 ): Promise<BridgeManifestEntry> {
-  const sourceName = name === PROJECT_MCP_CONFIG ? 'mcp.json' : name;
+  const sourceName = name;
   const sourcePath = path.join(projectDir, PROJECT_ORBIT_DIR, PROJECT_ORBIT_BRIDGE_DIR, sourceName);
   await writeFileIfChanged(sourcePath, content);
   const targetPath = path.join(projectDir, name);
@@ -73,17 +72,9 @@ async function publishBridge(
 export async function syncProjectBridges(
   projectDir: string,
   exposure: AgentExposureSettings,
-  files: Partial<Record<typeof PROJECT_MCP_CONFIG | typeof PROJECT_AGENT_MD | 'AGENTS.md', string>>
+  files: Partial<Record<typeof PROJECT_AGENT_MD | 'AGENTS.md', string>>
 ): Promise<BridgeManifest> {
   const bridges: Record<string, BridgeManifestEntry> = {};
-  if (files[PROJECT_MCP_CONFIG]) {
-    bridges[PROJECT_MCP_CONFIG] = await publishBridge(
-      projectDir,
-      PROJECT_MCP_CONFIG,
-      files[PROJECT_MCP_CONFIG]!,
-      exposure.exposeMcpBridge
-    );
-  }
   if (files[PROJECT_AGENT_MD]) {
     bridges[PROJECT_AGENT_MD] = await publishBridge(
       projectDir,

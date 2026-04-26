@@ -87,7 +87,7 @@ export async function updateTaskSection(
   );
 }
 
-/** Append a dated entry to `# Execution Log`. Used by the MCP layer in R5. */
+/** Append a dated entry to `# Execution Log`. */
 export async function appendExecutionLog(
   absPath: string,
   line: string,

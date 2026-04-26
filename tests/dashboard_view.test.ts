@@ -63,10 +63,6 @@ vi.mock('../src/renderer/src/components/Modals/VisionEditorModal', () => ({
   VisionEditorModal: () => null
 }));
 
-vi.mock('../src/renderer/src/components/Modals/NightShiftModal', () => ({
-  NightShiftModal: () => null
-}));
-
 const { DashboardView } = await import('../src/renderer/src/views/DashboardView');
 
 describe('DashboardView area count', () => {

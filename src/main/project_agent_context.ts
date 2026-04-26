@@ -64,7 +64,7 @@ function buildIndex(hasCommunityConventions: boolean): string {
 | 工具与命令 | \`tooling-commands.md\` | 本项目的构建 / 测试 / 运行命令与发现方式 |
 | Worktree 工作流 | \`worktree-workflow.md\` | 何时以及如何使用 worktree |
 | 安全规则 | \`safety-rules.md\` | 操作边界与安全约束 |
-| MCP 工具指南 | \`mcp-tools.md\` | 可用的 Orbit MCP 工具及推荐用法 |
+| Orbit CLI 指南 | \`orbit-cli.md\` | 可用的 Orbit CLI 命令及推荐用法 |
 ${communityRow}
 
 ## 操作记录
@@ -83,7 +83,7 @@ Orbit 是一个个人愿景驱动的 AI 协作工作台。核心原则是：**�
 - **Project**：位于 \`01_Projects/\` 下的文件夹型项目，内部有 README、AGENT、任务与记忆目录。
 - **Task**：位于 \`.orbit/agent/tasks/\` 的 Markdown 任务文件，是执行过程的最小管理单元。
 - **Worktree**：用于大改动、实验或并行任务的隔离工作副本。
-- **Distill / Night Shift**：Orbit 中用于总结、回顾和持续推进工作的机制。
+- **Distill / Auto-runner**：Orbit 中用于总结、回顾和持续推进工作的机制。
 
 ## Agent 在 Orbit 中的角色
 你不是纯聊天助手，而是 Orbit 工作流中的执行参与者。你需要理解项目目标、维护任务状态、记录思考与执行轨迹，并保持改动可逆、可审计。
@@ -169,21 +169,16 @@ function buildSafetyRules(): string {
 `;
 }
 
-function buildMcpTools(): string {
-  return `# MCP 工具指南
+function buildOrbitCliGuide(): string {
+  return `# Orbit CLI 指南
 
 ## 当前可用工具
 - \`orbit task propose\`：提议创建需要用户批准的新任务（不要直接创建任务）
-- \`list_tasks\`：列出当前项目任务
-- \`update_task_status\`：更新任务状态
-- \`append_execution_log\`：为任务追加执行日志
-- \`log_thinking\`：记录任务思考
-- \`get_vision\`：读取 vault 级 Vision
-- \`search_global_context\`：搜索全局知识上下文
-- \`checkpoint_commit\`：提交当前项目代码检查点
-- \`get_project_state\`：查看 git 状态与活跃任务摘要
-- \`read_operation_log\`：读取近期操作日志
-- \`query_operation_log\`：按条件查询操作日志
+- \`orbit task list\`：列出当前项目任务
+- \`orbit task update\`：更新任务状态
+- \`orbit task log\`：为任务追加执行日志
+- \`orbit inbox help\`：请求用户补充信息
+- \`orbit run request-merge\`：请求审查和合并
 
 ## 推荐协作模式
 1. 确认当前 task；内部子步骤只写 Execution Log
@@ -271,7 +266,7 @@ function buildEntry(target: EntryTarget): string {
 \`.orbit/agent/logs/${PROJECT_SESSION_HISTORY}\` 汇总了近期项目级 agent 会话，是恢复项目上下文的首选入口之一。
 
 ## Agent 能力入口
-优先使用 \`orbit\` CLI；MCP server 仍可能存在于旧项目中，但不要通过旧 \`create_task\` 路径直接创建看板任务。
+优先使用 \`orbit\` CLI；不要通过旧 \`create_task\` 路径直接创建看板任务。
 
 > 此文件面向 ${label} 入口。若需要更深入认知，请从 skills 索引继续阅读。
 `;
@@ -371,8 +366,8 @@ export async function buildProjectAgentContextFiles(
       buildWorktreeWorkflow(),
     [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'safety-rules.md')]:
       buildSafetyRules(),
-    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'mcp-tools.md')]:
-      buildMcpTools(),
+    [path.posix.join(PROJECT_ORBIT_DIR, PROJECT_ORBIT_AGENT_DIR, PROJECT_ORBIT_SKILLS_DIR, 'orbit-cli.md')]:
+      buildOrbitCliGuide(),
     ...(communityConventions
       ? {
           [path.posix.join(

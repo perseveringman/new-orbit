@@ -9,7 +9,6 @@ import {
   type CreateProjectResultDTO,
   type CreateTaskArgsDTO,
   type CreateTaskResultDTO,
-  type EnsureMcpConfigResultDTO,
   type EntityFilter,
   type CloseProjectResult,
   type OrphanRescueCandidate,
@@ -52,8 +51,6 @@ import {
   listProjectTaskPaths,
   listProjects
 } from './project';
-import { ensureMcpConfig } from './mcp_config';
-import { getMcpServerPath } from './mcp_path';
 import { contentHash } from './content_hash';
 import { listTemplates } from './templates';
 import {
@@ -669,18 +666,7 @@ export function registerFsIpc(): void {
     IPC.project.create,
     async (_e, args: CreateProjectArgsDTO): Promise<CreateProjectResultDTO> => {
       const sess = getSession();
-      let mcpServerPath: string | undefined;
-      try {
-        mcpServerPath = getMcpServerPath();
-      } catch {
-        // electron app not initialized (e.g. unit tests using a stripped main).
-        mcpServerPath = undefined;
-      }
-      const result = await createProject(
-        sess.vault,
-        args,
-        mcpServerPath ? { mcpServerPath } : {}
-      );
+      const result = await createProject(sess.vault, args);
       // Bring the new README into the in-memory indices.
       try {
         const readmeAbs = path.join(result.projectPath, 'README.md');
@@ -731,35 +717,6 @@ export function registerFsIpc(): void {
         out.push(...sess.tasks.tasksOf(rel));
       }
       return materializeTaskGraph(out);
-    }
-  );
-
-  ipcMain.handle(
-    IPC.project.ensureMcpConfig,
-    async (_e, uid: string): Promise<EnsureMcpConfigResultDTO> => {
-      const sess = getSession();
-      const projects = await listProjects(sess.vault);
-      const match = projects.find((p) => p.uid === uid);
-      if (!match) throw new Error(`project not found: ${uid}`);
-      if (match.legacy) {
-        throw new Error(
-          `project "${match.slug}" is a legacy single-file project; migrate it first`
-        );
-      }
-      const mcpServerPath = getMcpServerPath();
-      const r = await ensureMcpConfig(match.path, {
-        vault: sess.vault,
-        projectUid: match.uid,
-        projectSlug: match.slug,
-        mcpServerPath
-      });
-      return {
-        uid: match.uid,
-        slug: match.slug,
-        configPath: r.path,
-        written: r.written,
-        mcpServerPath
-      };
     }
   );
 

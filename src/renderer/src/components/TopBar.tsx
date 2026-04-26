@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useWorkspace } from '../store/workspace';
 import { useAgent } from '../store/agent';
 import { useWorktrees } from '../store/worktrees';
-import { useNightShift } from '../store/nightShift';
 import { AboutModal } from './AboutModal';
 import { MigrationDialog } from './Modals/MigrationDialog';
 
@@ -19,11 +18,6 @@ export function TopBar(): JSX.Element {
   const activeWt = worktrees.filter((w) => w.status === 'active').length;
   const [aboutOpen, setAboutOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
-  const nightShiftRun = useNightShift((s) => s.run);
-  const subscribeNightShift = useNightShift((s) => s.subscribe);
-  useEffect(() => {
-    subscribeNightShift();
-  }, [subscribeNightShift]);
 
   const legacyCount = projects.filter((p) => p.legacy).length;
 
@@ -62,24 +56,6 @@ export function TopBar(): JSX.Element {
             </span>
           )}
           {vault && costToday && <BudgetMeter onClick={openSettings} />}
-          {nightShiftRun && nightShiftRun.status === 'running' && (
-            <NightShiftPill />
-          )}
-          {vault && (
-            <button
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent('orbit:open-drawer', {
-                    detail: 'night-shift-history'
-                  })
-                )
-              }
-              className={btn}
-              title="Night Shift history"
-            >
-              History
-            </button>
-          )}
           <button
             onClick={() => setAboutOpen(true)}
             title="About Orbit"
@@ -173,24 +149,3 @@ function BudgetMeter({ onClick }: { onClick: () => void }): JSX.Element | null {
     </button>
   );
 }
-
-function NightShiftPill(): JSX.Element | null {
-  const run = useNightShift((s) => s.run);
-  const cancel = useNightShift((s) => s.cancel);
-  if (!run) return null;
-  const done = run.tasks.filter(
-    (t) => t.phase === 'done' || t.phase === 'blocked' || t.phase === 'cancelled'
-  ).length;
-  return (
-    <button
-      onClick={() => {
-        if (confirm('Cancel Night Shift and kill all runners?')) void cancel();
-      }}
-      className="flex items-center gap-1 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-600 hover:bg-indigo-500/20 dark:text-indigo-300"
-      title="Click to cancel"
-    >
-      🌙 Night Shift {done}/{run.tasks.length}
-    </button>
-  );
-}
-

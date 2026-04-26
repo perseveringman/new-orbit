@@ -8,7 +8,6 @@ import { usePara } from '../store/para';
 import { useSidebar } from '../store/sidebar';
 import { useTaskDetails } from '../store/taskDetails';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
-import { NightShiftModal } from '../components/Modals/NightShiftModal';
 import { MigrationDialog } from '../components/Modals/MigrationDialog';
 import { TerminalManager } from '../components/Terminal/TerminalManager';
 import type { TerminalManagerHandle } from '../components/Terminal/TerminalManager';
@@ -65,7 +64,6 @@ export function ProjectRoomView(): JSX.Element {
   const [githubState, setGitHubState] = useState<GitHubProjectState | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const [nightShiftOpen, setNightShiftOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
 
   // Outer tab: 'kanban' / 'terminal' / 'sessions' / 'github', persisted per project
@@ -291,20 +289,6 @@ export function ProjectRoomView(): JSX.Element {
     }
   }
 
-  async function enableOrbitTools(): Promise<void> {
-    if (!project) return;
-    try {
-      const res = await window.orbit.project.ensureMcpConfig(project.uid);
-      toast(
-        res.written
-          ? `Orbit tools enabled → ${res.configPath}`
-          : `Orbit tools already enabled (${res.configPath})`
-      );
-    } catch (e) {
-      toast(`Enable failed: ${(e as Error).message}`);
-    }
-  }
-
   async function publishToGitHub(): Promise<void> {
     setOuterTab('github');
   }
@@ -524,20 +508,6 @@ export function ProjectRoomView(): JSX.Element {
               Publish to GitHub
             </button>
           )}
-          {kanbanModel.headerActions.includes('enable-orbit-tools') && (
-            <button
-              className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
-              onClick={() => void enableOrbitTools()}
-              disabled={isLegacy}
-              title={
-                isLegacy
-                  ? 'Legacy project — migrate first'
-                  : 'Write .mcp.json so Claude Code picks up the seven Orbit tools'
-              }
-            >
-              Enable Orbit Tools
-            </button>
-          )}
           {kanbanModel.headerActions.includes('archive-project') && (
             <button
               className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
@@ -650,7 +620,6 @@ export function ProjectRoomView(): JSX.Element {
           onProjectsChanged={refreshProjects}
           onTasksChanged={refreshTasks}
           onOpenTerminal={() => setOuterTab('terminal')}
-          onStartNightShift={() => setNightShiftOpen(true)}
         />
       </div>
 
@@ -690,11 +659,6 @@ export function ProjectRoomView(): JSX.Element {
           void refreshProjects();
           void refreshTasks();
         }}
-      />
-      <NightShiftModal
-        open={nightShiftOpen}
-        projectUid={project.uid}
-        onClose={() => setNightShiftOpen(false)}
       />
     </div>
   );

@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import type { AgentEvent } from '@shared/agent';
-import type { NightShiftRunDTO, TerminalAgentEventDTO } from '@shared/ipc';
+import type { TerminalAgentEventDTO } from '@shared/ipc';
 import { getStoredTerminalTitle } from '../components/Terminal/terminalManagerState';
 
 export interface ReviewQueueItem {
   id: string;
-  source: 'night-shift' | 'permission';
+  source: 'permission';
   title: string;
   detail?: string;
   runId?: string;
@@ -21,7 +21,6 @@ export interface ReviewQueueItem {
 
 interface ReviewQueueStore {
   items: ReviewQueueItem[];
-  seedFromNightShift(runs: NightShiftRunDTO[]): void;
   ingestAgentEvent(runId: string, event: AgentEvent): void;
   ingestTerminalEvent(event: TerminalAgentEventDTO): void;
   dismiss(id: string): void;
@@ -50,27 +49,6 @@ function removeItemsById(items: ReviewQueueItem[], ids: string[]): ReviewQueueIt
 
 export const useReviewQueue = create<ReviewQueueStore>((set) => ({
   items: [],
-  seedFromNightShift(runs) {
-    set((state) => {
-      let next = state.items.filter((item) => item.status === 'pending');
-      for (const run of runs) {
-        for (const task of run.tasks) {
-          if (task.phase !== 'done' && task.phase !== 'blocked') continue;
-          next = upsert(next, {
-            id: `ns:${run.runId}:${task.taskUid}`,
-            source: 'night-shift',
-            title: task.title,
-            detail: task.detail ?? task.phase,
-            runId: run.runId,
-            taskUid: task.taskUid,
-            createdAt: task.endedAt ?? run.startedAt,
-            status: 'pending'
-          });
-        }
-      }
-      return { items: next };
-    });
-  },
   ingestAgentEvent(runId, event) {
     const data = (event.data ?? {}) as Record<string, unknown>;
     if (data.hookEventType !== 'PermissionRequest') return;

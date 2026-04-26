@@ -3,7 +3,7 @@ import { promises as fs, createWriteStream, WriteStream } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { nanoid } from 'nanoid';
-import { ORBIT_DIR, ORBIT_LOGS_DIR, PROJECT_ORBIT_DIR, PROJECT_ORBIT_MCP_CONFIG } from '@shared/constants';
+import { ORBIT_DIR, ORBIT_LOGS_DIR } from '@shared/constants';
 import {
   ORBIT_HOOK_PORT_ENV,
   ORBIT_HOOK_TOKEN_ENV,
@@ -63,7 +63,7 @@ export interface SpawnOpts {
   /**
    * R6: Tool invocation resolver. Called when the subprocess emits
    * `@orbit:tool:<name> <json>`. Should return a plain-text reply that
-   * will be fed back into stdin (typically the MCP tool result JSON).
+   * will be fed back into stdin.
    */
   onToolInvocation?: (name: string, args: Record<string, unknown>) => Promise<string>;
   /** Test hook to replace child_process.spawn. */
@@ -459,10 +459,6 @@ export class AgentRunner extends EventEmitter {
       'stream-json',
       '--verbose'
     ];
-    const mcpConfigPath = await resolveOrbitMcpConfig(this.opts.cwd);
-    if (mcpConfigPath) {
-      args.push('--mcp-config', mcpConfigPath);
-    }
     if (inputMode === 'stream-json') {
       args.push('--input-format', 'stream-json');
     }
@@ -803,16 +799,6 @@ export class AgentRunner extends EventEmitter {
       delete map[this.runId];
       await writeActive(this.opts.vaultPath, map);
     }
-  }
-}
-
-async function resolveOrbitMcpConfig(cwd: string): Promise<string | null> {
-  const configPath = path.join(cwd, PROJECT_ORBIT_DIR, PROJECT_ORBIT_MCP_CONFIG);
-  try {
-    await fs.access(configPath);
-    return configPath;
-  } catch {
-    return null;
   }
 }
 

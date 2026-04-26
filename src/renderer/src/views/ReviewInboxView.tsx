@@ -81,7 +81,7 @@ export function ReviewInboxView(): JSX.Element {
         <div>
           <h2 className="text-sm font-semibold">Morning Review</h2>
           <p className="text-xs text-neutral-500">
-            Review completed Night Shift tasks and permission requests.
+            Review permission requests from Orbit-managed agent sessions.
           </p>
         </div>
         <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] dark:border-neutral-700">

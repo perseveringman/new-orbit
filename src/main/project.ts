@@ -18,7 +18,6 @@ import { newUid } from './uid';
 import * as frontmatter from './frontmatter';
 import { assertInsideVault, toPosix, vaultRel } from './pathGuard';
 import { renderTaskMarkdown, scaffoldProject } from './templates';
-import { ensureMcpConfig } from './mcp_config';
 import { ensureProjectAgentContext } from './project_agent_context';
 import { walkMarkdown } from './walk';
 import {
@@ -61,16 +60,6 @@ export interface CreateProjectArgs {
   area_uid?: string;
   tags?: string[];
   agent_exposure?: Partial<AgentExposureSettings>;
-}
-
-export interface CreateProjectOptions {
-  /**
-   * Absolute path to `out/mcp/server.cjs`. When supplied (the
-   * production path), `createProject` writes a per-project `.mcp.json`
-   * registering the Orbit MCP server. Tests / CLI tooling can omit it
-   * to skip MCP wiring.
-   */
-  mcpServerPath?: string;
 }
 
 export interface CreateProjectResult {
@@ -138,8 +127,7 @@ async function initProjectGitRepo(dir: string, slug: string): Promise<void> {
  */
 export async function createProject(
   vault: string,
-  args: CreateProjectArgs,
-  opts: CreateProjectOptions = {}
+  args: CreateProjectArgs
 ): Promise<CreateProjectResult> {
   assertValidSlug(args.slug);
   const dir = projectDir(vault, args.slug);
@@ -191,19 +179,6 @@ export async function createProject(
     if (args.tags && args.tags.length > 0) patch['tags'] = args.tags;
     const upd = frontmatter.update(raw, patch);
     if (upd.changed) await fs.writeFile(readmeAbs, upd.content, 'utf8');
-  }
-
-  // R5: register Orbit MCP server in this project's `.mcp.json` so
-  // Claude Code can discover the seven Orbit hooks the moment a user
-  // runs `claude` inside the project. Done before the initial git
-  // commit so the file is included in the project's history.
-  if (opts.mcpServerPath) {
-    await ensureMcpConfig(dir, {
-      vault,
-      projectUid: uid,
-      projectSlug: args.slug,
-      mcpServerPath: opts.mcpServerPath
-    });
   }
 
   await initProjectGitRepo(dir, args.slug);

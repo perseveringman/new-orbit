@@ -48,7 +48,7 @@ export function AgentPanel(): JSX.Element {
         <div className="rounded border border-dashed border-neutral-300 px-3 py-4 text-xs text-neutral-500 dark:border-neutral-700">
           <p className="font-medium text-neutral-700 dark:text-neutral-200">No global agent runs yet.</p>
           <p className="mt-1">
-            This tab tracks Orbit-managed runs like Night Shift and dispatched task agents.
+            This tab tracks Orbit-managed runs like Auto-runner and dispatched task agents.
           </p>
           <p className="mt-1">
             Terminal-launched Claude/Codex sessions show up in the <span className="font-medium">Sessions</span> tab instead.

@@ -149,7 +149,6 @@ describe('ProjectGitHubSurface', () => {
         onPublish: noop,
         onCreatePullRequest: noop,
         onOpenTerminal: noop,
-        onStartNightShift: noop,
         onOpenPullRequest: noop,
         onOpenIssue: noop,
         onBindIssue: noop,
@@ -160,8 +159,7 @@ describe('ProjectGitHubSurface', () => {
     expect(html).toContain('acme/orbit-app');
     expect(html).toContain('feature/github-redesign');
     expect(html).toContain('Terminal flow');
-    expect(html).toContain('Night Shift flow');
-    expect(html).toContain('Start Night Shift');
+    expect(html).toContain('Auto-runner flow');
     expect(html).toContain('PRs 1');
   });
 
@@ -188,7 +186,6 @@ describe('ProjectGitHubSurface', () => {
         onPublish: noop,
         onCreatePullRequest: noop,
         onOpenTerminal: noop,
-        onStartNightShift: noop,
         onOpenPullRequest: noop,
         onOpenIssue: noop,
         onBindIssue: noop,
@@ -221,7 +218,6 @@ describe('ProjectGitHubSurface', () => {
         onPublish: noop,
         onCreatePullRequest: noop,
         onOpenTerminal: noop,
-        onStartNightShift: noop,
         onOpenPullRequest: noop,
         onOpenIssue: noop,
         onBindIssue: noop,
@@ -247,7 +243,6 @@ describe('ProjectGitHubSurface', () => {
         onPublish: noop,
         onCreatePullRequest: noop,
         onOpenTerminal: noop,
-        onStartNightShift: noop,
         onOpenPullRequest: noop,
         onOpenIssue: noop,
         onBindIssue: noop,
@@ -275,7 +270,6 @@ describe('ProjectGitHubSurface', () => {
         onPublish: noop,
         onCreatePullRequest: noop,
         onOpenTerminal: noop,
-        onStartNightShift: noop,
         onOpenPullRequest: noop,
         onOpenIssue: noop,
         onBindIssue: noop,
@@ -295,7 +289,6 @@ describe('ProjectGitHubSurface', () => {
         onPublish: noop,
         onCreatePullRequest: noop,
         onOpenTerminal: noop,
-        onStartNightShift: noop,
         onOpenPullRequest: noop,
         onOpenIssue: noop,
         onBindIssue: noop,

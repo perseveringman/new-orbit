@@ -2,7 +2,7 @@
  * Staged-aware git status primitives for the Workspace Inspector.
  *
  * Provides:
- *  - parsePorcelainStatus   — pure parser extracted from mcp/tools.ts
+ *  - parsePorcelainStatus   — pure parser for git porcelain status
  *  - getChanges             — read current working-tree status
  *  - stagePaths             — `git add <paths>`
  *  - unstagePaths           — `git restore --staged <paths>`
@@ -65,7 +65,7 @@ export interface CommitSelectionArgs {
  *   For untracked: `?? path`
  *   For renames:   `XY old -> new`
  *
- * This replaces the private `countStatusLines` in `src/mcp/tools.ts`.
+ * Shared porcelain parser for git status summaries.
  */
 export function parsePorcelainStatus(lines: string[]): PorcelainStatusResult {
   let stagedCount = 0;

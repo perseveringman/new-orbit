@@ -192,11 +192,10 @@ describe('AgentRunner stream parsing', () => {
     }
   });
 
-  it('starts Claude with -p prompt in one-shot mode and auto-loads local MCP config', async () => {
+  it('starts Claude with -p prompt in one-shot mode without MCP auto-loading', async () => {
     const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-input-'));
     try {
       await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
-      await fs.writeFile(path.join(vault, '.orbit', '.mcp.json'), '{"mcpServers":{}}\n', 'utf8');
       const { spawn, last, lastArgs, lastOptions } = capturingSpawner();
 
       const runner = new AgentRunner({
@@ -216,8 +215,7 @@ describe('AgentRunner stream parsing', () => {
       expect(lastArgs()).toContain('-p');
       expect(lastArgs()).toContain('plan the change');
       expect(lastArgs()).not.toContain('--input-format');
-      expect(lastArgs()).toContain('--mcp-config');
-      expect(lastArgs()).toContain(path.join(vault, '.orbit', '.mcp.json'));
+      expect(lastArgs()).not.toContain('--mcp-config');
       expect(lastOptions()?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
       expect(child.stdin.read()).toBeNull();
 

@@ -81,7 +81,7 @@ describe('project.create (R1)', () => {
       'tooling-commands.md',
       'worktree-workflow.md',
       'safety-rules.md',
-      'mcp-tools.md'
+      'orbit-cli.md'
     ];
     for (const name of skillFiles) {
       const raw = await fs.readFile(path.join(skillsDir, name), 'utf8');

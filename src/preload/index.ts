@@ -15,7 +15,6 @@ import {
   type DistillResult,
   type DistillSuggestHit,
   type ExternalNotesPathInfoDTO,
-  type EnsureMcpConfigResultDTO,
   type EntityFilter,
   type GitHubRepositoryListArgsDTO,
   type GitHubTaskIssueBindingArgsDTO,
@@ -23,10 +22,6 @@ import {
   type ImportGitHubRepositoryArgsDTO,
   type ImportGitHubRepositoryResultDTO,
   type JournalListItemDTO,
-  type NightShiftDoneEventDTO,
-  type NightShiftPlanDTO,
-  type NightShiftProgressEventDTO,
-  type NightShiftRunDTO,
   type OrbitApi,
   type OrphanRescueCandidate,
   type PublishProjectToGitHubArgsDTO,
@@ -175,9 +170,7 @@ const api: OrbitApi = {
     getTasks: (uid: string): Promise<TaskRecord[]> =>
       ipcRenderer.invoke(IPC.project.getTasks, uid),
     listTemplates: (): Promise<TemplateMetaDTO[]> =>
-      ipcRenderer.invoke(IPC.project.listTemplates),
-    ensureMcpConfig: (uid: string): Promise<EnsureMcpConfigResultDTO> =>
-      ipcRenderer.invoke(IPC.project.ensureMcpConfig, uid)
+      ipcRenderer.invoke(IPC.project.listTemplates)
   },
   runtime: {
     list: (): Promise<RuntimeDescriptor[]> => ipcRenderer.invoke(IPC.runtime.list),
@@ -496,25 +489,6 @@ const api: OrbitApi = {
     get: (date?: string): Promise<DailyReviewDTO | null> =>
       ipcRenderer.invoke(IPC.review.get, date),
     list: (): Promise<JournalListItemDTO[]> => ipcRenderer.invoke(IPC.review.list)
-  },
-  nightShift: {
-    start: (plan: NightShiftPlanDTO): Promise<{ runId: string }> =>
-      ipcRenderer.invoke(IPC.nightShift.start, plan),
-    cancel: (runId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.nightShift.cancel, runId),
-    status: (runId: string): Promise<NightShiftRunDTO | null> =>
-      ipcRenderer.invoke(IPC.nightShift.status, runId),
-    list: (): Promise<NightShiftRunDTO[]> => ipcRenderer.invoke(IPC.nightShift.list),
-    onProgress: (cb: (ev: NightShiftProgressEventDTO) => void) => {
-      const listener = (_: unknown, ev: NightShiftProgressEventDTO): void => cb(ev);
-      ipcRenderer.on(IPC.nightShift.progress, listener);
-      return () => ipcRenderer.removeListener(IPC.nightShift.progress, listener);
-    },
-    onDone: (cb: (ev: NightShiftDoneEventDTO) => void) => {
-      const listener = (_: unknown, ev: NightShiftDoneEventDTO): void => cb(ev);
-      ipcRenderer.on(IPC.nightShift.done, listener);
-      return () => ipcRenderer.removeListener(IPC.nightShift.done, listener);
-    }
   },
   autoRunner: {
     status: (): Promise<AutoRunnerStatusDTO> => ipcRenderer.invoke(IPC.autoRunner.status),

@@ -26,7 +26,6 @@ import { GitHubWorkspaceView } from './GitHubWorkspaceView';
 import { ProjectRoomView } from './ProjectRoomView';
 import { JournalHistoryView } from './JournalHistoryView';
 import { RuntimesWorkspaceView } from './RuntimesWorkspaceView';
-import { NightShiftHistoryDrawer } from '../components/NightShiftHistoryDrawer';
 import { NewProjectModal } from '../components/Modals/NewProjectModal';
 import { NewAreaModal } from '../components/Modals/NewAreaModal';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
@@ -73,7 +72,6 @@ export function VaultView(): JSX.Element {
   const refresh = usePara((s) => s.refresh);
   const initAgent = useAgent((s) => s.init);
   const teardownAgent = useAgent((s) => s.teardown);
-  const seedReviewQueueFromNightShift = useReviewQueue((s) => s.seedFromNightShift);
   const ingestReviewAgentEvent = useReviewQueue((s) => s.ingestAgentEvent);
   const ingestTerminalReviewEvent = useReviewQueue((s) => s.ingestTerminalEvent);
   const sidebarSurface = useSidebar((s) => s.surface);
@@ -85,7 +83,6 @@ export function VaultView(): JSX.Element {
   const setSidebarFocus = useSidebar((s) => s.setFocus);
   const openSidebarPanel = useSidebar((s) => s.openPanel);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [nsHistoryOpen, setNsHistoryOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -170,15 +167,6 @@ export function VaultView(): JSX.Element {
   }, [view.kind]);
 
   useEffect(() => {
-    function onOpenDrawer(e: Event): void {
-      const detail = (e as CustomEvent<string>).detail;
-      if (detail === 'night-shift-history') setNsHistoryOpen(true);
-    }
-    window.addEventListener('orbit:open-drawer', onOpenDrawer as EventListener);
-    return () => window.removeEventListener('orbit:open-drawer', onOpenDrawer as EventListener);
-  }, []);
-
-  useEffect(() => {
     function onOpenRightTab(e: Event): void {
       const raw = (
         e as CustomEvent<
@@ -214,11 +202,6 @@ export function VaultView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    void window.orbit.nightShift.list().then((runs) => {
-      if (!cancelled) seedReviewQueueFromNightShift(runs);
-    });
-
     const offAgent = window.orbit.agent.onEvent(({ runId, event }) => {
       ingestReviewAgentEvent(runId, event);
     });
@@ -252,11 +235,10 @@ export function VaultView(): JSX.Element {
       terminalPaneStatusRegistry.set(sessionKey, next);
     });
     return () => {
-      cancelled = true;
       offAgent();
       off();
     };
-  }, [ingestReviewAgentEvent, ingestTerminalReviewEvent, seedReviewQueueFromNightShift]);
+  }, [ingestReviewAgentEvent, ingestTerminalReviewEvent]);
   async function onOpenWikilink(target: string): Promise<void> {
     const hits = await window.orbit.fs.search(target, { limit: 10 });
     const lower = target.replace(/\.md$/i, '').toLowerCase();
@@ -426,7 +408,6 @@ export function VaultView(): JSX.Element {
       </aside>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-      <NightShiftHistoryDrawer open={nsHistoryOpen} onClose={() => setNsHistoryOpen(false)} />
       <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
       <NewAreaModal />
       {view.kind === 'project' && (

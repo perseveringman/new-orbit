@@ -81,7 +81,6 @@ import type {
   WorktreeRecord
 } from './git';
 import type {
-  GitHubCheckSummary,
   GitHubConnection,
   GitHubProjectDetails,
   GitHubPullRequestSummary,
@@ -89,8 +88,7 @@ import type {
   GitHubRepoBinding,
   GitHubRepoVisibility,
   GitHubTaskBinding,
-  GitHubWorkspaceRepository,
-  NightShiftGitHubOptions
+  GitHubWorkspaceRepository
 } from './github';
 import type {
   ConversationTurn,
@@ -165,8 +163,7 @@ export const IPC = {
     list: 'project:list',
     archive: 'project:archive',
     getTasks: 'project:getTasks',
-    listTemplates: 'project:listTemplates',
-    ensureMcpConfig: 'project:ensureMcpConfig'
+    listTemplates: 'project:listTemplates'
   },
   runtime: {
     list: 'runtime:list',
@@ -332,14 +329,6 @@ export const IPC = {
     generate: 'review:generate',
     get: 'review:get',
     list: 'review:list'
-  },
-  nightShift: {
-    start: 'nightShift:start',
-    cancel: 'nightShift:cancel',
-    status: 'nightShift:status',
-    list: 'nightShift:list',
-    progress: 'nightShift:progress',
-    done: 'nightShift:done'
   },
   autoRunner: {
     status: 'autoRunner:status',
@@ -510,7 +499,6 @@ export interface ProjectSummaryDTO {
 
 export interface AgentExposureSettingsDTO {
   mode: 'isolated' | 'bridge' | 'compatible';
-  exposeMcpBridge?: boolean;
   exposeAgentMdBridge?: boolean;
   exposeAgentsMdBridge?: boolean;
   consumeCommunityAgentMd?: boolean;
@@ -542,14 +530,6 @@ export interface ArchiveProjectResultDTO {
   uid: string;
   slug: string;
   archivedAt: string;
-}
-
-export interface EnsureMcpConfigResultDTO {
-  uid: string;
-  slug: string;
-  configPath: string;
-  written: boolean;
-  mcpServerPath: string;
 }
 
 export interface PublishProjectToGitHubArgsDTO {
@@ -776,61 +756,6 @@ export interface JournalListItemDTO {
   excerpt: string;
 }
 
-export type NightShiftTaskPhase =
-  | 'pending'
-  | 'worktree'
-  | 'running'
-  | 'pre-merge'
-  | 'pr'
-  | 'done'
-  | 'blocked'
-  | 'cancelled';
-
-export interface NightShiftTaskStatusDTO {
-  taskUid: string;
-  title: string;
-  projectUid: string;
-  phase: NightShiftTaskPhase;
-  detail?: string;
-  branch?: string;
-  prUrl?: string;
-  prNumber?: number;
-  issueNumber?: number;
-  checks?: GitHubCheckSummary[];
-  startedAt?: string;
-  endedAt?: string;
-}
-
-export interface NightShiftRunDTO {
-  runId: string;
-  startedAt: string;
-  endedAt?: string;
-  status: 'running' | 'done' | 'cancelled' | 'error';
-  concurrency: number;
-  createPR: boolean;
-  tasks: NightShiftTaskStatusDTO[];
-  summary?: { done: number; blocked: number; cancelled: number };
-}
-
-export interface NightShiftPlanDTO {
-  taskUids: string[];
-  concurrency?: number;
-  createPR?: boolean;
-  github?: NightShiftGitHubOptions;
-}
-
-export interface NightShiftProgressEventDTO {
-  runId: string;
-  taskUid: string;
-  phase: NightShiftTaskPhase;
-  detail?: string;
-}
-
-export interface NightShiftDoneEventDTO {
-  runId: string;
-  summary: { done: number; blocked: number; cancelled: number };
-}
-
 export interface OrbitApi {
   workspace: {
     pickAndOpen(): Promise<VaultResult>;
@@ -889,7 +814,6 @@ export interface OrbitApi {
     archive(uid: string): Promise<ArchiveProjectResultDTO>;
     getTasks(uid: string): Promise<TaskRecord[]>;
     listTemplates(): Promise<TemplateMetaDTO[]>;
-    ensureMcpConfig(uid: string): Promise<EnsureMcpConfigResultDTO>;
   };
   runtime: {
     list(): Promise<RuntimeDescriptor[]>;
@@ -1109,14 +1033,6 @@ export interface OrbitApi {
     generate(date?: string): Promise<DailyReviewDTO>;
     get(date?: string): Promise<DailyReviewDTO | null>;
     list(): Promise<JournalListItemDTO[]>;
-  };
-  nightShift: {
-    start(plan: NightShiftPlanDTO): Promise<{ runId: string }>;
-    cancel(runId: string): Promise<void>;
-    status(runId: string): Promise<NightShiftRunDTO | null>;
-    list(): Promise<NightShiftRunDTO[]>;
-    onProgress(cb: (ev: NightShiftProgressEventDTO) => void): () => void;
-    onDone(cb: (ev: NightShiftDoneEventDTO) => void): () => void;
   };
   autoRunner: {
     status(): Promise<AutoRunnerStatusDTO>;

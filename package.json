@@ -10,8 +10,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build:mcp": "esbuild src/mcp/server.ts --bundle --platform=node --target=node18 --format=cjs --outfile=out/mcp/server.cjs --alias:@shared=./src/shared --external:electron --external:fsevents",
-    "build": "npm run typecheck && electron-vite build && npm run build:mcp && npm run build:cli",
+    "build": "npm run typecheck && electron-vite build && npm run build:cli",
     "start": "electron-vite preview",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",

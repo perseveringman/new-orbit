@@ -1,6 +1,6 @@
 import type { SidebarPanelId, SidebarSurfaceId } from './vaultRightSidebarModel';
 
-export type ProjectRoomHeaderAction = 'enable-orbit-tools' | 'archive-project';
+export type ProjectRoomHeaderAction = 'archive-project';
 export type ProjectRoomOuterTab =
   | 'kanban'
   | 'terminal'
@@ -30,7 +30,7 @@ export function deriveProjectRoomKanbanModel(args: {
   selectedTaskId: string | null;
 }): ProjectRoomKanbanModel {
   return {
-    headerActions: ['enable-orbit-tools', 'archive-project'],
+    headerActions: ['archive-project'],
     documentTabs: [],
     detailSurface: 'sidebar',
     kanbanPaneClassName: 'flex-1',

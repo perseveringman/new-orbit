@@ -59,7 +59,7 @@ const BUILTIN_TEMPLATES: Array<{
       templateId: 'role-template-executor',
       version: 1,
       instructions:
-        '先分析项目现状与任务信息是否充分；若信息不足，先提出澄清并保持任务非 done；只有真正开始实施时才推进到 doing，确认完成后再通过 MCP 标记 done，并输出清晰实施报告。',
+        '先分析项目现状与任务信息是否充分；若信息不足，先提出澄清并保持任务非 done；只有真正开始实施时才推进到 doing，确认完成后再通过 Orbit CLI 标记 done，并输出清晰实施报告。',
       skillRefs: ['implementation', 'validation'],
       providerPreferences: ['claude'],
       defaultConcurrency: 2,

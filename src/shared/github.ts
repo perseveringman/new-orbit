@@ -133,12 +133,3 @@ export interface GitHubProjectDetails {
   taskBindings: GitHubTaskBinding[];
   lastSyncedAt: string | null;
 }
-
-export interface NightShiftGitHubOptions {
-  pushBranch?: boolean;
-  createDraftPr?: boolean;
-  baseBranch?: string;
-  reviewers?: string[];
-  labels?: string[];
-  waitForChecks?: boolean;
-}

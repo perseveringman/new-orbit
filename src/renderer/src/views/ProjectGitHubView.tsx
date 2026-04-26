@@ -30,7 +30,6 @@ export interface ProjectGitHubSurfaceProps {
     draft?: boolean;
   }): void;
   onOpenTerminal(): void;
-  onStartNightShift(): void;
   onOpenPullRequest(url: string): void;
   onOpenIssue(url: string): void;
   onBindIssue(issueNumber: number): void;
@@ -43,7 +42,6 @@ interface ProjectGitHubViewProps {
   onProjectsChanged(): Promise<unknown>;
   onTasksChanged(): Promise<void>;
   onOpenTerminal(): void;
-  onStartNightShift(): void;
 }
 
 export function ProjectGitHubView({
@@ -51,8 +49,7 @@ export function ProjectGitHubView({
   tasks,
   onProjectsChanged,
   onTasksChanged,
-  onOpenTerminal,
-  onStartNightShift
+  onOpenTerminal
 }: ProjectGitHubViewProps): JSX.Element {
   const toast = useFiles((s) => s.toast);
   const [details, setDetails] = useState<GitHubProjectDetails | null>(null);
@@ -174,7 +171,6 @@ export function ProjectGitHubView({
       onPublish={publish}
       onCreatePullRequest={createPullRequest}
       onOpenTerminal={onOpenTerminal}
-      onStartNightShift={onStartNightShift}
       onOpenPullRequest={(url) => window.open(url, '_blank', 'noopener')}
       onOpenIssue={(url) => window.open(url, '_blank', 'noopener')}
       onBindIssue={bindIssue}
@@ -195,7 +191,6 @@ export function ProjectGitHubSurface({
   onPublish,
   onCreatePullRequest,
   onOpenTerminal,
-  onStartNightShift,
   onOpenPullRequest,
   onOpenIssue,
   onBindIssue,
@@ -218,7 +213,7 @@ export function ProjectGitHubSurface({
               {details?.overview.binding?.fullName ?? `${projectName} · not linked`}
             </h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-300">
-              Keep tasks, issues, branches, worktrees, PRs, and Night Shift delivery status in one
+              Keep tasks, issues, branches, worktrees, PRs, and Auto-runner delivery status in one
               place.
             </p>
           </div>
@@ -315,10 +310,10 @@ export function ProjectGitHubSurface({
               steps={['Task → issue binding', 'Branch + worktree', 'Terminal work', 'Push + PR + review']}
             />
             <JourneyCard
-              title="Night Shift flow"
-              description="Let Night Shift pick issue-linked tasks, open a ghost worktree, and report PR/check state back into Orbit."
-              actionLabel="Start Night Shift"
-              onAction={onStartNightShift}
+              title="Auto-runner flow"
+              description="Use approved tasks, worktree execution, and PR/check state as the delivery trail."
+              actionLabel="Open Terminal"
+              onAction={onOpenTerminal}
               steps={['Issue-linked task queue', 'Ghost worktree', 'Autonomous execution', 'PR + checks + follow-up']}
             />
           </section>

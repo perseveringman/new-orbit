@@ -20,12 +20,6 @@ files:
   - "!**/node_modules/.cache"
   - "!**/.DS_Store"
 
-extraResources:
-  - from: "out/mcp"
-    to: "mcp"
-    filter:
-      - "**/*"
-
 mac:
   category: public.app-category.productivity
   icon: build/icon.png

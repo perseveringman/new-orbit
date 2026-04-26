@@ -55,7 +55,6 @@ export const BASE_CONFIG_JSON = `{
   "teardown": [],
   "agent_exposure": {
     "mode": "isolated",
-    "exposeMcpBridge": false,
     "exposeAgentMdBridge": false,
     "exposeAgentsMdBridge": false,
     "consumeCommunityAgentMd": false,

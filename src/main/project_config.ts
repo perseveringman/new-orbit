@@ -13,7 +13,6 @@ export type ProjectExecutionContext = 'worktree' | 'sandbox';
 
 export interface AgentExposureSettings {
   mode: AgentExposureMode;
-  exposeMcpBridge: boolean;
   exposeAgentMdBridge: boolean;
   exposeAgentsMdBridge: boolean;
   consumeCommunityAgentMd: boolean;
@@ -88,7 +87,6 @@ function normalizeGitHubRepoBinding(raw: unknown): GitHubRepoBinding | undefined
 export function defaultAgentExposureSettings(mode: AgentExposureMode = 'isolated'): AgentExposureSettings {
   return {
     mode,
-    exposeMcpBridge: mode !== 'isolated',
     exposeAgentMdBridge: false,
     exposeAgentsMdBridge: mode !== 'isolated',
     consumeCommunityAgentMd: mode === 'compatible',
@@ -108,8 +106,6 @@ export function normalizeAgentExposureSettings(raw: unknown): AgentExposureSetti
   if (!isRecord(raw)) return defaults;
   return {
     mode,
-    exposeMcpBridge:
-      typeof raw['exposeMcpBridge'] === 'boolean' ? raw['exposeMcpBridge'] : defaults.exposeMcpBridge,
     exposeAgentMdBridge:
       typeof raw['exposeAgentMdBridge'] === 'boolean'
         ? raw['exposeAgentMdBridge']

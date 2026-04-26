@@ -84,17 +84,13 @@ export function parseHydrationLine(line: string): HydrationRequest | null {
 /**
  * Text-fallback tool invocation parser.
  *
- * R5 wires the canonical Orbit tools through MCP (`.mcp.json` + the
- * stdio JSON-RPC server). For headless / nightly runs that don't have
- * MCP available we still want the same surface; agents can emit lines
- * shaped like:
+ * Parses legacy text tool calls. Agents can emit lines shaped like:
  *
  *   @orbit:tool:create_task {"title":"...","description":"..."}
  *
  * Returns `null` when the line does not match the prefix or the JSON
- * argument blob fails to parse. The actual dispatch (calling
- * `src/mcp/tools.ts`) is wired in R6 — R5 ships the parser + tests so
- * the contract is locked.
+ * argument blob fails to parse. Current v2 command execution should prefer
+ * the `orbit` CLI bridge.
  */
 export function parseToolInvocationLine(line: string): ToolInvocation | null {
   const trimmed = line.replace(/^[>\s]+/, '').trim();
