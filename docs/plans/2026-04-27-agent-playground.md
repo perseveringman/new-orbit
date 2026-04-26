@@ -1,6 +1,6 @@
 ---
 title: "Agent Playground — 调试基础设施"
-status: draft
+status: completed
 date: 2026-04-27
 phase: "3.0"
 depends_on: null

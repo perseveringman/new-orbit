@@ -1,6 +1,6 @@
 ---
 title: "Phase 3 — Agent Observability & Resilience"
-status: draft
+status: completed
 date: 2026-04-27
 adr: ADR-011, ADR-012, ADR-013, ADR-014
 supersedes: null

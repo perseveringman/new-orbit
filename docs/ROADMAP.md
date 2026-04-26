@@ -1,6 +1,6 @@
 # Orbit — Roadmap
 
-> **Status**: Phase 3 规划完成（2026-04-27），待实施
+> **Status**: Phase 3 代码实施完成（2026-04-27），进入 dog-food 观察期
 > **Update cadence**: 每个里程碑落地后更新；大方向调整随 ADR 同步刷新。
 
 本文记录 Orbit 各阶段的目标、当前状态和下一步计划。**v2 方向的完整说明在 `docs/overview.md`，决策记录在 `docs/decisions/`。**
@@ -68,6 +68,27 @@
 | Capture 三分 (Feed/Library/Thoughts) | [ADR-010](decisions/ADR-010-capture-tri-partition.md) | [capture-foundation](plans/2026-04-26-capture-foundation.md) | completed |
 | Quick Capture MVP | 004 + 010 | [quick-capture-mvp](plans/2026-04-26-quick-capture-mvp.md) | completed |
 
+### Phase 3 — Agent Observability & Resilience（2026-04-27）
+
+**触发**：v2 实施完成后 dog-food 发现核心问题——agent 执行是黑盒（突然渲染、没有 tool use、resume 断裂）。同时确立了 Runtime 抽象贯通、全链路事件回放、Dashboard 重做等方向。
+
+**状态**：代码实施完成，进入真实 dog-food 观察期。4 项新 ADR（ADR-011 ~ ADR-014）保持 accepted。
+
+| 子系统 | ADR | Plan | 状态 |
+|--------|-----|------|------|
+| Agent Playground 调试基础设施 | — | [agent-playground](plans/2026-04-27-agent-playground.md) | completed |
+| Runtime 抽象贯通（通用 Agent Event 协议） | [ADR-011](decisions/ADR-011-runtime-abstraction-through-capabilities.md) | [runtime-adapter-layer](plans/2026-04-27-runtime-adapter-layer.md) | completed |
+| Activity tab 时间线 UI（打字机 + markdown） | — | [activity-timeline-ui](plans/2026-04-27-activity-timeline-ui.md) | completed |
+| Task-Session 绑定（原生 resume + 双向 stream） | [ADR-012](decisions/ADR-012-task-session-binding-model.md) | [task-session-binding](plans/2026-04-27-task-session-binding.md) | completed |
+| Runtime Fallback 决策规则 + Budget | [ADR-014](decisions/ADR-014-runtime-fallback-decision-rules.md) | [runtime-fallback-rules](plans/2026-04-27-runtime-fallback-rules.md) | completed |
+| 统一事件回放（全链路 + Developer Console） | [ADR-013](decisions/ADR-013-unified-event-replay-infrastructure.md) | [event-replay-infrastructure](plans/2026-04-27-event-replay-infrastructure.md) | completed |
+| Global Dashboard 重做（5 象限） | — | [global-dashboard](plans/2026-04-27-global-dashboard.md) | completed |
+
+**观察期事项**：
+- 真实 dog-food 需要持续 2-4 天；当前只能完成代码与自动化验证，不能在同一实施会话里证明长期无阻塞问题。
+- Codex / Copilot adapter 仍是能力声明 + stub 启动路径，真实生产 fallback 需要后续接通各 vendor 的原生事件协议。
+- Sandbox ExecutionContext、Review 页面 UI、Thinking Trail 自动化和 Capture 多入口继续留在 Phase 4+。
+
 ### v1 遗留中的 "进行中" 项（仍有效）
 
 | 功能 | 文档 | 状态 |
@@ -88,35 +109,6 @@
 | **Agent 自主创建入看板的 subtask** | 废弃 | 折叠进主任务 Execution Log (ADR-002) |
 | `plans/2026-04-22-orbit-agent-context-*.md` | superseded | ADR-008 (CLI-first 取代 context wrapper 路线) |
 | `plans/2026-04-24-capture-knowledge-funnel.md` | superseded | ADR-010 + `capture-foundation` |
-
----
-
-## 进行中
-
-### Phase 3 — Agent Observability & Resilience（2026-04-27）
-
-**触发**：v2 实施完成后 dog-food 发现核心问题——agent 执行是黑盒（突然渲染、没有 tool use、resume 断裂）。同时确立了 Runtime 抽象贯通、全链路事件回放、Dashboard 重做等方向。
-
-**状态**：规划完成，待实施。4 项新 ADR（ADR-011 ~ ADR-014）已 accepted。
-
-| 子系统 | ADR | Plan | 状态 |
-|--------|-----|------|------|
-| Runtime 抽象贯通（通用 Agent Event 协议） | [ADR-011](decisions/ADR-011-runtime-abstraction-through-capabilities.md) | [phase-3 总纲](plans/2026-04-27-phase-3-agent-observability-resilience.md) | draft |
-| Task-Session 绑定（原生 resume + 双向 stream） | [ADR-012](decisions/ADR-012-task-session-binding-model.md) | 同上 | draft |
-| 统一事件回放（全链路 + Developer Console） | [ADR-013](decisions/ADR-013-unified-event-replay-infrastructure.md) | 同上 | draft |
-| Runtime Fallback 决策规则 + Budget | [ADR-014](decisions/ADR-014-runtime-fallback-decision-rules.md) | 同上 | draft |
-| Activity tab 时间线 UI（打字机 + 实时 markdown） | — | 同上 | draft |
-| Agent Playground 调试基础设施 | — | 同上 | draft |
-| Global Dashboard 重做（象限 3/4/5） | — | 同上 | draft |
-
-**实施顺序**（6 个阶段，阶段间有依赖）：
-
-1. **Phase 3.0**：调试基础设施（Playground + scenario harness + 事件录像）
-2. **Phase 3.1**：Runtime 抽象贯通（adapter 接口 + Claude/Codex/Copilot adapters）
-3. **Phase 3.2**：可观察性 UI（Activity tab + 时间线 + 打字机 + 实时 markdown）
-4. **Phase 3.3**：延续性（Task-Session 绑定 + resume + 双向 stream）
-5. **Phase 3.4**：全链路事件回放（统一总线 + Developer Console + Golden Files）
-6. **Phase 3.5**：Global Dashboard 重做（象限 3: 知识增长 / 象限 4: 思考轨迹 / 象限 5: 系统健康）
 
 ---
 

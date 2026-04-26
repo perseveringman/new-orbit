@@ -1,6 +1,6 @@
 ---
 title: "全链路事件回放基础设施"
-status: draft
+status: completed
 date: 2026-04-27
 adr: ADR-013
 phase: "3.4"

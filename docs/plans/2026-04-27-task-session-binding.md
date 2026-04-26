@@ -1,6 +1,6 @@
 ---
 title: "Task-Session 绑定 — 通用 Resume 与双向 Stream"
-status: draft
+status: completed
 date: 2026-04-27
 adr: ADR-012
 phase: "3.3"

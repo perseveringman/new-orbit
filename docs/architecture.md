@@ -37,11 +37,12 @@ Orbit 仍采用 Electron 三进程布局：
 1. `configureActivityEmitter(vaultPath)` 绑定 Activity Log 根目录。
 2. `openFsSession(vaultPath)` 建立 refmap、文件索引、search index、task index 与 watcher。
 3. `startCliServerForVault(vaultPath)` 在 `<vault>/.orbit/cli-socket` 暴露本地 CLI bridge。
-4. `reconcileOnStart(vaultPath)` 恢复 agent / terminal session 状态。
-5. `ensureOrchestrationForVault(vaultPath)` 初始化 runtime、planner、roles、dispatch storage。
-6. `getAutoRunnerDispatcher().attach(vaultPath)` 装载 Auto-runner，但是否运行由 settings 控制。
-7. `ensureTerminalAgentRuntimeForVault(vaultPath)` 启动 terminal hook runtime。
-8. `ensureVectorStore(vaultPath)` 与 worktree GC 作为后台能力初始化。
+4. `configureEventReplay(vaultPath)` 绑定统一事件回放 store 与 run recorder。
+5. `reconcileOnStart(vaultPath)` 恢复 agent / terminal session 状态。
+6. `ensureOrchestrationForVault(vaultPath)` 初始化 runtime、planner、roles、dispatch storage。
+7. `getAutoRunnerDispatcher().attach(vaultPath)` 装载 Auto-runner，但是否运行由 settings 控制。
+8. `ensureTerminalAgentRuntimeForVault(vaultPath)` 启动 terminal hook runtime。
+9. `ensureVectorStore(vaultPath)` 与 worktree GC 作为后台能力初始化。
 
 关闭 vault 时，上述 runtime 会反向 detach / shutdown，并停止 CLI server 与 watcher。
 
@@ -63,7 +64,7 @@ Orbit 仍采用 Electron 三进程布局：
 | `git`, `github`, `env`, `envExt` | local Git, GitHub CLI integration, environment checks |
 | `agent`, `terminal`, `terminalAgent` | Claude/Codex/Gemini runner, pty, terminal session awareness |
 | `runtime`, `planner`, `conversation`, `dispatch`, `role` | orchestration core |
-| `activity` | append/query Activity Log |
+| `activity`, `events`, `dashboard` | Activity Log、全链路事件回放、五象限 Dashboard 聚合 |
 | `approval` | proposal approval state machine |
 | `inbox` | unified Inbox hub |
 | `capture`, `quickCapture` | Feed, Library, Thoughts, global quick capture |
@@ -87,6 +88,11 @@ Vault root:
     ├── config.json
     ├── refmap.json
     ├── activity/YYYY-MM-DD.ndjson
+    ├── events/YYYY-MM-DD.ndjson
+    ├── events/runs/<runId>/
+    │   ├── raw-vendor.ndjson
+    │   ├── abstract.ndjson
+    │   └── ui-render.ndjson
     ├── cli-socket
     ├── inbox/
     ├── approval/
@@ -158,7 +164,16 @@ Immutable task frontmatter keys are still `uid`, `type`, and `created`; migratio
 
 Project config (`.orbit/config.json`) stores `execution_context: "worktree" | "sandbox"`, defaulting to `worktree`.
 
-`src/main/agent/runner.ts` starts Claude Code in one-shot stream-json mode by default:
+`src/main/agent/runner.ts` still executes Claude Code, while `src/main/agent/adapter/`
+adds the Phase 3 runtime adapter layer:
+
+- `UnifiedAgentEvent` (`src/shared/agent-event.ts`) is the vendor-neutral event protocol.
+- `ClaudeAdapter` converts Claude stream-json into unified events.
+- Codex / Copilot adapters declare capabilities and stub process startup paths.
+- `RunnerPool` emits both legacy `AgentEvent` and `UnifiedAgentEvent` so existing UI remains compatible during migration.
+- Runtime metadata (`runtimeId`, provider, name) is threaded from dispatch/startTask into runner events.
+
+Claude starts in stream-json mode by default:
 
 ```text
 claude -p <prompt> --output-format stream-json --verbose
@@ -170,10 +185,24 @@ The runner owns:
 - `_active.json` PID bookkeeping and startup reconciliation.
 - cost extraction and event normalization.
 - hook env vars for terminal/agent lifecycle integration.
+- `--resume <vendorSessionId>` when a task has a persisted vendor session.
+- stream-json stdin for sending user messages into an active run.
 
 It no longer auto-loads `.mcp.json`; agent capabilities should go through `orbit` CLI or terminal hooks.
 
-## 7. Activity Log
+Task conversations persist `RunSegment.vendorSessionId` and reverse-scan latest completed/running
+segments before dispatching a new run. Manual task chat first attempts `agent:sendMessage` into an
+active run, then falls back to a resumed Claude process.
+
+Fallback and budget resilience are configured under `autoRunner` settings:
+
+- default stale timeout: 15 minutes.
+- default runtime priority: Claude -> Codex -> Copilot.
+- default per-task budget: `$20`, overridable by task frontmatter `budget_limit`.
+- helper rules classify non-retryable errors and choose the next runtime without interrupting an
+  event-emitting live process.
+
+## 7. Activity Log and Event Replay
 
 `src/main/activity/` provides append-only Activity Log infrastructure:
 
@@ -183,6 +212,18 @@ It no longer auto-loads `.mcp.json`; agent capabilities should go through `orbit
 - query filters exposed through `activity:query`.
 
 Activity Log currently records task mutations, proposal lifecycle, Inbox events, Auto-runner events, and Capture operations. It is the audit trail for v2 behavior and the observation substrate for later review UI.
+
+Phase 3 adds `src/main/events/` as the unified replay layer:
+
+- `TraceableEvent` (`src/shared/events.ts`) normalizes Activity, Agent, Inbox and IPC events with
+  `traceId`, `spanId`, `runId`, `taskId/taskUid`, source and payload.
+- `TraceableEventStore` writes `.orbit/events/YYYY-MM-DD.ndjson` and supports source/trace/run/task
+  filters plus GC.
+- `RunRecorder` writes three parallel run files under `.orbit/events/runs/<runId>/`: raw vendor,
+  abstract unified event, and ui-render payload.
+- `events:*` IPC exposes historical query, GC and realtime push to the renderer.
+- Developer Console (`DeveloperConsoleView`) is the X-Ray surface for live event stream,
+  trace/source/kind/task filters, payload inspection and basic playback.
 
 ## 8. Proposal approval system
 
@@ -266,7 +307,8 @@ Renderer state is organized through Zustand stores under `src/renderer/src/store
 
 - `workspace`, `files`, `para` for vault/project navigation.
 - `agent`, `worktrees`, `reviewQueue`, `taskDetails` for execution-facing UI.
-- Inbox, Capture, Project Room, Planner, Roles, Sessions, GitHub, Inspector and Area Room are composed as React views.
+- Inbox, Capture, Project Room, Planner, Roles, Sessions, GitHub, Inspector, Developer Console,
+  Dashboard and Area Room are composed as React views.
 
 Project Room currently contains:
 
@@ -278,6 +320,18 @@ Project Room currently contains:
 - Roles
 
 The old Night Shift modal/history UI has been removed. Review Inbox now focuses on permission requests from Orbit-managed sessions.
+
+Task Detail's Chat tab is now presented as Activity. It renders conversation turns and live agent
+events through Timeline cards for user/system/assistant messages, thinking, tool use/result, cost,
+error and done states.
+
+The global Dashboard is now a five-quadrant command center backed by `src/main/dashboard/`:
+
+- pending user attention (Inbox, blocked and ready/waiting tasks).
+- active agent work (doing tasks, active runs, runtime online count, today cost).
+- knowledge growth (Feed, Library, Thoughts, promotion and project counts).
+- thinking trail (Daily Review, recent Activity, Vision review age, recent thinking-trail dirs).
+- system health (vault/worktree/orbit disk usage, dirty project count, runtime status, budget).
 
 ## 15. Git and GitHub integration
 

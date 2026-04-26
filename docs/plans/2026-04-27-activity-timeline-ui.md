@@ -1,6 +1,6 @@
 ---
 title: "Activity Timeline UI — 时间线渲染与实时 Markdown"
-status: draft
+status: completed
 date: 2026-04-27
 phase: "3.2"
 depends_on: "2026-04-27-runtime-adapter-layer.md (Phase 3.1)"

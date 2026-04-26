@@ -1,6 +1,6 @@
 ---
 title: "Runtime Fallback 决策规则与 Budget 熔断"
-status: draft
+status: completed
 date: 2026-04-27
 adr: ADR-014
 phase: "3.3"

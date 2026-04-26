@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit Phase 3.6 文档与收尾**：将 Phase 3 plans 标记为 completed，更新 `docs/architecture.md` 与 `docs/ROADMAP.md` 为 Phase 3 现状，并在 `docs/CHANGELOG.v2-implementation.md` 增补 Phase 3 偏离、权衡与后续观察项。
 - **Orbit Phase 3.5 Global Dashboard**：新增 Dashboard 聚合 IPC 与五象限工作台，覆盖待处理事项、Agent 进行中、知识增长、思考轨迹和系统健康，并接入 Activity、Inbox、Runtime、Budget、Git dirty、磁盘用量与 Developer Console 跳转。
 - **Orbit Phase 3.4 Event Replay Infrastructure**：新增 TraceableEvent schema、`.orbit/events/` NDJSON 按日写入与 GC、全局事件总线、agent/activity/inbox/ipc 四源接入、agent raw/abstract/ui-render 三层录像，以及 Developer Console 的实时流、trace/source/kind/task 过滤和基础 playback。
 - **Orbit Phase 3.2 / 3.3 Activity + Session + Fallback 基础**：任务详情 Chat tab 改为 Activity 体验，新增 Timeline cards 与流式 Markdown 展示；Task-Session 绑定支持 vendor session reverse scan、Claude resume 参数与运行中 `agent:sendMessage`；Auto-runner settings 扩展默认预算、15 分钟 stale timeout、runtime priority，并新增 fallback / budget guard 基础规则。

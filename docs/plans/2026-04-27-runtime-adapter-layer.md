@@ -1,6 +1,6 @@
 ---
 title: "Runtime Adapter Layer — 通用 Agent Event 协议与 Adapter 实现"
-status: draft
+status: completed
 date: 2026-04-27
 adr: ADR-011
 phase: "3.1"

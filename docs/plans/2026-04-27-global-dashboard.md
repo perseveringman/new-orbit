@@ -1,6 +1,6 @@
 ---
 title: "Global Dashboard 重做"
-status: draft
+status: completed
 date: 2026-04-27
 phase: "3.5"
 depends_on: "2026-04-27-event-replay-infrastructure.md (Phase 3.4)"
