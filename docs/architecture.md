@@ -181,10 +181,18 @@ adds the Phase 3 runtime adapter layer:
 - `RunnerPool` emits both legacy `AgentEvent` and `UnifiedAgentEvent` so existing UI remains compatible during migration.
 - Runtime metadata (`runtimeId`, provider, name) is threaded from dispatch/startTask into runner events.
 
-Claude starts in stream-json mode by default:
+Claude starts with structured output by default:
 
 ```text
 claude -p <prompt> --output-format stream-json --verbose
+```
+
+When Orbit needs realtime stdin (for resumed task conversations or live user follow-up), it switches
+to Claude's stream-json input protocol and sends the initial task prompt as a `type: user` JSONL
+message on stdin:
+
+```text
+claude -p --output-format stream-json --input-format stream-json --verbose --resume <vendorSessionId>
 ```
 
 The runner owns:

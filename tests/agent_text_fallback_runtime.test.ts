@@ -69,10 +69,23 @@ describe('AgentRunner tool-invocation fallback (R6)', () => {
         .join('')
         .trim()
         .split('\n')
-        .map((line) => JSON.parse(line) as { role: string; content: string });
-      expect(stdinMessages[0]).toEqual({
-        role: 'user',
-        content: '{"ok":true,"uid":"taskabc"}'
+        .map(
+          (line) =>
+            JSON.parse(line) as {
+              type: string;
+              message: { role: string; content: Array<{ type: string; text: string }> };
+            }
+        );
+      expect(stdinMessages[0]).toMatchObject({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'text', text: 'p' }] }
+      });
+      expect(stdinMessages[1]).toMatchObject({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: '{"ok":true,"uid":"taskabc"}' }]
+        }
       });
 
       const snap = runner.snapshot();

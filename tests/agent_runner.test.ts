@@ -285,11 +285,16 @@ describe('AgentRunner stream parsing', () => {
       expect(lastArgs()).toEqual(
         expect.arrayContaining(['--resume', 'session-1', '--input-format', 'stream-json'])
       );
+      expect(lastArgs()).not.toContain('continue');
       expect(lastOptions()?.stdio).toEqual(['pipe', 'pipe', 'pipe']);
+      const initial = child.stdin.read()?.toString('utf8') ?? '';
+      expect(initial).toContain('"type":"user"');
+      expect(initial).toContain('"text":"continue"');
 
       expect(runner.sendMessage('follow up')).toBe(true);
       const written = child.stdin.read()?.toString('utf8') ?? '';
-      expect(written).toContain('"content":"follow up"');
+      expect(written).toContain('"type":"user"');
+      expect(written).toContain('"text":"follow up"');
 
       await runner.stop('test');
     } finally {

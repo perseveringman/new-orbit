@@ -461,13 +461,10 @@ export class AgentRunner extends EventEmitter {
     await this.openLog();
     this.logRaw(`# orbit runner start runId=${this.runId} task=${this.opts.taskId ?? ''}`);
 
-    const args = [
-      '-p',
-      this.opts.prompt,
-      '--output-format',
-      'stream-json',
-      '--verbose'
-    ];
+    const args =
+      inputMode === 'stream-json'
+        ? ['-p', '--output-format', 'stream-json', '--verbose']
+        : ['-p', this.opts.prompt, '--output-format', 'stream-json', '--verbose'];
     if (this.opts.vendorSessionId) {
       args.push('--resume', this.opts.vendorSessionId);
     }
@@ -506,6 +503,14 @@ export class AgentRunner extends EventEmitter {
       this.flushStderr();
       void this.finish(code === 0 ? 'done' : 'error', undefined, code);
     });
+    if (inputMode === 'stream-json' && !this.writeStdin(this.opts.prompt)) {
+      this.push({
+        idx: this.eventIdx++,
+        at: new Date().toISOString(),
+        kind: 'error',
+        text: 'failed to write initial stream-json prompt'
+      });
+    }
   }
 
   private onStdout(chunk: string): void {
@@ -662,7 +667,13 @@ export class AgentRunner extends EventEmitter {
 
   private writeStdin(text: string): boolean {
     if (!this.child?.stdin || this.child.stdin.destroyed) return false;
-    const payload = `${JSON.stringify({ role: 'user', content: text })}\n`;
+    const payload = `${JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text }]
+      }
+    })}\n`;
     try {
       this.child.stdin.write(payload);
       this.logRaw(`# orbit stdin -> ${payload}`);
