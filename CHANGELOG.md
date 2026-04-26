@@ -22,6 +22,10 @@
 - **Activity Log 基础设施**：新增 `src/main/activity/`，提供 Activity Event 类型、NDJSON 按日存储、fire-and-forget emitter、查询过滤与只读 IPC，并补充 emit / query / concurrency 单元测试。
 - **Orbit CLI Phase 0 脚手架**：新增 `src/cli/` 命令行入口、稳定 help / `--json` 输出、退出码与本地 socket bridge；新增 `src/main/cli_server/` 薄协议层，先暴露 `search`、`cat`、`task list`，并保留 MCP 启动流程不变
 
+### Fixed
+
+- **左侧栏 Inbox 红点计数**：Workspace 左侧导航的 Inbox 入口现在会订阅 Inbox 事件并显示 `sidebarMessagesPending` 红色 badge，这样无需进入 Inbox 页面也能看到待处理消息数。
+
 - **Orbit v2 方向确立（2026-04-26）**：经过一次完整 Onboard 对话（~29 轮），确立 v2 演进方向。产出：
   - 新增 `docs/overview.md` — v2 完整架构总览
   - 新增 `docs/decisions/` 目录（10 份 ADR + README）：ADR-001 (废弃 Night Shift) / ADR-002 (Agent 子任务折叠) / ADR-003 (ExecutionContext 双轨) / ADR-004 (Inbox 枢纽) / ADR-005 (Plan Chat 定位) / ADR-006 (propose-approve) / ADR-007 (depends_on) / ADR-008 (AI-Native CLI-first) / ADR-009 (Activity Log) / ADR-010 (Capture 三分)

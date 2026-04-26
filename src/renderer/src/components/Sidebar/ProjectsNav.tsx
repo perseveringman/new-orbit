@@ -26,6 +26,7 @@ export function ProjectsNav(): JSX.Element {
   const { projects } = useWorkspace();
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
   const [countsByUid, setCountsByUid] = useState<Record<string, number>>({});
+  const [inboxPendingCount, setInboxPendingCount] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function openNewProject(): void {
@@ -68,6 +69,21 @@ export function ProjectsNav(): JSX.Element {
     };
   }, [projects]);
 
+  useEffect(() => {
+    async function refreshInboxCount(): Promise<void> {
+      try {
+        const result = await window.orbit.inbox.list({ includeArchived: true });
+        setInboxPendingCount(result.counts.sidebarMessagesPending);
+      } catch {
+        setInboxPendingCount(0);
+      }
+    }
+
+    void refreshInboxCount();
+    const dispose = window.orbit.inbox.onEvent(() => void refreshInboxCount());
+    return dispose;
+  }, []);
+
   function onClickProject(p: ProjectSummaryDTO): void {
     setActiveProjectUid(p.uid);
     setView({ kind: 'project', projectUid: p.uid });
@@ -83,16 +99,12 @@ export function ProjectsNav(): JSX.Element {
           const active = isQuickItemActive(view, it);
           return (
             <li key={it.label}>
-              <button
+              <WorkspaceQuickItem
+                destination={it}
+                active={active}
+                badgeCount={workspaceBadgeCount(it, inboxPendingCount)}
                 onClick={() => setView(it.view)}
-                className={
-                  'flex w-full items-center gap-2 rounded px-2 py-1 text-left text-neutral-700 hover:bg-neutral-200/60 dark:text-neutral-300 dark:hover:bg-neutral-800/60 ' +
-                  (active ? 'bg-neutral-200/80 dark:bg-neutral-800/80' : '')
-                }
-              >
-                <span className="w-4 text-neutral-500">{it.icon}</span>
-                <span>{it.label}</span>
-              </button>
+              />
             </li>
           );
         })}
@@ -157,5 +169,42 @@ export function ProjectsNav(): JSX.Element {
         </ul>
       )}
     </div>
+  );
+}
+
+export function workspaceBadgeCount(
+  destination: WorkspaceDestination,
+  inboxPendingCount: number
+): number {
+  return destination.view.kind === 'inbox' ? inboxPendingCount : 0;
+}
+
+export function WorkspaceQuickItem({
+  destination,
+  active,
+  badgeCount,
+  onClick
+}: {
+  destination: WorkspaceDestination;
+  active: boolean;
+  badgeCount: number;
+  onClick(): void;
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        'flex w-full items-center gap-2 rounded px-2 py-1 text-left text-neutral-700 hover:bg-neutral-200/60 dark:text-neutral-300 dark:hover:bg-neutral-800/60 ' +
+        (active ? 'bg-neutral-200/80 dark:bg-neutral-800/80' : '')
+      }
+    >
+      <span className="w-4 shrink-0 text-neutral-500">{destination.icon}</span>
+      <span className="min-w-0 flex-1 truncate">{destination.label}</span>
+      {badgeCount > 0 ? (
+        <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          {badgeCount}
+        </span>
+      ) : null}
+    </button>
   );
 }
