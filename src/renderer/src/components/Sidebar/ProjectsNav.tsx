@@ -3,6 +3,7 @@ import { usePara, type WorkspaceView } from '../../store/para';
 import { useWorkspace } from '../../store/workspace';
 import type { ProjectSummaryDTO } from '@shared/ipc';
 import type { TaskRecord } from '@shared/schemas';
+import type { InboxEvent, InboxItem } from '@shared/inbox';
 import { WORKSPACE_DESTINATIONS, type WorkspaceDestination } from '../topbarModel';
 import { AreasNav } from './AreasNav';
 
@@ -26,8 +27,9 @@ export function ProjectsNav(): JSX.Element {
   const { projects } = useWorkspace();
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
   const [countsByUid, setCountsByUid] = useState<Record<string, number>>({});
-  const [inboxPendingCount, setInboxPendingCount] = useState(0);
+  const [pendingInboxMessageIds, setPendingInboxMessageIds] = useState<Set<string>>(() => new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inboxRequestSeq = useRef(0);
 
   function openNewProject(): void {
     window.dispatchEvent(new CustomEvent('orbit:open-new-project'));
@@ -71,16 +73,22 @@ export function ProjectsNav(): JSX.Element {
 
   useEffect(() => {
     async function refreshInboxCount(): Promise<void> {
+      const seq = ++inboxRequestSeq.current;
       try {
         const result = await window.orbit.inbox.list({ includeArchived: true });
-        setInboxPendingCount(result.counts.sidebarMessagesPending);
+        if (seq === inboxRequestSeq.current) {
+          setPendingInboxMessageIds(pendingMessageIdsFromItems(result.items));
+        }
       } catch {
-        setInboxPendingCount(0);
+        if (seq === inboxRequestSeq.current) setPendingInboxMessageIds(new Set());
       }
     }
 
     void refreshInboxCount();
-    const dispose = window.orbit.inbox.onEvent(() => void refreshInboxCount());
+    const dispose = window.orbit.inbox.onEvent((event) => {
+      setPendingInboxMessageIds((current) => applyInboxBadgeEvent(current, event));
+      void refreshInboxCount();
+    });
     return dispose;
   }, []);
 
@@ -102,7 +110,7 @@ export function ProjectsNav(): JSX.Element {
               <WorkspaceQuickItem
                 destination={it}
                 active={active}
-                badgeCount={workspaceBadgeCount(it, inboxPendingCount)}
+                badgeCount={workspaceBadgeCount(it, pendingInboxMessageIds.size)}
                 onClick={() => setView(it.view)}
               />
             </li>
@@ -177,6 +185,22 @@ export function workspaceBadgeCount(
   inboxPendingCount: number
 ): number {
   return destination.view.kind === 'inbox' ? inboxPendingCount : 0;
+}
+
+export function pendingMessageIdsFromItems(items: InboxItem[]): Set<string> {
+  return new Set(
+    items
+      .filter((item) => item.category === 'message' && item.status === 'pending')
+      .map((item) => item.id)
+  );
+}
+
+export function applyInboxBadgeEvent(current: Set<string>, event: InboxEvent): Set<string> {
+  if (event.item.category !== 'message') return current;
+  const next = new Set(current);
+  if (event.item.status === 'pending' && event.type !== 'archived') next.add(event.item.id);
+  else next.delete(event.item.id);
+  return next;
 }
 
 export function WorkspaceQuickItem({
