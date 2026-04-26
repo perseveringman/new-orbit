@@ -35,6 +35,7 @@ describe('ProjectsNav inbox badge', () => {
 
     expect(html).toContain('Inbox');
     expect(html).toContain('bg-red-500');
+    expect(html).toContain('h-5 w-5');
     expect(html).toContain('>3<');
   });
 

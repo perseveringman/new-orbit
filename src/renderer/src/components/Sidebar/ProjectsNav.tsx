@@ -225,7 +225,10 @@ export function WorkspaceQuickItem({
       <span className="w-4 shrink-0 text-neutral-500">{destination.icon}</span>
       <span className="min-w-0 flex-1 truncate">{destination.label}</span>
       {badgeCount > 0 ? (
-        <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+        <span
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium leading-none text-white"
+          title={`${badgeCount} pending inbox messages`}
+        >
           {badgeCount}
         </span>
       ) : null}
