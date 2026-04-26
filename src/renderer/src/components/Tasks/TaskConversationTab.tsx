@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentEvent } from '@shared/agent';
+import type { AgentEvent, RunSummary } from '@shared/agent';
 import type { RunSegment, RuntimeDescriptor, TaskConversation } from '@shared/orchestration';
 import type { TaskRecord } from '@shared/schemas';
 import { buildAgentEventKey } from '../../lib/agentEventKeys';
 import { useAgent } from '../../store/agent';
 import { useTaskConversation } from '../../store/taskConversation';
-import { AgentEventCard, SegmentDivider, TurnCard } from '../Timeline';
+import { AgentEventCard, describeAgentEvent, SegmentDivider, TurnCard } from '../Timeline';
 
 interface TaskConversationTabProps {
   task: TaskRecord;
 }
 
 interface TimelineEntry {
-  kind: 'segment' | 'turn';
+  kind: 'segment' | 'turn' | 'event' | 'placeholder';
   key: string;
   segment?: RunSegment;
   turn?: TaskConversation['turns'][number];
+  event?: AgentEvent;
+  live?: boolean;
 }
 
 type ConversationInputState = 'idle' | 'running' | 'waiting';
@@ -60,6 +62,7 @@ export function TaskConversationTab({ task }: TaskConversationTabProps): JSX.Ele
   const conversation = useTaskConversation((s) => s.conversations[task.id]);
   const loading = useTaskConversation((s) => s.loading[task.id] ?? false);
   const sending = useTaskConversation((s) => s.sending[task.id] ?? false);
+  const runs = useAgent((s) => s.runs);
 
   useEffect(() => {
     init();
@@ -78,6 +81,7 @@ export function TaskConversationTab({ task }: TaskConversationTabProps): JSX.Ele
     <TaskConversationTimeline
       task={task}
       conversation={conversation ?? null}
+      runs={runs}
       loading={loading}
       sending={sending}
       onSend={(message) => send(task.id, message)}
@@ -88,6 +92,7 @@ export function TaskConversationTab({ task }: TaskConversationTabProps): JSX.Ele
 interface TaskConversationTimelineProps {
   task: TaskRecord;
   conversation: TaskConversation | null;
+  runs?: Record<string, { events: AgentEvent[]; summary: RunSummary }>;
   loading?: boolean;
   sending?: boolean;
   onSend?(message: string): Promise<void>;
@@ -96,6 +101,7 @@ interface TaskConversationTimelineProps {
 export function TaskConversationTimeline({
   task,
   conversation,
+  runs = {},
   loading = false,
   sending = false,
   onSend
@@ -114,39 +120,11 @@ export function TaskConversationTimeline({
       setRuntimeId((current) => current || items[0]?.runtimeId || '');
     });
   }, []);
-  const segmentById = useMemo(
-    () => new Map((conversation?.segments ?? []).map((segment) => [segment.id, segment])),
-    [conversation?.segments]
-  );
   const timeline = useMemo<TimelineEntry[]>(() => {
-    if (!conversation) return [];
-    const entries: TimelineEntry[] = [];
-    let activeSegmentId: string | null = null;
-    for (const turn of conversation.turns) {
-      const segment = turn.segmentId ? segmentById.get(turn.segmentId) : undefined;
-      if (segment && segment.id !== activeSegmentId) {
-        entries.push({
-          kind: 'segment',
-          key: `segment:${segment.id}`,
-          segment
-        });
-        activeSegmentId = segment.id;
-      }
-      if (!segment) activeSegmentId = null;
-      entries.push({
-        kind: 'turn',
-        key: `turn:${turn.id}`,
-        turn
-      });
-    }
-    return entries;
-  }, [conversation, segmentById]);
-  const runningSegments = useMemo(
-    () =>
-      (conversation?.segments ?? []).filter((segment) => segment.status === 'running' && segment.runId),
-    [conversation?.segments]
-  );
+    return buildConversationTimelineEntries(conversation, runs);
+  }, [conversation, runs]);
   const inputState = getConversationInputState(conversation);
+  const liveStatus = useMemo(() => buildLiveStatus(conversation, runs), [conversation, runs]);
 
   async function handleSend(): Promise<void> {
     if (!onSend) return;
@@ -202,16 +180,27 @@ export function TaskConversationTimeline({
           timeline.map((entry) =>
             entry.kind === 'segment' && entry.segment ? (
               <SegmentDivider key={entry.key} segment={entry.segment} />
+            ) : entry.kind === 'event' && entry.event ? (
+              <div key={entry.key}>
+                <AgentEventCard event={entry.event} live={entry.live} />
+              </div>
+            ) : entry.kind === 'placeholder' && entry.segment ? (
+              <LivePlaceholderCard key={entry.key} />
             ) : entry.turn ? (
               <TurnCard key={entry.key} turn={entry.turn} />
             ) : null
           )
         )}
-        {runningSegments.map((segment) => (
-          <LiveEventStream key={segment.id} segment={segment} />
-        ))}
       </div>
       <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
+        {liveStatus && (
+          <div className="mb-3 rounded-xl border border-sky-300/50 bg-sky-50 px-3 py-2 text-sm text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100">
+            <div className="flex items-center gap-2">
+              <span className="animate-pulse">●</span>
+              <span>{liveStatus}</span>
+            </div>
+          </div>
+        )}
         <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Activity</div>
         <div className="flex gap-2">
           <textarea
@@ -241,42 +230,117 @@ export function TaskConversationTimeline({
   );
 }
 
-function LiveEventStream({ segment }: { segment: RunSegment }): JSX.Element | null {
-  const run = useAgent((s) => (segment.runId ? s.runs[segment.runId] : undefined));
-  if (!segment.runId) return null;
-  if (!run) {
-    return (
-      <div className="rounded border border-sky-400/40 bg-sky-500/5 p-3">
-        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-sky-600 dark:text-sky-300">
-          <span className="animate-pulse">●</span> Agent is starting…
-        </div>
-        <div className="space-y-1 border-l-2 border-sky-400/60 pl-3">
-          <p className="text-xs text-neutral-500">Waiting for the first live event…</p>
-        </div>
-      </div>
-    );
-  }
-  if (run.summary.status !== 'running') return null;
-  const events = dedupeAgentDisplayEvents(run.events).filter(
-    (event): event is AgentEvent => event.kind !== 'budget_warn' && event.kind !== 'budget_halt'
-  );
-
+function LivePlaceholderCard(): JSX.Element {
   return (
     <div className="rounded border border-sky-400/40 bg-sky-500/5 p-3">
       <div className="mb-2 flex items-center gap-2 text-xs font-medium text-sky-600 dark:text-sky-300">
-        <span className="animate-pulse">●</span> Agent is working…
+        <span className="animate-pulse">●</span> Agent is starting…
       </div>
       <div className="space-y-1 border-l-2 border-sky-400/60 pl-3">
-        {events.length === 0 ? (
-          <p className="text-xs text-neutral-500">Waiting for live output…</p>
-        ) : (
-          events.map((event, order) => (
-            <div key={buildAgentEventKey(segment.id, event, order)}>
-              <AgentEventCard event={event} />
-            </div>
-          ))
-        )}
+        <p className="text-xs text-neutral-500">Waiting for the first live event…</p>
       </div>
     </div>
   );
+}
+
+export function buildConversationTimelineEntries(
+  conversation: TaskConversation | null,
+  runs: Record<string, { events: AgentEvent[]; summary: RunSummary }>
+): TimelineEntry[] {
+  if (!conversation) return [];
+  const entries: TimelineEntry[] = [];
+  const segmentStarts = [...conversation.segments].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const pendingLooseTurns = conversation.turns
+    .filter((turn) => !turn.segmentId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  let looseIndex = 0;
+
+  for (const segment of segmentStarts) {
+    while (looseIndex < pendingLooseTurns.length && pendingLooseTurns[looseIndex]!.createdAt < segment.startedAt) {
+      const turn = pendingLooseTurns[looseIndex]!;
+      entries.push({ kind: 'turn', key: `turn:${turn.id}`, turn });
+      looseIndex += 1;
+    }
+
+    entries.push({ kind: 'segment', key: `segment:${segment.id}`, segment });
+    const segmentEvents = eventsForSegment(segment, runs[segment.runId]?.events);
+    const hasDetailedEvents = segmentEvents.some(isDetailedSegmentEvent);
+    const segmentTurns = conversation.turns.filter(
+      (turn) => turn.segmentId === segment.id && !(hasDetailedEvents && turn.role === 'assistant')
+    );
+    const segmentItems = [
+      ...segmentTurns.map((turn, index) => ({
+        kind: 'turn' as const,
+        key: `turn:${turn.id}`,
+        at: turn.createdAt,
+        index,
+        turn
+      })),
+      ...segmentEvents.map((event, index) => ({
+        kind: 'event' as const,
+        key: buildAgentEventKey(segment.id, event, index),
+        at: event.at,
+        index,
+        event,
+        live: segment.status === 'running'
+      }))
+    ].sort((a, b) => {
+      if (a.at !== b.at) return a.at.localeCompare(b.at);
+      if (a.kind !== b.kind) return a.kind === 'turn' ? -1 : 1;
+      return a.index - b.index;
+    });
+
+    if (segment.status === 'running' && segmentItems.length === 0) {
+      entries.push({ kind: 'placeholder', key: `placeholder:${segment.id}`, segment });
+      continue;
+    }
+
+    for (const item of segmentItems) {
+      if (item.kind === 'turn') {
+        entries.push({ kind: 'turn', key: item.key, turn: item.turn });
+      } else {
+        entries.push({
+          kind: 'event',
+          key: item.key,
+          event: item.event,
+          live: item.live
+        });
+      }
+    }
+  }
+
+  while (looseIndex < pendingLooseTurns.length) {
+    const turn = pendingLooseTurns[looseIndex]!;
+    entries.push({ kind: 'turn', key: `turn:${turn.id}`, turn });
+    looseIndex += 1;
+  }
+
+  return entries;
+}
+
+function eventsForSegment(segment: RunSegment, liveEvents: AgentEvent[] | undefined): AgentEvent[] {
+  const events =
+    segment.status === 'running' && liveEvents?.length ? liveEvents : (segment.events ?? []);
+  return dedupeAgentDisplayEvents(events).filter(
+    (event): event is AgentEvent => event.kind !== 'budget_warn' && event.kind !== 'budget_halt'
+  );
+}
+
+function isDetailedSegmentEvent(event: AgentEvent): boolean {
+  return ['message', 'text', 'thinking', 'tool_use', 'tool_result', 'error', 'hydrate'].includes(event.kind);
+}
+
+export function buildLiveStatus(
+  conversation: TaskConversation | null,
+  runs: Record<string, { events: AgentEvent[]; summary: RunSummary }>
+): string | null {
+  const runningSegment = [...(conversation?.segments ?? [])]
+    .reverse()
+    .find((segment) => segment.status === 'running' && segment.runId);
+  if (!runningSegment?.runId) return null;
+  const run = runs[runningSegment.runId];
+  if (!run || run.summary.status !== 'running') return 'Agent is working…';
+  const events = eventsForSegment(runningSegment, run.events);
+  const latest = [...events].reverse().find((event) => isDetailedSegmentEvent(event));
+  return latest ? describeAgentEvent(latest) : 'Agent is working…';
 }

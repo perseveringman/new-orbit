@@ -223,6 +223,7 @@ export async function completeSegment(
     sessionStatus?: AgentSessionStatus;
     summary?: string;
     vendorSessionId?: string;
+    events?: AgentEvent[];
   }
 ): Promise<void> {
   const endedAt = new Date().toISOString();
@@ -232,12 +233,13 @@ export async function completeSegment(
       segment.id === segmentId
         ? {
             ...segment,
-            status: result.status,
-            sessionStatus: result.sessionStatus ?? segment.sessionStatus,
-            summary: result.summary,
-            ...(result.vendorSessionId ? { vendorSessionId: result.vendorSessionId } : {}),
-            endedAt
-          }
+             status: result.status,
+             sessionStatus: result.sessionStatus ?? segment.sessionStatus,
+             summary: result.summary,
+             ...(result.events ? { events: result.events } : {}),
+             ...(result.vendorSessionId ? { vendorSessionId: result.vendorSessionId } : {}),
+             endedAt
+           }
         : segment
     ),
     updatedAt: endedAt
@@ -323,7 +325,7 @@ export async function recordRunCompletion(
     summary: result.summary
   });
   const assistantContent = collectAssistantContent(result.events);
-  if (assistantContent) {
+  if (assistantContent && !hasDetailedSegmentEvents(result.events)) {
     await appendTurn(vaultPath, match.taskUid, {
       role: 'assistant',
       content: assistantContent,
@@ -347,7 +349,8 @@ export async function recordRunCompletion(
     status: completion.status,
     sessionStatus: completion.sessionStatus,
     summary: completion.summary,
-    vendorSessionId: extractVendorSessionIdFromAgentEvents(result.events)
+    vendorSessionId: extractVendorSessionIdFromAgentEvents(result.events),
+    events: result.events
   });
   if (completion.status === 'completed') {
     await resolveTaskAttentionAfterCompletion(vaultPath, match.taskUid);
@@ -366,6 +369,12 @@ export async function recordRunCompletion(
     });
   }
   await clearActiveRunId(match.taskId, runId);
+}
+
+function hasDetailedSegmentEvents(events: AgentEvent[]): boolean {
+  return events.some((event) =>
+    ['message', 'text', 'thinking', 'tool_use', 'tool_result', 'error', 'hydrate'].includes(event.kind)
+  );
 }
 
 async function resolveTaskAttentionFromChat(vaultPath: string, taskUid: string): Promise<void> {

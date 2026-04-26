@@ -1,11 +1,41 @@
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 interface StreamingMarkdownProps {
   content: string;
+  animate?: boolean;
+  chunkSize?: number;
+  intervalMs?: number;
 }
 
-export function StreamingMarkdown({ content }: StreamingMarkdownProps): JSX.Element {
-  const lines = content.split('\n');
+export function StreamingMarkdown({
+  content,
+  animate = false,
+  chunkSize = 3,
+  intervalMs = 16
+}: StreamingMarkdownProps): JSX.Element {
+  const shouldAnimate = animate && typeof window !== 'undefined';
+  const [visibleLength, setVisibleLength] = useState(shouldAnimate ? 0 : content.length);
+
+  useEffect(() => {
+    if (!shouldAnimate) {
+      setVisibleLength(content.length);
+      return;
+    }
+    setVisibleLength(0);
+    const timer = window.setInterval(() => {
+      setVisibleLength((current) => {
+        if (current >= content.length) {
+          window.clearInterval(timer);
+          return content.length;
+        }
+        return Math.min(content.length, current + chunkSize);
+      });
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [chunkSize, content, intervalMs, shouldAnimate]);
+
+  const rendered = shouldAnimate ? content.slice(0, visibleLength) : content;
+  const lines = useMemo(() => rendered.split('\n'), [rendered]);
   return (
     <div className="space-y-2 text-sm leading-6">
       {lines.map((line, index) => (

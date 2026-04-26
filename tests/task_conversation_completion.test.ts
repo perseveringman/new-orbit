@@ -6,6 +6,7 @@ import { createVault } from '../src/main/vault';
 import { createProject, createTask } from '../src/main/project';
 import {
   collectAssistantContent,
+  getConversation,
   getOrCreateConversation,
   recordRunCompletion,
   resolveConversationCompletion,
@@ -150,5 +151,18 @@ describe('task conversation completion resolution', () => {
         })
       })
     ]);
+    const conversation = await getConversation(vault, task.uid);
+    expect(conversation?.segments[0]).toEqual(
+      expect.objectContaining({
+        status: 'needs_attention',
+        sessionStatus: 'awaiting_user',
+        events: [
+          expect.objectContaining({
+            kind: 'message',
+            text: 'Please provide the production API key.'
+          })
+        ]
+      })
+    );
   });
 });

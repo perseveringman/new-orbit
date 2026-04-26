@@ -5,6 +5,8 @@ import type { AgentEvent } from '../src/shared/agent';
 import type { TaskConversation } from '../src/shared/orchestration';
 import type { TaskRecord } from '../src/shared/schemas';
 import {
+  buildConversationTimelineEntries,
+  buildLiveStatus,
   dedupeAgentDisplayEvents,
   getConversationInputPlaceholder,
   TaskConversationTimeline
@@ -37,6 +39,24 @@ const conversation: TaskConversation = {
       trigger: 'dispatch',
       status: 'completed',
       summary: 'Done',
+      events: [
+        {
+          idx: 1,
+          at: '2026-04-25T12:00:05.000Z',
+          kind: 'tool_use',
+          toolName: 'read_file',
+          data: {
+            name: 'read_file',
+            input: { path: '/tmp/task.md', start_line: 1, end_line: 40 }
+          }
+        },
+        {
+          idx: 2,
+          at: '2026-04-25T12:00:06.000Z',
+          kind: 'message',
+          text: '我先梳理相关模块。'
+        }
+      ],
       startedAt: '2026-04-25T12:00:00.000Z',
       endedAt: '2026-04-25T12:05:00.000Z'
     },
@@ -85,10 +105,12 @@ describe('TaskConversationTimeline', () => {
 
     expect(html).toContain('Auto · executor-binding · Completed');
     expect(html).toContain('Manual · Running');
+    expect(html).toContain('Tool call');
+    expect(html).toContain('task.md');
     expect(html).toContain('Agent');
     expect(html).toContain('再补上对话输入框');
     expect(html).toContain('Activity');
-    expect(html).toContain('Agent is starting');
+    expect(html).toContain('Agent is working…');
   });
 
   it('builds unique live event keys when events share the same idx', () => {
@@ -149,5 +171,41 @@ describe('TaskConversationTimeline', () => {
     expect(getConversationInputPlaceholder(task.title, 'running')).toBe(
       '追加消息给正在运行的 agent'
     );
+  });
+
+  it('prefers detailed segment events over synthetic assistant summary turns', () => {
+    const entries = buildConversationTimelineEntries(conversation, {});
+    expect(entries.some((entry) => entry.kind === 'event' && entry.event?.kind === 'tool_use')).toBe(true);
+    expect(
+      entries.some((entry) => entry.kind === 'turn' && entry.turn?.role === 'assistant')
+    ).toBe(false);
+  });
+
+  it('summarizes the latest running activity for the footer status bar', () => {
+    expect(
+      buildLiveStatus(conversation, {
+        'run-2': {
+          summary: {
+            runId: 'run-2',
+            taskId: 'task-1',
+            status: 'running',
+            startedAt: '2026-04-25T12:06:00.000Z',
+            cwd: '/tmp'
+          },
+          events: [
+            {
+              idx: 1,
+              at: '2026-04-25T12:06:07.000Z',
+              kind: 'tool_use',
+              toolName: 'grep',
+              data: {
+                name: 'grep',
+                input: { path: '/tmp/task.md' }
+              }
+            }
+          ]
+        }
+      })
+    ).toContain('Working · Grep task.md');
   });
 });

@@ -1,3 +1,4 @@
+import type { AgentEvent } from './agent';
 import type { TaskStatus } from './schemas';
 
 export const TASK_ORIGINS = ['human', 'agent', 'system', 'imported'] as const;
@@ -237,6 +238,7 @@ export interface RunSegment {
   status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_attention';
   sessionStatus?: AgentSessionStatus;
   summary?: string;
+  events?: AgentEvent[];
   startedAt: string;
   endedAt?: string;
 }

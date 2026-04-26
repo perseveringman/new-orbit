@@ -31,6 +31,7 @@ export const useTaskConversation = create<TaskConversationState>((set, get) => (
     if (typeof window === 'undefined' || get().unsubscribe) return;
     const off = window.orbit.conversation.onEvent(({ taskId, turn }) => {
       get().ingestTurn(taskId, turn);
+      void get().load(taskId);
     });
     set({ unsubscribe: off });
   },

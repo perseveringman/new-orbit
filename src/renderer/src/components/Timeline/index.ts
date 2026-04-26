@@ -1,6 +1,7 @@
 export {
   AgentEventCard,
   AssistantMessageCard,
+  describeAgentEvent,
   SegmentDivider,
   SystemEventCard,
   ThinkingCard,
