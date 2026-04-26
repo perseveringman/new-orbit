@@ -103,6 +103,8 @@ describe('Inbox v2 renderer shell', () => {
     expect(html).toContain('Open task');
     expect(html).toContain('No task conversation yet');
     expect(html).toContain('Ask the agent to work on');
+    expect(html).toContain('flex h-full min-h-0 flex-col gap-4');
+    expect(html).toContain('min-h-0 flex-1 overflow-hidden');
     expect(html).not.toContain('intentionally a placeholder');
   });
 });

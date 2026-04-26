@@ -41,7 +41,7 @@ export function HelpRequestStageContent({
   onOpenTask?(): void;
 }): JSX.Element {
   return (
-    <div className="flex min-h-0 flex-col space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-violet-500">
@@ -65,7 +65,7 @@ export function HelpRequestStageContent({
         <span>Run: {item.context.run_id ?? 'Not linked'}</span>
       </div>
       {task ? (
-        <div className="min-h-[420px] overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
           <TaskConversationTab task={task} />
         </div>
       ) : (
