@@ -5,6 +5,7 @@ import type {
   ImplementationReport,
   ProjectRoleBinding,
   RoleTemplate,
+  RunSegment,
   RuntimeDescriptor,
   TaskLease
 } from '@shared/orchestration';
@@ -451,6 +452,23 @@ export class DispatchService extends EventEmitter {
     if (snapshot && snapshot.summary.status === 'running') return;
     const timeline = summarizeEvents(snapshot?.events ?? [event.event]);
     const wasKilled = snapshot?.summary.status === 'killed';
+    // Persist conversation completion for any matching segment (manual sendAndRun
+    // or auto-dispatch). recordRunCompletion is a no-op when no running segment
+    // is found, and it reconciles the final segment status against the task file
+    // via resolveConversationCompletion. Crucially this is also where
+    // `vendorSessionId` is extracted from the agent event stream and persisted
+    // onto the segment, enabling the next run to `--resume` the same Claude
+    // session.
+    const segmentStatusFromPool: RunSegment['status'] = wasKilled
+      ? 'cancelled'
+      : event.event.kind === 'done'
+        ? 'completed'
+        : 'failed';
+    await recordRunCompletion(this.vaultPath, event.runId, {
+      status: segmentStatusFromPool,
+      summary: timeline.summary,
+      events: snapshot?.events ?? [event.event]
+    });
     const lease = this.leases.find(
       (entry) => entry.runId === event.runId && entry.status === 'running'
     );
@@ -463,11 +481,6 @@ export class DispatchService extends EventEmitter {
       taskStatus: normalizeTaskStatus(taskFile.frontmatter['status']),
       blockedReason: asOptionalString(taskFile.frontmatter['blocked_reason']),
       summary: timeline.summary
-    });
-    await recordRunCompletion(this.vaultPath, event.runId, {
-      status: completion.segmentStatus,
-      summary: timeline.summary,
-      events: snapshot?.events ?? [event.event]
     });
     const completedAt = new Date().toISOString();
     const nextLease: TaskLease = {

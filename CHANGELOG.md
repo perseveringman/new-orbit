@@ -84,6 +84,7 @@
 
 ### Fixed
 
+- **Manual run 不持久化 vendorSessionId 导致 resume 链路断**：`recordRunCompletion` 此前只在 dispatch 路径（lease 命中时）被调用，manual `sendAndRun` 启动的 run 完成时既没有把 assistant turn 落盘也没把 Claude 真实 `session_id` 写回 segment；后续 manual 续写虽然会从 conversation 取出"最近一个" `vendorSessionId`，但它停留在最初 dispatch 那一次的 checkpoint，永远不会推进。改为在 `dispatch.ts handlePoolEvent` 的 lease 守卫之前先调用 `recordRunCompletion`，让所有 run（manual + auto）都按真实 Claude 输出更新 segment 的 `vendorSessionId`，下一次 `--resume` 才能接到当前对话末尾
 - **Vault watcher 启动崩溃 / glob ignore 失效**：chokidar v4 已移除 glob 支持，原 `**/.orbit/logs/**` 等忽略模式实际不生效，导致 `.orbit/cli-socket` Unix domain socket 被纳入监听并让 `fs.watch` 抛出 `UNKNOWN: unknown error` 击穿 main 进程；改为基于路径的 `ignored` 函数，正确过滤 `.orbit/logs|cost|trash`、`.git`、`node_modules` 与 `.orbit/cli-socket`
 - **Task Chat / Agent 日志重复 key warning**：事件流列表不再把 `event.idx` 当成唯一 React key；`TaskConversationTab` 与 `AgentPanel` 现在使用稳定组合 key，避免 live output 中出现重复 key warning
 - **Claude 对话流正文缺失**：runner 现在会解析真实 Claude stream-json 的嵌套 `assistant.message.content[]` 文本，不再把 live 对话误判成空字符串；task chat 会显示 agent 的逐步输出，而不是只剩 `✅ 执行完成: exit 0`
