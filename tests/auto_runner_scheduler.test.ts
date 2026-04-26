@@ -4,9 +4,10 @@ import {
   schedulerDecision,
   startsInCurrentHour
 } from '../src/main/auto_runner/scheduler';
-import type { AutoRunnerSettings } from '../src/shared/schemas';
+import { DEFAULT_AUTO_RUNNER_SETTINGS, type AutoRunnerSettings } from '../src/shared/schemas';
 
 const settings: AutoRunnerSettings = {
+  ...DEFAULT_AUTO_RUNNER_SETTINGS,
   enabled: true,
   maxConcurrent: 2,
   hourlyTaskLimit: 3,

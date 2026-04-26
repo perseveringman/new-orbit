@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { StartTaskResult } from '../src/shared/agent';
 import type { WorktreeRecord } from '../src/shared/git';
 import type { TaskRecord } from '../src/shared/schemas';
+import { DEFAULT_AUTO_RUNNER_SETTINGS } from '../src/shared/schemas';
 import type { ExecutionContext } from '../src/main/execution';
 import type { RunnerPool } from '../src/main/agent/pool';
 import { AutoRunnerDispatcher } from '../src/main/auto_runner/dispatcher';
@@ -79,6 +80,7 @@ describe('AutoRunnerDispatcher', () => {
     const startTask = vi.fn<[], Promise<StartTaskResult>>();
     const dispatcher = new AutoRunnerDispatcher({
       readSettings: async () => ({
+        ...DEFAULT_AUTO_RUNNER_SETTINGS,
         enabled: false,
         maxConcurrent: 2,
         hourlyTaskLimit: 10,
@@ -107,6 +109,7 @@ describe('AutoRunnerDispatcher', () => {
     const bridge = fakeBridge();
     const dispatcher = new AutoRunnerDispatcher({
       readSettings: async () => ({
+        ...DEFAULT_AUTO_RUNNER_SETTINGS,
         enabled: true,
         maxConcurrent: 2,
         hourlyTaskLimit: 1,
@@ -153,6 +156,7 @@ describe('AutoRunnerDispatcher', () => {
     const startTask = vi.fn(async () => ({ kind: 'ok', runId: 'run_1' }) satisfies StartTaskResult);
     const dispatcher = new AutoRunnerDispatcher({
       readSettings: async () => ({
+        ...DEFAULT_AUTO_RUNNER_SETTINGS,
         enabled: true,
         maxConcurrent: 2,
         hourlyTaskLimit: 10,
@@ -191,6 +195,7 @@ describe('AutoRunnerDispatcher', () => {
     const updates: Record<string, unknown>[] = [];
     const dispatcher = new AutoRunnerDispatcher({
       readSettings: async () => ({
+        ...DEFAULT_AUTO_RUNNER_SETTINGS,
         enabled: true,
         maxConcurrent: 1,
         hourlyTaskLimit: 10,

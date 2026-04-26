@@ -42,6 +42,7 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       depends_on: ['task-a'],
       derived_from: 'task-parent',
       priority: 'high',
+      budget_limit: 12,
       effort: 4
     });
     expect(r.success).toBe(true);
@@ -54,6 +55,7 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       expect(r.data.proposed_by_agent_run).toBe('run-2');
       expect(r.data.depends_on).toEqual(['task-a']);
       expect(r.data.derived_from).toBe('task-parent');
+      expect(r.data.budget_limit).toBe(12);
     }
   });
 

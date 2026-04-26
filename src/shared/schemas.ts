@@ -120,6 +120,7 @@ export const TaskFrontmatter = z.object({
   /** UID list of tasks that must complete before this one (DAG parent refs). */
   pre_conditions: z.array(z.string()).optional(),
   blocked_reason: z.string().optional(),
+  budget_limit: z.number().positive().optional(),
   /** R6: marked by Daily Review as recommended for today. */
   recommended: z.boolean().optional()
 });
@@ -201,6 +202,7 @@ export interface TaskRecord {
   recommended_role?: string;
   candidate_role_slugs?: string[];
   blocked_reason?: string;
+  budget_limit?: number;
   ready?: boolean;
 }
 
@@ -263,11 +265,26 @@ export const DEFAULT_BUDGET: BudgetSettings = {
 
 // --- Auto-runner settings (v2 Phase 4) ---
 
+const RuntimePrioritySchema = z.preprocess((value) => {
+  const input = Array.isArray(value) ? value : ['claude', 'codex', 'copilot'];
+  const seen = new Set<string>();
+  return input.filter((entry): entry is string => {
+    if (typeof entry !== 'string') return false;
+    if (entry !== 'claude' && entry !== 'codex' && entry !== 'copilot') return false;
+    if (seen.has(entry)) return false;
+    seen.add(entry);
+    return true;
+  });
+}, z.array(z.enum(['claude', 'codex', 'copilot'])).default(['claude', 'codex', 'copilot']));
+
 export const AutoRunnerSettingsSchema = z.object({
   enabled: z.boolean().default(false),
   maxConcurrent: z.number().int().min(1).max(10).default(2),
   hourlyTaskLimit: z.number().int().min(1).max(100).default(10),
-  tickIntervalMs: z.number().int().min(1000).max(60_000).default(5000)
+  tickIntervalMs: z.number().int().min(1000).max(60_000).default(5000),
+  defaultBudgetPerTask: z.number().positive().default(20),
+  staleTimeoutMinutes: z.number().int().min(1).max(24 * 60).default(15),
+  runtimePriority: RuntimePrioritySchema
 });
 export type AutoRunnerSettings = z.infer<typeof AutoRunnerSettingsSchema>;
 
@@ -275,7 +292,10 @@ export const DEFAULT_AUTO_RUNNER_SETTINGS: AutoRunnerSettings = {
   enabled: false,
   maxConcurrent: 2,
   hourlyTaskLimit: 10,
-  tickIntervalMs: 5000
+  tickIntervalMs: 5000,
+  defaultBudgetPerTask: 20,
+  staleTimeoutMinutes: 15,
+  runtimePriority: ['claude', 'codex', 'copilot']
 };
 
 export function parseAutoRunnerSettings(input: unknown): AutoRunnerSettings {

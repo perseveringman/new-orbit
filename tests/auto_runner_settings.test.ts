@@ -12,7 +12,10 @@ describe('auto-runner settings', () => {
       enabled: false,
       maxConcurrent: 2,
       hourlyTaskLimit: 10,
-      tickIntervalMs: 5000
+      tickIntervalMs: 5000,
+      defaultBudgetPerTask: 20,
+      staleTimeoutMinutes: 15,
+      runtimePriority: ['claude', 'codex', 'copilot']
     });
   });
 
@@ -21,8 +24,19 @@ describe('auto-runner settings', () => {
       enabled: true,
       maxConcurrent: 4,
       hourlyTaskLimit: 10,
-      tickIntervalMs: 5000
+      tickIntervalMs: 5000,
+      defaultBudgetPerTask: 20,
+      staleTimeoutMinutes: 15,
+      runtimePriority: ['claude', 'codex', 'copilot']
     });
+  });
+
+  it('normalizes runtime priority for fallback', () => {
+    expect(
+      parseAutoRunnerSettings({
+        runtimePriority: ['codex', 'codex', 'invalid', 'claude']
+      }).runtimePriority
+    ).toEqual(['codex', 'claude']);
   });
 
   it('rejects invalid persisted limits as a safe default bundle', () => {
