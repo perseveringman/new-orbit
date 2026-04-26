@@ -343,3 +343,15 @@ export async function readClaudeProjectSessionDetail(
     messages: await readClaudeSessionMessages(target.filePath)
   };
 }
+
+export async function readClaudeSessionDetailById(
+  root: string,
+  sessionId: string
+): Promise<ClaudeProjectSessionDetail | null> {
+  const target = await findSessionById(root, sessionId);
+  if (!target) return null;
+  return {
+    ...target,
+    messages: await readClaudeSessionMessages(target.filePath)
+  };
+}

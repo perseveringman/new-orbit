@@ -32,6 +32,10 @@ export class CopilotRuntimeAdapter implements RuntimeAdapter {
     });
   }
 
+  async getSessionTranscript(_sessionId: string): Promise<UnifiedAgentEvent[] | null> {
+    return null;
+  }
+
   start(request: RuntimeStartRequest): RuntimeProcessHandle {
     return startLineProcess(this, request, ['--help'], false);
   }

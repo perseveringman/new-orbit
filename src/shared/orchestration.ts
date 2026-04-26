@@ -231,6 +231,7 @@ export interface RunSegment {
   runId: string;
   leaseId?: string;
   bindingId?: string;
+  runtimeId?: string;
   vendorSessionId?: string;
   trigger: 'dispatch' | 'manual';
   status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_attention';

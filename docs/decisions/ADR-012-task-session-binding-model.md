@@ -88,3 +88,16 @@ v2 的 Auto-runner 把 Night Shift 的"按时间分段的批量执行"替换成�
 
 - 总纲：`plans/2026-04-27-phase-3-agent-observability-resilience.md`
 - 子 plan：`plans/2026-04-27-task-session-binding.md`（待写）
+
+## 2026-04-28 修订
+
+Phase 4.0 在保留"一个 task 对应一个长期 vendor session"的基础上，补充跨 runtime 承接语义：
+
+1. `RuntimeAdapter` 增加 `getSessionTranscript(sessionId): Promise<UnifiedAgentEvent[] | null>`，用于按需读取 vendor 本地 session 历史并翻译为统一事件。
+2. Claude adapter 读取 `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`（通过本地 session 索引兜底定位），Codex / Copilot adapter 在当前阶段返回 `null`，由上层 fallback 到 Phase 3 unified event store / conversation segment 重组。
+3. Switch Runtime 流程不迁移 vendor sessionId，而是：
+   - 停止旧 run（若仍在运行）
+   - 按 RunSegment 时间线读取所有 transcript
+   - 用粗略 token 估算决定全文注入或 progress summary 注入
+   - 用 continuation prompt 启动新 runtime，并创建新的 RunSegment 记录 `runtimeId`
+4. 因此 ADR-012 的"一个 task 一个 vendor session"修订为"一个 task 在同一 runtime 内复用 vendor session；跨 runtime 时通过 transcript + continuation prompt 承接"。

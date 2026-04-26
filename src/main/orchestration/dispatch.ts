@@ -364,6 +364,7 @@ export class DispatchService extends EventEmitter {
         runId: startResult.runId,
         leaseId,
         bindingId: binding.id,
+        runtimeId: runtime.runtimeId,
         trigger: 'dispatch',
         status: 'running',
         sessionStatus: startTransition.newSessionStatus,
@@ -431,6 +432,7 @@ export class DispatchService extends EventEmitter {
         runId: '',
         leaseId,
         bindingId: binding.id,
+        runtimeId: runtime.runtimeId,
         trigger: 'dispatch',
         status: 'failed',
         sessionStatus: 'failed_terminal'

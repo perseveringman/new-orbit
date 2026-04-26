@@ -30,6 +30,7 @@ export interface RuntimeAdapter {
   readonly capabilities: RuntimeAdapterCapabilities;
   buildSystemPrompt?(prompt: string, input?: AgentOnboardingPromptInput): string;
   normalizeVendorEvent(raw: unknown, context: UnifiedAgentEventContext, index: number): UnifiedAgentEvent;
+  getSessionTranscript(sessionId: string): Promise<UnifiedAgentEvent[] | null>;
   start(request: RuntimeStartRequest): RuntimeProcessHandle;
 }
 
