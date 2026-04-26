@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentEvent, RunSummary } from '@shared/agent';
 import type { RunSegment, RuntimeDescriptor, TaskConversation } from '@shared/orchestration';
 import type { TaskRecord } from '@shared/schemas';
@@ -21,6 +21,13 @@ interface TimelineEntry {
 }
 
 type ConversationInputState = 'idle' | 'running' | 'waiting';
+export const CONVERSATION_AUTOSCROLL_THRESHOLD_PX = 48;
+
+export interface ScrollViewportMetrics {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}
 
 export function getConversationInputState(
   conversation: TaskConversation | null
@@ -53,6 +60,13 @@ export function dedupeAgentDisplayEvents(events: AgentEvent[]): AgentEvent[] {
     next.push(event);
   }
   return next;
+}
+
+export function isConversationNearBottom(
+  metrics: ScrollViewportMetrics,
+  threshold = CONVERSATION_AUTOSCROLL_THRESHOLD_PX
+): boolean {
+  return metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop <= threshold;
 }
 
 export function TaskConversationTab({ task }: TaskConversationTabProps): JSX.Element {
@@ -110,9 +124,16 @@ export function TaskConversationTimeline({
   const [runtimes, setRuntimes] = useState<RuntimeDescriptor[]>([]);
   const [runtimeId, setRuntimeId] = useState('');
   const [switching, setSwitching] = useState(false);
+  const [autoFollow, setAutoFollow] = useState(true);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const autoFollowRef = useRef(autoFollow);
 
   useEffect(() => {
     setDraft('');
+  }, [task.id]);
+  useEffect(() => {
+    setAutoFollow(true);
   }, [task.id]);
   useEffect(() => {
     void window.orbit.runtime.list().then((items) => {
@@ -120,11 +141,61 @@ export function TaskConversationTimeline({
       setRuntimeId((current) => current || items[0]?.runtimeId || '');
     });
   }, []);
+  useEffect(() => {
+    autoFollowRef.current = autoFollow;
+  }, [autoFollow]);
   const timeline = useMemo<TimelineEntry[]>(() => {
     return buildConversationTimelineEntries(conversation, runs);
   }, [conversation, runs]);
   const inputState = getConversationInputState(conversation);
   const liveStatus = useMemo(() => buildLiveStatus(conversation, runs), [conversation, runs]);
+  const timelineSignature = useMemo(
+    () =>
+      timeline
+        .map((entry) =>
+          entry.kind === 'event'
+            ? entry.key
+            : entry.kind === 'turn'
+              ? entry.turn?.id ?? entry.key
+              : entry.key
+        )
+        .join('|'),
+    [timeline]
+  );
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, []);
+
+  const updateAutoFollow = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setAutoFollow(
+      isConversationNearBottom({
+        scrollTop: el.scrollTop,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight
+      })
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!autoFollowRef.current) return;
+    scrollToBottom();
+  }, [conversation?.updatedAt, liveStatus, scrollToBottom, timelineSignature]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') return;
+    const content = contentRef.current;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      if (autoFollowRef.current) scrollToBottom();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [scrollToBottom]);
 
   async function handleSend(): Promise<void> {
     if (!onSend) return;
@@ -169,28 +240,34 @@ export function TaskConversationTimeline({
           </button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        {loading && !conversation ? (
-          <p className="text-sm text-neutral-500">Loading conversation…</p>
-        ) : timeline.length === 0 ? (
-          <div className="flex h-full items-center justify-center rounded border border-dashed border-neutral-300 px-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
-            No task conversation yet. Send a message to start a focused task run.
-          </div>
-        ) : (
-          timeline.map((entry) =>
-            entry.kind === 'segment' && entry.segment ? (
-              <SegmentDivider key={entry.key} segment={entry.segment} />
-            ) : entry.kind === 'event' && entry.event ? (
-              <div key={entry.key}>
-                <AgentEventCard event={entry.event} live={entry.live} />
-              </div>
-            ) : entry.kind === 'placeholder' && entry.segment ? (
-              <LivePlaceholderCard key={entry.key} />
-            ) : entry.turn ? (
-              <TurnCard key={entry.key} turn={entry.turn} />
-            ) : null
-          )
-        )}
+      <div
+        ref={scrollRef}
+        onScroll={updateAutoFollow}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+      >
+        <div ref={contentRef} className="space-y-4">
+          {loading && !conversation ? (
+            <p className="text-sm text-neutral-500">Loading conversation…</p>
+          ) : timeline.length === 0 ? (
+            <div className="flex h-full items-center justify-center rounded border border-dashed border-neutral-300 px-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
+              No task conversation yet. Send a message to start a focused task run.
+            </div>
+          ) : (
+            timeline.map((entry) =>
+              entry.kind === 'segment' && entry.segment ? (
+                <SegmentDivider key={entry.key} segment={entry.segment} />
+              ) : entry.kind === 'event' && entry.event ? (
+                <div key={entry.key}>
+                  <AgentEventCard event={entry.event} live={entry.live} />
+                </div>
+              ) : entry.kind === 'placeholder' && entry.segment ? (
+                <LivePlaceholderCard key={entry.key} />
+              ) : entry.turn ? (
+                <TurnCard key={entry.key} turn={entry.turn} />
+              ) : null
+            )
+          )}
+        </div>
       </div>
       <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
         {liveStatus && (

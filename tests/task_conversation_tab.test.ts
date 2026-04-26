@@ -7,8 +7,10 @@ import type { TaskRecord } from '../src/shared/schemas';
 import {
   buildConversationTimelineEntries,
   buildLiveStatus,
+  CONVERSATION_AUTOSCROLL_THRESHOLD_PX,
   dedupeAgentDisplayEvents,
   getConversationInputPlaceholder,
+  isConversationNearBottom,
   TaskConversationTimeline
 } from '../src/renderer/src/components/Tasks/TaskConversationTab';
 import { buildAgentEventKey } from '../src/renderer/src/lib/agentEventKeys';
@@ -207,5 +209,23 @@ describe('TaskConversationTimeline', () => {
         }
       })
     ).toContain('Working · Grep task.md');
+  });
+
+  it('treats near-bottom scroll positions as auto-follow eligible', () => {
+    expect(
+      isConversationNearBottom({
+        scrollTop: 452,
+        scrollHeight: 1000,
+        clientHeight: 500
+      })
+    ).toBe(true);
+    expect(
+      isConversationNearBottom({
+        scrollTop: 400,
+        scrollHeight: 1000,
+        clientHeight: 500
+      })
+    ).toBe(false);
+    expect(CONVERSATION_AUTOSCROLL_THRESHOLD_PX).toBe(48);
   });
 });
