@@ -58,6 +58,7 @@ export interface StartTaskArgs {
   taskId: string;
   instructions?: string;
   worktreePath?: string;
+  runtimeId?: string;
 }
 
 export interface StartResult {
@@ -68,11 +69,13 @@ export interface StartResult {
 export interface StartError {
   kind: 'error';
   code:
-    | 'cli_missing'
-    | 'task_not_found'
-    | 'no_vault'
+     | 'cli_missing'
+     | 'task_not_found'
+     | 'no_vault'
     | 'already_running'
     | 'spawn_failed'
+    | 'runtime_missing'
+    | 'unsupported_runtime'
     | 'safety_blocked'
     | 'budget_blocked';
   message: string;

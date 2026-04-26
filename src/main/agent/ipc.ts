@@ -63,6 +63,7 @@ import { readCodexSessionMessages } from './codex_sessions';
 import { listProjects } from '../project';
 import { listAreas } from '../area';
 import { readTaskFile } from '../task';
+import { getLocalRuntimeManager } from '../orchestration/runtime';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
 const TERMINAL_AGENT_EVENT_CHANNEL = IPC.terminalAgent.event;
@@ -482,7 +483,25 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
   const sess = currentSession();
   if (!sess) return { kind: 'error', code: 'no_vault', message: 'No vault is open.' };
 
-  const detect = await detectClaude();
+  const runtime = args.runtimeId ? getLocalRuntimeManager().get(args.runtimeId) : null;
+  if (args.runtimeId && !runtime) {
+    return {
+      kind: 'error',
+      code: 'runtime_missing',
+      message: `Runtime not found: ${args.runtimeId}`
+    };
+  }
+  if (runtime && runtime.provider !== 'claude') {
+    return {
+      kind: 'error',
+      code: 'unsupported_runtime',
+      message: `${runtime.provider} adapter is available but task spawning is still gated to Claude in Phase 3.1.`
+    };
+  }
+
+  const detect = runtime
+    ? { available: true, path: runtime.binaryPath, version: runtime.version ?? undefined }
+    : await detectClaude();
   if (!detect.available || !detect.path) {
     return {
       kind: 'error',
@@ -618,6 +637,9 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       taskId: task.id,
       title: task.title,
       vaultPath: sess.vault,
+      runtimeProvider: runtime?.provider ?? 'claude',
+      runtimeId: runtime?.runtimeId,
+      runtimeName: runtime?.name,
       hookConfig: await getHookRuntimeConfig(),
       extraEnv
     } as const;

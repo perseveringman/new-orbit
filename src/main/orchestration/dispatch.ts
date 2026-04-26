@@ -300,7 +300,8 @@ export class DispatchService extends EventEmitter {
     const instructions = [version?.instructions, binding.overlayInstructions].filter(Boolean).join('\n\n');
     const startResult = await startTask({
       taskId: task.id,
-      instructions: instructions || undefined
+      instructions: instructions || undefined,
+      runtimeId: runtime.runtimeId
     });
     if (startResult.kind !== 'ok') {
       await this.markDispatchFailure(task, binding, runtime, leaseId, startResult);

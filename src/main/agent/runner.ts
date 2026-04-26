@@ -19,6 +19,7 @@ import type {
   RunStatus,
   RunSummary
 } from '@shared/agent';
+import type { RuntimeProvider } from '@shared/orchestration';
 import { parseHydrationLine, parseToolInvocationLine } from './context';
 import { LIMITS } from '@shared/limits';
 import { renderClaudeSettingsJson, renderNotifyShTemplate } from './hooks/template';
@@ -34,6 +35,10 @@ export interface SpawnOpts {
   cwd: string;
   /** Optional API key to inject via `ANTHROPIC_API_KEY`. */
   apiKey?: string;
+  /** Runtime metadata used by the Phase 3 compatibility event bridge. */
+  runtimeProvider?: RuntimeProvider;
+  runtimeId?: string;
+  runtimeName?: string;
   /** Extra env vars merged into the child process env. */
   extraEnv?: Record<string, string>;
   /** Optional hook server config for lifecycle callbacks. */

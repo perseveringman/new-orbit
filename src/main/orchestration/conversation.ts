@@ -9,6 +9,7 @@ import { refreshTaskFileInSession } from './session';
 import { readJsonFile, taskConversationFile, writeJsonFile } from './storage';
 import { readTaskFile, updateTaskFrontmatter } from '../task';
 import type { TaskStatus } from '@shared/schemas';
+import { extractVendorSessionIdFromAgentEvents } from '../agent/adapter/compat';
 
 type NewTurn = Omit<ConversationTurn, 'id' | 'createdAt'>;
 type NewSegment = Omit<RunSegment, 'id' | 'startedAt'>;
@@ -258,7 +259,8 @@ export async function recordRunCompletion(
   });
   await completeSegment(vaultPath, match.taskUid, match.segment.id, {
     status: completion.status,
-    summary: completion.summary
+    summary: completion.summary,
+    vendorSessionId: extractVendorSessionIdFromAgentEvents(result.events)
   });
   await clearActiveRunId(match.taskId, runId);
 }

@@ -1,10 +1,13 @@
 import { EventEmitter } from 'node:events';
 import type { AgentEvent, RunSummary } from '@shared/agent';
+import type { UnifiedAgentEvent } from '@shared/agent-event';
 import { AgentRunner, type SpawnOpts } from './runner';
+import { agentEventToUnifiedAgentEvent } from './adapter/compat';
 
 export interface PoolEvent {
   runId: string;
   event: AgentEvent;
+  unifiedEvent: UnifiedAgentEvent;
 }
 
 export class RunnerPool extends EventEmitter {
@@ -35,7 +38,16 @@ export class RunnerPool extends EventEmitter {
     this.runners.set(r.runId, r);
     if (opts.taskId) this.byTask.set(opts.taskId, r.runId);
     r.on('event', (ev: AgentEvent) => {
-      this.emit('event', { runId: r.runId, event: ev } satisfies PoolEvent);
+      const unifiedEvent = agentEventToUnifiedAgentEvent(ev, {
+        runId: r.runId,
+        taskId: opts.taskId,
+        runtime: {
+          provider: opts.runtimeProvider ?? 'claude',
+          runtimeId: opts.runtimeId,
+          name: opts.runtimeName
+        }
+      });
+      this.emit('event', { runId: r.runId, event: ev, unifiedEvent } satisfies PoolEvent);
     });
     r.on('exit', () => {
       if (opts.taskId && this.byTask.get(opts.taskId) === r.runId) {
