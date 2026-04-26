@@ -2,6 +2,7 @@ import type { TaskRecord } from '@shared/schemas';
 import type { ActivityEventInput } from '../activity';
 import { emitActivity } from '../activity';
 import { createInboxServiceForVault, type InboxService } from '../inbox/service';
+import { broadcastInboxEvent } from '../inbox/events';
 
 export interface AutoRunnerEventBridgeOptions {
   emitActivity?: (input: ActivityEventInput) => unknown;
@@ -27,7 +28,9 @@ export class AutoRunnerEventBridge {
 
   constructor(options: AutoRunnerEventBridgeOptions = {}) {
     this.activity = options.emitActivity ?? emitActivity;
-    this.inboxForVault = options.inboxForVault ?? ((vaultPath) => createInboxServiceForVault(vaultPath));
+    this.inboxForVault =
+      options.inboxForVault ??
+      ((vaultPath) => createInboxServiceForVault(vaultPath, { onEvent: broadcastInboxEvent }));
   }
 
   runStarted(event: AutoRunnerRunEvent): void {

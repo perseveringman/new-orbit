@@ -61,6 +61,22 @@ const EMPTY_COST: CostTodayResult = {
   }
 };
 
+function eventKey(event: AgentEvent): string {
+  return [
+    event.idx,
+    event.kind,
+    event.at,
+    event.text ?? '',
+    event.toolName ?? ''
+  ].join(':');
+}
+
+function appendUniqueEvent(events: AgentEvent[], event: AgentEvent): AgentEvent[] {
+  const key = eventKey(event);
+  if (events.some((existing) => eventKey(existing) === key)) return events;
+  return [...events, event];
+}
+
 export const useAgent = create<AgentStore>((set, get) => ({
   detect: null,
   runs: {},
@@ -120,7 +136,7 @@ export const useAgent = create<AgentStore>((set, get) => ({
         void get().refreshList();
         return;
       }
-      const events = [...existing.events, event];
+      const events = appendUniqueEvent(existing.events, event);
       if (events.length > 500) events.splice(0, events.length - 500);
       const nextRuns = { ...state.runs, [runId]: { ...existing, events } };
       set({ runs: nextRuns });

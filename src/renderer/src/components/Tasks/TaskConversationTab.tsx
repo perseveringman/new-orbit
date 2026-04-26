@@ -37,6 +37,22 @@ export function getConversationInputPlaceholder(
   return `发送消息启动 "${taskTitle}"`;
 }
 
+export function dedupeAgentDisplayEvents(events: AgentEvent[]): AgentEvent[] {
+  const next: AgentEvent[] = [];
+  let previousText = '';
+  for (const event of events) {
+    if ((event.kind === 'message' || event.kind === 'text') && event.text?.trim()) {
+      const text = event.text.trim();
+      if (text === previousText) continue;
+      previousText = text;
+    } else {
+      previousText = '';
+    }
+    next.push(event);
+  }
+  return next;
+}
+
 export function TaskConversationTab({ task }: TaskConversationTabProps): JSX.Element {
   const init = useTaskConversation((s) => s.init);
   const load = useTaskConversation((s) => s.load);
@@ -241,7 +257,7 @@ function LiveEventStream({ segment }: { segment: RunSegment }): JSX.Element | nu
     );
   }
   if (run.summary.status !== 'running') return null;
-  const events = run.events.filter(
+  const events = dedupeAgentDisplayEvents(run.events).filter(
     (event): event is AgentEvent => event.kind !== 'budget_warn' && event.kind !== 'budget_halt'
   );
 

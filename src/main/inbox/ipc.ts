@@ -1,10 +1,9 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { InboxCaptureInput, InboxDismissInput, InboxListFilter, InboxMessageInput, InboxResolveInput } from './types';
 import { createInboxServiceForVault } from './service';
 import { dismissInboxItemWithProposalSync, resolveInboxItemWithProposalSync } from './proposal_sync';
-import type { InboxEvent } from './types';
-import { publishTraceableEvent } from '../events/bus';
+import { broadcastInboxEvent } from './events';
 
 export function registerInboxIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
@@ -36,20 +35,4 @@ export function registerInboxIpc(getVaultPath: () => string | null): void {
     })
   );
   ipcMain.handle(IPC.inbox.archive, async (_event, id: string) => service().archive(id));
-}
-
-function broadcastInboxEvent(event: InboxEvent): void {
-  publishTraceableEvent({
-    source: 'inbox',
-    type: event.type,
-    traceId: event.item.context.task_uid ?? event.item.id,
-    taskUid: event.item.context.task_uid,
-    summary: event.item.title,
-    payload: event
-  });
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IPC.inbox.event, event);
-    }
-  }
 }

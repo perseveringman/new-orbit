@@ -5,6 +5,7 @@ import type { AgentEvent } from '../src/shared/agent';
 import type { TaskConversation } from '../src/shared/orchestration';
 import type { TaskRecord } from '../src/shared/schemas';
 import {
+  dedupeAgentDisplayEvents,
   getConversationInputPlaceholder,
   TaskConversationTimeline
 } from '../src/renderer/src/components/Tasks/TaskConversationTab';
@@ -112,6 +113,34 @@ describe('TaskConversationTimeline', () => {
       'segment-2:message:5:2026-04-25T12:06:07.000Z:1'
     ]);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('deduplicates adjacent live agent text cards', () => {
+    const events: AgentEvent[] = [
+      {
+        idx: 1,
+        at: '2026-04-25T12:06:06.000Z',
+        kind: 'message',
+        text: 'Let me inspect the task.'
+      },
+      {
+        idx: 2,
+        at: '2026-04-25T12:06:07.000Z',
+        kind: 'text',
+        text: 'Let me inspect the task.'
+      },
+      {
+        idx: 3,
+        at: '2026-04-25T12:06:08.000Z',
+        kind: 'message',
+        text: 'Next I will read the project plan.'
+      }
+    ];
+
+    expect(dedupeAgentDisplayEvents(events).map((event) => event.text)).toEqual([
+      'Let me inspect the task.',
+      'Next I will read the project plan.'
+    ]);
   });
 
   it('uses state-aware input placeholders for waiting and running sessions', () => {

@@ -10,6 +10,7 @@ import { readJsonFile, taskConversationFile, writeJsonFile } from './storage';
 import { readTaskFile, updateTaskFrontmatter } from '../task';
 import type { TaskStatus } from '@shared/schemas';
 import { extractVendorSessionIdFromAgentEvents } from '../agent/adapter/compat';
+import { OrchestrationEventBridge } from './event_bridge';
 
 type NewTurn = Omit<ConversationTurn, 'id' | 'createdAt'>;
 type NewSegment = Omit<RunSegment, 'id' | 'startedAt'>;
@@ -61,6 +62,19 @@ export function resolveConversationCompletion(args: {
       args.blockedReason ||
       (summary && summary !== 'exit 0' ? summary : defaultIncompleteSummary(args.taskStatus))
   };
+}
+
+export function collectAssistantContent(events: AgentEvent[]): string {
+  const lines: string[] = [];
+  let previousText = '';
+  for (const event of events) {
+    if (event.kind !== 'message' && event.kind !== 'text') continue;
+    const text = event.text?.trim();
+    if (!text || text === previousText) continue;
+    lines.push(text);
+    previousText = text;
+  }
+  return lines.join('\n\n');
 }
 
 export async function getConversation(
@@ -304,11 +318,7 @@ export async function recordRunCompletion(
         : undefined,
     summary: result.summary
   });
-  const assistantContent = result.events
-    .filter((event) => event.kind === 'message' || event.kind === 'text')
-    .map((event) => event.text?.trim())
-    .filter((line): line is string => Boolean(line))
-    .join('\n\n');
+  const assistantContent = collectAssistantContent(result.events);
   if (assistantContent) {
     await appendTurn(vaultPath, match.taskUid, {
       role: 'assistant',
@@ -330,11 +340,24 @@ export async function recordRunCompletion(
     segmentId: match.segment.id
   });
   await completeSegment(vaultPath, match.taskUid, match.segment.id, {
-      status: completion.status,
-      sessionStatus: completion.sessionStatus,
-      summary: completion.summary,
+    status: completion.status,
+    sessionStatus: completion.sessionStatus,
+    summary: completion.summary,
     vendorSessionId: extractVendorSessionIdFromAgentEvents(result.events)
   });
+  if (
+    match.segment.trigger !== 'dispatch' &&
+    (completion.status === 'needs_attention' || completion.status === 'failed') &&
+    task
+  ) {
+    await new OrchestrationEventBridge().dispatchNeedsAttention({
+      vaultPath,
+      task,
+      runId,
+      summary: completion.summary,
+      failed: completion.status === 'failed'
+    });
+  }
   await clearActiveRunId(match.taskId, runId);
 }
 

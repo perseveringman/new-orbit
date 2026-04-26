@@ -1,5 +1,6 @@
 import type { TaskRecord } from '@shared/schemas';
 import { createInboxServiceForVault, type InboxService } from '../inbox';
+import { broadcastInboxEvent } from '../inbox/events';
 
 export interface DispatchNeedsAttentionEvent {
   vaultPath: string;
@@ -17,7 +18,9 @@ export class OrchestrationEventBridge {
   private readonly inboxForVault: (vaultPath: string) => Pick<InboxService, 'emitMessage'>;
 
   constructor(options: OrchestrationEventBridgeOptions = {}) {
-    this.inboxForVault = options.inboxForVault ?? ((vaultPath) => createInboxServiceForVault(vaultPath));
+    this.inboxForVault =
+      options.inboxForVault ??
+      ((vaultPath) => createInboxServiceForVault(vaultPath, { onEvent: broadcastInboxEvent }));
   }
 
   async dispatchNeedsAttention(event: DispatchNeedsAttentionEvent): Promise<void> {

@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TaskRecord } from '../src/shared/schemas';
 import { AutoRunnerEventBridge } from '../src/main/auto_runner/event_bridge';
 
+vi.mock('electron', () => ({
+  BrowserWindow: { getAllWindows: () => [] }
+}));
+
 function task(): TaskRecord {
   return {
     id: 'file:task_1',
