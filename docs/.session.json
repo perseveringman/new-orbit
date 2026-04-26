@@ -67,7 +67,7 @@
       ],
       "user_corrections_applied": [
         "ADR-015 / ADR-016 accepted 后不修改正文",
-        "lifecycle scenario 框架默认不 mock 真实 agent，只在缺少 vendor CLI 环境时报告 SKIP",
+        "lifecycle scenario 默认执行本地 acceptance checks，真实 vendor CLI 长跑通过 ORBIT_LIFECYCLE_REAL=1 单独开启",
         "blocked 语义还原为依赖不可用，不再表达 agent 求助或 runtime 失败"
       ]
     }

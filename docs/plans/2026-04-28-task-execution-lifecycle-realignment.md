@@ -611,7 +611,7 @@ Nightly soak 一次约 $40，月成本 $1200。如果太贵：
 - [x] `orbit project overview` / `orbit task related` / `orbit task transcript` / `orbit task switch-runtime` CLI 全部可用
 - [x] Claude adapter 的 `getSessionTranscript` 可用
 - [x] Switch Runtime 流程在 UI / CLI / Auto-runner fallback 三个入口都跑通
-- [x] LifecycleRunner + 15 个 scenario 全部通过（fixture/parser/CLI 框架通过；真实 agent 执行需在具备 vendor CLI 的本机设置 `ORBIT_LIFECYCLE_REAL=1` 继续 dog-food）
+- [x] LifecycleRunner + 15 个 scenario 全部通过（默认本地 acceptance checks 跑 reducer/状态序列并断言 `PASS`；真实 agent 执行需在具备 vendor CLI 的本机设置 `ORBIT_LIFECYCLE_REAL=1` 继续 dog-food）
 - [x] CI 三档（local / nightly / weekly）配置完成
 - [x] `npm run typecheck` / `npm test` 全绿
 - [x] 文档更新：architecture.md / ROADMAP.md / CHANGELOG / decisions/README.md

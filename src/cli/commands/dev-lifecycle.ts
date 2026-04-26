@@ -86,7 +86,7 @@ export function generateDevLifecycleHelp(): string {
   return `Usage: orbit dev:lifecycle run [--all|--concurrent N|<scenario-id...>]
 
 Lifecycle scenarios exercise Phase 4.0 task/session/runtime lifecycle behavior.
-By default this command validates scenario fixtures and reports SKIP; set
+By default this command executes deterministic lifecycle acceptance checks; set
 ORBIT_LIFECYCLE_REAL=1 in a machine with Orbit + agent CLIs to execute real runs.
 `;
 }

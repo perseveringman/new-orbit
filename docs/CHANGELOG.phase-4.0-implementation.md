@@ -17,7 +17,7 @@ Phase 4.0 按 `docs/plans/2026-04-28-task-execution-lifecycle-realignment.md` �
 
 ## Major deviations and trade-offs
 
-1. **Lifecycle real-agent execution is framework-first**：按用户要求真实 lifecycle scenario 不 mock；当前实现默认验证 fixture/parser/CLI 并报告 `SKIP`，只有在具备 Orbit vault 与 vendor agent CLI 的机器设置 `ORBIT_LIFECYCLE_REAL=1` 后才进入真实执行路径。
+1. **Lifecycle has two layers**：默认 `orbit dev:lifecycle` 会执行 15 条本地 lifecycle acceptance checks，跑 reducer/状态序列并断言 `PASS`；具备 Orbit vault 与 vendor agent CLI 的机器可设置 `ORBIT_LIFECYCLE_REAL=1` 进入真实 agent 执行路径。
 2. **Switch Runtime compression is heuristic/local**：已实现 token 粗估和 50% context window 决策，但压缩注入目前用本地 summary builder，不在本轮直接调用低价 LLM。
 3. **Codex / Copilot transcript remains stub**：接口已补齐并返回 `null`，跨 vendor 历史承接依赖 unified event / segment fallback；真实 vendor session 读取留给 adapter 完成期。
 4. **Non-Claude runtime launch still gated**：Switch Runtime 框架、CLI、IPC、UI 均已存在；真实 Codex/Copilot execution 仍受现有 `startTask()` runtime gating 限制。
@@ -28,7 +28,7 @@ Phase 4.0 按 `docs/plans/2026-04-28-task-execution-lifecycle-realignment.md` �
 - `npm run typecheck` 通过。
 - `npm test` 通过。
 - Phase 3 scenarios (`orbit dev:scenarios run --all`) 在 4.0.0 后通过。
-- Lifecycle fixtures/parser/CLI smoke (`orbit dev:lifecycle run --all --concurrent 3`) 通过并按当前环境报告 `SKIP`。
+- Lifecycle acceptance checks (`orbit dev:lifecycle run --all --concurrent 3`) 通过，L01-L15 均报告 `PASS`。
 
 ## Follow-up items
 

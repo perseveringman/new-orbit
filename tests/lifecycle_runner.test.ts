@@ -25,12 +25,36 @@ describe('LifecycleRunner', () => {
     expect(resolveLifecycleScenarioId('missing')).toBeNull();
   });
 
-  it('skips real execution unless explicitly enabled', async () => {
+  it('executes local lifecycle scripts and validates acceptance', async () => {
     const runner = new LifecycleRunner({ scenarioDir });
 
     await expect(runner.runMany(['L01', 'L02'], 2)).resolves.toEqual([
-      { scenarioId: 'L01', ok: true, skipped: true, failures: [] },
-      { scenarioId: 'L02', ok: true, skipped: true, failures: [] }
+      {
+        scenarioId: 'L01',
+        ok: true,
+        skipped: false,
+        failures: [],
+        taskStateSequence: ['todo', 'doing', 'doing', 'done'],
+        agentSessionStateSequence: ['idle', 'launching', 'running', 'completed']
+      },
+      {
+        scenarioId: 'L02',
+        ok: true,
+        skipped: false,
+        failures: [],
+        taskStateSequence: ['todo', 'doing', 'doing', 'doing'],
+        agentSessionStateSequence: ['idle', 'launching', 'running', 'awaiting_user']
+      }
     ]);
+  });
+
+  it('executes all 15 lifecycle scenarios as acceptance checks', async () => {
+    const runner = new LifecycleRunner({ scenarioDir });
+
+    const results = await runner.runMany(LIFECYCLE_SCENARIO_IDS, 5);
+
+    expect(results).toHaveLength(15);
+    expect(results.every((result) => result.ok && !result.skipped)).toBe(true);
+    expect(results.map((result) => result.scenarioId)).toEqual([...LIFECYCLE_SCENARIO_IDS]);
   });
 });
