@@ -138,6 +138,43 @@ describe('RunnerPool', () => {
       await fs.rm(vault, { recursive: true, force: true });
     }
   });
+
+  it('emits unified compatibility events alongside legacy events', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-pool-unified-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const pool = new RunnerPool();
+      const { spawn, last } = fakeSpawner();
+      const seen: Array<{ legacy: string; unified: string }> = [];
+      pool.on('event', (event) => {
+        seen.push({ legacy: event.event.kind, unified: event.unifiedEvent.kind });
+      });
+
+      await pool.spawn({
+        claudePath: '/bin/true',
+        prompt: 'p',
+        cwd: vault,
+        taskId: 'file:foo',
+        vaultPath: vault,
+        spawner: spawn,
+        runtimeId: 'claude:/bin/true',
+        runtimeName: 'Claude test'
+      });
+      const child = last();
+      child.stdout.write('{"type":"message","role":"assistant","content":"hi"}\n');
+      child.emit('close', 0);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(seen).toEqual(
+        expect.arrayContaining([
+          { legacy: 'message', unified: 'message' },
+          { legacy: 'done', unified: 'done' }
+        ])
+      );
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('AgentRunner stream parsing', () => {
