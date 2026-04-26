@@ -22,7 +22,7 @@ export function TaskDetailsHost(): JSX.Element | null {
       onClose={close}
       tabs={[
         { id: 'detail', label: 'Detail' },
-        { id: 'chat', label: 'Chat' }
+        { id: 'chat', label: 'Activity' }
       ]}
       activeTab={tab}
       onTabChange={(nextTab) => setTab(nextTab as 'detail' | 'chat')}

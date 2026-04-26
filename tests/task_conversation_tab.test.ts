@@ -83,7 +83,7 @@ describe('TaskConversationTimeline', () => {
     expect(html).toContain('Manual · Running');
     expect(html).toContain('Agent');
     expect(html).toContain('再补上对话输入框');
-    expect(html).toContain('Task Chat');
+    expect(html).toContain('Activity');
     expect(html).toContain('Agent is starting');
   });
 

@@ -5,6 +5,7 @@ import type { TaskRecord } from '@shared/schemas';
 import { buildAgentEventKey } from '../../lib/agentEventKeys';
 import { useAgent } from '../../store/agent';
 import { useTaskConversation } from '../../store/taskConversation';
+import { AgentEventCard, SegmentDivider, TurnCard } from '../Timeline';
 
 interface TaskConversationTabProps {
   task: TaskRecord;
@@ -124,7 +125,7 @@ export function TaskConversationTimeline({
             entry.kind === 'segment' && entry.segment ? (
               <SegmentDivider key={entry.key} segment={entry.segment} />
             ) : entry.turn ? (
-              <ChatBubble key={entry.key} turn={entry.turn} />
+              <TurnCard key={entry.key} turn={entry.turn} />
             ) : null
           )
         )}
@@ -133,7 +134,7 @@ export function TaskConversationTimeline({
         ))}
       </div>
       <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Task Chat</div>
+        <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Activity</div>
         <div className="flex gap-2">
           <textarea
             value={draft}
@@ -162,63 +163,6 @@ export function TaskConversationTimeline({
   );
 }
 
-function SegmentDivider({ segment }: { segment: RunSegment }): JSX.Element {
-  const triggerLabel = segment.trigger === 'dispatch' ? 'Auto' : 'Manual';
-  const statusLabel =
-    segment.status === 'running'
-      ? 'Running'
-      : segment.status === 'completed'
-        ? 'Completed'
-        : segment.status === 'needs_attention'
-          ? 'Needs input'
-        : segment.status === 'cancelled'
-          ? 'Cancelled'
-          : 'Failed';
-
-  return (
-    <div className="flex items-center gap-3 pt-2 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
-      <div className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
-      <span>
-        {triggerLabel}
-        {segment.bindingId ? ` · ${segment.bindingId}` : ''}
-        {` · ${statusLabel}`}
-      </span>
-      <div className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
-    </div>
-  );
-}
-
-function ChatBubble({
-  turn
-}: {
-  turn: TaskConversation['turns'][number];
-}): JSX.Element {
-  if (turn.role === 'system') {
-    return (
-      <div className="text-center text-xs text-neutral-500">
-        <span>{turn.content}</span>
-      </div>
-    );
-  }
-
-  const isUser = turn.role === 'user';
-  return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={
-          'max-w-[78%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ' +
-          (isUser
-            ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-            : 'border border-neutral-200 bg-neutral-50 text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100')
-        }
-      >
-        {!isUser && <div className="mb-1 text-[11px] font-medium text-sky-500">Agent</div>}
-        {turn.content}
-      </div>
-    </div>
-  );
-}
-
 function LiveEventStream({ segment }: { segment: RunSegment }): JSX.Element | null {
   const run = useAgent((s) => (segment.runId ? s.runs[segment.runId] : undefined));
   if (!segment.runId) return null;
@@ -236,8 +180,7 @@ function LiveEventStream({ segment }: { segment: RunSegment }): JSX.Element | nu
   }
   if (run.summary.status !== 'running') return null;
   const events = run.events.filter(
-    (event): event is AgentEvent =>
-      (event.kind === 'message' || event.kind === 'text') && Boolean(event.text?.trim())
+    (event): event is AgentEvent => event.kind !== 'budget_warn' && event.kind !== 'budget_halt'
   );
 
   return (
@@ -250,12 +193,9 @@ function LiveEventStream({ segment }: { segment: RunSegment }): JSX.Element | nu
           <p className="text-xs text-neutral-500">Waiting for live output…</p>
         ) : (
           events.map((event, order) => (
-            <p
-              key={buildAgentEventKey(segment.id, event, order)}
-              className="whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-400"
-            >
-              {event.text}
-            </p>
+            <div key={buildAgentEventKey(segment.id, event, order)}>
+              <AgentEventCard event={event} />
+            </div>
           ))
         )}
       </div>
