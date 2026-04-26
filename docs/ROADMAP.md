@@ -1,6 +1,6 @@
 # Orbit — Roadmap
 
-> **Status**: v2 方向确立（2026-04-26）
+> **Status**: v2 本期实施完成（2026-04-26）
 > **Update cadence**: 每个里程碑落地后更新；大方向调整随 ADR 同步刷新。
 
 本文记录 Orbit 各阶段的目标、当前状态和下一步计划。**v2 方向的完整说明在 `docs/overview.md`，决策记录在 `docs/decisions/`。**
@@ -48,27 +48,25 @@
 
 ---
 
-## 进行中 — v2 方向确立 (2026-04-26)
-
-### 🎯 Orbit v2 演进
+### v2 本期实施（2026-04-26）
 
 **触发**：2026-04-26 的 v2 方向 Onboard 对话，确立 10 项核心决策（ADR-001 ~ ADR-010）。
 
-**状态**：方案落地（ADR + plans 已写完），待开始实施。
+**状态**：核心代码路径已落地，v1 architecture 已归档，Night Shift / MCP runtime 已清理。
 
 | 子系统 | ADR | Plan | 状态 |
 |--------|-----|------|------|
-| 废弃 Night Shift → Auto-runner | [ADR-001](decisions/ADR-001-deprecate-night-shift.md) | [auto-runner-dispatcher](plans/2026-04-26-auto-runner-dispatcher.md) | draft |
-| Agent 自主边界：子任务折叠 | [ADR-002](decisions/ADR-002-agent-autonomy-scope.md) | 同上 | draft |
-| ExecutionContext 分化 | [ADR-003](decisions/ADR-003-execution-context-split.md) | [execution-model-migration](plans/2026-04-26-execution-model-migration.md) | draft |
-| Inbox 作为人机协作枢纽 | [ADR-004](decisions/ADR-004-inbox-as-hub.md) | [inbox-v2-architecture](plans/2026-04-26-inbox-v2-architecture.md) | draft |
-| Plan Chat 定位修正 | [ADR-005](decisions/ADR-005-plan-chat-reframing.md) | （合入 inbox-v2） | draft |
-| 任务授权链路 (propose-approve) | [ADR-006](decisions/ADR-006-task-authorization-model.md) | 同 auto-runner | draft |
-| 任务依赖模型 | [ADR-007](decisions/ADR-007-task-dependency-model.md) | [task-dependency-system](plans/2026-04-26-task-dependency-system.md) | draft |
-| AI-Native + CLI-first | [ADR-008](decisions/ADR-008-ai-native-cli-first.md) | [cli-migration](plans/2026-04-26-cli-migration.md) | draft |
-| Activity Log 基础设施 | [ADR-009](decisions/ADR-009-activity-log-infrastructure.md) | [activity-log-infrastructure](plans/2026-04-26-activity-log-infrastructure.md) | draft |
-| Capture 三分 (Feed/Library/Thoughts) | [ADR-010](decisions/ADR-010-capture-tri-partition.md) | [capture-foundation](plans/2026-04-26-capture-foundation.md) | draft |
-| Quick Capture MVP | 004 + 010 | [quick-capture-mvp](plans/2026-04-26-quick-capture-mvp.md) | draft |
+| 废弃 Night Shift → Auto-runner | [ADR-001](decisions/ADR-001-deprecate-night-shift.md) | [auto-runner-dispatcher](plans/2026-04-26-auto-runner-dispatcher.md) | completed |
+| Agent 自主边界：子任务折叠 | [ADR-002](decisions/ADR-002-agent-autonomy-scope.md) | 同上 | completed |
+| ExecutionContext 分化 | [ADR-003](decisions/ADR-003-execution-context-split.md) | [execution-model-migration](plans/2026-04-26-execution-model-migration.md) | completed |
+| Inbox 作为人机协作枢纽 | [ADR-004](decisions/ADR-004-inbox-as-hub.md) | [inbox-v2-architecture](plans/2026-04-26-inbox-v2-architecture.md) | completed |
+| Plan Chat 定位修正 | [ADR-005](decisions/ADR-005-plan-chat-reframing.md) | （合入 inbox-v2） | completed |
+| 任务授权链路 (propose-approve) | [ADR-006](decisions/ADR-006-task-authorization-model.md) | 同 auto-runner | completed |
+| 任务依赖模型 | [ADR-007](decisions/ADR-007-task-dependency-model.md) | [task-dependency-system](plans/2026-04-26-task-dependency-system.md) | completed |
+| AI-Native + CLI-first | [ADR-008](decisions/ADR-008-ai-native-cli-first.md) | [cli-migration](plans/2026-04-26-cli-migration.md) | completed |
+| Activity Log 基础设施 | [ADR-009](decisions/ADR-009-activity-log-infrastructure.md) | [activity-log-infrastructure](plans/2026-04-26-activity-log-infrastructure.md) | completed |
+| Capture 三分 (Feed/Library/Thoughts) | [ADR-010](decisions/ADR-010-capture-tri-partition.md) | [capture-foundation](plans/2026-04-26-capture-foundation.md) | completed |
+| Quick Capture MVP | 004 + 010 | [quick-capture-mvp](plans/2026-04-26-quick-capture-mvp.md) | completed |
 
 ### v1 遗留中的 "进行中" 项（仍有效）
 
@@ -97,23 +95,19 @@
 
 > 按优先级排列。
 
-### P1 — v2 本期实施（见"进行中"）
-
-**目标**：在未来若干迭代内落地 ADR-001 ~ ADR-010 的全部内容。顺序建议见 `plans/2026-04-26-execution-model-migration.md` 的总览章节。
-
-### P2 — Review 页面 UI
+### P1 — Review 页面 UI
 
 Activity Log 基础设施已经是 v2 本期内容（ADR-009），但它的用户可视化（"Review 页面，时间轴看今天/本周做了什么"）留到下一期。
 
-### P3 — Sandbox ExecutionContext 详细设计
+### P2 — Sandbox ExecutionContext 详细设计
 
 ADR-003 确立了抽象分化，Worktree 侧 v2 本期落地，**Sandbox 的详细实现**单独开一期设计。
 
-### P4 — Thinking Trail 子系统
+### P3 — Thinking Trail 子系统
 
 AI 对话记录的结构化留痕。2026-04-26 的 v2 对话已经以手动方式实践了一次（见 `docs/thinking-trail/`），未来自动化。
 
-### P5 — Capture 能力扩展
+### P4 — Capture 能力扩展
 
 - 手机 share endpoint
 - Voice Log + 本地转写
@@ -121,31 +115,31 @@ AI 对话记录的结构化留痕。2026-04-26 的 v2 对话已经以手动方�
 - Feed 多来源（Twitter / GitHub / HN / Substack …）
 - 剪贴板粘贴自动识别 URL / 长文本
 
-### P6 — Orbit 自我进化
+### P5 — Orbit 自我进化
 
 基于 Activity Log + Thinking Trail + Distillation 的三向数据融合，agent 主动提出优化建议。长期方向。
 
-### P7 — GitHub 深度集成
+### P6 — GitHub 深度集成
 
 - Issue → Task 双向同步
 - PR review 状态在 Project Room 展示
 - Auto-runner 结果直接推远程分支
 
-### P8 — 性能与稳定性
+### P7 — 性能与稳定性
 
 - 大 vault（>1000 文件）索引性能
 - Electron 启动时间
 - 崩溃恢复改善
 
-### P9 — 跨平台支持
+### P8 — 跨平台支持
 
 - Linux (AppImage/snap)
 - Windows (NSIS installer)
 - CLI 跨平台路径处理
 
-### P10 — MCP 观察期决策
+### P9 — CLI-first 观察期决策
 
-v2 上线后观察 agent 对 CLI 的调用准确度，根据实际数据决定是否重新引入 MCP（作为补充 / 替代）。
+v2 上线后观察 agent 对 CLI 的调用准确度，根据实际数据决定是否需要新 ADR 调整 agent-facing 工具面。
 
 ---
 

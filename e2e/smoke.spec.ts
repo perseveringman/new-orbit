@@ -36,24 +36,27 @@ test('orbit smoke: launch, create vault, create note', async () => {
   for (const d of ['01_Projects', '02_Areas', '03_Resources', '04_Archives']) {
     await fs.mkdir(path.join(vaultDir, d), { recursive: true });
   }
-
-  // Open the vault via the exposed IPC (bypasses the native dialog).
-  await win.evaluate(async (dir: string) => {
-    // @ts-expect-error window.orbit is injected by preload
-    return window.orbit.workspace.openPath(dir);
-  }, vaultDir);
-
-  // Sidebar should show PARA buckets once the vault is open.
-  await expect(win.locator('text=01_Projects').first()).toBeVisible({ timeout: 15_000 });
-
-  // Create a markdown note and verify it appears in the tree.
   const target = path.join(vaultDir, '01_Projects', 'test.md');
   await fs.writeFile(
     target,
     '---\nuid: test-001\ntype: project\ntitle: test\nstatus: active\n---\n\n# test\n',
     'utf8'
   );
-  await expect(win.locator('text=test.md').first()).toBeVisible({ timeout: 15_000 });
+
+  // Open the vault via the exposed IPC (bypasses the native dialog).
+  await win.evaluate(async (dir: string) => {
+    // @ts-expect-error window.orbit is injected by preload
+    return window.orbit.workspace.openPath(dir);
+  }, vaultDir);
+  await win.reload();
+  await win.waitForLoadState('domcontentloaded');
+
+  await expect(win.getByRole('heading', { name: 'Workspace' })).toBeVisible({ timeout: 15_000 });
+  await win.getByRole('button', { name: 'Journals' }).click();
+
+  // The files panel should show PARA buckets and the markdown note without its extension.
+  await expect(win.getByText('01_Projects').first()).toBeVisible({ timeout: 15_000 });
+  await expect(win.getByText('test').first()).toBeVisible({ timeout: 15_000 });
 
   await app.close();
 });

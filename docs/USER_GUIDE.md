@@ -1,4 +1,4 @@
-# Orbit 用户手册 / User Guide (v1.0)
+# Orbit 用户手册 / User Guide (v2)
 
 Orbit 是一个"项目即文件夹 + AI 协作"的本地工作台。本指南用一个完整的日常流程，带你从 0 走到 1。
 
@@ -35,8 +35,8 @@ Dashboard 顶部有 **Vision** 卡片。第一件事就是把它写出来——O
 确认后 Orbit：
 1. 创建 `01_Projects/<slug>/` 文件夹
 2. 初始化独立 git 仓库（`cd` 进去就是一个干净的 repo）
-3. 按模板渲染 `README.md`, `AGENT.md`, `.agent/config.json`
-4. 写入 `.mcp.json`（指向 Orbit 的 MCP server），这样在项目根跑 `claude` 时，CLI 就能调用 Orbit 的工具
+3. 按模板渲染 `README.md`, `AGENT.md`, `.orbit/config.json`
+4. 写入项目级 agent context（包括 `orbit-cli.md`），这样在项目根跑 `claude` 时，CLI 能看到 Orbit 的可用命令
 5. 在 Dashboard 上新增一张卡片
 
 ## 4. 进入 Project Room
@@ -74,22 +74,22 @@ Project Room 底部终端直接敲：
 
 ```bash
 claude
-# or any other MCP-aware CLI
+# or any other local agent CLI
 ```
 
-MCP-capable CLI 会读取 `.mcp.json` 并自动连接到 **Orbit Hooks** 服务端。你可以让它调：
+Agent 可以通过项目 context 学到 `orbit` CLI。常用命令包括：
 
-| 工具 | 作用 |
+| 命令 | 作用 |
 | --- | --- |
-| `search_vault` | 跨整个 vault 全文搜索 |
-| `get_file` | 读任意 `.md`（by UID 或相对路径）|
-| `create_task` | 生成一个四段式 task 到当前项目 |
-| `update_task` | 更新 task 的 frontmatter 或四段内容 |
-| `search_memories` | 读项目 `.agent/memories/` |
-| `save_memory` | 写一条项目级记忆 |
-| `query_project_graph` | 获取项目的 task 列表 + 链接关系 |
+| `orbit search <query>` | 跨整个 vault 全文搜索 |
+| `orbit cat <path-or-uid>` | 读任意 Markdown（by UID 或相对路径）|
+| `orbit task list --project <uid>` | 获取项目 task 列表 |
+| `orbit task update <uid> ...` | 更新 task frontmatter 或四段内容 |
+| `orbit proposal create ...` | 为独立新任务提交待审批 Proposal |
+| `orbit inbox list` | 查看 Inbox 待处理事件 |
+| `orbit activity list` | 查看 Activity Log |
 
-让它 "根据 README，生成 3 个 task"——它就会直接调 `create_task` 把任务写进 Kanban。
+让它 "根据 README，提出 3 个新任务"——它应通过 Proposal 流程把独立任务交给你审批，而不是直接写入 Kanban。
 
 快捷键：`` ⌘` `` 把焦点扔回终端。
 
@@ -135,13 +135,14 @@ AI 在干活前自己发散出的计划。
   - 需人工 preMergeCheck 通过后才能 squash 回 main
   - 跑完如果超预算会被 budget gate 拦下（顶栏红色 Today pill）
 
-## 8. Night Shift —— 夜间批处理
+## 8. Auto-runner —— 持续调度
 
-晚上睡觉前：
-1. Dashboard → **Start Night Shift**
-2. 勾选你要今晚跑的 task、设定并发数 + 是否自动开 PR
-3. 每个 task 会在独立 `.orbit/night-worktrees/<runId>/<taskUid>/` 里执行
-4. 顶栏 🌙 pill 滚动显示进度，点它可随时取消并终止全部子进程
+Auto-runner 默认关闭，需要你在 Settings 里显式开启：
+
+1. Settings → Auto-runner → 开启 `autoRunner.enabled`
+2. 确保 task 已 approved 且依赖链已解锁
+3. Dispatcher 会周期性扫描 ready task，并在独立 worktree 中启动 agent run
+4. 运行状态、错误、proposal 与需要你处理的事件会进入 Activity Log / Inbox
 
 ## 9. 次日早晨 / Daily Review
 
@@ -149,7 +150,7 @@ Dashboard → **Today's Journal**：
 - 已有：`02_Areas/Journal/YYYY-MM-DD.md` 直接读
 - 没有：点 **Generate** 让 LLM（或 fallback 模板）生成
 - 生成后会把被推荐的 task 标 🌟 Recommended today
-- 顶栏点 **Journals** 或 **🌙 History** 回看所有历史
+- 顶栏点 **Journals** 回看所有历史
 
 ## 10. 归档项目
 
@@ -178,7 +179,7 @@ Dashboard → **Today's Journal**：
 1. 打开那个 task（任意方式）
 2. TaskEditor 顶部 **Try rescue**
 3. 下拉选要挂到哪个项目
-4. 点 **Relink**：后台 IPC `task.relink(path, newProjectUid)` 改 frontmatter + 文件搬到目标项目的 `.agent/tasks/`
+4. 点 **Relink**：后台 IPC `task.relink(path, newProjectUid)` 改 frontmatter + 文件搬到目标项目的 `.orbit/agent/tasks/`
 
 ## 13. 快捷键
 

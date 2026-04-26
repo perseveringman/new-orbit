@@ -1,5 +1,5 @@
 ---
-status: draft
+status: completed
 created: 2026-04-26
 updated: 2026-04-26
 adr: ADR-007

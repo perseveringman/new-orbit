@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit v2 阶段 6 清理与文档收尾**：删除 Night Shift 与 MCP runtime 旧路径，停用项目 `.mcp.json` 自动写入，归档 v1 架构到 `docs/archive/architecture-v1.md`，重写 `docs/architecture.md` 为 v2 现状，并新增 `docs/CHANGELOG.v2-implementation.md` 记录偏离、权衡与后续观察项。
 - **Orbit v2 阶段 5 Capture + CLI**：完成 Feed / Library / Thoughts 基础数据流、Thought-only Quick Capture 与 `orbit` CLI 对现有 v1 MCP 等价能力和 v2 foundation 的主要命令覆盖，保留 MCP 启动到清理阶段处理。
 - **Capture / Quick Capture 基础能力**：新增 Feed RSS 订阅与去重刷新、Feed History 淡出、Library 保存/阅读进度/Promote to Resource、Thoughts 生命周期与 `⌘⇧I` Thought-only Quick Capture 浮层，并接入 Inbox v2、IPC/preload 类型和 Activity Log。
 - **Orbit v2 阶段 5 CLI 全量覆盖**：补齐 `orbit` CLI 对 v1 MCP 等价能力与现有 v2 foundation 的命令面，包括 project/task/inbox/activity/approval/auto-runner/agent/run；新增 stdin/`--file` 长内容输入、稳定 unavailable 错误与命令覆盖测试，Capture/Memory 后端缺失时仅暴露 help 与结构化不可用错误。
@@ -54,6 +55,7 @@
 
 ### Changed
 
+- **v2 文档状态同步**：`docs/plans/2026-04-26-*.md` 标记为 completed，`README.md` 与 `docs/ROADMAP.md` 更新为 v2 已实施后的描述。
 - **任务执行 Prompt 边界**：agent task prompt 追加 `# Boundary` 段，明确只能处理当前任务范围、越界工作需新建任务、不得修改其他任务状态，并要求输出完成摘要
 - **Agent 任务生命周期契约**：task prompt 与内置 executor 角色现在都会先要求 agent 审视项目上下文和任务信息是否充分；若信息不足，必须先提出澄清、把任务保留在非 `done` 状态，并在真正完成后才通过 Orbit MCP 标记 `done`
 - **Planner 交互模型**：Project Planner 从“左侧 proposal 列表 + 主画布”调整为“中间 planner chat + 右侧产物画布”；默认对话 agent 为 Plan Agent，可切换 Architect / Executor 视角，只有生成任务拆分后才显示右侧 React Flow artifact，并在 artifact header 中切换 proposal 版本

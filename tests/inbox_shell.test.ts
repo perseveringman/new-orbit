@@ -62,9 +62,10 @@ describe('Inbox v2 renderer shell', () => {
     expect(html).toContain('Authorization chain');
   });
 
-  it('renders honest Library placeholders in Stage View', () => {
+  it('renders Library article Stage View markup', () => {
     const html = renderToStaticMarkup(createElement(StageView, { item: items[1] }));
-    expect(html).toContain('Reader placeholder');
-    expect(html).toContain('Article extraction and the full reader backend are deferred');
+    expect(html).toContain('Library');
+    expect(html).toContain('Loading article');
+    expect(html).toContain('Promote to Resource');
   });
 });

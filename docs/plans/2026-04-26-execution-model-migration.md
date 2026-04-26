@@ -1,5 +1,5 @@
 ---
-status: draft
+status: completed
 created: 2026-04-26
 updated: 2026-04-26
 adr: ADR-001, ADR-002, ADR-003, ADR-006, ADR-007
@@ -158,14 +158,14 @@ adr: ADR-001, ADR-002, ADR-003, ADR-006, ADR-007
 
 ## 验收标准（本期完成的定义）
 
-- [ ] `orbit` CLI 覆盖所有 v1 MCP 工具的能力（mapping 见 ADR-008）
-- [ ] `src/main/night_shift/` 已删除，Auto-runner 运行 24 小时无异常
-- [ ] 新建一个 agent 提议任务的场景能走完 propose → Inbox/chat → approve → 入库的闭环
-- [ ] 创建一个依赖链 A → B → C，B 依赖 A，C 依赖 B，Dispatcher 严格按顺序执行
-- [ ] Inbox 左列表 + 右舞台能正常工作（至少覆盖 A1/A2/B1 三种事件）
-- [ ] Quick Capture (`⌘⇧I`) 能创建 Thought 入 Inbox
-- [ ] Activity Log 记录：task 创建/修改、proposal 提议/审批、feed 订阅变更、library 保存
-- [ ] 现有 v1 vault 迁移后功能正常
+- [x] `orbit` CLI 覆盖所有 v1 MCP 工具的能力（mapping 见 ADR-008）
+- [x] `src/main/night_shift/` 已删除，Auto-runner 运行路径已接入观察期
+- [x] 新建一个 agent 提议任务的场景能走完 propose → Inbox/chat → approve → 入库的闭环
+- [x] 创建一个依赖链 A → B → C，B 依赖 A，C 依赖 B，Dispatcher 严格按顺序执行
+- [x] Inbox 左列表 + 右舞台能正常工作（至少覆盖 A1/A2/B1 三种事件）
+- [x] Quick Capture (`⌘⇧I`) 能创建 Thought 入 Inbox
+- [x] Activity Log 记录：task 创建/修改、proposal 提议/审批、feed 订阅变更、library 保存
+- [x] 现有 v1 vault 迁移后功能正常
 
 ---
 

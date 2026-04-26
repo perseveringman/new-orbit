@@ -16,11 +16,10 @@
 01_Projects/my-project/
 ├── README.md            # frontmatter + project body (no Agent section)
 ├── AGENT.md             # extracted or template-rendered persona
-├── .mcp.json            # auto-written on first open
+├── .orbit/config.json   # project-level Orbit config
 ├── .gitignore
 ├── .git/                # per-project repo
-└── .agent/
-    ├── config.json
+└── .orbit/agent/
     ├── tasks/.gitkeep
     └── memories/.gitkeep
 ```
@@ -36,7 +35,7 @@
    - 读旧 `.md` 的 frontmatter + body
    - 提取 `## Agent` 章节（如有）变成 `AGENT.md`
    - 其余 body 写入新的 `README.md`（保留/补齐 frontmatter 必要字段）
-   - 创建 `.agent/` 结构
+   - 创建 `.orbit/` project config 与 agent 结构
    - `git init` 新项目仓库
    - 删掉旧 `.md`
 5. 结束后 Dashboard 会自动刷新项目列表。
@@ -80,7 +79,7 @@ cd <vault> && git bundle create /tmp/vault-backup-$(date +%Y%m%d).bundle --all
 
 - **老 project 的 `## Agent` 章节**会被整段提进 `AGENT.md`；如果没有该章节，Orbit 用 `blank` 模板生成一个默认 persona
 - **老 project 没有 `uid` 字段**：迁移时 `ensureUid` 会补一个稳定 UID；任何引用它的 `[[wikilink]]` 若按 slug 解析的照常工作
-- **Task 文件**如果原先就在 `01_Projects` 顶层，请手动把它挪进对应的项目文件夹 `<slug>/.agent/tasks/`（或在 Orbit 里打开、点 **Try rescue → Relink**）
+- **Task 文件**如果原先就在 `01_Projects` 顶层，请手动把它挪进对应的项目文件夹 `<slug>/.orbit/agent/tasks/`（或在 Orbit 里打开、点 **Try rescue → Relink**）
 - **`04_Archives/` 里的旧单文件项目**不会被本迁移触碰——它们已经归档，不影响使用
 
 ## After migration
