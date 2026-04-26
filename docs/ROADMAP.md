@@ -1,6 +1,6 @@
 # Orbit — Roadmap
 
-> **Status**: Phase 3 代码实施完成（2026-04-27），进入 dog-food 观察期
+> **Status**: Phase 4.0 代码实施完成（2026-04-28），进入 lifecycle dog-food 观察期
 > **Update cadence**: 每个里程碑落地后更新；大方向调整随 ADR 同步刷新。
 
 本文记录 Orbit 各阶段的目标、当前状态和下一步计划。**v2 方向的完整说明在 `docs/overview.md`，决策记录在 `docs/decisions/`。**
@@ -89,6 +89,24 @@
 - Codex / Copilot adapter 仍是能力声明 + stub 启动路径，真实生产 fallback 需要后续接通各 vendor 的原生事件协议。
 - Sandbox ExecutionContext、Review 页面 UI、Thinking Trail 自动化和 Capture 多入口继续留在 Phase 4+。
 
+### Phase 4.0 — Task Execution Lifecycle Realignment（2026-04-28）
+
+**触发**：Phase 3 dog-food 暴露 task 状态机和 agent 会话状态机被错误耦合，导致 agent 求助即 task → blocked 死锁。
+
+**状态**：代码实施完成，进入真实 lifecycle dog-food 观察期。ADR-015 / ADR-016 已 accepted，ADR-012 已追加 Switch Runtime 修订。
+
+| 子系统 | ADR | Plan | 状态 |
+|--------|-----|------|------|
+| Task / Agent Session 状态机解耦 | [ADR-015](decisions/ADR-015-task-session-state-decoupling.md) | [task-execution-lifecycle-realignment](plans/2026-04-28-task-execution-lifecycle-realignment.md) | completed |
+| Agent Onboarding Protocol | [ADR-016](decisions/ADR-016-agent-onboarding-protocol.md) | 同上 | completed |
+| Switch Runtime 与 Session 承接 | [ADR-012](decisions/ADR-012-task-session-binding-model.md)（修订） | 同上 | completed |
+| 端到端 lifecycle scenario 基础设施 | — | 同上 | completed |
+
+**观察期事项**：
+- 真实 L01-L15 lifecycle scenario 需要在具备 vendor agent CLI 的本机设置 `ORBIT_LIFECYCLE_REAL=1` 后长跑验证。
+- Codex / Copilot adapter 仍需完成真实 process/event/transcript 能力，当前 Switch Runtime 对非 Claude 的生产运行受 runtime gate 限制。
+- Kanban awaiting-user 图标已接 UI hook，后续需把 active run segment 聚合进 task list 数据。
+
 ### v1 遗留中的 "进行中" 项（仍有效）
 
 | 功能 | 文档 | 状态 |
@@ -116,20 +134,7 @@
 
 > 按优先级排列。原 P1-P9 重新编号为 Phase 4+ 方向。
 
-### Phase 4.0 — Task Execution Lifecycle Realignment（draft）
-
-**触发**：Phase 3 dog-food 暴露 task 状态机和 agent 会话状态机被错误耦合，导致 agent 求助即 task → blocked 死锁。
-
-**状态**：方案 draft（2026-04-28）
-
-| 子系统 | ADR | Plan |
-|--------|-----|------|
-| Task / Agent Session 状态机解耦 | ADR-015（待写） | [task-execution-lifecycle-realignment](plans/2026-04-28-task-execution-lifecycle-realignment.md) |
-| Agent Onboarding Protocol | ADR-016（待写） | 同上 |
-| Switch Runtime 与 Session 承接 | ADR-012（修订） | 同上 |
-| 端到端真实自动化测试（lifecycle scenarios） | — | 同上 |
-
-### Phase 4 后续方向（Phase 4.0 完成后）
+### Phase 4 后续方向
 
 | 方向 | 说明 | 原编号 |
 |------|------|--------|

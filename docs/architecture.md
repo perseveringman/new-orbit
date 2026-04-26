@@ -154,6 +154,14 @@ Task files use Zod schemas from `src/shared/schemas.ts`. v2 task fields include:
 
 Immutable task frontmatter keys are still `uid`, `type`, and `created`; migrations must not rewrite them.
 
+Phase 4.0 separates project-level task state from execution-level agent session state:
+
+- task status remains the board/project state (`todo`, `doing`, `blocked`, `done`, etc.).
+- `blocked` is reserved for dependency unavailability from ADR-007, not agent help requests or runtime failures.
+- `src/main/task-state/reducer.ts` is the pure transition reducer for task/session lifecycle inputs.
+- agent session status is stored per `RunSegment.sessionStatus`: `idle`, `launching`, `running`, `awaiting_user`, `completed`, `failed_retryable`, or `failed_terminal`.
+- `awaiting_user` keeps the task in `doing`; user chat or switch-runtime can resume execution without abusing `blocked`.
+
 ## 6. ExecutionContext and agent runner
 
 `src/main/execution/` defines the v2 execution abstraction:
@@ -193,6 +201,16 @@ It no longer auto-loads `.mcp.json`; agent capabilities should go through `orbit
 Task conversations persist `RunSegment.vendorSessionId` and reverse-scan latest completed/running
 segments before dispatching a new run. Manual task chat first attempts `agent:sendMessage` into an
 active run, then falls back to a resumed Claude process.
+
+Agent starts now prepend the ADR-016 onboarding protocol. The runner scans the first agent message
+for the required `我已了解：` acknowledgement and emits a non-blocking Activity event so dog-food can
+measure protocol compliance.
+
+Runtime adapters expose `getSessionTranscript(sessionId)`. Claude reads local JSONL session history
+and maps it into `UnifiedAgentEvent`; Codex and Copilot currently return `null`, allowing Switch
+Runtime to fall back to unified event/segment summaries. `src/main/orchestration/switch_runtime.ts`
+builds the continuation prompt, estimates transcript tokens with a rough character heuristic, and
+chooses full transcript vs summarized injection before launching the replacement runtime.
 
 Fallback and budget resilience are configured under `autoRunner` settings:
 
@@ -283,11 +301,15 @@ Auto-runner is designed as a continuous local loop, not a batch modal. Manual te
 - `orbit search`
 - `orbit cat`
 - `orbit task list/get/update/propose/log`
+- `orbit project overview`
+- `orbit task related/transcript/propose-split/switch-runtime`
+- `orbit kanban list`
 - `orbit inbox ...`
 - `orbit activity ...`
 - `orbit approval ...`
 - `orbit auto-runner ...`
 - `orbit agent/run ...`
+- `orbit dev:scenarios`, `orbit dev:golden`, `orbit dev:lifecycle`
 
 The CLI talks to the Electron main process over the local vault socket. Missing backend domains return structured `unavailable` errors rather than pretending success.
 

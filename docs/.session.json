@@ -1,28 +1,28 @@
 {
   "project_name": "orbit",
   "mode": "evolve",
-  "current_phase": "phase-4.0-planning",
+  "current_phase": "phase-4.0-implemented",
   "phases_covered": [
     "v1-foundation",
     "v2-direction",
-    "phase-3-observability-resilience"
+    "phase-3-observability-resilience",
+    "phase-4.0-task-execution-lifecycle-realignment"
   ],
   "checklist_status": {
     "evolve": {
       "scope_clear": true,
       "before_after_diff_clear": true,
       "affected_docs_updated": true,
-      "changelog_appended": false,
+      "changelog_appended": true,
       "adr_drafted": true,
       "session_persisted": true,
       "open_questions_updated": true
     }
   },
   "pending_questions": [
-    "ADR-015 / ADR-016 仍是 proposed 状态，开工前需要 accepted",
-    "CHANGELOG.phase-4.0-implementation.md 等开工时新建",
     "Codex / Copilot adapter 的 getSessionTranscript 实现仍 stub，跨 vendor session 历史读取在真实 fallback 时是否够用待 dog-food 验证",
-    "启动协议遵守率数据收集机制：warning 是否需要落到 Dashboard 象限 5"
+    "启动协议遵守率数据收集机制：warning 是否需要落到 Dashboard 象限 5",
+    "真实 L01-L15 lifecycle scenario 需在具备 vendor agent CLI 的本机设置 ORBIT_LIFECYCLE_REAL=1 后执行"
   ],
   "features_identified": [
     "task-state-reducer",
@@ -53,7 +53,24 @@
         "agent 启动协议必须强约束：千万不要直接开始开工",
         "端到端自动化测试必须真实调用 agent，不能 mock，并要模拟用户介入"
       ]
+    },
+    {
+      "date": "2026-04-28",
+      "topic": "Phase 4.0 task execution lifecycle implementation",
+      "outcome": "落地 task/session 状态机解耦、Agent Onboarding Protocol、Switch Runtime 承接框架、UI/CLI 入口和 lifecycle scenario 基础设施；真实 agent 长跑进入 dog-food follow-up",
+      "produced": [
+        "src/main/task-state/reducer.ts",
+        "src/main/agent/onboarding.ts",
+        "src/main/orchestration/switch_runtime.ts",
+        "src/main/dev/lifecycle-runner.ts",
+        "docs/CHANGELOG.phase-4.0-implementation.md"
+      ],
+      "user_corrections_applied": [
+        "ADR-015 / ADR-016 accepted 后不修改正文",
+        "lifecycle scenario 框架默认不 mock 真实 agent，只在缺少 vendor CLI 环境时报告 SKIP",
+        "blocked 语义还原为依赖不可用，不再表达 agent 求助或 runtime 失败"
+      ]
     }
   ],
-  "last_updated": "2026-04-28T00:00:00Z"
+  "last_updated": "2026-04-28T23:59:00Z"
 }

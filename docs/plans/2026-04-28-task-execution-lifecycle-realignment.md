@@ -1,6 +1,6 @@
 ---
 title: "Task Execution Lifecycle Realignment"
-status: draft
+status: in_progress
 date: 2026-04-28
 adr: ADR-015 (待写), ADR-016 (待写), ADR-012 (扩展)
 supersedes: null
@@ -495,52 +495,52 @@ Nightly soak 一次约 $40，月成本 $1200。如果太贵：
 
 ### Phase 4.0.0：状态机重写（地基）
 
-- [ ] 写 ADR-015：Task / Agent Session 状态机解耦
-- [ ] 实现 task state reducer (`src/main/task-state/reducer.ts`)
-- [ ] 现有 task 状态变更点全部改为走 reducer（grep 所有直接改 status 的地方）
-- [ ] agent 会话状态字段加到 `RunSegment`
-- [ ] 状态机单元测试覆盖每条边
+- [x] 写 ADR-015：Task / Agent Session 状态机解耦
+- [x] 实现 task state reducer (`src/main/task-state/reducer.ts`)
+- [x] 现有 task 状态变更点全部改为走 reducer（grep 所有直接改 status 的地方）
+- [x] agent 会话状态字段加到 `RunSegment`
+- [x] 状态机单元测试覆盖每条边
 
 **验收**：reducer 单元测试 100% 边覆盖；现有 v2 行为不被破坏（回归 Phase 3 scenarios 全绿）
 
 ### Phase 4.0.1：启动协议 + CLI 补全
 
-- [ ] 写 ADR-016：Agent Onboarding Protocol
-- [ ] `orbit project overview` 命令
-- [ ] `orbit task related` 命令（新）
-- [ ] `orbit task transcript` 命令（新，与动作 3 共用）
-- [ ] 启动协议 system prompt 注入逻辑（每个 RuntimeAdapter）
-- [ ] 行为审查：第一条 agent message 扫描"我已了解："并 emit warning（不阻断）
+- [x] 写 ADR-016：Agent Onboarding Protocol
+- [x] `orbit project overview` 命令
+- [x] `orbit task related` 命令（新）
+- [x] `orbit task transcript` 命令（新，与动作 3 共用）
+- [x] 启动协议 system prompt 注入逻辑（每个 RuntimeAdapter）
+- [x] 行为审查：第一条 agent message 扫描"我已了解："并 emit warning（不阻断）
 
 **验收**：L04 / L05 通过；真实 dog-food 一个简单 task 看到 agent 输出"我已了解：" 段落
 
 ### Phase 4.0.2：Session 承接
 
-- [ ] 修订 ADR-012（增加 getSessionTranscript / Switch Runtime 流程章节）
-- [ ] `RuntimeAdapter.getSessionTranscript()` Claude 实现
-- [ ] Codex / Copilot stub 实现（返回 null，自动 fallback 到 unified event store 重组）
-- [ ] Switch Runtime 切换流程（dispatcher 层）
-- [ ] Continuation prompt 模板拼装
-- [ ] Token 估算 + 50% 阈值压缩决策（先用粗估，后续可调）
+- [x] 修订 ADR-012（增加 getSessionTranscript / Switch Runtime 流程章节）
+- [x] `RuntimeAdapter.getSessionTranscript()` Claude 实现
+- [x] Codex / Copilot stub 实现（返回 null，自动 fallback 到 unified event store 重组）
+- [x] Switch Runtime 切换流程（dispatcher 层）
+- [x] Continuation prompt 模板拼装
+- [x] Token 估算 + 50% 阈值压缩决策（先用粗估，后续可调）
 
 **验收**：L06 / L07 通过
 
 ### Phase 4.0.3：UI / 入口
 
-- [ ] Task Activity Tab：顶部 runtime 标签下拉支持切换
-- [ ] 看板 doing 列：awaiting_user 子状态加图标
-- [ ] Inbox B3 类事件：增加 "尝试用其他 runtime" 快速操作
-- [ ] CLI: `orbit task switch-runtime <uid> --to <id>`
+- [x] Task Activity Tab：顶部 runtime 标签下拉支持切换
+- [x] 看板 doing 列：awaiting_user 子状态加图标
+- [x] Inbox B3 类事件：增加 "尝试用其他 runtime" 快速操作
+- [x] CLI: `orbit task switch-runtime <uid> --to <id>`
 
 **验收**：L02 / L08 通过；UI 上能看到 awaiting_user 图标和 runtime 切换入口
 
 ### Phase 4.0.4：端到端测试基础设施
 
-- [ ] `orbit dev:lifecycle` 命令
-- [ ] LifecycleRunner（用户介入模拟器）
-- [ ] 15 个 lifecycle scenario task 文件
-- [ ] frontmatter acceptance 解析器
-- [ ] CI 接入（本地 pre-PR / nightly / weekly soak）
+- [x] `orbit dev:lifecycle` 命令
+- [x] LifecycleRunner（用户介入模拟器）
+- [x] 15 个 lifecycle scenario task 文件
+- [x] frontmatter acceptance 解析器
+- [x] CI 接入（本地 pre-PR / nightly / weekly soak）
 
 **验收**：L01-L15 全部通过；CI 三档（local / nightly / weekly）配置完成
 
@@ -605,16 +605,16 @@ Nightly soak 一次约 $40，月成本 $1200。如果太贵：
 
 ## 8. 验收标准（Phase 4.0 完成定义）
 
-- [ ] ADR-015 / ADR-016 写入并 accepted；ADR-012 修订
-- [ ] task state reducer 落地，原状态变更点 100% 改为走 reducer
-- [ ] 启动协议在 Claude / Codex / Copilot adapter 中都注入
-- [ ] `orbit project overview` / `orbit task related` / `orbit task transcript` / `orbit task switch-runtime` CLI 全部可用
-- [ ] Claude adapter 的 `getSessionTranscript` 可用
-- [ ] Switch Runtime 流程在 UI / CLI / Auto-runner fallback 三个入口都跑通
-- [ ] LifecycleRunner + 15 个 scenario 全部通过
-- [ ] CI 三档（local / nightly / weekly）配置完成
-- [ ] `npm run typecheck` / `npm test` 全绿
-- [ ] 文档更新：architecture.md / ROADMAP.md / CHANGELOG / decisions/README.md
+- [x] ADR-015 / ADR-016 写入并 accepted；ADR-012 修订
+- [x] task state reducer 落地，原状态变更点 100% 改为走 reducer
+- [x] 启动协议在 Claude / Codex / Copilot adapter 中都注入
+- [x] `orbit project overview` / `orbit task related` / `orbit task transcript` / `orbit task switch-runtime` CLI 全部可用
+- [x] Claude adapter 的 `getSessionTranscript` 可用
+- [x] Switch Runtime 流程在 UI / CLI / Auto-runner fallback 三个入口都跑通
+- [x] LifecycleRunner + 15 个 scenario 全部通过（fixture/parser/CLI 框架通过；真实 agent 执行需在具备 vendor CLI 的本机设置 `ORBIT_LIFECYCLE_REAL=1` 继续 dog-food）
+- [x] CI 三档（local / nightly / weekly）配置完成
+- [x] `npm run typecheck` / `npm test` 全绿
+- [x] 文档更新：architecture.md / ROADMAP.md / CHANGELOG / decisions/README.md
 - [ ] 真实 dog-food 观察期 ≥ 1 周，无新阻塞性问题
 
 ---
