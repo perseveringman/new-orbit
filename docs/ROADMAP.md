@@ -1,6 +1,6 @@
 # Orbit — Roadmap
 
-> **Status**: v2 本期实施完成（2026-04-26）
+> **Status**: Phase 3 规划完成（2026-04-27），待实施
 > **Update cadence**: 每个里程碑落地后更新；大方向调整随 ADR 同步刷新。
 
 本文记录 Orbit 各阶段的目标、当前状态和下一步计划。**v2 方向的完整说明在 `docs/overview.md`，决策记录在 `docs/decisions/`。**
@@ -91,55 +91,58 @@
 
 ---
 
+## 进行中
+
+### Phase 3 — Agent Observability & Resilience（2026-04-27）
+
+**触发**：v2 实施完成后 dog-food 发现核心问题——agent 执行是黑盒（突然渲染、没有 tool use、resume 断裂）。同时确立了 Runtime 抽象贯通、全链路事件回放、Dashboard 重做等方向。
+
+**状态**：规划完成，待实施。4 项新 ADR（ADR-011 ~ ADR-014）已 accepted。
+
+| 子系统 | ADR | Plan | 状态 |
+|--------|-----|------|------|
+| Runtime 抽象贯通（通用 Agent Event 协议） | [ADR-011](decisions/ADR-011-runtime-abstraction-through-capabilities.md) | [phase-3 总纲](plans/2026-04-27-phase-3-agent-observability-resilience.md) | draft |
+| Task-Session 绑定（原生 resume + 双向 stream） | [ADR-012](decisions/ADR-012-task-session-binding-model.md) | 同上 | draft |
+| 统一事件回放（全链路 + Developer Console） | [ADR-013](decisions/ADR-013-unified-event-replay-infrastructure.md) | 同上 | draft |
+| Runtime Fallback 决策规则 + Budget | [ADR-014](decisions/ADR-014-runtime-fallback-decision-rules.md) | 同上 | draft |
+| Activity tab 时间线 UI（打字机 + 实时 markdown） | — | 同上 | draft |
+| Agent Playground 调试基础设施 | — | 同上 | draft |
+| Global Dashboard 重做（象限 3/4/5） | — | 同上 | draft |
+
+**实施顺序**（6 个阶段，阶段间有依赖）：
+
+1. **Phase 3.0**：调试基础设施（Playground + scenario harness + 事件录像）
+2. **Phase 3.1**：Runtime 抽象贯通（adapter 接口 + Claude/Codex/Copilot adapters）
+3. **Phase 3.2**：可观察性 UI（Activity tab + 时间线 + 打字机 + 实时 markdown）
+4. **Phase 3.3**：延续性（Task-Session 绑定 + resume + 双向 stream）
+5. **Phase 3.4**：全链路事件回放（统一总线 + Developer Console + Golden Files）
+6. **Phase 3.5**：Global Dashboard 重做（象限 3: 知识增长 / 象限 4: 思考轨迹 / 象限 5: 系统健康）
+
+---
+
 ## 计划中
 
-> 按优先级排列。
+> 按优先级排列。原 P1-P9 重新编号为 Phase 4+ 方向。
 
-### P1 — Review 页面 UI
+### Phase 4 方向（Phase 3 完成后）
 
-Activity Log 基础设施已经是 v2 本期内容（ADR-009），但它的用户可视化（"Review 页面，时间轴看今天/本周做了什么"）留到下一期。
+| 方向 | 说明 | 原编号 |
+|------|------|--------|
+| **Sandbox ExecutionContext** | 非代码项目（research / writing）的执行环境，补齐功能断层 | 原 P2 |
+| **Thinking Trail 自动化** | 每次 chat session 自动留痕、关键认知跃迁自动识别 | 原 P3 |
+| **对话沉淀 → 项目** | 从 Thoughts / Chat 自然沉淀识别主题集聚，agent 主动提议立项 | 新增 |
+| **Capture 多入口** | 剪贴板识别、Library Quick Capture、浏览器插件、手机 share、Voice Log | 原 P4 |
+| **Review 页面 UI** | Activity Log 的用户可视化（时间轴、汇总、检索） | 原 P1 |
 
-### P2 — Sandbox ExecutionContext 详细设计
+### 长期方向（Phase 5+）
 
-ADR-003 确立了抽象分化，Worktree 侧 v2 本期落地，**Sandbox 的详细实现**单独开一期设计。
-
-### P3 — Thinking Trail 子系统
-
-AI 对话记录的结构化留痕。2026-04-26 的 v2 对话已经以手动方式实践了一次（见 `docs/thinking-trail/`），未来自动化。
-
-### P4 — Capture 能力扩展
-
-- 手机 share endpoint
-- Voice Log + 本地转写
-- 浏览器插件一键 save
-- Feed 多来源（Twitter / GitHub / HN / Substack …）
-- 剪贴板粘贴自动识别 URL / 长文本
-
-### P5 — Orbit 自我进化
-
-基于 Activity Log + Thinking Trail + Distillation 的三向数据融合，agent 主动提出优化建议。长期方向。
-
-### P6 — GitHub 深度集成
-
-- Issue → Task 双向同步
-- PR review 状态在 Project Room 展示
-- Auto-runner 结果直接推远程分支
-
-### P7 — 性能与稳定性
-
-- 大 vault（>1000 文件）索引性能
-- Electron 启动时间
-- 崩溃恢复改善
-
-### P8 — 跨平台支持
-
-- Linux (AppImage/snap)
-- Windows (NSIS installer)
-- CLI 跨平台路径处理
-
-### P9 — CLI-first 观察期决策
-
-v2 上线后观察 agent 对 CLI 的调用准确度，根据实际数据决定是否需要新 ADR 调整 agent-facing 工具面。
+| 方向 | 说明 | 原编号 |
+|------|------|--------|
+| **Orbit 自我进化** | Activity Log + Thinking Trail + Distillation 三向融合 | 原 P5 |
+| **GitHub 深度集成** | Issue ↔ Task 双向同步、PR review 展示、远程分支推送 | 原 P6 |
+| **性能与稳定性** | 大 vault 索引、启动时间、崩溃恢复 | 原 P7 |
+| **跨平台支持** | Linux / Windows 打包 + CLI 跨平台路径 | 原 P8 |
+| **CLI-first 观察期决策** | agent CLI 调用准确度监控，决定是否重新引入 MCP | 原 P9 |
 
 ---
 

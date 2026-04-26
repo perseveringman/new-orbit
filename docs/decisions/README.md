@@ -60,6 +60,10 @@ ADR 借鉴自 Michael Nygard 的 [Documenting Architecture Decisions](https://co
 | 008 | [AI-Native 原则与 CLI-first 迁移](ADR-008-ai-native-cli-first.md) | accepted | `cli-migration` |
 | 009 | [Activity Log — 系统级用户行为留痕](ADR-009-activity-log-infrastructure.md) | accepted | `activity-log-infrastructure` |
 | 010 | [Capture 三分 — Feed / Library / Thoughts](ADR-010-capture-tri-partition.md) | accepted | `capture-foundation` |
+| 011 | [Runtime 抽象贯通 — 通用 Agent Event 协议](ADR-011-runtime-abstraction-through-capabilities.md) | accepted | `phase-3-agent-observability-resilience` |
+| 012 | [Task-Session 绑定模型](ADR-012-task-session-binding-model.md) | accepted | `phase-3-agent-observability-resilience` |
+| 013 | [统一事件回放基础设施](ADR-013-unified-event-replay-infrastructure.md) | accepted | `phase-3-agent-observability-resilience` |
+| 014 | [Runtime Fallback 决策规则](ADR-014-runtime-fallback-decision-rules.md) | accepted | `phase-3-agent-observability-resilience` |
 
 ---
 
