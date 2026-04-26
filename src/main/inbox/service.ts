@@ -18,12 +18,22 @@ import {
   type InboxListFilter,
   type InboxListResult,
   type InboxMessageInput,
+  type InboxMessageSubtype,
+  type InboxResolutionSource,
   type InboxResolveInput,
   type InboxStatus
 } from './types';
 
 export type InboxActivityEmitter = (input: ActivityEventInput) => unknown;
 export type InboxEventListener = (event: InboxEvent) => void;
+export interface InboxResolveTaskAttentionInput {
+  taskUid: string;
+  runId?: string;
+  source?: InboxResolutionSource;
+  note?: string;
+  resolved_by?: 'user' | 'agent';
+  resolved_at?: string;
+}
 
 export interface InboxServiceOptions {
   now?: () => Date;
@@ -143,6 +153,33 @@ export class InboxService {
     return this.store.get(id);
   }
 
+  async resolvePendingTaskAttention(input: InboxResolveTaskAttentionInput): Promise<InboxItem[]> {
+    const taskUid = input.taskUid.trim();
+    if (!taskUid) throw new Error('taskUid is required to resolve pending task attention');
+    const active = await this.list({ category: 'message', status: 'pending', includeArchived: false });
+    const matches = active.items.filter(
+      (item) =>
+        item.category === 'message' &&
+        item.status === 'pending' &&
+        TASK_ATTENTION_SUBTYPES.has(item.subtype as InboxMessageSubtype) &&
+        item.context.task_uid === taskUid &&
+        (!input.runId || item.context.run_id === input.runId)
+    );
+    const resolved: InboxItem[] = [];
+    for (const item of matches) {
+      resolved.push(
+        await this.resolve(item.id, {
+          decision: 'done',
+          source: input.source ?? 'chat',
+          note: input.note,
+          resolved_by: input.resolved_by ?? 'user',
+          resolved_at: input.resolved_at
+        })
+      );
+    }
+    return resolved;
+  }
+
   private async requirePending(id: string): Promise<InboxItem> {
     const item = await this.store.get(id);
     if (!item) throw new Error(`inbox item not found: ${id}`);
@@ -192,6 +229,8 @@ function resolvedStatusFor(item: InboxItem): InboxStatus {
   if (item.subtype === 'library_article' || item.subtype === 'thought') return 'processed';
   return 'archived';
 }
+
+const TASK_ATTENTION_SUBTYPES = new Set<InboxMessageSubtype>(['B1', 'B2', 'B3']);
 
 function createActionFor(item: InboxItem): ActivityEventInput['action'] {
   if (item.category === 'message') return 'inbox.message_created';

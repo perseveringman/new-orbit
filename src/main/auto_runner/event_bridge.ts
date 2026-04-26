@@ -6,7 +6,7 @@ import { broadcastInboxEvent } from '../inbox/events';
 
 export interface AutoRunnerEventBridgeOptions {
   emitActivity?: (input: ActivityEventInput) => unknown;
-  inboxForVault?: (vaultPath: string) => Pick<InboxService, 'emitMessage'>;
+  inboxForVault?: (vaultPath: string) => AttentionInbox;
 }
 
 export interface AutoRunnerRunEvent {
@@ -22,9 +22,12 @@ export interface AutoRunnerUnsupportedEvent {
   message: string;
 }
 
+type AttentionInbox = Pick<InboxService, 'emitMessage'> &
+  Partial<Pick<InboxService, 'resolvePendingTaskAttention'>>;
+
 export class AutoRunnerEventBridge {
   private readonly activity: (input: ActivityEventInput) => unknown;
-  private readonly inboxForVault: (vaultPath: string) => Pick<InboxService, 'emitMessage'>;
+  private readonly inboxForVault: (vaultPath: string) => AttentionInbox;
 
   constructor(options: AutoRunnerEventBridgeOptions = {}) {
     this.activity = options.emitActivity ?? emitActivity;
@@ -65,7 +68,16 @@ export class AutoRunnerEventBridge {
       payload: { title: event.task.title, message },
       summary: `Auto-runner failed: ${event.task.title}`
     });
-    await this.inboxForVault(event.vaultPath).emitMessage({
+    const inbox = this.inboxForVault(event.vaultPath);
+    if (event.task.uid) {
+      await inbox.resolvePendingTaskAttention?.({
+        taskUid: event.task.uid,
+        source: 'inbox',
+        note: 'Superseded by a newer auto-runner failure.',
+        resolved_by: 'agent'
+      });
+    }
+    await inbox.emitMessage({
       subtype: 'B3',
       title: `Auto-runner failed: ${event.task.title}`,
       summary: message,
@@ -92,7 +104,16 @@ export class AutoRunnerEventBridge {
       },
       summary: `Auto-runner skipped sandbox task: ${event.task.title}`
     });
-    await this.inboxForVault(event.vaultPath).emitMessage({
+    const inbox = this.inboxForVault(event.vaultPath);
+    if (event.task.uid) {
+      await inbox.resolvePendingTaskAttention?.({
+        taskUid: event.task.uid,
+        source: 'inbox',
+        note: 'Superseded by a newer sandbox support warning.',
+        resolved_by: 'agent'
+      });
+    }
+    await inbox.emitMessage({
       subtype: 'B1',
       title: `Sandbox Auto-runner unsupported: ${event.task.title}`,
       summary: event.message,

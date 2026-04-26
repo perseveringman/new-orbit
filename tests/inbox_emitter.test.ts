@@ -64,4 +64,55 @@ describe('inbox service emitter', () => {
     expect(thought.status).toBe('pending');
     expect(activities.map((event) => event.action)).toEqual(['thought.created']);
   });
+
+  it('resolves pending task attention messages by task context', async () => {
+    const events: InboxEvent[] = [];
+    const service = createInboxService(createInboxStore(vaultPath), {
+      id: () => `inbox_${events.length}`,
+      now: () => new Date('2026-04-26T10:00:00.000Z'),
+      emitActivity: () => undefined,
+      onEvent: (event) => events.push(event)
+    });
+
+    const help = await service.emitMessage({
+      subtype: 'B1',
+      title: 'Agent needs input',
+      summary: 'Need one more detail.',
+      context: { task_uid: 'task_1', run_id: 'run_1' },
+      payload: {}
+    });
+    const failure = await service.emitMessage({
+      subtype: 'B3',
+      title: 'Agent failed',
+      summary: 'Runtime failed.',
+      context: { task_uid: 'task_1', run_id: 'run_2' },
+      payload: {}
+    });
+    await service.emitMessage({
+      subtype: 'C1',
+      title: 'Dependency warning',
+      summary: 'Dependency changed.',
+      context: { task_uid: 'task_1' },
+      payload: {}
+    });
+    await service.emitMessage({
+      subtype: 'B1',
+      title: 'Other task needs input',
+      summary: 'Different task.',
+      context: { task_uid: 'task_2' },
+      payload: {}
+    });
+
+    const resolved = await service.resolvePendingTaskAttention({
+      taskUid: 'task_1',
+      source: 'chat',
+      note: 'User replied in chat.'
+    });
+
+    expect(resolved.map((item) => item.id)).toEqual([help.id, failure.id]);
+    expect(resolved.every((item) => item.status === 'resolved')).toBe(true);
+    const active = await service.list({ category: 'message', status: 'pending', includeArchived: false });
+    expect(active.items.map((item) => item.subtype).sort()).toEqual(['B1', 'C1']);
+    expect(events.filter((event) => event.type === 'resolved')).toHaveLength(2);
+  });
 });

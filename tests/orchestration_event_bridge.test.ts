@@ -81,4 +81,30 @@ describe('OrchestrationEventBridge', () => {
       })
     );
   });
+
+  it('resolves stale task attention before emitting a newer help request', async () => {
+    const emitMessage = vi.fn(async (input) => input);
+    const resolvePendingTaskAttention = vi.fn(async () => []);
+    const bridge = new OrchestrationEventBridge({
+      inboxForVault: () => ({ emitMessage, resolvePendingTaskAttention })
+    });
+
+    await bridge.dispatchNeedsAttention({
+      vaultPath: '/vault',
+      task: task(),
+      runId: 'run_3',
+      summary: 'Need a narrower scope.',
+      failed: false
+    });
+
+    expect(resolvePendingTaskAttention).toHaveBeenCalledWith({
+      taskUid: 'task_1',
+      source: 'inbox',
+      note: 'Superseded by a newer agent attention request.',
+      resolved_by: 'agent'
+    });
+    expect(resolvePendingTaskAttention.mock.invocationCallOrder[0]).toBeLessThan(
+      emitMessage.mock.invocationCallOrder[0]
+    );
+  });
 });

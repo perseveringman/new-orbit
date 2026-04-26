@@ -1,6 +1,11 @@
 export { registerInboxIpc } from './ipc';
 export { InboxService, createInboxService, createInboxServiceForVault } from './service';
-export type { InboxActivityEmitter, InboxEventListener, InboxServiceOptions } from './service';
+export type {
+  InboxActivityEmitter,
+  InboxEventListener,
+  InboxResolveTaskAttentionInput,
+  InboxServiceOptions
+} from './service';
 export { InboxStore, createInboxStore, monthKeyFromIso, readInboxNdjson } from './store';
 export { createProposalInboxSync, inboxMessageForProposal, type ProposalInboxSync } from './proposal';
 export {

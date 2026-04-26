@@ -10,12 +10,15 @@ export interface DispatchNeedsAttentionEvent {
   failed: boolean;
 }
 
+type AttentionInbox = Pick<InboxService, 'emitMessage'> &
+  Partial<Pick<InboxService, 'resolvePendingTaskAttention'>>;
+
 export interface OrchestrationEventBridgeOptions {
-  inboxForVault?: (vaultPath: string) => Pick<InboxService, 'emitMessage'>;
+  inboxForVault?: (vaultPath: string) => AttentionInbox;
 }
 
 export class OrchestrationEventBridge {
-  private readonly inboxForVault: (vaultPath: string) => Pick<InboxService, 'emitMessage'>;
+  private readonly inboxForVault: (vaultPath: string) => AttentionInbox;
 
   constructor(options: OrchestrationEventBridgeOptions = {}) {
     this.inboxForVault =
@@ -25,7 +28,16 @@ export class OrchestrationEventBridge {
 
   async dispatchNeedsAttention(event: DispatchNeedsAttentionEvent): Promise<void> {
     const summary = event.summary.trim() || 'Agent run requires attention.';
-    await this.inboxForVault(event.vaultPath).emitMessage({
+    const inbox = this.inboxForVault(event.vaultPath);
+    if (event.task.uid) {
+      await inbox.resolvePendingTaskAttention?.({
+        taskUid: event.task.uid,
+        source: 'inbox',
+        note: 'Superseded by a newer agent attention request.',
+        resolved_by: 'agent'
+      });
+    }
+    await inbox.emitMessage({
       subtype: event.failed ? 'B3' : 'B1',
       title: event.failed
         ? `Agent run failed: ${event.task.title}`

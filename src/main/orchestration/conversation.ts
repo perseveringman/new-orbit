@@ -11,6 +11,8 @@ import { readTaskFile, updateTaskFrontmatter } from '../task';
 import type { TaskStatus } from '@shared/schemas';
 import { extractVendorSessionIdFromAgentEvents } from '../agent/adapter/compat';
 import { OrchestrationEventBridge } from './event_bridge';
+import { createInboxServiceForVault } from '../inbox/service';
+import { broadcastInboxEvent } from '../inbox/events';
 
 type NewTurn = Omit<ConversationTurn, 'id' | 'createdAt'>;
 type NewSegment = Omit<RunSegment, 'id' | 'startedAt'>;
@@ -259,6 +261,7 @@ export async function sendAndRun(
   if (task.active_run_id && runningSegment) {
     const sent = sendAgentMessage(task.active_run_id, message);
     if (sent.accepted) {
+      await resolveTaskAttentionFromChat(vaultPath, task.uid);
       return { turnId: userTurn.id, runId: task.active_run_id, segmentId: runningSegment.id };
     }
   }
@@ -289,6 +292,7 @@ export async function sendAndRun(
     return { turnId: userTurn.id, runId: '', segmentId: segment.id };
   }
 
+  await resolveTaskAttentionFromChat(vaultPath, task.uid);
   await bindSegmentRunId(vaultPath, task.uid, segment.id, result.runId);
   await updateTaskFrontmatter(task.filePath, { active_run_id: result.runId });
   await refreshTaskFileInSession(task.filePath);
@@ -345,6 +349,9 @@ export async function recordRunCompletion(
     summary: completion.summary,
     vendorSessionId: extractVendorSessionIdFromAgentEvents(result.events)
   });
+  if (completion.status === 'completed') {
+    await resolveTaskAttentionAfterCompletion(vaultPath, match.taskUid);
+  }
   if (
     match.segment.trigger !== 'dispatch' &&
     (completion.status === 'needs_attention' || completion.status === 'failed') &&
@@ -359,6 +366,24 @@ export async function recordRunCompletion(
     });
   }
   await clearActiveRunId(match.taskId, runId);
+}
+
+async function resolveTaskAttentionFromChat(vaultPath: string, taskUid: string): Promise<void> {
+  await createInboxServiceForVault(vaultPath, { onEvent: broadcastInboxEvent }).resolvePendingTaskAttention({
+    taskUid,
+    source: 'chat',
+    note: 'User replied in the task conversation.',
+    resolved_by: 'user'
+  });
+}
+
+async function resolveTaskAttentionAfterCompletion(vaultPath: string, taskUid: string): Promise<void> {
+  await createInboxServiceForVault(vaultPath, { onEvent: broadcastInboxEvent }).resolvePendingTaskAttention({
+    taskUid,
+    source: 'chat',
+    note: 'Agent completed after the pending attention request.',
+    resolved_by: 'agent'
+  });
 }
 
 export async function appendReleaseTurn(
