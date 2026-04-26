@@ -79,11 +79,11 @@ export function classifyDispatchCompletion({
   return {
     segmentStatus: 'needs_attention',
     leaseStatus: 'needs_attention',
-    reportStatus: 'failed',
+    reportStatus: 'needs_attention',
     direction: 'needs attention',
     taskStatus: nextStatus,
     blockedReason: nextStatus === 'blocked' ? blockedReason || summary : undefined,
-    bindingHealth: 'degraded',
+    bindingHealth: 'healthy',
     eventType: 'dispatch:needs_attention'
   };
 }

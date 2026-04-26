@@ -11,9 +11,10 @@ describe('dispatch completion classification', () => {
 
     expect(result.segmentStatus).toBe('needs_attention');
     expect(result.leaseStatus).toBe('needs_attention');
-    expect(result.reportStatus).toBe('failed');
+    expect(result.reportStatus).toBe('needs_attention');
     expect(result.taskStatus).toBe('blocked');
     expect(result.blockedReason).toBe('Waiting for a product clarification');
+    expect(result.bindingHealth).toBe('healthy');
     expect(result.eventType).toBe('dispatch:needs_attention');
   });
 
@@ -41,7 +42,9 @@ describe('dispatch completion classification', () => {
     });
 
     expect(result.segmentStatus).toBe('needs_attention');
+    expect(result.reportStatus).toBe('needs_attention');
     expect(result.taskStatus).toBe('waiting');
     expect(result.blockedReason).toBeUndefined();
+    expect(result.bindingHealth).toBe('healthy');
   });
 });

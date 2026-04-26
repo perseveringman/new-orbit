@@ -509,6 +509,8 @@ function ReportStatusBadge({ status }: { status: ImplementationReport['status'] 
       ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
       : status === 'running'
         ? 'bg-sky-500/20 text-sky-700 dark:text-sky-300'
+        : status === 'needs_attention'
+          ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
         : status === 'failed'
           ? 'bg-red-500/20 text-red-700 dark:text-red-300'
           : 'bg-neutral-500/20 text-neutral-700 dark:text-neutral-300';

@@ -38,7 +38,13 @@ export type TaskLeaseStatus = (typeof LEASE_STATUSES)[number];
 export const PROPOSAL_STATUSES = ['draft', 'accepted', 'rejected', 'published'] as const;
 export type PlanProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
-export const IMPLEMENTATION_REPORT_STATUSES = ['running', 'completed', 'failed', 'released'] as const;
+export const IMPLEMENTATION_REPORT_STATUSES = [
+  'running',
+  'completed',
+  'needs_attention',
+  'failed',
+  'released'
+] as const;
 export type ImplementationReportStatus = (typeof IMPLEMENTATION_REPORT_STATUSES)[number];
 
 export const PLANNER_AGENT_IDS = ['plan-agent', 'architect-agent', 'executor-agent'] as const;
