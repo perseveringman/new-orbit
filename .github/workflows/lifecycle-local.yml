@@ -1,0 +1,19 @@
+name: Lifecycle local
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lifecycle-local:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- tests/lifecycle_runner.test.ts tests/cli/dev_lifecycle.test.ts
+      - run: npm run cli -- dev:lifecycle run L01 L02 L03 L04 L05

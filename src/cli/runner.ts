@@ -36,6 +36,7 @@ import {
   generateTopLevelHelp
 } from './help/generate';
 import { runDevGoldenCli } from './commands/dev-golden';
+import { runDevLifecycleCli } from './commands/dev-lifecycle';
 import { runDevScenariosCli } from './commands/dev-scenarios';
 
 interface ParsedGlobalFlags {
@@ -1001,6 +1002,8 @@ export async function runCli(argv: string[], options: CliRunOptions = {}): Promi
     else if (command === 'run') output = await runRun(flags, options);
     else if (command === 'dev:scenarios')
       output = await runDevScenariosCli(flags.args.slice(1), options, flags.json);
+    else if (command === 'dev:lifecycle')
+      output = await runDevLifecycleCli(flags.args.slice(1), options, flags.json);
     else if (command === 'dev:golden')
       output = await runDevGoldenCli(flags.args.slice(1), options, flags.json);
     else if (command === 'feed')

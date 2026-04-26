@@ -21,6 +21,7 @@ Available commands:
   agent       Agent run commands: list-runs, stop
   run         Agent self-reporting: request-merge, report-progress, emit-insight
   dev:scenarios Agent Playground scenario runner
+  dev:lifecycle Phase 4.0 lifecycle scenario runner
   dev:golden  Agent Playground golden file verification
   feed        Feed capture commands (${CAPTURE_UNAVAILABLE})
   library     Library capture commands (${CAPTURE_UNAVAILABLE})

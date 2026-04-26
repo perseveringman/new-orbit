@@ -1,0 +1,19 @@
+name: Lifecycle nightly
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  lifecycle-nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run cli -- dev:lifecycle run --all --concurrent 3
+      - run: npm run cli -- dev:lifecycle run --concurrent 5 L13 L13 L13
