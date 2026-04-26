@@ -1,0 +1,59 @@
+{
+  "project_name": "orbit",
+  "mode": "evolve",
+  "current_phase": "phase-4.0-planning",
+  "phases_covered": [
+    "v1-foundation",
+    "v2-direction",
+    "phase-3-observability-resilience"
+  ],
+  "checklist_status": {
+    "evolve": {
+      "scope_clear": true,
+      "before_after_diff_clear": true,
+      "affected_docs_updated": true,
+      "changelog_appended": false,
+      "adr_drafted": true,
+      "session_persisted": true,
+      "open_questions_updated": true
+    }
+  },
+  "pending_questions": [
+    "ADR-015 / ADR-016 仍是 proposed 状态，开工前需要 accepted",
+    "CHANGELOG.phase-4.0-implementation.md 等开工时新建",
+    "Codex / Copilot adapter 的 getSessionTranscript 实现仍 stub，跨 vendor session 历史读取在真实 fallback 时是否够用待 dog-food 验证",
+    "启动协议遵守率数据收集机制：warning 是否需要落到 Dashboard 象限 5"
+  ],
+  "features_identified": [
+    "task-state-reducer",
+    "agent-session-state-machine",
+    "agent-onboarding-protocol",
+    "switch-runtime-with-transcript",
+    "lifecycle-e2e-testing"
+  ],
+  "features_drafted": [
+    "phase-4.0-task-execution-lifecycle-realignment"
+  ],
+  "sessions_log": [
+    {
+      "date": "2026-04-28",
+      "topic": "task 稳定执行流程 / 端到端生命周期",
+      "outcome": "落地 plan 草稿 + ADR-015 + ADR-016 (proposed)，5 大故障症状收敛到根因（task 状态机 / agent 会话状态机耦合），下一步开工前需 accept ADR",
+      "produced": [
+        "plans/2026-04-28-task-execution-lifecycle-realignment.md",
+        "decisions/ADR-015-task-session-state-decoupling.md",
+        "decisions/ADR-016-agent-onboarding-protocol.md",
+        "ROADMAP.md (Phase 4.0 段)",
+        "open-questions.md (#17)"
+      ],
+      "user_corrections_applied": [
+        "transcript 不需要 Orbit 自做持久化——复用 vendor CLI 自带 session 历史，通过 RuntimeAdapter.getSessionTranscript 拉取",
+        "用户在 task chat 发消息本身就是续跑入口，不需要专门的 Resume 按钮",
+        "event replay 是 Orbit 开发者用的可观测工具，不是用户 task 排障工具——本期不引入新的故障 self-service AI",
+        "agent 启动协议必须强约束：千万不要直接开始开工",
+        "端到端自动化测试必须真实调用 agent，不能 mock，并要模拟用户介入"
+      ]
+    }
+  ],
+  "last_updated": "2026-04-28T00:00:00Z"
+}

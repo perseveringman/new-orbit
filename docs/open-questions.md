@@ -2,7 +2,7 @@
 
 > 本文记录 Orbit v2 方向确立过程中**被明确认识到但本期不做**的事项。它们是后续迭代的候选，同时也是"未定之事"的可见清单——避免这些想法被遗忘或重复讨论。
 
-> **Last updated**: 2026-04-26（随 v2 方向确立新建）
+> **Last updated**: 2026-04-28（追加 #17：task 生命周期状态机解耦相关待定项已收敛进 Phase 4.0 plan）
 
 每个条目给出：
 - **上下文**：为什么这事值得讨论
@@ -381,6 +381,26 @@ Thinking Trail 子系统设计时（见 #2）一并考虑。
 **相关**：
 - ADR-002
 - ADR-006
+
+---
+
+---
+
+## 17. Task 状态机和 Agent 会话状态机的耦合（已收敛进 Phase 4.0）
+
+**上下文**：
+2026-04-27 Phase 3 完成代码后 dog-food 立刻暴露的根因——task 项目层状态和 agent 执行层会话状态被错误地耦合在一起，导致：
+
+- agent 求助补充信息 → task 直接被推到 `blocked`，单向门
+- 用户补充完信息 task 不会自动回 doing
+- 对话发消息没有自动续跑路径
+
+**当前状态**：
+已收敛进 Phase 4.0 plan：[`plans/2026-04-28-task-execution-lifecycle-realignment.md`](./plans/2026-04-28-task-execution-lifecycle-realignment.md)。
+
+**相关**：
+- ADR-015（待写）/ ADR-016（待写）
+- ADR-012（待修订）
 
 ---
 

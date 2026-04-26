@@ -64,6 +64,8 @@ ADR 借鉴自 Michael Nygard 的 [Documenting Architecture Decisions](https://co
 | 012 | [Task-Session 绑定模型](ADR-012-task-session-binding-model.md) | accepted | `phase-3-agent-observability-resilience` |
 | 013 | [统一事件回放基础设施](ADR-013-unified-event-replay-infrastructure.md) | accepted | `phase-3-agent-observability-resilience` |
 | 014 | [Runtime Fallback 决策规则](ADR-014-runtime-fallback-decision-rules.md) | accepted | `phase-3-agent-observability-resilience` |
+| 015 | [Task 状态机与 Agent 会话状态机解耦](ADR-015-task-session-state-decoupling.md) | proposed | `task-execution-lifecycle-realignment` |
+| 016 | [Agent 启动协议 — 先了解项目全貌再开工](ADR-016-agent-onboarding-protocol.md) | proposed | `task-execution-lifecycle-realignment` |
 
 ---
 

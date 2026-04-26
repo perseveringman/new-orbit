@@ -116,7 +116,20 @@
 
 > 按优先级排列。原 P1-P9 重新编号为 Phase 4+ 方向。
 
-### Phase 4 方向（Phase 3 完成后）
+### Phase 4.0 — Task Execution Lifecycle Realignment（draft）
+
+**触发**：Phase 3 dog-food 暴露 task 状态机和 agent 会话状态机被错误耦合，导致 agent 求助即 task → blocked 死锁。
+
+**状态**：方案 draft（2026-04-28）
+
+| 子系统 | ADR | Plan |
+|--------|-----|------|
+| Task / Agent Session 状态机解耦 | ADR-015（待写） | [task-execution-lifecycle-realignment](plans/2026-04-28-task-execution-lifecycle-realignment.md) |
+| Agent Onboarding Protocol | ADR-016（待写） | 同上 |
+| Switch Runtime 与 Session 承接 | ADR-012（修订） | 同上 |
+| 端到端真实自动化测试（lifecycle scenarios） | — | 同上 |
+
+### Phase 4 后续方向（Phase 4.0 完成后）
 
 | 方向 | 说明 | 原编号 |
 |------|------|--------|
