@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Orbit Phase 3.0 Agent Playground**：新增 9 个 agent scenario fixture、`orbit dev:scenarios` / `orbit dev:golden` 调试命令、三层 run recorder（raw-vendor / abstract / ui-render）与 golden 文件比对测试，为后续 runtime adapter、event replay 和 Dashboard 提供可重复验证基础。
 - **Orbit v2 阶段 6 清理与文档收尾**：删除 Night Shift 与 MCP runtime 旧路径，停用项目 `.mcp.json` 自动写入，归档 v1 架构到 `docs/archive/architecture-v1.md`，重写 `docs/architecture.md` 为 v2 现状，并新增 `docs/CHANGELOG.v2-implementation.md` 记录偏离、权衡与后续观察项。
 - **Orbit v2 阶段 5 Capture + CLI**：完成 Feed / Library / Thoughts 基础数据流、Thought-only Quick Capture 与 `orbit` CLI 对现有 v1 MCP 等价能力和 v2 foundation 的主要命令覆盖，保留 MCP 启动到清理阶段处理。
 - **Capture / Quick Capture 基础能力**：新增 Feed RSS 订阅与去重刷新、Feed History 淡出、Library 保存/阅读进度/Promote to Resource、Thoughts 生命周期与 `⌘⇧I` Thought-only Quick Capture 浮层，并接入 Inbox v2、IPC/preload 类型和 Activity Log。
