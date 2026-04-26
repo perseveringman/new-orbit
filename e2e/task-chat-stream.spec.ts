@@ -154,11 +154,12 @@ test('task chat shows live stream for an autonomous todo task', async () => {
     const dialog = win.getByRole('dialog', { name: prepared.taskTitle });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-    await dialog.getByRole('button', { name: 'Chat' }).click();
-    await expect(dialog.getByText('Task Chat')).toBeVisible({ timeout: 10_000 });
+    await dialog.getByRole('button', { name: 'Activity' }).click();
+    const idlePlaceholder = `发送消息启动 "${prepared.taskTitle}"`;
+    await expect(dialog.getByPlaceholder(idlePlaceholder)).toBeVisible({ timeout: 10_000 });
 
     await dialog
-      .getByPlaceholder(`Ask the agent to work on "${prepared.taskTitle}"`)
+      .getByPlaceholder(idlePlaceholder)
       .fill('Please start this task and stream progress.');
     await dialog.getByRole('button', { name: 'Send' }).click();
 
