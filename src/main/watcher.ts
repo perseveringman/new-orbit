@@ -51,6 +51,7 @@ export class VaultWatcher {
         `**/${ORBIT_DIR}/${ORBIT_LOGS_DIR}/**`,
         `**/${ORBIT_DIR}/${ORBIT_COST_DIR}/**`,
         `**/${ORBIT_DIR}/${ORBIT_TRASH_DIR}/**`,
+        `**/${ORBIT_DIR}/cli-socket`,
         '**/.git/**',
         '**/node_modules/**'
       ],
