@@ -13,7 +13,7 @@ Available commands:
   memory      Memory search/save (${MEMORY_UNAVAILABLE})
   project     Project commands: overview, graph, list, get, archive
   kanban      Kanban commands: list
-  task        Task commands: list, get, update, propose, related, transcript, propose-scope, propose-split, deps, delete
+  task        Task commands: list, get, update, propose, related, transcript, switch-runtime, propose-scope, propose-split, deps, delete
   inbox       Inbox commands: list, get, resolve, dismiss, archive, emit-message
   activity    Activity log commands: list, summary
   approval    Approval commands: list, get, resolve
@@ -94,6 +94,7 @@ Available subcommands:
   update <uid> [--status S] [--depends-on a,b]
   related <uid>
   transcript <uid>
+  switch-runtime <uid> --to <runtime-id>
   propose --title T (--project UID | --area UID) [--run RUN] [--description TEXT|--file F]
   propose-scope <current-uid> [--run RUN] [--summary TEXT|--file F]
   propose-split <current-uid> [--run RUN] [--summary TEXT|--file F]

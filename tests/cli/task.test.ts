@@ -4,7 +4,7 @@ import { runCli } from '../../src/cli/runner';
 import { capture, RecordingBridge } from './helpers';
 
 describe('CLI task commands', () => {
-  it('maps list/get/update/deps/related/transcript to bridge methods', async () => {
+  it('maps list/get/update/deps/related/transcript/switch-runtime to bridge methods', async () => {
     const io = capture();
     const bridge = new RecordingBridge({
       'task.list': [],
@@ -14,7 +14,8 @@ describe('CLI task commands', () => {
       'task.update': { uid: 'task_1', id: 'task_1', title: 'T', status: 'done', relPath: 'x.md' },
       'task.deps': { uid: 'task_1', status: 'todo', children: [] },
       'task.related': { relatedTasks: [] },
-      'task.transcript': { segments: [], turns: [] }
+      'task.transcript': { segments: [], turns: [] },
+      'task.switchRuntime': { runId: 'run_2' }
     });
 
     await expect(
@@ -41,6 +42,12 @@ describe('CLI task commands', () => {
     await expect(runCli(['task', 'transcript', 'task_1'], { ...io.options, bridge })).resolves.toBe(
       EXIT_SUCCESS
     );
+    await expect(
+      runCli(['task', 'switch-runtime', 'task_1', '--to', 'claude:/bin/claude'], {
+        ...io.options,
+        bridge
+      })
+    ).resolves.toBe(EXIT_SUCCESS);
 
     expect(bridge.calls.map((call) => call.method)).toEqual([
       'task.list',
@@ -48,13 +55,18 @@ describe('CLI task commands', () => {
       'task.update',
       'task.deps',
       'task.related',
-      'task.transcript'
+      'task.transcript',
+      'task.switchRuntime'
     ]);
     expect(bridge.calls[0]?.params).toEqual({ status: 'todo', project_uid: 'project_1' });
     expect(bridge.calls[2]?.params).toEqual({
       uid: 'task_1',
       status: 'done',
       depends_on: ['a', 'b']
+    });
+    expect(bridge.calls[6]?.params).toEqual({
+      uid: 'task_1',
+      runtime_id: 'claude:/bin/claude'
     });
   });
 

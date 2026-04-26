@@ -16,6 +16,7 @@ import {
   updateProjectRoleBinding
 } from './roles';
 import { getLocalRuntimeManager } from './runtime';
+import { switchTaskRuntime } from './switch_runtime';
 
 function broadcast(channel: string, payload: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -89,6 +90,9 @@ export function registerOrchestrationIpc(): void {
     const task = sess.tasks.allTasks().find((entry) => entry.id === taskId);
     if (!task || task.source !== 'file') throw new Error(`task not found: ${taskId}`);
     return sendAndRun(sess.vault, task, message);
+  });
+  ipcMain.handle(IPC.conversation.switchRuntime, async (_e, taskUid: string, runtimeId: string) => {
+    return switchTaskRuntime(taskUid, runtimeId);
   });
 
   ipcMain.handle(IPC.dispatch.status, async (_e, projectUid?: string) => {

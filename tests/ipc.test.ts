@@ -49,7 +49,7 @@ describe('IPC contract', () => {
 
   it('conversation namespace declares task chat channels', () => {
     const keys = Object.keys(IPC.conversation).sort();
-    expect(keys).toEqual(['event', 'get', 'send'].sort());
+    expect(keys).toEqual(['event', 'get', 'send', 'switchRuntime'].sort());
     for (const v of Object.values(IPC.conversation)) {
       expect(v.startsWith('conversation:')).toBe(true);
     }

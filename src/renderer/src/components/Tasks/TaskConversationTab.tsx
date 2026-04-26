@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AgentEvent } from '@shared/agent';
-import type { RunSegment, TaskConversation } from '@shared/orchestration';
+import type { RunSegment, RuntimeDescriptor, TaskConversation } from '@shared/orchestration';
 import type { TaskRecord } from '@shared/schemas';
 import { buildAgentEventKey } from '../../lib/agentEventKeys';
 import { useAgent } from '../../store/agent';
@@ -85,10 +85,19 @@ export function TaskConversationTimeline({
   onSend
 }: TaskConversationTimelineProps): JSX.Element {
   const [draft, setDraft] = useState('');
+  const [runtimes, setRuntimes] = useState<RuntimeDescriptor[]>([]);
+  const [runtimeId, setRuntimeId] = useState('');
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     setDraft('');
   }, [task.id]);
+  useEffect(() => {
+    void window.orbit.runtime.list().then((items) => {
+      setRuntimes(items);
+      setRuntimeId((current) => current || items[0]?.runtimeId || '');
+    });
+  }, []);
   const segmentById = useMemo(
     () => new Map((conversation?.segments ?? []).map((segment) => [segment.id, segment])),
     [conversation?.segments]
@@ -131,8 +140,41 @@ export function TaskConversationTimeline({
     setDraft('');
   }
 
+  async function handleSwitchRuntime(): Promise<void> {
+    if (!task.uid || !runtimeId || switching) return;
+    setSwitching(true);
+    try {
+      await window.orbit.conversation.switchRuntime(task.uid, runtimeId);
+    } finally {
+      setSwitching(false);
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2 text-xs dark:border-neutral-800">
+        <span className="font-medium text-neutral-600 dark:text-neutral-300">Runtime</span>
+        <div className="flex items-center gap-2">
+          <select
+            value={runtimeId}
+            onChange={(event) => setRuntimeId(event.target.value)}
+            className="rounded border border-neutral-300 bg-white px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+          >
+            {runtimes.map((runtime) => (
+              <option key={runtime.runtimeId} value={runtime.runtimeId}>
+                {runtime.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => void handleSwitchRuntime()}
+            disabled={!task.uid || !runtimeId || switching}
+            className="rounded bg-neutral-900 px-2 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          >
+            {switching ? 'Switching…' : 'Switch Runtime'}
+          </button>
+        </div>
+      </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {loading && !conversation ? (
           <p className="text-sm text-neutral-500">Loading conversation…</p>

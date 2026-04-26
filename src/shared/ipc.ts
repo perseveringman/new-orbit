@@ -200,6 +200,7 @@ export const IPC = {
   conversation: {
     get: 'conversation:get',
     send: 'conversation:send',
+    switchRuntime: 'conversation:switchRuntime',
     event: 'conversation:event'
   },
   dispatch: {
@@ -876,6 +877,7 @@ export interface OrbitApi {
       runId: string;
       segmentId: string;
     }>;
+    switchRuntime(taskUid: string, runtimeId: string): Promise<{ runId: string; segmentId?: string }>;
     onEvent(cb: (ev: { taskId: string; turn: ConversationTurn }) => void): () => void;
   };
   dispatch: {

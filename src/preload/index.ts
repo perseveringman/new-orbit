@@ -233,6 +233,11 @@ const api: OrbitApi = {
       message: string
     ): Promise<{ turnId: string; runId: string; segmentId: string }> =>
       ipcRenderer.invoke(IPC.conversation.send, taskId, message),
+    switchRuntime: (
+      taskUid: string,
+      runtimeId: string
+    ): Promise<{ runId: string; segmentId?: string }> =>
+      ipcRenderer.invoke(IPC.conversation.switchRuntime, taskUid, runtimeId),
     onEvent: (cb: (ev: { taskId: string; turn: ConversationTurn }) => void) => {
       const listener = (_: unknown, ev: { taskId: string; turn: ConversationTurn }): void => cb(ev);
       ipcRenderer.on(IPC.conversation.event, listener);

@@ -416,6 +416,19 @@ function parseTaskUpdate(uid: string, args: string[]): Record<string, unknown> {
   return patch;
 }
 
+function parseTaskSwitchRuntime(uid: string, args: string[]): Record<string, unknown> {
+  const params: Record<string, unknown> = { uid };
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? '';
+    if (arg === '--to') params['runtime_id'] = argvValue(args, ++i, '--to');
+    else throw usageError(`Unknown task switch-runtime option: ${arg}`);
+  }
+  if (typeof params['runtime_id'] !== 'string') {
+    throw usageError('Usage: orbit task switch-runtime <uid> --to <runtime-id>');
+  }
+  return params;
+}
+
 async function parseTaskPropose(
   args: string[],
   options: CliRunOptions
@@ -497,6 +510,17 @@ async function runTask(flags: ParsedGlobalFlags, options: CliRunOptions): Promis
     const uid = flags.args[2];
     if (!uid) throw usageError('Usage: orbit task transcript <uid>');
     return bridgeOutput(flags, options, 'task.transcript', { uid }, formatTranscript);
+  }
+  if (subcommand === 'switch-runtime') {
+    const uid = flags.args[2];
+    if (!uid) throw usageError('Usage: orbit task switch-runtime <uid> --to <runtime-id>');
+    return bridgeOutput(
+      flags,
+      options,
+      'task.switchRuntime',
+      parseTaskSwitchRuntime(uid, flags.args.slice(3)),
+      formatGeneric
+    );
   }
   if (subcommand === 'update') {
     const uid = flags.args[2];

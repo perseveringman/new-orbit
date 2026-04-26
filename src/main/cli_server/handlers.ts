@@ -31,6 +31,7 @@ import { listProjects } from '../project';
 import { getPool } from '../agent/pool';
 import { appendExecutionLog } from '../task';
 import { getConversation } from '../orchestration/conversation';
+import { switchTaskRuntime } from '../orchestration/switch_runtime';
 import { cliServerError } from './errors';
 import type { CliHandlerRegistry } from './registry';
 
@@ -328,6 +329,11 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       segments: conversation?.segments ?? [],
       turns: conversation?.turns ?? []
     };
+  });
+
+  registry.register('task.switchRuntime', async (params) => {
+    const input = objectParams(params, 'task.switchRuntime');
+    return switchTaskRuntime(stringParam(input, 'uid'), stringParam(input, 'runtime_id'));
   });
 
   registry.register('task.update', async (params) => {

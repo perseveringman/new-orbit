@@ -740,6 +740,9 @@ function TaskCard({
   selected: boolean;
   onSelect(): void;
 }): JSX.Element {
+  const activeRunSegment = (task as TaskRecord & { activeRunSegment?: { sessionStatus?: string } })
+    .activeRunSegment;
+  const awaitingUser = task.status === 'doing' && activeRunSegment?.sessionStatus === 'awaiting_user';
   const priority =
     task.source === 'file' ? ((task as TaskRecord & { priority?: string }).priority ?? null) : null;
   const priorityColor =
@@ -767,6 +770,7 @@ function TaskCard({
           />
         )}
         <span className="min-w-0 flex-1 truncate font-medium">{task.title}</span>
+        {awaitingUser && <span title="Awaiting user reply">💬</span>}
       </div>
       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
         {task.origin && task.origin !== 'human' && (

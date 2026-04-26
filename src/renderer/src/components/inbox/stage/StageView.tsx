@@ -45,6 +45,15 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
               Reject
             </button>
           )}
+          {item.category === 'message' && item.subtype === 'B3' && (
+            <button
+              type="button"
+              onClick={() => void tryOtherRuntime(item, () => onResolve?.(item, 'done'))}
+              className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
+            >
+              尝试用其他 runtime
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onResolve?.(item, item.category === 'capture' ? 'processed' : 'done')}
@@ -63,6 +72,20 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
       )}
     </div>
   );
+}
+
+async function tryOtherRuntime(item: InboxItem, afterSwitch?: () => void): Promise<void> {
+  const taskUid =
+    item.context.task_uid ??
+    (typeof item.payload === 'object' && item.payload !== null
+      ? (item.payload as { task_uid?: unknown }).task_uid
+      : undefined);
+  if (typeof taskUid !== 'string' || !taskUid) return;
+  const runtimes = await window.orbit.runtime.list();
+  const runtime = runtimes.find((entry) => entry.status === 'online');
+  if (!runtime) return;
+  await window.orbit.conversation.switchRuntime(taskUid, runtime.runtimeId);
+  afterSwitch?.();
 }
 
 function renderItem(item: InboxItem): JSX.Element {
