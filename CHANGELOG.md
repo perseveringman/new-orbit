@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- **Task Editor 依赖编辑补齐**：任务详情的 Structured 表单现在可以直接编辑 `depends_on`，同时展示 `derived_from`、未完成依赖提示和缺失依赖引用；当循环依赖等保存被拒绝时，表单会自动回滚到磁盘状态，避免前端停留在假成功值。
 - **左侧栏 Inbox 红点计数**：Workspace 左侧导航的 Inbox 入口现在会订阅 Inbox 事件并显示 `sidebarMessagesPending` 红色 badge，这样无需进入 Inbox 页面也能看到待处理消息数。
 
 - **Orbit v2 方向确立（2026-04-26）**：经过一次完整 Onboard 对话（~29 轮），确立 v2 演进方向。产出：

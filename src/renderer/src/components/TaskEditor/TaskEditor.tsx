@@ -14,7 +14,7 @@ import { MiniMarkdownEditor } from '../Editor/MiniMarkdownEditor';
 /**
  * TaskEditor — structured editing surface for a single task markdown file.
  *
- * Top: frontmatter form (status/priority/due/effort/tags/pre_conditions).
+ * Top: frontmatter form (status/priority/due/effort/tags/depends_on/pre_conditions).
  * Bottom: four collapsible sections (Description / Thinking / Execution Log /
  *          Summary), each backed by a MiniMarkdownEditor. Execution Log is
  *          read-only by default; a Raw Edit toggle swaps in the editor.
@@ -28,7 +28,7 @@ import { MiniMarkdownEditor } from '../Editor/MiniMarkdownEditor';
 
 export interface TaskEditorProps {
   task: TaskRecord;
-  /** All tasks in the same project, used for pre_conditions multi-select. */
+  /** All tasks in the same project, used for dependency + pre_conditions pickers. */
   siblings?: TaskRecord[];
   onFrontmatterChanged?(): void;
   onSectionsChanged?(): void;
@@ -78,6 +78,7 @@ export function TaskEditor({
   const [projects, setProjects] = useState<ProjectSummaryDTO[]>([]);
   const [relinkUid, setRelinkUid] = useState<string>('');
   const [relinking, setRelinking] = useState(false);
+  const path = task.filePath;
 
   const sectionTimers = useRef<Record<string, number>>({});
   const rawTimer = useRef<number | null>(null);
@@ -86,10 +87,27 @@ export function TaskEditor({
     description: '',
     thinking: '',
     executionLog: '',
-    summary: ''
+      summary: ''
   });
 
-  const path = task.filePath;
+  const applyTaskSnapshot = useCallback((next: TaskGetResultDTO): void => {
+    setFm(next.frontmatter);
+    setSections(next.sections);
+    setRaw(next.raw);
+    lastSavedSection.current = {
+      description: next.sections.description,
+      thinking: next.sections.thinking,
+      executionLog: next.sections.executionLog,
+      summary: next.sections.summary
+    };
+  }, []);
+
+  const reloadTaskSnapshot = useCallback(async (): Promise<TaskGetResultDTO> => {
+    const next = await window.orbit.task.get(path);
+    applyTaskSnapshot(next);
+    return next;
+  }, [applyTaskSnapshot, path]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -100,15 +118,7 @@ export function TaskEditor({
       try {
         const v = await window.orbit.task.get(path);
         if (cancelled) return;
-        setFm(v.frontmatter);
-        setSections(v.sections);
-        setRaw(v.raw);
-        lastSavedSection.current = {
-          description: v.sections.description,
-          thinking: v.sections.thinking,
-          executionLog: v.sections.executionLog,
-          summary: v.sections.summary
-        };
+        applyTaskSnapshot(v);
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
@@ -123,9 +133,9 @@ export function TaskEditor({
       }
       sectionTimers.current = {};
       if (rawTimer.current) window.clearTimeout(rawTimer.current);
-      if (fmTimer.current) window.clearTimeout(fmTimer.current);
-    };
-  }, [path]);
+        if (fmTimer.current) window.clearTimeout(fmTimer.current);
+      };
+  }, [applyTaskSnapshot, path]);
 
   const commitSection = useCallback(
     (section: TaskSectionName, value: string) => {
@@ -156,9 +166,12 @@ export function TaskEditor({
       void window.orbit.task
         .updateFrontmatter(path, patch)
         .then(() => onFrontmatterChanged?.())
-        .catch((e) => toast(`Save failed: ${(e as Error).message}`));
+        .catch((e) => {
+          toast(`Save failed: ${(e as Error).message}`);
+          void reloadTaskSnapshot().catch(() => undefined);
+        });
     },
-    [path, onFrontmatterChanged, toast]
+    [path, onFrontmatterChanged, reloadTaskSnapshot, toast]
   );
 
   const queueFrontmatter = useCallback(
@@ -220,14 +233,27 @@ export function TaskEditor({
   const due = (fm['due'] as string) ?? '';
   const effort = fm['effort'];
   const tags = Array.isArray(fm['tags']) ? (fm['tags'] as string[]) : [];
+  const dependsOn = Array.isArray(fm['depends_on'])
+    ? (fm['depends_on'] as string[])
+    : (task.depends_on ?? []);
   const preConditions = Array.isArray(fm['pre_conditions'])
     ? (fm['pre_conditions'] as string[])
     : [];
+  const derivedFrom =
+    typeof fm['derived_from'] === 'string'
+      ? (fm['derived_from'] as string)
+      : typeof task.derived_from === 'string'
+        ? task.derived_from
+        : null;
   const strategy = (fm['execution_strategy'] as string) ?? '';
 
-  const siblingChoices = useMemo(
+  const relationChoices = useMemo(
     () => siblings.filter((s) => s.uid && s.uid !== task.uid),
     [siblings, task.uid]
+  );
+  const dependencyState = useMemo(
+    () => inspectDependencyState(dependsOn, relationChoices),
+    [dependsOn, relationChoices]
   );
 
   const ctrl =
@@ -412,9 +438,28 @@ export function TaskEditor({
                 onChange={(next) => queueFrontmatter({ tags: next.length ? next : undefined })}
               />
             </Field>
+            <Field label="Dependencies" className={label + ' md:col-span-3'}>
+              <TaskRelationPicker
+                all={relationChoices}
+                value={dependsOn}
+                onChange={(next) => queueFrontmatter({ depends_on: next })}
+              />
+              {dependencyState.unmet.length > 0 || dependencyState.missing.length > 0 ? (
+                <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                  {describeDependencyState(dependencyState)}
+                </p>
+              ) : null}
+            </Field>
+            {derivedFrom ? (
+              <Field label="Derived from" className={label}>
+                <div className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300">
+                  {derivedFrom}
+                </div>
+              </Field>
+            ) : null}
             <Field label="Pre-conditions" className={label + ' md:col-span-3'}>
-              <PreConditionsPicker
-                all={siblingChoices}
+              <TaskRelationPicker
+                all={relationChoices}
                 value={preConditions}
                 onChange={(next) =>
                   queueFrontmatter({
@@ -578,7 +623,54 @@ function TagChips({
   );
 }
 
-function PreConditionsPicker({
+export function toggleTaskRelationValue(value: string[], uid: string, checked: boolean): string[] {
+  if (checked) {
+    return value.includes(uid) ? value : [...value, uid];
+  }
+  return value.filter((entry) => entry !== uid);
+}
+
+export function inspectDependencyState(
+  dependsOn: string[],
+  choices: TaskRecord[]
+): { unmet: TaskRecord[]; missing: string[] } {
+  const known = new Map<string, TaskRecord>();
+  for (const task of choices) {
+    if (task.uid) known.set(task.uid, task);
+  }
+
+  const unmet: TaskRecord[] = [];
+  const missing: string[] = [];
+  for (const uid of dependsOn) {
+    const task = known.get(uid);
+    if (!task) {
+      missing.push(uid);
+      continue;
+    }
+    if (task.status !== 'done') unmet.push(task);
+  }
+  return { unmet, missing };
+}
+
+export function describeDependencyState(state: {
+  unmet: TaskRecord[];
+  missing: string[];
+}): string {
+  const parts: string[] = [];
+  if (state.unmet.length > 0) {
+    parts.push(
+      `Waiting on ${state.unmet.length} task${state.unmet.length > 1 ? 's' : ''}: ${state.unmet
+        .map((task) => task.title)
+        .join(', ')}`
+    );
+  }
+  if (state.missing.length > 0) {
+    parts.push(`Missing dependency reference${state.missing.length > 1 ? 's' : ''}: ${state.missing.join(', ')}`);
+  }
+  return parts.join(' · ');
+}
+
+export function TaskRelationPicker({
   all,
   value,
   onChange
@@ -608,8 +700,7 @@ function PreConditionsPicker({
               type="checkbox"
               checked={checked}
               onChange={(e) => {
-                if (e.target.checked) onChange([...value, uid]);
-                else onChange(value.filter((x) => x !== uid));
+                onChange(toggleTaskRelationValue(value, uid, e.target.checked));
               }}
             />
             <span className="truncate">{t.title}</span>
