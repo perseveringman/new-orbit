@@ -18,6 +18,25 @@ interface TimelineEntry {
   turn?: TaskConversation['turns'][number];
 }
 
+type ConversationInputState = 'idle' | 'running' | 'waiting';
+
+export function getConversationInputState(
+  conversation: TaskConversation | null
+): ConversationInputState {
+  if (!conversation || conversation.segments.length === 0) return 'idle';
+  if (conversation.segments.some((segment) => segment.status === 'running')) return 'running';
+  return 'waiting';
+}
+
+export function getConversationInputPlaceholder(
+  taskTitle: string,
+  state: ConversationInputState
+): string {
+  if (state === 'running') return '追加消息给正在运行的 agent';
+  if (state === 'waiting') return '继续对话';
+  return `发送消息启动 "${taskTitle}"`;
+}
+
 export function TaskConversationTab({ task }: TaskConversationTabProps): JSX.Element {
   const init = useTaskConversation((s) => s.init);
   const load = useTaskConversation((s) => s.load);
@@ -102,6 +121,7 @@ export function TaskConversationTimeline({
       (conversation?.segments ?? []).filter((segment) => segment.status === 'running' && segment.runId),
     [conversation?.segments]
   );
+  const inputState = getConversationInputState(conversation);
 
   async function handleSend(): Promise<void> {
     if (!onSend) return;
@@ -146,7 +166,7 @@ export function TaskConversationTimeline({
               }
             }}
             rows={2}
-            placeholder={`Ask the agent to work on "${task.title}"`}
+            placeholder={getConversationInputPlaceholder(task.title, inputState)}
             disabled={sending}
             className="min-h-[64px] flex-1 resize-none rounded border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 dark:border-neutral-700 dark:bg-neutral-900"
           />

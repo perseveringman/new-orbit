@@ -149,6 +149,41 @@ export function getLatestVendorSessionId(
   return undefined;
 }
 
+export function getLatestResumableSegment(
+  conversation: Pick<TaskConversation, 'segments'>
+): RunSegment | undefined {
+  for (let i = conversation.segments.length - 1; i >= 0; i -= 1) {
+    const segment = conversation.segments[i];
+    if (!segment || segment.status === 'cancelled') continue;
+    return segment;
+  }
+  return undefined;
+}
+
+export function resolveFollowupSegment(
+  task: Pick<TaskRecord, 'id' | 'owner_type' | 'owner_id' | 'role_binding_id'>,
+  conversation: Pick<TaskConversation, 'segments'>
+): Pick<RunSegment, 'taskId' | 'trigger' | 'status' | 'bindingId' | 'vendorSessionId' | 'runId'> {
+  const latestSegment = getLatestResumableSegment(conversation);
+  const roleBindingId = task.role_binding_id?.trim() || undefined;
+  const ownerBindingId =
+    task.owner_type === 'binding' ? task.owner_id?.trim() || undefined : undefined;
+  const bindingId =
+    roleBindingId ??
+    ownerBindingId ??
+    (task.owner_type === 'binding' ? latestSegment?.bindingId : undefined);
+  const vendorSessionId = latestSegment?.vendorSessionId?.trim() || undefined;
+
+  return {
+    taskId: task.id,
+    runId: '',
+    trigger: bindingId ? 'dispatch' : 'manual',
+    status: 'running',
+    ...(bindingId ? { bindingId } : {}),
+    ...(vendorSessionId ? { vendorSessionId } : {})
+  };
+}
+
 export async function completeSegment(
   vaultPath: string,
   taskUid: string,
@@ -193,14 +228,8 @@ export async function sendAndRun(
       return { turnId: userTurn.id, runId: task.active_run_id, segmentId: runningSegment.id };
     }
   }
-  const vendorSessionId = getLatestVendorSessionId(conversation);
-  const segment = await startSegment(vaultPath, task.uid, {
-    taskId: task.id,
-    runId: '',
-    trigger: 'manual',
-    status: 'running',
-    ...(vendorSessionId ? { vendorSessionId } : {})
-  });
+  const followupSegment = resolveFollowupSegment(task, conversation);
+  const segment = await startSegment(vaultPath, task.uid, followupSegment);
   await appendTurn(vaultPath, task.uid, {
     role: 'system',
     content: '⏳ 正在执行...',
@@ -210,7 +239,7 @@ export async function sendAndRun(
   const result = await startTask({
     taskId: task.id,
     instructions: message,
-    vendorSessionId
+    vendorSessionId: followupSegment.vendorSessionId
   });
 
   if (result.kind !== 'ok') {

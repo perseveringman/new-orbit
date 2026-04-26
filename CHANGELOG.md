@@ -30,6 +30,7 @@
 
 ### Fixed
 
+- **Task 对话续跑身份对齐**：当 Inbox 里的 B1 补充信息触发 task conversation 继续执行时，新的 run segment 现在会继承原有 binding / vendor session 语义，不再把同一条长期 agent 会话错误显示成新的 `MANUAL · SESSION`；输入框也会按 idle / running / waiting 状态切换为“发送消息启动 / 追加消息 / 继续对话”。
 - **Inbox B1 求助消息嵌入任务对话**：Inbox Messages 的 B1 Agent help Stage View 不再显示占位说明，会根据 `task_uid` 嵌入对应任务的 Activity 对话页，用户可直接在 Inbox 里查看上下文并回复 agent。
 - **左侧栏 Inbox 红点实时计数**：Workspace 左侧栏现在用 pending message id 集合维护 Inbox 红点，并忽略过期的异步刷新结果，避免连续产生多条消息时红点被旧请求覆盖成较小数字。
 - **Inbox B1 详情滚动恢复**：B1 Agent help 的 Stage View 嵌入任务 Activity 后，详情容器现在会正确继承 `h-full/min-h-0` 高度约束，长对话可以在 Inbox 详情区内部滚动，不会被裁掉。

@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../src/shared/agent';
 import type { TaskConversation } from '../src/shared/orchestration';
 import type { TaskRecord } from '../src/shared/schemas';
-import { TaskConversationTimeline } from '../src/renderer/src/components/Tasks/TaskConversationTab';
+import {
+  getConversationInputPlaceholder,
+  TaskConversationTimeline
+} from '../src/renderer/src/components/Tasks/TaskConversationTab';
 import { buildAgentEventKey } from '../src/renderer/src/lib/agentEventKeys';
 
 const task: TaskRecord = {
@@ -109,5 +112,13 @@ describe('TaskConversationTimeline', () => {
       'segment-2:message:5:2026-04-25T12:06:07.000Z:1'
     ]);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('uses state-aware input placeholders for waiting and running sessions', () => {
+    expect(getConversationInputPlaceholder(task.title, 'idle')).toBe('发送消息启动 "Implement task chat"');
+    expect(getConversationInputPlaceholder(task.title, 'waiting')).toBe('继续对话');
+    expect(getConversationInputPlaceholder(task.title, 'running')).toBe(
+      '追加消息给正在运行的 agent'
+    );
   });
 });
