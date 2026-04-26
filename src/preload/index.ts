@@ -317,6 +317,8 @@ const api: OrbitApi = {
   agent: {
     detect: () => ipcRenderer.invoke(IPC.agent.detect),
     startTask: (args: StartTaskArgs) => ipcRenderer.invoke(IPC.agent.startTask, args),
+    sendMessage: (runId: string, message: string) =>
+      ipcRenderer.invoke(IPC.agent.sendMessage, runId, message),
     stop: (id: string) => ipcRenderer.invoke(IPC.agent.stop, id),
     list: () => ipcRenderer.invoke(IPC.agent.list),
     tail: (id: string, q?: TailQuery) => ipcRenderer.invoke(IPC.agent.tail, id, q),

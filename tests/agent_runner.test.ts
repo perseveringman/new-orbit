@@ -262,6 +262,41 @@ describe('AgentRunner stream parsing', () => {
     }
   });
 
+  it('resumes Claude sessions and writes live messages in stream-json mode', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-resume-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, last, lastArgs, lastOptions } = capturingSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/true',
+        prompt: 'continue',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000,
+        inputMode: 'stream-json',
+        vendorSessionId: 'session-1'
+      });
+
+      await runner.start();
+      const child = last();
+      expect(lastArgs()).toEqual(
+        expect.arrayContaining(['--resume', 'session-1', '--input-format', 'stream-json'])
+      );
+      expect(lastOptions()?.stdio).toEqual(['pipe', 'pipe', 'pipe']);
+
+      expect(runner.sendMessage('follow up')).toBe(true);
+      const written = child.stdin.read()?.toString('utf8') ?? '';
+      expect(written).toContain('"content":"follow up"');
+
+      await runner.stop('test');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
   it('treats stderr lines as stream text instead of terminal errors', async () => {
     const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-stderr-'));
     try {

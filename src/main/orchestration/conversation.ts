@@ -4,7 +4,7 @@ import type { AgentEvent } from '@shared/agent';
 import type { ConversationTurn, RunSegment, TaskConversation } from '@shared/orchestration';
 import type { TaskRecord } from '@shared/schemas';
 import { currentSession } from '../fs';
-import { startTask } from '../agent/ipc';
+import { sendAgentMessage, startTask } from '../agent/ipc';
 import { refreshTaskFileInSession } from './session';
 import { readJsonFile, taskConversationFile, writeJsonFile } from './storage';
 import { readTaskFile, updateTaskFrontmatter } from '../task';
@@ -138,6 +138,17 @@ export async function bindSegmentRunId(
   }));
 }
 
+export function getLatestVendorSessionId(
+  conversation: Pick<TaskConversation, 'segments'>
+): string | undefined {
+  for (let i = conversation.segments.length - 1; i >= 0; i -= 1) {
+    const segment = conversation.segments[i];
+    if (!segment || segment.status === 'cancelled') continue;
+    if (segment.vendorSessionId?.trim()) return segment.vendorSessionId.trim();
+  }
+  return undefined;
+}
+
 export async function completeSegment(
   vaultPath: string,
   taskUid: string,
@@ -168,16 +179,27 @@ export async function sendAndRun(
   message: string
 ): Promise<{ turnId: string; runId: string; segmentId: string }> {
   if (!task.uid || task.source !== 'file') throw new Error('task conversation requires a file-backed task');
-  await getOrCreateConversation(vaultPath, task);
+  const conversation = await getOrCreateConversation(vaultPath, task);
   const userTurn = await appendTurn(vaultPath, task.uid, {
     role: 'user',
     content: message
   });
+  const runningSegment = conversation.segments.find(
+    (segment) => segment.status === 'running' && segment.runId === task.active_run_id
+  );
+  if (task.active_run_id && runningSegment) {
+    const sent = sendAgentMessage(task.active_run_id, message);
+    if (sent.accepted) {
+      return { turnId: userTurn.id, runId: task.active_run_id, segmentId: runningSegment.id };
+    }
+  }
+  const vendorSessionId = getLatestVendorSessionId(conversation);
   const segment = await startSegment(vaultPath, task.uid, {
     taskId: task.id,
     runId: '',
     trigger: 'manual',
-    status: 'running'
+    status: 'running',
+    ...(vendorSessionId ? { vendorSessionId } : {})
   });
   await appendTurn(vaultPath, task.uid, {
     role: 'system',
@@ -187,7 +209,8 @@ export async function sendAndRun(
 
   const result = await startTask({
     taskId: task.id,
-    instructions: message
+    instructions: message,
+    vendorSessionId
   });
 
   if (result.kind !== 'ok') {

@@ -59,6 +59,7 @@ export interface StartTaskArgs {
   instructions?: string;
   worktreePath?: string;
   runtimeId?: string;
+  vendorSessionId?: string;
 }
 
 export interface StartResult {
@@ -92,6 +93,11 @@ export interface ReattachResult {
   events: AgentEvent[];
   terminated: boolean;
   logPath: string;
+}
+
+export interface SendAgentMessageResult {
+  accepted: boolean;
+  reason?: 'run_not_found' | 'not_running' | 'stdin_unavailable';
 }
 
 export interface CostSummary {

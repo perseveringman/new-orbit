@@ -12,6 +12,7 @@ import type {
   DetectResult,
   ReattachResult,
   RunSummary,
+  SendAgentMessageResult,
   StartTaskArgs,
   StartTaskResult,
   TailQuery
@@ -261,6 +262,12 @@ export function registerAgentIpc(): void {
   ipcMain.handle(
     IPC.agent.startTask,
     async (_e, args: StartTaskArgs): Promise<StartTaskResult> => startTask(args)
+  );
+
+  ipcMain.handle(
+    IPC.agent.sendMessage,
+    async (_e, runId: string, message: string): Promise<SendAgentMessageResult> =>
+      sendAgentMessage(runId, message)
   );
 
   ipcMain.handle(IPC.agent.stop, async (_e, runId: string): Promise<void> => {
@@ -637,11 +644,13 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       taskId: task.id,
       title: task.title,
       vaultPath: sess.vault,
-      runtimeProvider: runtime?.provider ?? 'claude',
-      runtimeId: runtime?.runtimeId,
-      runtimeName: runtime?.name,
-      hookConfig: await getHookRuntimeConfig(),
-      extraEnv
+        runtimeProvider: runtime?.provider ?? 'claude',
+        runtimeId: runtime?.runtimeId,
+        runtimeName: runtime?.name,
+        vendorSessionId: args.vendorSessionId,
+        inputMode: args.vendorSessionId ? 'stream-json' : 'one-shot',
+        hookConfig: await getHookRuntimeConfig(),
+        extraEnv
     } as const;
     const opts = apiKey ? { ...spawnOpts, apiKey } : { ...spawnOpts };
     const runner = await getPool().spawn(opts);
@@ -691,6 +700,15 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
     }
     return { kind: 'error', code: 'spawn_failed', message: err.message };
   }
+}
+
+export function sendAgentMessage(runId: string, message: string): SendAgentMessageResult {
+  const runner = getPool().get(runId);
+  if (!runner) return { accepted: false, reason: 'run_not_found' };
+  if (runner.summary.status !== 'running') return { accepted: false, reason: 'not_running' };
+  return runner.sendMessage(message)
+    ? { accepted: true }
+    : { accepted: false, reason: 'stdin_unavailable' };
 }
 
 /**

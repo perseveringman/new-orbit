@@ -22,6 +22,7 @@ import { startTask } from '../agent/ipc';
 import {
   appendReleaseTurn,
   appendTurn,
+  getLatestVendorSessionId,
   getOrCreateConversation,
   recordRunCompletion,
   startSegment
@@ -298,10 +299,16 @@ export class DispatchService extends EventEmitter {
     const versions = await listRoleTemplateVersions(binding.templateId);
     const version = versions.find((entry) => entry.id === binding.templateVersionId);
     const instructions = [version?.instructions, binding.overlayInstructions].filter(Boolean).join('\n\n');
+    const conversation = task.uid ? await getOrCreateConversation(vaultPath, task) : null;
+    const vendorSessionId =
+      conversation && runtime.capabilities.supportsResume
+        ? getLatestVendorSessionId(conversation)
+        : undefined;
     const startResult = await startTask({
       taskId: task.id,
       instructions: instructions || undefined,
-      runtimeId: runtime.runtimeId
+      runtimeId: runtime.runtimeId,
+      vendorSessionId
     });
     if (startResult.kind !== 'ok') {
       await this.markDispatchFailure(task, binding, runtime, leaseId, startResult);
@@ -342,14 +349,14 @@ export class DispatchService extends EventEmitter {
     await updateTaskFrontmatter(task.filePath, { active_run_id: startResult.runId });
     await refreshTaskFileInSession(task.filePath);
     if (task.uid) {
-      await getOrCreateConversation(vaultPath, task);
       const segment = await startSegment(vaultPath, task.uid, {
         taskId: task.id,
         runId: startResult.runId,
         leaseId,
         bindingId: binding.id,
         trigger: 'dispatch',
-        status: 'running'
+        status: 'running',
+        ...(vendorSessionId ? { vendorSessionId } : {})
       });
       await appendTurn(vaultPath, task.uid, {
         role: 'system',

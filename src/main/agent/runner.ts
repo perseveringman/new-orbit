@@ -59,6 +59,8 @@ export interface SpawnOpts {
   idleTimeoutMs?: number;
   /** Input contract for the Claude subprocess. */
   inputMode?: 'one-shot' | 'stream-json';
+  /** Vendor-native session id used for resume-capable runtimes. */
+  vendorSessionId?: string;
   /**
    * Hydration resolver. Called when the subprocess emits
    * `@orbit:search <query>`. Should return a plain-text reply that will
@@ -98,7 +100,7 @@ export interface ReattachedRunSnapshot {
 }
 
 const MAX_EVENTS = 500;
-const DEFAULT_IDLE_MS = 10 * 60 * 1000;
+const DEFAULT_IDLE_MS = 15 * 60 * 1000;
 const ringStore = createRingBufferStore(LIMITS.AGENT_EVENT_RING_CAPACITY);
 
 // --- active pid bookkeeping (kill-reconcile) ---------------------------------
@@ -464,6 +466,9 @@ export class AgentRunner extends EventEmitter {
       'stream-json',
       '--verbose'
     ];
+    if (this.opts.vendorSessionId) {
+      args.push('--resume', this.opts.vendorSessionId);
+    }
     if (inputMode === 'stream-json') {
       args.push('--input-format', 'stream-json');
     }
@@ -648,12 +653,18 @@ export class AgentRunner extends EventEmitter {
     }
   }
 
-  private writeStdin(text: string): void {
-    if (!this.child?.stdin || this.child.stdin.destroyed) return;
+  sendMessage(text: string): boolean {
+    if (this.status !== 'running') return false;
+    return this.writeStdin(text);
+  }
+
+  private writeStdin(text: string): boolean {
+    if (!this.child?.stdin || this.child.stdin.destroyed) return false;
     const payload = `${JSON.stringify({ role: 'user', content: text })}\n`;
     try {
       this.child.stdin.write(payload);
       this.logRaw(`# orbit stdin -> ${payload}`);
+      return true;
     } catch (e) {
       this.push({
         idx: this.eventIdx++,
@@ -661,6 +672,7 @@ export class AgentRunner extends EventEmitter {
         kind: 'error',
         text: `stdin write failed: ${(e as Error).message}`
       });
+      return false;
     }
   }
 

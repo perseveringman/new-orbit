@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IPC, type OrbitApi } from '../src/shared/ipc';
-import { DEFAULT_BUDGET } from '../src/shared/schemas';
+import { DEFAULT_AUTO_RUNNER_SETTINGS, DEFAULT_BUDGET } from '../src/shared/schemas';
 
 describe('IPC contract', () => {
   it('exposes the required namespaces', () => {
@@ -67,6 +67,7 @@ describe('IPC contract', () => {
         'installInWorktree',
         'list',
         'reattach',
+        'sendMessage',
         'startTask',
         'stop',
         'tail'
@@ -153,12 +154,7 @@ describe('IPC contract', () => {
       claudePath: '',
       anthropicApiKey: '',
       vectorWakeThreshold: 0.2,
-      autoRunner: {
-        enabled: false,
-        maxConcurrent: 2,
-        hourlyTaskLimit: 10,
-        tickIntervalMs: 5000
-      },
+      autoRunner: { ...DEFAULT_AUTO_RUNNER_SETTINGS },
       worktreeGcEnabled: true,
       worktreeGcDays: 7
     };

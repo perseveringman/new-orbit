@@ -27,6 +27,7 @@ import type {
   DetectResult,
   ReattachResult,
   RunSummary,
+  SendAgentMessageResult,
   StartTaskArgs,
   StartTaskResult,
   TailQuery
@@ -239,6 +240,7 @@ export const IPC = {
   agent: {
     detect: 'agent:detect',
     startTask: 'agent:startTask',
+    sendMessage: 'agent:sendMessage',
     stop: 'agent:stop',
     list: 'agent:list',
     tail: 'agent:tail',
@@ -925,6 +927,7 @@ export interface OrbitApi {
   agent: {
     detect(): Promise<DetectResult>;
     startTask(args: StartTaskArgs): Promise<StartTaskResult>;
+    sendMessage(runId: string, message: string): Promise<SendAgentMessageResult>;
     stop(runId: string): Promise<void>;
     list(): Promise<RunSummary[]>;
     tail(runId: string, q?: TailQuery): Promise<AgentEvent[]>;
