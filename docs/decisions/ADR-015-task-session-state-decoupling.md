@@ -1,7 +1,7 @@
 ---
 id: ADR-015
 title: Task 状态机与 Agent 会话状态机解耦
-status: proposed
+status: accepted
 date: 2026-04-28
 related: ADR-006, ADR-007, ADR-012, ADR-014
 implementation: plans/2026-04-28-task-execution-lifecycle-realignment.md

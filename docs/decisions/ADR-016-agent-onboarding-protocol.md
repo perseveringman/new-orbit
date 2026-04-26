@@ -1,7 +1,7 @@
 ---
 id: ADR-016
 title: Agent 启动协议 — 先了解项目全貌再开工
-status: proposed
+status: accepted
 date: 2026-04-28
 related: ADR-008, ADR-011, ADR-015
 implementation: plans/2026-04-28-task-execution-lifecycle-realignment.md

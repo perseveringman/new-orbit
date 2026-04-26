@@ -216,6 +216,15 @@ export interface ConversationTurn {
   createdAt: string;
 }
 
+export type AgentSessionStatus =
+  | 'idle'
+  | 'launching'
+  | 'running'
+  | 'awaiting_user'
+  | 'completed'
+  | 'failed_retryable'
+  | 'failed_terminal';
+
 export interface RunSegment {
   id: string;
   taskId: string;
@@ -225,6 +234,7 @@ export interface RunSegment {
   vendorSessionId?: string;
   trigger: 'dispatch' | 'manual';
   status: 'running' | 'completed' | 'failed' | 'cancelled' | 'needs_attention';
+  sessionStatus?: AgentSessionStatus;
   summary?: string;
   startedAt: string;
   endedAt?: string;

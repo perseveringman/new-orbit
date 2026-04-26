@@ -13,6 +13,7 @@ import { buildReadySet } from './ready_set';
 import { AutoRunnerEventBridge } from './event_bridge';
 import { launchCapacity, schedulerDecision, startsInCurrentHour } from './scheduler';
 import { readAutoRunnerSettings, setAutoRunnerEnabled } from './settings';
+import { reduceTaskState } from '../task-state/reducer';
 
 export interface AutoRunnerActiveRun extends AutoRunnerRunDTO {
   projectPath?: string;
@@ -216,8 +217,16 @@ export class AutoRunnerDispatcher extends EventEmitter {
     let worktree: WorktreeRecord | null = null;
     try {
       worktree = await context.create({ taskId: task.id, name: task.uid ?? task.id });
+      const startTransition = reduceTaskState(
+        {
+          task,
+          activeRunSegment: { sessionStatus: 'idle' },
+          pendingDependencies: []
+        },
+        { source: 'dispatcher', kind: 'agent_session_started' }
+      );
       await this.updateTask(task, {
-        status: 'doing',
+        status: startTransition.newTaskStatus,
         owner_type: 'agent',
         owner_id: 'auto_runner',
         claimed_at: this.now().toISOString(),
@@ -272,12 +281,20 @@ export class AutoRunnerDispatcher extends EventEmitter {
   }
 
   private async markTaskBlocked(task: TaskRecord, message: string): Promise<void> {
+    const transition = reduceTaskState(
+      {
+        task,
+        activeRunSegment: { sessionStatus: 'idle' },
+        pendingDependencies: []
+      },
+      { source: 'dispatcher', kind: 'dispatcher_dispatch_failed' }
+    );
     await this.updateTask(task, {
-      status: 'blocked',
+      status: transition.newTaskStatus,
       owner_type: undefined,
       owner_id: undefined,
       active_run_id: undefined,
-      blocked_reason: message
+      agent_block_reason: message
     });
   }
 
@@ -291,11 +308,35 @@ export class AutoRunnerDispatcher extends EventEmitter {
     if (!task) return;
     const snapshot = this.pool.get(event.runId)?.snapshot();
     const failed = snapshot?.summary.status === 'error' || snapshot?.summary.status === 'killed';
+    const transition = failed
+      ? reduceTaskState(
+          {
+            task,
+            activeRunSegment: { sessionStatus: 'running' },
+            pendingDependencies: []
+          },
+          {
+            source: 'agent',
+            kind: 'agent_failed',
+            payload: { retryable: snapshot?.summary.status === 'killed' }
+          }
+        )
+      : reduceTaskState(
+          {
+            task,
+            activeRunSegment: { sessionStatus: 'running' },
+            pendingDependencies: []
+          },
+          { source: 'agent', kind: 'agent_completed', payload: { taskCompleted: task.status === 'done' } }
+        );
     await this.updateTask(task, {
       owner_type: undefined,
       owner_id: undefined,
       active_run_id: undefined,
-      ...(failed ? { status: 'blocked', blocked_reason: snapshot?.summary.reason ?? event.event.text } : {})
+      status: transition.newTaskStatus,
+      ...(failed
+        ? { agent_block_reason: snapshot?.summary.reason ?? event.event.text }
+        : { agent_block_reason: undefined })
     });
     if (failed) {
       await this.eventBridge.runFailed({

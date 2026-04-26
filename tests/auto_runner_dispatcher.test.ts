@@ -180,8 +180,8 @@ describe('AutoRunnerDispatcher', () => {
     expect(startTask).not.toHaveBeenCalled();
     expect(updates).toEqual([
       expect.objectContaining({
-        status: 'blocked',
-        blocked_reason: expect.stringContaining('Sandbox ExecutionContext')
+        status: 'todo',
+        agent_block_reason: expect.stringContaining('Sandbox ExecutionContext')
       })
     ]);
     expect(bridge.sandboxUnsupported).toHaveBeenCalledWith(

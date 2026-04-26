@@ -42,6 +42,7 @@ import { getLocalRuntimeManager } from './runtime';
 import { readJsonFile, vaultLeasesFile, vaultReportsFile, writeJsonFile } from './storage';
 import { classifyDispatchCompletion } from './dispatch_completion';
 import { OrchestrationEventBridge } from './event_bridge';
+import { reduceTaskState } from '../task-state/reducer';
 
 function summarizeEvents(events: AgentEvent[]): { summary: string; details: string[] } {
   const lines = events
@@ -288,8 +289,16 @@ export class DispatchService extends EventEmitter {
     if (!arePreConditionsMet(task, buildTaskGraph(allTasks).byUid)) return;
 
     const leaseId = `lease-${nanoid(10)}`;
+    const startTransition = reduceTaskState(
+      {
+        task: { id: task.id, status: normalizeTaskStatus(current.frontmatter['status']) ?? task.status },
+        activeRunSegment: { sessionStatus: 'idle' },
+        pendingDependencies: []
+      },
+      { source: 'dispatcher', kind: 'agent_session_started' }
+    );
     await updateTaskFrontmatter(task.filePath, {
-      status: 'doing',
+      status: startTransition.newTaskStatus,
       owner_type: 'binding',
       owner_id: binding.id,
       claimed_at: new Date().toISOString(),
@@ -357,6 +366,7 @@ export class DispatchService extends EventEmitter {
         bindingId: binding.id,
         trigger: 'dispatch',
         status: 'running',
+        sessionStatus: startTransition.newSessionStatus,
         ...(vendorSessionId ? { vendorSessionId } : {})
       });
       await appendTurn(vaultPath, task.uid, {
@@ -422,7 +432,8 @@ export class DispatchService extends EventEmitter {
         leaseId,
         bindingId: binding.id,
         trigger: 'dispatch',
-        status: 'failed'
+        status: 'failed',
+        sessionStatus: 'failed_terminal'
       });
       await appendTurn(vaultPath, task.uid, {
         role: 'system',

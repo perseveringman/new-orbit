@@ -10,6 +10,7 @@ describe('task conversation completion resolution', () => {
     });
 
     expect(result.status).toBe('needs_attention');
+    expect(result.sessionStatus).toBe('awaiting_user');
     expect(result.summary).toBe('Run exited before the task was marked done.');
   });
 
@@ -22,6 +23,7 @@ describe('task conversation completion resolution', () => {
     });
 
     expect(result.status).toBe('needs_attention');
+    expect(result.sessionStatus).toBe('awaiting_user');
     expect(result.summary).toBe('Need product confirmation for the rollout scope.');
   });
 
@@ -33,6 +35,7 @@ describe('task conversation completion resolution', () => {
     });
 
     expect(result.status).toBe('completed');
+    expect(result.sessionStatus).toBe('completed');
     expect(result.summary).toBe('Implemented the requested feature.');
   });
 });

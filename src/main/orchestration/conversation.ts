@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { nanoid } from 'nanoid';
 import type { AgentEvent } from '@shared/agent';
-import type { ConversationTurn, RunSegment, TaskConversation } from '@shared/orchestration';
+import type { AgentSessionStatus, ConversationTurn, RunSegment, TaskConversation } from '@shared/orchestration';
 import type { TaskRecord } from '@shared/schemas';
 import { currentSession } from '../fs';
 import { sendAgentMessage, startTask } from '../agent/ipc';
@@ -38,16 +38,25 @@ export function resolveConversationCompletion(args: {
   taskStatus: TaskStatus | null;
   blockedReason?: string;
   summary: string;
-}): { status: RunSegment['status']; summary: string } {
+}): { status: RunSegment['status']; sessionStatus: AgentSessionStatus; summary: string } {
   const summary = args.summary.trim();
   if (args.taskStatus === 'done') {
-    return { status: args.resultStatus, summary: summary || 'Task marked done.' };
+    return {
+      status: args.resultStatus,
+      sessionStatus: args.resultStatus === 'failed' ? 'failed_terminal' : 'completed',
+      summary: summary || 'Task marked done.'
+    };
   }
   if (args.resultStatus !== 'completed' && args.resultStatus !== 'needs_attention') {
-    return { status: args.resultStatus, summary: summary || defaultIncompleteSummary(args.taskStatus) };
+    return {
+      status: args.resultStatus,
+      sessionStatus: args.resultStatus === 'cancelled' ? 'failed_retryable' : 'failed_terminal',
+      summary: summary || defaultIncompleteSummary(args.taskStatus)
+    };
   }
   return {
     status: 'needs_attention',
+    sessionStatus: 'awaiting_user',
     summary:
       args.blockedReason ||
       (summary && summary !== 'exit 0' ? summary : defaultIncompleteSummary(args.taskStatus))
@@ -112,6 +121,7 @@ export async function startSegment(
 ): Promise<RunSegment> {
   const nextSegment: RunSegment = {
     ...segment,
+    sessionStatus: segment.sessionStatus ?? (segment.status === 'running' ? 'running' : 'idle'),
     id: nanoid(12),
     startedAt: new Date().toISOString()
   };
@@ -163,7 +173,10 @@ export function getLatestResumableSegment(
 export function resolveFollowupSegment(
   task: Pick<TaskRecord, 'id' | 'owner_type' | 'owner_id' | 'role_binding_id'>,
   conversation: Pick<TaskConversation, 'segments'>
-): Pick<RunSegment, 'taskId' | 'trigger' | 'status' | 'bindingId' | 'vendorSessionId' | 'runId'> {
+): Pick<
+  RunSegment,
+  'taskId' | 'trigger' | 'status' | 'sessionStatus' | 'bindingId' | 'vendorSessionId' | 'runId'
+> {
   const latestSegment = getLatestResumableSegment(conversation);
   const roleBindingId = task.role_binding_id?.trim() || undefined;
   const ownerBindingId =
@@ -179,6 +192,7 @@ export function resolveFollowupSegment(
     runId: '',
     trigger: bindingId ? 'dispatch' : 'manual',
     status: 'running',
+    sessionStatus: 'running',
     ...(bindingId ? { bindingId } : {}),
     ...(vendorSessionId ? { vendorSessionId } : {})
   };
@@ -188,7 +202,12 @@ export async function completeSegment(
   vaultPath: string,
   taskUid: string,
   segmentId: string,
-  result: { status: RunSegment['status']; summary?: string; vendorSessionId?: string }
+  result: {
+    status: RunSegment['status'];
+    sessionStatus?: AgentSessionStatus;
+    summary?: string;
+    vendorSessionId?: string;
+  }
 ): Promise<void> {
   const endedAt = new Date().toISOString();
   await updateConversation(vaultPath, taskUid, (conversation) => ({
@@ -198,6 +217,7 @@ export async function completeSegment(
         ? {
             ...segment,
             status: result.status,
+            sessionStatus: result.sessionStatus ?? segment.sessionStatus,
             summary: result.summary,
             ...(result.vendorSessionId ? { vendorSessionId: result.vendorSessionId } : {}),
             endedAt
@@ -310,8 +330,9 @@ export async function recordRunCompletion(
     segmentId: match.segment.id
   });
   await completeSegment(vaultPath, match.taskUid, match.segment.id, {
-    status: completion.status,
-    summary: completion.summary,
+      status: completion.status,
+      sessionStatus: completion.sessionStatus,
+      summary: completion.summary,
     vendorSessionId: extractVendorSessionIdFromAgentEvents(result.events)
   });
   await clearActiveRunId(match.taskId, runId);

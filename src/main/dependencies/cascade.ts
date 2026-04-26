@@ -6,6 +6,7 @@ import { updateTaskFrontmatter } from '../task';
 import type { TaskRecord } from '@shared/schemas';
 import { dependentTasksOf } from './graph';
 import * as frontmatter from '../frontmatter';
+import { reduceTaskState } from '../task-state/reducer';
 
 export type DependencyUnavailableReason = 'deleted' | 'archived';
 
@@ -50,10 +51,18 @@ export async function cascadeDependencyUnavailable(
   for (const task of affected) {
     if (!task.uid) continue;
     if (isNonRunningAffected(task)) {
+      const transition = reduceTaskState(
+        {
+          task,
+          activeRunSegment: null,
+          pendingDependencies: [input.dependencyUid]
+        },
+        { source: 'system', kind: 'dependency_blocked' }
+      );
       await updateTaskFrontmatter(
         task.filePath,
         {
-          status: 'blocked',
+          status: transition.newTaskStatus,
           blocked_reason: blockedReason(input.dependencyUid, input.reason)
         },
         input.refreshTask

@@ -71,6 +71,7 @@ import {
   listProjectTree as _listProjectTree,
   createDirectory as _createDirectory
 } from './project_fs';
+import { reduceTaskState } from './task-state/reducer';
 
 export interface VaultSession {
   vault: string;
@@ -1050,7 +1051,20 @@ async function updateTaskStatus(
     const abs = path.join(sess.vault, rel);
     assertInsideVault(sess.vault, abs);
     const content = await fs.readFile(abs, 'utf8');
-    const { content: next, changed } = frontmatter.update(content, { status });
+    const currentTask = sess.tasks.tasksOf(rel).find((t) => t.id === id);
+    const transition = reduceTaskState(
+      {
+        task: { id, status: currentTask?.status ?? status },
+        activeRunSegment: null,
+        pendingDependencies: []
+      },
+      { source: 'user', kind: 'user_set_status', payload: { status } }
+    );
+    const patch: Record<string, unknown> = { status: transition.newTaskStatus };
+    if (transition.sideEffects.some((effect) => effect.kind === 'clear_blocked_reason')) {
+      patch.blocked_reason = undefined;
+    }
+    const { content: next, changed } = frontmatter.update(content, patch);
     if (changed) {
       await atomicWriteFile(abs, next);
       sess.index.upsert(rel, next);
