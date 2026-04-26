@@ -6,6 +6,7 @@ import type { TaskRecord } from '@shared/schemas';
 import type { InboxEvent, InboxItem } from '@shared/inbox';
 import { WORKSPACE_DESTINATIONS, type WorkspaceDestination } from '../topbarModel';
 import { AreasNav } from './AreasNav';
+import { useInbox } from '../../store/inbox';
 
 function isQuickItemActive(view: WorkspaceView, it: WorkspaceDestination): boolean {
   if (view.kind !== it.view.kind) return false;
@@ -26,10 +27,10 @@ export function ProjectsNav(): JSX.Element {
   const setView = usePara((s) => s.setView);
   const { projects } = useWorkspace();
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
+  const initInbox = useInbox((state) => state.init);
+  const inboxPendingCount = useInbox((state) => state.counts.sidebarMessagesPending);
   const [countsByUid, setCountsByUid] = useState<Record<string, number>>({});
-  const [pendingInboxMessageIds, setPendingInboxMessageIds] = useState<Set<string>>(() => new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inboxRequestSeq = useRef(0);
 
   function openNewProject(): void {
     window.dispatchEvent(new CustomEvent('orbit:open-new-project'));
@@ -59,6 +60,10 @@ export function ProjectsNav(): JSX.Element {
   }, [projects]);
 
   useEffect(() => {
+    initInbox();
+  }, [initInbox]);
+
+  useEffect(() => {
     const off = window.orbit.fs.onEvent(() => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
@@ -70,27 +75,6 @@ export function ProjectsNav(): JSX.Element {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [projects]);
-
-  useEffect(() => {
-    async function refreshInboxCount(): Promise<void> {
-      const seq = ++inboxRequestSeq.current;
-      try {
-        const result = await window.orbit.inbox.list({ includeArchived: true });
-        if (seq === inboxRequestSeq.current) {
-          setPendingInboxMessageIds(pendingMessageIdsFromItems(result.items));
-        }
-      } catch {
-        if (seq === inboxRequestSeq.current) setPendingInboxMessageIds(new Set());
-      }
-    }
-
-    void refreshInboxCount();
-    const dispose = window.orbit.inbox.onEvent((event) => {
-      setPendingInboxMessageIds((current) => applyInboxBadgeEvent(current, event));
-      void refreshInboxCount();
-    });
-    return dispose;
-  }, []);
 
   function onClickProject(p: ProjectSummaryDTO): void {
     setActiveProjectUid(p.uid);
@@ -110,7 +94,7 @@ export function ProjectsNav(): JSX.Element {
               <WorkspaceQuickItem
                 destination={it}
                 active={active}
-                badgeCount={workspaceBadgeCount(it, pendingInboxMessageIds.size)}
+                badgeCount={workspaceBadgeCount(it, inboxPendingCount)}
                 onClick={() => setView(it.view)}
               />
             </li>

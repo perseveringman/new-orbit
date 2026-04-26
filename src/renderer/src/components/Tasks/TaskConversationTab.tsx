@@ -132,7 +132,7 @@ export function TaskConversationTimeline({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {loading && !conversation ? (
           <p className="text-sm text-neutral-500">Loading conversation…</p>

@@ -23,8 +23,8 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
   }
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-neutral-200 bg-white/70 dark:border-neutral-800 dark:bg-neutral-900/60">
-      <div className="flex-1 overflow-auto p-6">{renderItem(item)}</div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white/70 dark:border-neutral-800 dark:bg-neutral-900/60">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">{renderItem(item)}</div>
       {isActionable(item.status) && (
         <div className="flex items-center justify-end gap-2 border-t border-neutral-200 p-3 dark:border-neutral-800">
           {item.category === 'message' && item.subtype.startsWith('A') && (

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { InboxCountSummary, InboxItem } from '@shared/inbox';
-import { summarizeInboxCounts } from '@shared/inbox';
 import type { InboxCaptureTab, InboxPrimaryTab } from '@shared/inbox_renderer';
 import { InboxList } from './list/InboxList';
 import { StageView } from './stage/StageView';
+import { useInbox } from '../../store/inbox';
 
 interface InboxShellContentProps {
   items: InboxItem[];
@@ -21,35 +21,19 @@ interface InboxShellContentProps {
 }
 
 export function InboxShell(): JSX.Element {
-  const [items, setItems] = useState<InboxItem[]>([]);
-  const [counts, setCounts] = useState<InboxCountSummary>(() => summarizeInboxCounts([]));
+  const init = useInbox((state) => state.init);
+  const refresh = useInbox((state) => state.refresh);
+  const items = useInbox((state) => state.items);
+  const counts = useInbox((state) => state.counts);
+  const loading = useInbox((state) => state.loading);
+  const error = useInbox((state) => state.error);
   const [activePrimary, setActivePrimary] = useState<InboxPrimaryTab>('messages');
   const [activeCapture, setActiveCapture] = useState<InboxCaptureTab>('library');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function refresh(): Promise<void> {
-    if (typeof window === 'undefined') return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await window.orbit.inbox.list({ includeArchived: true });
-      setItems(result.items);
-      setCounts(result.counts);
-      setSelectedId((current) => current ?? firstVisibleId(result.items, activePrimary, activeCapture));
-    } catch (caught) {
-      setError((caught as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   useEffect(() => {
-    void refresh();
-    const dispose = window.orbit.inbox.onEvent(() => void refresh());
-    return dispose;
-  }, []);
+    init();
+  }, [init]);
 
   useEffect(() => {
     setSelectedId((current) => current ?? firstVisibleId(items, activePrimary, activeCapture));
