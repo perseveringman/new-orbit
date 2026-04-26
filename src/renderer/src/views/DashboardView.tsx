@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { ProjectSummaryDTO } from '@shared/ipc';
-import type { TaskRecord, TaskStatus } from '@shared/schemas';
-import type { AutoRunnerStatusDTO } from '@shared/auto_runner';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import type { ActivityEvent } from '@shared/activity';
+import type { DashboardSummary } from '@shared/dashboard';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
 import { VisionEditorModal } from '../components/Modals/VisionEditorModal';
 
-const STATUSES: TaskStatus[] = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'];
-
 const cardCls =
-  'rounded-lg border border-neutral-200 bg-white/70 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/60';
+  'rounded-2xl border border-neutral-200 bg-white/75 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/70';
+const subtleCls = 'text-xs text-neutral-500 dark:text-neutral-400';
 
 export function DashboardView(): JSX.Element {
   const vault = useWorkspace((s) => s.vault);
@@ -26,339 +25,497 @@ export function DashboardView(): JSX.Element {
   const toast = useFiles((s) => s.toast);
   const openPath = useFiles((s) => s.openPath);
   const [editVision, setEditVision] = useState(false);
-  const [journalExists, setJournalExists] = useState<string | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
   const [generatingReview, setGeneratingReview] = useState(false);
-  const [autoRunner, setAutoRunner] = useState<AutoRunnerStatusDTO | null>(null);
   const [autoRunnerBusy, setAutoRunnerBusy] = useState(false);
-  const [drilldown, setDrilldown] = useState<
-    { project: ProjectSummaryDTO; status: TaskStatus; rows: TaskRecord[] } | null
-  >(null);
+
+  const loadDashboard = useCallback(async () => {
+    if (!vault) return;
+    setLoadingSummary(true);
+    try {
+      setSummary(await window.orbit.dashboard.summary());
+    } catch (error) {
+      toast(`Dashboard refresh failed: ${(error as Error).message}`);
+    } finally {
+      setLoadingSummary(false);
+    }
+  }, [toast, vault]);
 
   useEffect(() => {
     void refreshVision();
     void refreshProjects();
-  }, [refreshVision, refreshProjects]);
+    void loadDashboard();
+  }, [loadDashboard, refreshVision, refreshProjects]);
 
-  useEffect(() => {
-    void window.orbit.autoRunner.status().then(setAutoRunner).catch(() => undefined);
-  }, []);
-
-  // today's journal link
   useEffect(() => {
     if (!vault) return;
-    const d = new Date();
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const rel = `02_Areas/Journal/${iso}.md`;
-    void (async () => {
-      const filePath = `${vault.path}/${rel}`;
-      const exists = await window.orbit.fs.exists(filePath);
-      setJournalExists(exists ? filePath : null);
-    })();
-  }, [vault]);
+    const refresh = (): void => {
+      void refreshProjects();
+      void loadDashboard();
+    };
+    const offFs = window.orbit.fs.onEvent(refresh);
+    const offInbox = window.orbit.inbox.onEvent(refresh);
+    const offEvents = window.orbit.events.onEvent(refresh);
+    const offAutoRunner = window.orbit.autoRunner.onEvent(refresh);
+    const offRuntime = window.orbit.runtime.onEvent(refresh);
+    return () => {
+      offFs();
+      offInbox();
+      offEvents();
+      offAutoRunner();
+      offRuntime();
+    };
+  }, [loadDashboard, refreshProjects, vault]);
 
   const paraCounts = useMemo(() => {
-    const active = projects.filter((p) => p.status !== 'archived').length;
+    const active = projects.filter((project) => project.status !== 'archived').length;
     const archived =
-      entities.filter((e) => e.type === 'archive').length +
-      projects.filter((p) => p.status === 'archived').length;
-    const resources = entities.filter((e) => e.type === 'resource').length;
+      entities.filter((entity) => entity.type === 'archive').length +
+      projects.filter((project) => project.status === 'archived').length;
+    const resources = entities.filter((entity) => entity.type === 'resource').length;
     return { active, areas: areas.length, resources, archived };
-  }, [projects, areas, entities]);
+  }, [areas.length, entities, projects]);
 
-  const matrix = useMemo(() => {
-    const active = projects.filter((p) => p.status !== 'archived' && !p.legacy);
-    const byUid = new Map<string, Record<TaskStatus, TaskRecord[]>>();
-    for (const p of active) {
-      byUid.set(p.uid, { backlog: [], waiting: [], todo: [], doing: [], blocked: [], done: [] });
-    }
-    for (const t of tasks) {
-      if (!t.project_uid) continue;
-      const bucket = byUid.get(t.project_uid);
-      if (!bucket) continue;
-      bucket[t.status].push(t);
-    }
-    return active.map((p) => ({
-      project: p,
-        buckets: byUid.get(p.uid) ?? {
-          backlog: [],
-          waiting: [],
-          todo: [],
-          doing: [],
-          blocked: [],
-          done: []
-      }
-    }));
-  }, [projects, tasks]);
+  const doingTasks = tasks.filter((task) => task.status === 'doing').length;
+  const blockedTasks = summary?.pending.blockedTasks ?? tasks.filter((task) => task.status === 'blocked').length;
+  const pendingTasks =
+    summary?.pending.pendingTasks ??
+    tasks.filter((task) => task.status === 'waiting' || task.status === 'todo').length;
 
   return (
-    <div className="flex h-full flex-col overflow-auto">
-      <header className="border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
-        <h1 className="text-lg font-semibold">Dashboard</h1>
-        <p className="text-xs text-neutral-500">
-          Vision, PARA health, and project activity at a glance.
-        </p>
+    <div className="flex h-full flex-col overflow-auto bg-neutral-50 dark:bg-neutral-950">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
+        <div>
+          <h1 className="text-xl font-semibold">Dashboard</h1>
+          <p className={subtleCls}>
+            Five-quadrant command center for pending work, agent execution, knowledge growth,
+            thinking trails, and system health.
+          </p>
+        </div>
+        <div className="rounded-full border border-neutral-200 px-3 py-1 text-xs text-neutral-500 dark:border-neutral-800">
+          {new Date().toLocaleDateString()} {loadingSummary ? '· refreshing' : ''}
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 p-6 lg:grid-cols-3">
-        {/* Vision card */}
-        <section className={cardCls + ' lg:col-span-2'}>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">North Star</h2>
-            <button
-              className="rounded border border-neutral-300 px-2 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-              onClick={() => setEditVision(true)}
-            >
-              Edit Vision
-            </button>
-          </div>
-          <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-neutral-700 dark:text-neutral-300">
-            {vision && vision.trim()
-              ? vision
-              : 'Your Vision.md is empty — click Edit Vision to set your North Star.'}
-          </pre>
-        </section>
-
-        {/* Today Journal */}
-        <section className={cardCls}>
-          <h2 className="mb-2 text-sm font-semibold">Today&apos;s Journal</h2>
-          {journalExists ? (
-            <button
-              className="text-xs text-sky-600 underline hover:text-sky-500"
-              onClick={() => void openPath(journalExists)}
-            >
-              Open journal entry
-            </button>
-          ) : (
-            <button
-              disabled={generatingReview}
-              className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-              onClick={async () => {
-                setGeneratingReview(true);
-                try {
-                  const r = await window.orbit.review.generate();
-                  setJournalExists(r.path);
-                  await openPath(r.path);
-                  toast(
-                    `Daily Review generated: ${r.recommendedTaskUids.length} recommended task(s)`
-                  );
-                } catch (e) {
-                  toast(`Daily Review failed: ${(e as Error).message}`);
-                } finally {
-                  setGeneratingReview(false);
-                }
-              }}
-            >
-              {generatingReview ? 'Generating…' : 'Generate Daily Review'}
-            </button>
-          )}
-        </section>
-
-        {/* PARA four cards */}
-        <section className="lg:col-span-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <ParaCard
-              label="Active Projects"
-              n={paraCounts.active}
-              onClick={() => setView({ kind: 'editor' })}
-            />
-            <ParaCard
-              label="Areas"
-              n={paraCounts.areas}
-              onClick={() => setView({ kind: 'area', areaUid: null })}
-            />
-            <ParaCard
-              label="Resources"
-              n={paraCounts.resources}
-              onClick={() => setView({ kind: 'editor' })}
-            />
-            <ParaCard
-              label="Archived"
-              n={paraCounts.archived}
-              onClick={() => setView({ kind: 'editor' })}
-            />
-          </div>
-          <div className="mt-3 flex justify-end">
-            <button
-              disabled={autoRunnerBusy}
-              onClick={async () => {
-                setAutoRunnerBusy(true);
-                try {
-                  const next = autoRunner?.enabled
-                    ? await window.orbit.autoRunner.stop()
-                    : await window.orbit.autoRunner.start();
-                  setAutoRunner(next);
-                  toast(next.enabled ? 'Auto-runner enabled' : 'Auto-runner paused');
-                } catch (e) {
-                  toast(`Auto-runner update failed: ${(e as Error).message}`);
-                } finally {
-                  setAutoRunnerBusy(false);
-                }
-              }}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-              title="Toggle 24x7 dependency-ready task execution"
-            >
-              {autoRunner?.enabled ? '⏸ Stop Auto-runner' : '▶ Start Auto-runner'}
-            </button>
-          </div>
-        </section>
-
-        {/* Matrix kanban */}
-        <section className={cardCls + ' lg:col-span-3'}>
-          <h2 className="mb-3 text-sm font-semibold">Project Matrix</h2>
-          {matrix.length === 0 ? (
-            <p className="text-xs text-neutral-500">
-              No active folder-based projects yet. Click + New Project in the top bar.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-xs">
-                <thead>
-                  <tr className="text-left text-neutral-500">
-                    <th className="py-1 pr-3">Project</th>
-                    {STATUSES.map((s) => (
-                      <th key={s} className="px-2 py-1 text-center uppercase tracking-wider">
-                        {s}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrix.map(({ project, buckets }) => (
-                    <tr
-                      key={project.uid}
-                      className="border-t border-neutral-200 dark:border-neutral-800"
-                    >
-                      <td className="py-1 pr-3 font-medium">
-                        <button
-                          className="hover:underline"
-                          onClick={() => {
-                            setActiveProjectUid(project.uid);
-                            setView({ kind: 'project', projectUid: project.uid });
-                          }}
-                          title={project.relPath}
-                        >
-                          {project.name}
-                        </button>
-                      </td>
-                      {STATUSES.map((s) => {
-                        const rows = buckets[s];
-                        return (
-                          <td key={s} className="px-2 py-1 text-center">
-                            <button
-                              className={
-                                'min-w-[28px] rounded px-1.5 py-0.5 tabular-nums ' +
-                                (rows.length > 0
-                                  ? 'bg-neutral-200 text-neutral-800 hover:bg-sky-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-sky-900'
-                                  : 'text-neutral-400')
-                              }
-                              disabled={rows.length === 0}
-                              onClick={() => setDrilldown({ project, status: s, rows })}
-                            >
-                              {rows.length}
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
-
-      {drilldown && (
-        <DrilldownPopover
-          title={`${drilldown.project.name} · ${drilldown.status} (${drilldown.rows.length})`}
-          rows={drilldown.rows}
-          onClose={() => setDrilldown(null)}
-          onPick={async (t) => {
-            setDrilldown(null);
-            try {
-              // Jump directly into the Project Room.
-              setActiveProjectUid(t.project_uid ?? null);
-              if (t.project_uid) {
-                setView({ kind: 'project', projectUid: t.project_uid });
-              } else {
-                await openPath(t.filePath);
-                setView({ kind: 'editor' });
+      <div className="grid grid-cols-1 gap-4 p-6 xl:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="grid gap-4">
+          <PendingActionsCard
+            inboxPending={summary?.pending.inboxPending ?? 0}
+            pendingTasks={pendingTasks}
+            blockedTasks={blockedTasks}
+            onInbox={() => setView({ kind: 'inbox' })}
+            onToday={() => setView({ kind: 'today' })}
+          />
+          <AgentStatusCard
+            doingTasks={summary?.agent.doingTasks ?? doingTasks}
+            activeRuns={summary?.agent.activeRuns ?? 0}
+            todayCostUsd={summary?.agent.todayCostUsd ?? 0}
+            onlineRuntimes={summary?.agent.onlineRuntimes ?? 0}
+            autoRunnerEnabled={summary?.agent.autoRunnerEnabled ?? false}
+            busy={autoRunnerBusy}
+            onToggleAutoRunner={async () => {
+              setAutoRunnerBusy(true);
+              try {
+                const next = summary?.agent.autoRunnerEnabled
+                  ? await window.orbit.autoRunner.stop()
+                  : await window.orbit.autoRunner.start();
+                toast(next.enabled ? 'Auto-runner enabled' : 'Auto-runner paused');
+                await loadDashboard();
+              } catch (error) {
+                toast(`Auto-runner update failed: ${(error as Error).message}`);
+              } finally {
+                setAutoRunnerBusy(false);
               }
-            } catch (e) {
-              toast((e as Error).message);
-            }
-          }}
-        />
-      )}
+            }}
+            onKanban={() => setView({ kind: 'kanban', projectUid: null })}
+          />
+        </div>
+
+        <main className="grid min-w-0 gap-4">
+          <KnowledgeGrowthCard
+            stats={summary?.knowledge ?? null}
+            fallbackCounts={paraCounts}
+            onProjects={() => setView({ kind: 'kanban', projectUid: null })}
+          />
+          <ThinkingTrailCard
+            vision={vision}
+            stats={summary?.thinking ?? null}
+            generatingReview={generatingReview}
+            onEditVision={() => setEditVision(true)}
+            onOpenReview={async () => {
+              const path = summary?.thinking.dailyReviewPath;
+              if (path) await openPath(path);
+            }}
+            onGenerateReview={async () => {
+              setGeneratingReview(true);
+              try {
+                const review = await window.orbit.review.generate();
+                await openPath(review.path);
+                toast(
+                  `Daily Review generated: ${review.recommendedTaskUids.length} recommended task(s)`
+                );
+                await loadDashboard();
+              } catch (error) {
+                toast(`Daily Review failed: ${(error as Error).message}`);
+              } finally {
+                setGeneratingReview(false);
+              }
+            }}
+          />
+          <SystemHealthCard
+            health={summary?.health ?? null}
+            onConsole={() => setView({ kind: 'developerConsole' })}
+            onRuntime={() => setView({ kind: 'runtimes' })}
+            onDirtyProject={(projectName) => {
+              const project = projects.find((item) => item.name === projectName);
+              if (!project) return;
+              setActiveProjectUid(project.uid);
+              setView({ kind: 'project', projectUid: project.uid });
+            }}
+          />
+        </main>
+      </div>
 
       <VisionEditorModal open={editVision} onClose={() => setEditVision(false)} />
     </div>
   );
 }
 
-function ParaCard({
+function PendingActionsCard({
+  inboxPending,
+  pendingTasks,
+  blockedTasks,
+  onInbox,
+  onToday
+}: {
+  inboxPending: number;
+  pendingTasks: number;
+  blockedTasks: number;
+  onInbox(): void;
+  onToday(): void;
+}): JSX.Element {
+  return (
+    <section className={cardCls}>
+      <CardHeading eyebrow="Quadrant 1" title="待我处理" />
+      <MetricLine label="Inbox pending" value={inboxPending} tone={inboxPending > 0 ? 'red' : 'neutral'} />
+      <MetricLine label="Ready / waiting tasks" value={pendingTasks} />
+      <MetricLine label="Blocked tasks" value={blockedTasks} tone={blockedTasks > 0 ? 'amber' : 'neutral'} />
+      <div className="mt-4 flex gap-2">
+        <SmallButton onClick={onInbox}>Go Inbox</SmallButton>
+        <SmallButton onClick={onToday}>Today</SmallButton>
+      </div>
+    </section>
+  );
+}
+
+function AgentStatusCard({
+  doingTasks,
+  activeRuns,
+  todayCostUsd,
+  onlineRuntimes,
+  autoRunnerEnabled,
+  busy,
+  onToggleAutoRunner,
+  onKanban
+}: {
+  doingTasks: number;
+  activeRuns: number;
+  todayCostUsd: number;
+  onlineRuntimes: number;
+  autoRunnerEnabled: boolean;
+  busy: boolean;
+  onToggleAutoRunner(): void;
+  onKanban(): void;
+}): JSX.Element {
+  return (
+    <section className={cardCls}>
+      <CardHeading eyebrow="Quadrant 2" title="Agent 进行中" />
+      <MetricLine label="Doing tasks" value={doingTasks} />
+      <MetricLine label="Active runs" value={activeRuns} tone={activeRuns > 0 ? 'blue' : 'neutral'} />
+      <MetricLine label="Runtime online" value={onlineRuntimes} />
+      <MetricLine label="Today cost" value={`$${todayCostUsd.toFixed(4)}`} />
+      <div className="mt-4 grid gap-2">
+        <SmallButton onClick={onToggleAutoRunner} disabled={busy}>
+          {autoRunnerEnabled ? 'Pause Auto-runner' : 'Start Auto-runner'}
+        </SmallButton>
+        <SmallButton onClick={onKanban}>Open Kanban</SmallButton>
+      </div>
+    </section>
+  );
+}
+
+function KnowledgeGrowthCard({
+  stats,
+  fallbackCounts,
+  onProjects
+}: {
+  stats: DashboardSummary['knowledge'] | null;
+  fallbackCounts: { active: number; areas: number; resources: number; archived: number };
+  onProjects(): void;
+}): JSX.Element {
+  return (
+    <section className={cardCls}>
+      <CardHeading eyebrow="Quadrant 3" title="知识增长" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <BigMetric label="Feed saved" value={stats?.feedSaved ?? 0} />
+        <BigMetric label="Library added" value={stats?.libraryAdded ?? fallbackCounts.resources} />
+        <BigMetric label="Thoughts" value={stats?.thoughtsCreated ?? 0} />
+        <BigMetric label="Promoted" value={(stats?.promotedToResource ?? 0) + (stats?.promotedToProject ?? 0)} />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+        <ParaPill label="Active Projects" value={stats?.activeProjects ?? fallbackCounts.active} />
+        <ParaPill label="Areas" value={fallbackCounts.areas} />
+        <ParaPill label="Resources" value={fallbackCounts.resources} />
+        <ParaPill label="Archived" value={stats?.archivedProjects ?? fallbackCounts.archived} />
+      </div>
+      <div className="mt-4">
+        <SmallButton onClick={onProjects}>Review project flow</SmallButton>
+      </div>
+    </section>
+  );
+}
+
+function ThinkingTrailCard({
+  vision,
+  stats,
+  generatingReview,
+  onEditVision,
+  onOpenReview,
+  onGenerateReview
+}: {
+  vision: string | null;
+  stats: DashboardSummary['thinking'] | null;
+  generatingReview: boolean;
+  onEditVision(): void;
+  onOpenReview(): void;
+  onGenerateReview(): void;
+}): JSX.Element {
+  return (
+    <section className={cardCls}>
+      <CardHeading eyebrow="Quadrant 4" title="思考轨迹" />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            {stats?.dailyReviewAvailable ? (
+              <SmallButton onClick={onOpenReview}>Open Daily Review</SmallButton>
+            ) : (
+              <SmallButton onClick={onGenerateReview} disabled={generatingReview}>
+                {generatingReview ? 'Generating…' : 'Generate Daily Review'}
+              </SmallButton>
+            )}
+            <SmallButton onClick={onEditVision}>Edit Vision</SmallButton>
+            <span className={subtleCls}>
+              Vision reviewed:{' '}
+              {stats?.visionDaysSinceReview === null || stats?.visionDaysSinceReview === undefined
+                ? 'unknown'
+                : `${stats.visionDaysSinceReview} day(s) ago`}
+            </span>
+          </div>
+          <pre className="mt-3 max-h-28 overflow-hidden whitespace-pre-wrap rounded-xl bg-neutral-100 p-3 font-mono text-[11px] leading-snug text-neutral-700 dark:bg-neutral-950 dark:text-neutral-300">
+            {vision && vision.trim()
+              ? vision
+              : 'Your Vision.md is empty — click Edit Vision to set your North Star.'}
+          </pre>
+          {stats?.recentThinkingTrails && stats.recentThinkingTrails.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {stats.recentThinkingTrails.map((trail) => (
+                <span
+                  key={trail}
+                  className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                >
+                  {trail}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <RecentActivityList events={stats?.recentActivities ?? []} />
+      </div>
+    </section>
+  );
+}
+
+function SystemHealthCard({
+  health,
+  onConsole,
+  onRuntime,
+  onDirtyProject
+}: {
+  health: DashboardSummary['health'] | null;
+  onConsole(): void;
+  onRuntime(): void;
+  onDirtyProject(projectName: string): void;
+}): JSX.Element {
+  return (
+    <section className={cardCls}>
+      <CardHeading eyebrow="Quadrant 5" title="系统健康" />
+      <div className="grid gap-3 md:grid-cols-4">
+        <HealthTile
+          label="Disk"
+          value={formatBytes(health?.disk.vaultSizeBytes ?? 0)}
+          detail={`.orbit ${formatBytes(health?.disk.orbitDataSizeBytes ?? 0)} · worktrees ${formatBytes(
+            health?.disk.worktreeSizeBytes ?? 0
+          )}`}
+        />
+        <HealthTile
+          label="Git"
+          value={`${health?.git.dirtyProjects.length ?? 0} dirty`}
+          detail="projects with uncommitted files"
+        />
+        <HealthTile
+          label="Runtime"
+          value={`${health?.runtimes.filter((runtime) => runtime.status === 'online').length ?? 0} online`}
+          detail={(health?.runtimes ?? [])
+            .slice(0, 3)
+            .map((runtime) => `${runtime.provider} ${runtime.status}`)
+            .join(' · ')}
+        />
+        <HealthTile
+          label="Budget"
+          value={`$${(health?.budget.todayUsd ?? 0).toFixed(4)}`}
+          detail={`month $${(health?.budget.monthUsd ?? 0).toFixed(2)} · task limit $${
+            health?.budget.defaultLimitPerTask ?? 20
+          }`}
+        />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <SmallButton onClick={onConsole}>Open Developer Console</SmallButton>
+        <SmallButton onClick={onRuntime}>Runtime details</SmallButton>
+        {(health?.git.dirtyProjects ?? []).slice(0, 3).map((project) => (
+          <SmallButton key={project.projectName} onClick={() => onDirtyProject(project.projectName)}>
+            {project.projectName}: {project.uncommittedFiles}
+          </SmallButton>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecentActivityList({ events }: { events: ActivityEvent[] }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-500">
+        Recent Activity
+      </div>
+      <ul className="mt-2 space-y-2">
+        {events.slice(0, 6).map((event) => (
+          <li key={event.id} className="text-xs">
+            <div className="flex items-center gap-2 text-neutral-500">
+              <span>{formatTime(event.at)}</span>
+              <span>{event.action}</span>
+            </div>
+            <div className="mt-0.5 line-clamp-2 text-neutral-700 dark:text-neutral-300">
+              {event.summary}
+            </div>
+          </li>
+        ))}
+        {events.length === 0 && <li className={subtleCls}>No recent activity yet.</li>}
+      </ul>
+    </div>
+  );
+}
+
+function CardHeading({ eyebrow, title }: { eyebrow: string; title: string }): JSX.Element {
+  return (
+    <div className="mb-3">
+      <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{eyebrow}</div>
+      <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">{title}</h2>
+    </div>
+  );
+}
+
+function MetricLine({
   label,
-  n,
-  onClick
+  value,
+  tone = 'neutral'
 }: {
   label: string;
-  n: number;
+  value: number | string;
+  tone?: 'neutral' | 'red' | 'amber' | 'blue';
+}): JSX.Element {
+  const toneCls =
+    tone === 'red'
+      ? 'text-red-600 dark:text-red-300'
+      : tone === 'amber'
+        ? 'text-amber-600 dark:text-amber-300'
+        : tone === 'blue'
+          ? 'text-blue-600 dark:text-blue-300'
+          : 'text-neutral-900 dark:text-neutral-50';
+  return (
+    <div className="flex items-center justify-between border-b border-neutral-100 py-2 text-sm last:border-b-0 dark:border-neutral-800">
+      <span className={subtleCls}>{label}</span>
+      <span className={`font-semibold tabular-nums ${toneCls}`}>{value}</span>
+    </div>
+  );
+}
+
+function BigMetric({ label, value }: { label: string; value: number }): JSX.Element {
+  return (
+    <div className="rounded-xl bg-neutral-100 p-3 dark:bg-neutral-950">
+      <div className={subtleCls}>{label}</div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function ParaPill({ label, value }: { label: string; value: number }): JSX.Element {
+  return (
+    <div className="rounded-full border border-neutral-200 px-3 py-2 dark:border-neutral-800">
+      <span className="text-neutral-500">{label}</span>
+      <span className="ml-2 font-semibold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function HealthTile({
+  label,
+  value,
+  detail
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}): JSX.Element {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-950">
+      <div className={subtleCls}>{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+      <div className="mt-1 min-h-8 text-xs text-neutral-500">{detail || '—'}</div>
+    </div>
+  );
+}
+
+function SmallButton({
+  children,
+  onClick,
+  disabled = false
+}: {
+  children: ReactNode;
   onClick(): void;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <button
+      type="button"
+      disabled={disabled}
       onClick={onClick}
-      className={cardCls + ' text-left transition hover:border-sky-500'}
+      className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
     >
-      <div className="text-[11px] uppercase tracking-wider text-neutral-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums">{n}</div>
+      {children}
     </button>
   );
 }
 
-function DrilldownPopover({
-  title,
-  rows,
-  onClose,
-  onPick
-}: {
-  title: string;
-  rows: TaskRecord[];
-  onClose(): void;
-  onPick(t: TaskRecord): void;
-}): JSX.Element {
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 pt-20"
-      onClick={onClose}
-    >
-      <div
-        className="w-[min(560px,92vw)] rounded-lg border border-neutral-200 bg-white p-4 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <button
-            className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
-            onClick={onClose}
-          >
-            ✕
-          </button>
-        </div>
-        <ul className="max-h-96 space-y-1 overflow-auto text-xs">
-          {rows.map((t) => (
-            <li key={t.id}>
-              <button
-                className="w-full truncate rounded px-2 py-1 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                onClick={() => onPick(t)}
-                title={t.relPath}
-              >
-                {t.title || t.relPath}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }

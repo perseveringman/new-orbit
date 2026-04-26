@@ -78,7 +78,7 @@ describe('DashboardView area count', () => {
   it('shows the number of real area directories instead of area-typed entity files', () => {
     const html = renderToStaticMarkup(createElement(DashboardView));
     expect(html).toContain('Areas');
-    expect(html).toContain('>1</div></button>');
-    expect(html).not.toContain('>6</div></button>');
+    expect(html).toContain('>Areas</span><span class="ml-2 font-semibold tabular-nums">1</span>');
+    expect(html).not.toContain('>Areas</span><span class="ml-2 font-semibold tabular-nums">6</span>');
   });
 });

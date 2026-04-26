@@ -10,6 +10,7 @@ describe('top bar model', () => {
       'Dashboard',
       'Runtimes',
       'Agents',
+      'Console',
       'GitHub',
       'Inbox',
       'Today',
