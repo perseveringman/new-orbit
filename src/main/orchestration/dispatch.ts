@@ -39,6 +39,7 @@ import { arePreConditionsMet, buildTaskGraph, materializeTaskGraph } from './tas
 import { getLocalRuntimeManager } from './runtime';
 import { readJsonFile, vaultLeasesFile, vaultReportsFile, writeJsonFile } from './storage';
 import { classifyDispatchCompletion } from './dispatch_completion';
+import { OrchestrationEventBridge } from './event_bridge';
 
 function summarizeEvents(events: AgentEvent[]): { summary: string; details: string[] } {
   const lines = events
@@ -78,6 +79,7 @@ export class DispatchService extends EventEmitter {
   private reports: ImplementationReport[] = [];
   private interval: NodeJS.Timeout | null = null;
   private poolListenerAttached = false;
+  private readonly eventBridge = new OrchestrationEventBridge();
 
   async attach(vaultPath: string): Promise<void> {
     this.vaultPath = vaultPath;
@@ -492,6 +494,15 @@ export class DispatchService extends EventEmitter {
       blocked_reason: completion.blockedReason
     });
     await refreshTaskFileInSession(task.filePath);
+    if (completion.leaseStatus === 'needs_attention') {
+      await this.eventBridge.dispatchNeedsAttention({
+        vaultPath: this.vaultPath,
+        task,
+        runId: event.runId,
+        summary: completion.blockedReason ?? timeline.summary,
+        failed: completion.segmentStatus === 'failed'
+      });
+    }
     if (lease.bindingId && task.project_uid) {
       await updateProjectRoleBinding(this.vaultPath, task.project_uid, lease.bindingId, {
         health: completion.bindingHealth
