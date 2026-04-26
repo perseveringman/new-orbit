@@ -1,5 +1,6 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import { promises as fs, createReadStream } from 'node:fs';
+import path from 'node:path';
 import crypto from 'node:crypto';
 import type { FsEvent } from '@shared/types';
 import { ORBIT_DIR, ORBIT_LOGS_DIR, ORBIT_COST_DIR, ORBIT_TRASH_DIR } from '@shared/constants';
@@ -45,16 +46,26 @@ export class VaultWatcher {
   }
 
   start(): void {
+    const vaultRoot = this.vault;
+    const ignoredDirSegments = new Set([
+      `${ORBIT_DIR}/${ORBIT_LOGS_DIR}`,
+      `${ORBIT_DIR}/${ORBIT_COST_DIR}`,
+      `${ORBIT_DIR}/${ORBIT_TRASH_DIR}`,
+      '.git',
+      'node_modules'
+    ]);
+    const ignoredFileRel = new Set([`${ORBIT_DIR}/cli-socket`]);
     this.watcher = chokidar.watch(this.vault, {
       ignoreInitial: true,
-      ignored: [
-        `**/${ORBIT_DIR}/${ORBIT_LOGS_DIR}/**`,
-        `**/${ORBIT_DIR}/${ORBIT_COST_DIR}/**`,
-        `**/${ORBIT_DIR}/${ORBIT_TRASH_DIR}/**`,
-        `**/${ORBIT_DIR}/cli-socket`,
-        '**/.git/**',
-        '**/node_modules/**'
-      ],
+      ignored: (p: string): boolean => {
+        const rel = toPosix(path.relative(vaultRoot, p));
+        if (!rel || rel.startsWith('..')) return false;
+        if (ignoredFileRel.has(rel)) return true;
+        for (const seg of ignoredDirSegments) {
+          if (rel === seg || rel.startsWith(`${seg}/`)) return true;
+        }
+        return false;
+      },
       persistent: true,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
     });
