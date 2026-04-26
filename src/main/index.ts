@@ -25,6 +25,7 @@ import { configureActivityEmitter } from './activity';
 import { registerActivityIpc } from './activity/ipc';
 import { configureEventReplay } from './events/bus';
 import { registerEventReplayIpc } from './events/ipc';
+import { registerDashboardIpc } from './dashboard/ipc';
 import { registerApprovalIpc } from './approval';
 import { registerInboxIpc } from './inbox';
 import { QUICK_CAPTURE_ACCELERATOR, broadcastQuickCaptureOpen, registerCaptureIpc } from './capture';
@@ -346,6 +347,7 @@ function registerIpc(): void {
   registerAreaIpc(() => currentVault?.path ?? null);
   registerActivityIpc(() => currentVault?.path ?? null);
   registerEventReplayIpc();
+  registerDashboardIpc(() => currentVault?.path ?? null);
   registerApprovalIpc(() => currentVault?.path ?? null);
   registerInboxIpc(() => currentVault?.path ?? null);
   registerCaptureIpc(() => currentVault?.path ?? null);

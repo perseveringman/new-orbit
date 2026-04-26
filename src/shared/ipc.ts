@@ -34,6 +34,14 @@ import type {
 } from './agent';
 import type { AutoRunnerStatusDTO } from './auto_runner';
 import type { ActivityEvent, ActivityQueryFilter } from './activity';
+import type {
+  DashboardAgentStats,
+  DashboardKnowledgeStats,
+  DashboardPendingStats,
+  DashboardSummary,
+  DashboardSystemHealth,
+  DashboardThinkingStats
+} from './dashboard';
 import type { TraceableEvent, TraceableEventFilter, TraceableEventQueryResult } from './events';
 import type {
   Proposal,
@@ -172,6 +180,14 @@ export const IPC = {
     refresh: 'runtime:refresh',
     get: 'runtime:get',
     event: 'runtime:event'
+  },
+  dashboard: {
+    summary: 'dashboard:summary',
+    pendingStats: 'dashboard:pendingStats',
+    agentStats: 'dashboard:agentStats',
+    knowledgeStats: 'dashboard:knowledgeStats',
+    thinkingStats: 'dashboard:thinkingStats',
+    systemHealth: 'dashboard:systemHealth'
   },
   planner: {
     listProposals: 'planner:listProposals',
@@ -828,6 +844,14 @@ export interface OrbitApi {
     refresh(): Promise<RuntimeRegistrySnapshot>;
     get(runtimeId: string): Promise<RuntimeDescriptor | null>;
     onEvent(cb: (ev: RuntimeEventDTO) => void): () => void;
+  };
+  dashboard: {
+    summary(): Promise<DashboardSummary>;
+    pendingStats(): Promise<DashboardPendingStats>;
+    agentStats(): Promise<DashboardAgentStats>;
+    knowledgeStats(): Promise<DashboardKnowledgeStats>;
+    thinkingStats(): Promise<DashboardThinkingStats>;
+    systemHealth(): Promise<DashboardSystemHealth>;
   };
   planner: {
     listProposals(projectUid: string): Promise<PlanProposal[]>;

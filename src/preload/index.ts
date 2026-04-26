@@ -52,6 +52,14 @@ import type {
 } from '@shared/github';
 import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
 import type { ActivityEvent, ActivityQueryFilter } from '@shared/activity';
+import type {
+  DashboardAgentStats,
+  DashboardKnowledgeStats,
+  DashboardPendingStats,
+  DashboardSummary,
+  DashboardSystemHealth,
+  DashboardThinkingStats
+} from '@shared/dashboard';
 import type { TraceableEvent, TraceableEventFilter } from '@shared/events';
 import type {
   Proposal,
@@ -183,6 +191,18 @@ const api: OrbitApi = {
       ipcRenderer.on(IPC.runtime.event, listener);
       return () => ipcRenderer.removeListener(IPC.runtime.event, listener);
     }
+  },
+  dashboard: {
+    summary: (): Promise<DashboardSummary> => ipcRenderer.invoke(IPC.dashboard.summary),
+    pendingStats: (): Promise<DashboardPendingStats> =>
+      ipcRenderer.invoke(IPC.dashboard.pendingStats),
+    agentStats: (): Promise<DashboardAgentStats> => ipcRenderer.invoke(IPC.dashboard.agentStats),
+    knowledgeStats: (): Promise<DashboardKnowledgeStats> =>
+      ipcRenderer.invoke(IPC.dashboard.knowledgeStats),
+    thinkingStats: (): Promise<DashboardThinkingStats> =>
+      ipcRenderer.invoke(IPC.dashboard.thinkingStats),
+    systemHealth: (): Promise<DashboardSystemHealth> =>
+      ipcRenderer.invoke(IPC.dashboard.systemHealth)
   },
   planner: {
     listProposals: (projectUid: string): Promise<PlanProposal[]> =>

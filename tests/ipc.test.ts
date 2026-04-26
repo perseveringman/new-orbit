@@ -13,6 +13,7 @@ describe('IPC contract', () => {
         'autoRunner',
         'capture',
         'conversation',
+        'dashboard',
         'dispatch',
         'distill',
         'env',
