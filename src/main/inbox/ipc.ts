@@ -4,6 +4,7 @@ import type { InboxCaptureInput, InboxDismissInput, InboxListFilter, InboxMessag
 import { createInboxServiceForVault } from './service';
 import { dismissInboxItemWithProposalSync, resolveInboxItemWithProposalSync } from './proposal_sync';
 import type { InboxEvent } from './types';
+import { publishTraceableEvent } from '../events/bus';
 
 export function registerInboxIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
@@ -38,6 +39,14 @@ export function registerInboxIpc(getVaultPath: () => string | null): void {
 }
 
 function broadcastInboxEvent(event: InboxEvent): void {
+  publishTraceableEvent({
+    source: 'inbox',
+    type: event.type,
+    traceId: event.item.context.task_uid ?? event.item.id,
+    taskUid: event.item.context.task_uid,
+    summary: event.item.title,
+    payload: event
+  });
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(IPC.inbox.event, event);

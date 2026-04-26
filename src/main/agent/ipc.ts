@@ -65,6 +65,7 @@ import { listProjects } from '../project';
 import { listAreas } from '../area';
 import { readTaskFile } from '../task';
 import { getLocalRuntimeManager } from '../orchestration/runtime';
+import { currentRunRecorder, publishTraceableEvent } from '../events/bus';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
 const TERMINAL_AGENT_EVENT_CHANNEL = IPC.terminalAgent.event;
@@ -77,6 +78,18 @@ const terminalHookInstalledVaults = new Set<string>();
 function broadcastPool(): void {
   const pool = getPool();
   pool.on('event', (ev: PoolEvent) => {
+    publishTraceableEvent({
+      source: 'agent',
+      type: ev.unifiedEvent.kind,
+      traceId: ev.unifiedEvent.traceId,
+      spanId: ev.unifiedEvent.spanId,
+      parentSpanId: ev.unifiedEvent.parentSpanId,
+      runId: ev.runId,
+      taskId: ev.unifiedEvent.taskId,
+      summary: ev.event.kind,
+      payload: ev.unifiedEvent
+    });
+    void recordRunReplayEvent(ev);
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send(AGENT_EVENT_CHANNEL, ev);
     }
@@ -84,8 +97,43 @@ function broadcastPool(): void {
 }
 
 function broadcastAgentEvent(runId: string, event: AgentEvent): void {
+  publishTraceableEvent({
+    source: 'agent',
+    type: event.kind,
+    traceId: runId,
+    runId,
+    summary: event.kind,
+    payload: event
+  });
+  void recordUiReplayEvent(runId, event);
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) w.webContents.send(AGENT_EVENT_CHANNEL, { runId, event });
+  }
+}
+
+async function recordRunReplayEvent(ev: PoolEvent): Promise<void> {
+  const recorder = currentRunRecorder();
+  if (!recorder) return;
+  try {
+    await recorder.startRecording(ev.runId);
+    await Promise.all([
+      recorder.recordRaw(ev.runId, ev.unifiedEvent.vendorEvent ?? ev.event),
+      recorder.recordAbstract(ev.runId, ev.unifiedEvent),
+      recorder.recordUi(ev.runId, ev)
+    ]);
+  } catch (error) {
+    console.error('[events] failed to record agent replay layers', { error, runId: ev.runId });
+  }
+}
+
+async function recordUiReplayEvent(runId: string, event: AgentEvent): Promise<void> {
+  const recorder = currentRunRecorder();
+  if (!recorder) return;
+  try {
+    await recorder.startRecording(runId);
+    await recorder.recordUi(runId, { runId, event });
+  } catch (error) {
+    console.error('[events] failed to record agent ui replay layer', { error, runId });
   }
 }
 
@@ -673,6 +721,7 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
     // the new run even before the CLI emits a cost event. Real cost events
     // will overwrite-append later via the event handler below.
     runner.on('exit', () => {
+      currentRunRecorder()?.stopRecording(runner.runId);
       if (args.worktreePath) {
         getPortAllocator().release(`worktree:${args.worktreePath}`);
       }

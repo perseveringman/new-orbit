@@ -52,6 +52,7 @@ import type {
 } from '@shared/github';
 import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
 import type { ActivityEvent, ActivityQueryFilter } from '@shared/activity';
+import type { TraceableEvent, TraceableEventFilter } from '@shared/events';
 import type {
   Proposal,
   ProposalListFilter,
@@ -356,6 +357,15 @@ const api: OrbitApi = {
   activity: {
     query: (filter?: ActivityQueryFilter): Promise<ActivityEvent[]> =>
       ipcRenderer.invoke(IPC.activity.query, filter)
+  },
+  events: {
+    query: (filter?: TraceableEventFilter) => ipcRenderer.invoke(IPC.events.query, filter),
+    gc: (maxFiles?: number) => ipcRenderer.invoke(IPC.events.gc, maxFiles),
+    onEvent: (cb: (event: TraceableEvent) => void) => {
+      const listener = (_: unknown, event: TraceableEvent): void => cb(event);
+      ipcRenderer.on(IPC.events.event, listener);
+      return () => ipcRenderer.removeListener(IPC.events.event, listener);
+    }
   },
   approval: {
     submit: (input: ProposalSubmitInput): Promise<Proposal> =>

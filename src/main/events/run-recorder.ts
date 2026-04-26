@@ -9,10 +9,25 @@ export interface RunRecordingPaths {
 
 export class RunRecorder {
   private readonly active = new Map<string, RunRecordingPaths>();
+  private readonly pending = new Map<string, Promise<RunRecordingPaths>>();
 
   constructor(private readonly baseDir: string) {}
 
   async startRecording(runId: string): Promise<RunRecordingPaths> {
+    const active = this.active.get(runId);
+    if (active) return active;
+    const pending = this.pending.get(runId);
+    if (pending) return pending;
+    const started = this.createRecording(runId);
+    this.pending.set(runId, started);
+    try {
+      return await started;
+    } finally {
+      this.pending.delete(runId);
+    }
+  }
+
+  private async createRecording(runId: string): Promise<RunRecordingPaths> {
     const dir = path.join(this.baseDir, runId);
     await fs.mkdir(dir, { recursive: true });
     const paths: RunRecordingPaths = {

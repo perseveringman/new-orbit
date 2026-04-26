@@ -34,6 +34,7 @@ import type {
 } from './agent';
 import type { AutoRunnerStatusDTO } from './auto_runner';
 import type { ActivityEvent, ActivityQueryFilter } from './activity';
+import type { TraceableEvent, TraceableEventFilter, TraceableEventQueryResult } from './events';
 import type {
   Proposal,
   ProposalListFilter,
@@ -262,6 +263,11 @@ export const IPC = {
   },
   activity: {
     query: 'activity:query'
+  },
+  events: {
+    query: 'events:query',
+    gc: 'events:gc',
+    event: 'events:event'
   },
   approval: {
     submit: 'approval:submit',
@@ -953,6 +959,11 @@ export interface OrbitApi {
   };
   activity: {
     query(filter?: ActivityQueryFilter): Promise<ActivityEvent[]>;
+  };
+  events: {
+    query(filter?: TraceableEventFilter): Promise<TraceableEventQueryResult>;
+    gc(maxFiles?: number): Promise<number>;
+    onEvent(cb: (event: TraceableEvent) => void): () => void;
   };
   approval: {
     submit(input: ProposalSubmitInput): Promise<Proposal>;

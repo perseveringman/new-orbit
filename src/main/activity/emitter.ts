@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ActivityEvent, ActivityEventInput } from './types';
 import { createActivityStore } from './store';
+import { publishTraceableEvent } from '../events/bus';
 
 export interface ActivityAppendStore {
   append(event: ActivityEvent): Promise<void>;
@@ -28,12 +29,14 @@ export class ActivityEmitter {
 
   emit(input: ActivityEventInput): ActivityEvent {
     const event = this.toEvent(input);
+    publishActivityTrace(event);
     void this.store.append(event).catch((error: unknown) => this.onError(error, event));
     return event;
   }
 
   async emitAndWait(input: ActivityEventInput): Promise<ActivityEvent> {
     const event = this.toEvent(input);
+    publishActivityTrace(event);
     try {
       await this.store.append(event);
     } catch (error) {
@@ -55,6 +58,19 @@ export class ActivityEmitter {
     if (input.payload !== undefined) event.payload = input.payload;
     return event;
   }
+}
+
+function publishActivityTrace(event: ActivityEvent): void {
+  publishTraceableEvent({
+    source: 'activity',
+    type: event.action,
+    traceId: event.context.run_id ?? event.context.task_uid ?? event.id,
+    spanId: event.id,
+    runId: event.context.run_id,
+    taskUid: event.context.task_uid,
+    summary: event.summary,
+    payload: event
+  });
 }
 
 let defaultEmitter: ActivityEmitter | null = null;

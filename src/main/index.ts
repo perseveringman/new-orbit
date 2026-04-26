@@ -23,6 +23,8 @@ import { registerR6Ipc, startDailyReviewScheduler } from './r6_ipc';
 import { ensureOrchestrationForVault, registerOrchestrationIpc, shutdownOrchestration } from './orchestration/ipc';
 import { configureActivityEmitter } from './activity';
 import { registerActivityIpc } from './activity/ipc';
+import { configureEventReplay } from './events/bus';
+import { registerEventReplayIpc } from './events/ipc';
 import { registerApprovalIpc } from './approval';
 import { registerInboxIpc } from './inbox';
 import { QUICK_CAPTURE_ACCELERATOR, broadcastQuickCaptureOpen, registerCaptureIpc } from './capture';
@@ -120,6 +122,7 @@ async function pickDirectory(mode: 'open' | 'create'): Promise<string | null> {
 
 async function attachVaultRuntime(vaultPath: string): Promise<void> {
   configureActivityEmitter(vaultPath);
+  configureEventReplay(vaultPath);
   terminal.setVaultRoot(vaultPath);
   await openFsSession(vaultPath);
   await startCliServerForVault(vaultPath);
@@ -253,6 +256,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.workspace.close, async () => {
     currentVault = null;
     configureActivityEmitter(null);
+    configureEventReplay(null);
     await terminal.killAll();
     terminal.setVaultRoot(null);
     await closeVectorStore();
@@ -341,6 +345,7 @@ function registerIpc(): void {
   registerOrchestrationIpc();
   registerAreaIpc(() => currentVault?.path ?? null);
   registerActivityIpc(() => currentVault?.path ?? null);
+  registerEventReplayIpc();
   registerApprovalIpc(() => currentVault?.path ?? null);
   registerInboxIpc(() => currentVault?.path ?? null);
   registerCaptureIpc(() => currentVault?.path ?? null);

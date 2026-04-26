@@ -17,6 +17,7 @@ describe('IPC contract', () => {
         'distill',
         'env',
         'envExt',
+        'events',
         'fs',
         'git',
         'github',
