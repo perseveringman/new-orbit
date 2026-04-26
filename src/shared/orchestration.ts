@@ -6,7 +6,14 @@ export type TaskOrigin = (typeof TASK_ORIGINS)[number];
 export const TASK_OWNER_TYPES = ['agent', 'binding', 'human'] as const;
 export type TaskOwnerType = (typeof TASK_OWNER_TYPES)[number];
 
-export const RUNTIME_PROVIDERS = ['claude', 'codex', 'gemini', 'opencode', 'custom'] as const;
+export const RUNTIME_PROVIDERS = [
+  'claude',
+  'codex',
+  'copilot',
+  'gemini',
+  'opencode',
+  'custom'
+] as const;
 export type RuntimeProvider = (typeof RUNTIME_PROVIDERS)[number];
 
 export const RUNTIME_STATUSES = ['online', 'offline', 'degraded'] as const;

@@ -105,6 +105,17 @@ async function probeRuntimes(): Promise<RuntimeDescriptor[]> {
       maxConcurrentRuns: 1
     },
     {
+      provider: 'copilot',
+      command: 'copilot',
+      capabilities: {
+        supportsResume: false,
+        supportsHooks: false,
+        supportsWorktree: true,
+        supportsBackgroundRuns: false
+      },
+      maxConcurrentRuns: 1
+    },
+    {
       provider: 'gemini',
       command: 'gemini',
       capabilities: {
