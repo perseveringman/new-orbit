@@ -1,0 +1,5 @@
+{"scenario_id":"scenario-06","kind":"thinking","text":"Planning Runtime fallback"}
+{"scenario_id":"scenario-06","kind":"error","text":"simulated recoverable error"}
+{"scenario_id":"scenario-06","kind":"fallback","text":"fallback runtime selected"}
+{"scenario_id":"scenario-06","kind":"message","text":"Scenario scenario-06 response"}
+{"scenario_id":"scenario-06","kind":"done","text":"done"}

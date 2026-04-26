@@ -1,0 +1,5 @@
+{"scenario_id":"scenario-03","kind":"thinking","text":"Planning Long output streaming"}
+{"scenario_id":"scenario-03","kind":"message","text":"Scenario scenario-03 response"}
+{"scenario_id":"scenario-03","kind":"message","text":"Scenario scenario-03 response"}
+{"scenario_id":"scenario-03","kind":"cost","text":"cost","cost_usd":0.01}
+{"scenario_id":"scenario-03","kind":"done","text":"done"}

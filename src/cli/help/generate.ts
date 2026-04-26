@@ -19,6 +19,8 @@ Available commands:
   auto-runner Auto-runner controls: status, start, stop
   agent       Agent run commands: list-runs, stop
   run         Agent self-reporting: request-merge, report-progress, emit-insight
+  dev:scenarios Agent Playground scenario runner
+  dev:golden  Agent Playground golden file verification
   feed        Feed capture commands (${CAPTURE_UNAVAILABLE})
   library     Library capture commands (${CAPTURE_UNAVAILABLE})
   thought     Thought capture commands (${CAPTURE_UNAVAILABLE})

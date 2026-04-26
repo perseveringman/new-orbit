@@ -1,0 +1,4 @@
+{"scenario_id":"scenario-08","kind":"thinking","text":"Planning Budget limit"}
+{"scenario_id":"scenario-08","kind":"cost","text":"cost","cost_usd":0.01}
+{"scenario_id":"scenario-08","kind":"budget_warning","text":"budget_warning"}
+{"scenario_id":"scenario-08","kind":"budget_stop","text":"budget limit reached"}

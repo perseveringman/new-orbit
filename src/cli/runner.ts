@@ -35,6 +35,8 @@ import {
   generateThoughtHelp,
   generateTopLevelHelp
 } from './help/generate';
+import { runDevGoldenCli } from './commands/dev-golden';
+import { runDevScenariosCli } from './commands/dev-scenarios';
 
 interface ParsedGlobalFlags {
   json: boolean;
@@ -887,6 +889,10 @@ export async function runCli(argv: string[], options: CliRunOptions = {}): Promi
     else if (command === 'auto-runner') output = await runAutoRunner(flags, options);
     else if (command === 'agent') output = await runAgent(flags, options);
     else if (command === 'run') output = await runRun(flags, options);
+    else if (command === 'dev:scenarios')
+      output = await runDevScenariosCli(flags.args.slice(1), options, flags.json);
+    else if (command === 'dev:golden')
+      output = await runDevGoldenCli(flags.args.slice(1), options, flags.json);
     else if (command === 'feed')
       output = await runUnavailableDomain(flags, command, generateFeedHelp);
     else if (command === 'library')

@@ -1,0 +1,4 @@
+{"scenario_id":"scenario-05","kind":"resume","text":"resumed existing vendor session"}
+{"scenario_id":"scenario-05","kind":"thinking","text":"Planning Resume existing session"}
+{"scenario_id":"scenario-05","kind":"message","text":"Scenario scenario-05 response"}
+{"scenario_id":"scenario-05","kind":"done","text":"done"}

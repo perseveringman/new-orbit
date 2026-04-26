@@ -1,0 +1,6 @@
+{"scenario_id":"scenario-09","kind":"thinking","text":"Planning Event replay trace"}
+{"scenario_id":"scenario-09","kind":"tool_use","text":"read_file"}
+{"scenario_id":"scenario-09","kind":"tool_result","text":"tool result ok"}
+{"scenario_id":"scenario-09","kind":"message","text":"Scenario scenario-09 response"}
+{"scenario_id":"scenario-09","kind":"replay_marker","text":"replay_marker"}
+{"scenario_id":"scenario-09","kind":"done","text":"done"}

@@ -1,0 +1,5 @@
+{"scenario_id":"scenario-02","kind":"thinking","text":"Planning Tool use"}
+{"scenario_id":"scenario-02","kind":"tool_use","text":"read_file"}
+{"scenario_id":"scenario-02","kind":"tool_result","text":"tool result ok"}
+{"scenario_id":"scenario-02","kind":"message","text":"Scenario scenario-02 response"}
+{"scenario_id":"scenario-02","kind":"done","text":"done"}
