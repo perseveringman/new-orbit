@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ChatView } from '../Chat/ChatView';
+import { ChatView } from '../chat/ChatView';
 import type {
   ChatAction,
   ChatHostCapabilities,
@@ -52,8 +52,9 @@ export function InboxChatHost({
   }, [conversationId]);
 
   async function handleAction(action: ChatAction): Promise<void> {
-    if (action.kind === 'send_message' && onSend) {
-      await onSend(action.payload.text);
+    if (action.kind === 'chat.send_message' && onSend) {
+      const payload = action.payload as { text: string };
+      await onSend(payload.text);
     }
   }
 

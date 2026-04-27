@@ -63,6 +63,12 @@ export interface SpawnOpts {
   /** Vendor-native session id used for resume-capable runtimes. */
   vendorSessionId?: string;
   /**
+   * Chat 解耦 P0：业务层（如 Ask-Anywhere）传入的对话 id。
+   * 用于在 PoolEvent → RuntimeEvent 翻译时正确路由 conversationId，
+   * 让 renderer 端的 ChatView 能按 conversationId 过滤事件。
+   */
+  conversationId?: string;
+  /**
    * Hydration resolver. Called when the subprocess emits
    * `@orbit:search <query>`. Should return a plain-text reply that will
    * be fed back into stdin.

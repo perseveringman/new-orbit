@@ -1,13 +1,13 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { RuntimeEvent } from '../src/shared/chat-protocol';
+import type { RuntimeEvent, RuntimeEventKind, RuntimeEventPayloadMap } from '../src/shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '../src/shared/chat-protocol';
-import { ChatView } from '../src/renderer/src/components/Chat/ChatView';
+import { ChatView } from '../src/renderer/src/components/chat/ChatView';
 
-function ev<K extends RuntimeEvent['kind']>(
+function ev<K extends RuntimeEventKind>(
   kind: K,
-  payload: Extract<RuntimeEvent, { kind: K }>['payload'],
+  payload: RuntimeEventPayloadMap[K],
   overrides: Partial<RuntimeEvent> = {}
 ): RuntimeEvent {
   return {

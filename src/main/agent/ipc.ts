@@ -93,8 +93,10 @@ function broadcastPool(): void {
       payload: ev.unifiedEvent
     });
     void recordRunReplayEvent(ev);
-    // Chat 解耦 M2：同步 RuntimeEvent 到 chat IPC 通道
-    const runtimeEvent = unifiedAgentEventToRuntimeEvent(ev.unifiedEvent);
+    // Chat 解耦 P0：通过 PoolEvent.conversationId 路由 RuntimeEvent
+    const runtimeEvent = unifiedAgentEventToRuntimeEvent(ev.unifiedEvent, {
+      ...(ev.conversationId ? { conversationId: ev.conversationId } : {})
+    });
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) {
         w.webContents.send(AGENT_EVENT_CHANNEL, ev);
@@ -315,10 +317,7 @@ export function registerAgentIpc(): void {
 
   ipcMain.handle(IPC.agent.detect, (): Promise<DetectResult> => detectClaude());
 
-  // Chat 解耦 M2：占位 handler，M5 起将路由到 ChatHost.dispatch()
-  ipcMain.handle(IPC.chat.action, async (): Promise<void> => {
-    /* no-op until M5 host adapters land */
-  });
+  // Chat 解耦 P0：chat:action handler 由 ask-anywhere/ipc.ts 注册（registerAskAnywhereChatIpc）。
 
   ipcMain.handle(
     IPC.agent.startTask,

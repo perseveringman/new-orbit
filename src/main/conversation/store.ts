@@ -105,13 +105,26 @@ export class ConversationStore {
 
   async updateRuntime(
     id: string,
-    patch: Pick<ConversationMeta, 'currentRunId' | 'runtimeHint' | 'vendorSessionId'>
+    patch: {
+      currentRunId?: string | null;
+      runtimeHint?: string | null;
+      vendorSessionId?: string | null;
+    }
   ): Promise<void> {
     const meta = await this.readMeta(id);
     if (!meta) return;
-    if (patch.currentRunId !== undefined) meta.currentRunId = patch.currentRunId;
-    if (patch.runtimeHint !== undefined) meta.runtimeHint = patch.runtimeHint;
-    if (patch.vendorSessionId !== undefined) meta.vendorSessionId = patch.vendorSessionId;
+    if (patch.currentRunId !== undefined) {
+      if (patch.currentRunId === null) delete meta.currentRunId;
+      else meta.currentRunId = patch.currentRunId;
+    }
+    if (patch.runtimeHint !== undefined) {
+      if (patch.runtimeHint === null) delete meta.runtimeHint;
+      else meta.runtimeHint = patch.runtimeHint;
+    }
+    if (patch.vendorSessionId !== undefined) {
+      if (patch.vendorSessionId === null) delete meta.vendorSessionId;
+      else meta.vendorSessionId = patch.vendorSessionId;
+    }
     meta.updatedAt = new Date().toISOString();
     await this.writeMeta(meta);
   }

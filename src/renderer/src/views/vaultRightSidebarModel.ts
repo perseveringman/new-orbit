@@ -4,6 +4,7 @@ export type VaultViewKind =
   | 'developerConsole'
   | 'github'
   | 'inbox'
+  | 'askAnywhere'
   | 'today'
   | 'dashboard'
   | 'journals'
@@ -21,6 +22,7 @@ export type SidebarSurfaceId =
   | 'developerConsole'
   | 'github'
   | 'inbox'
+  | 'askAnywhere'
   | 'today'
   | 'dashboard'
   | 'journals'
@@ -94,6 +96,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   },
   inbox: {
     intents: [{ id: 'focus', title: 'Focus', panels: ['task-detail'] }]
+  },
+  askAnywhere: {
+    intents: [{ id: 'focus', title: 'Focus', panels: ['inspector'] }]
   },
   today: {
     intents: [{ id: 'focus', title: 'Focus', panels: ['task-detail'] }]

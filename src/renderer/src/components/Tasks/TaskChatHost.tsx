@@ -16,7 +16,7 @@ import { useEffect, useMemo } from 'react';
 import type { TaskRecord } from '@shared/schemas';
 import type { RuntimeDescriptor } from '@shared/orchestration';
 import { useState } from 'react';
-import { ChatView } from '../Chat/ChatView';
+import { ChatView } from '../chat/ChatView';
 import type { ChatAction, ChatHostCapabilities } from '@shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '@shared/chat-protocol';
 import { useTaskConversation } from '../../store/taskConversation';
@@ -86,9 +86,10 @@ export function TaskChatHost({ task }: TaskChatHostProps): JSX.Element {
   }
 
   async function onAction(action: ChatAction): Promise<void> {
-    if (action.kind === 'send_message') {
-      await send(task.id, action.payload.text);
-    } else if (action.kind === 'stop') {
+    if (action.kind === 'chat.send_message') {
+      const payload = action.payload as { text: string };
+      await send(task.id, payload.text);
+    } else if (action.kind === 'chat.stop') {
       const seg = runningSegments[0];
       if (seg?.runId) await window.orbit.agent.stop(seg.runId).catch(() => undefined);
     }

@@ -69,7 +69,11 @@ export class ConversationOrchestrator {
 
   async bindRuntime(
     conversationId: string,
-    patch: { currentRunId?: string; runtimeHint?: string; vendorSessionId?: string }
+    patch: {
+      currentRunId?: string | null;
+      runtimeHint?: string | null;
+      vendorSessionId?: string | null;
+    }
   ): Promise<void> {
     await this.store.updateRuntime(conversationId, patch);
   }
