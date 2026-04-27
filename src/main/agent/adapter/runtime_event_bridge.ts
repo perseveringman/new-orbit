@@ -58,7 +58,11 @@ function mapPayload(
 ): RuntimeEventPayloadMap[RuntimeEventKind] {
   switch (kind) {
     case 'runtime.message':
-      return { text: event.text ?? '' } satisfies RuntimeEventPayloadMap['runtime.message'];
+      return {
+        text: event.text ?? '',
+        isStreaming: false,
+        isFinal: true
+      } satisfies RuntimeEventPayloadMap['runtime.message'];
     case 'runtime.thinking':
       return { text: event.text ?? '' } satisfies RuntimeEventPayloadMap['runtime.thinking'];
     case 'runtime.tool_use':

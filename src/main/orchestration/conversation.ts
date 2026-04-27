@@ -13,6 +13,7 @@ import { extractVendorSessionIdFromAgentEvents } from '../agent/adapter/compat';
 import { OrchestrationEventBridge } from './event_bridge';
 import { createInboxServiceForVault } from '../inbox/service';
 import { broadcastInboxEvent } from '../inbox/events';
+import { ConversationOrchestrator } from '../conversation/orchestrator';
 
 type NewTurn = Omit<ConversationTurn, 'id' | 'createdAt'>;
 type NewSegment = Omit<RunSegment, 'id' | 'startedAt'>;
@@ -104,6 +105,20 @@ export async function getOrCreateConversation(
     updatedAt: now
   };
   await writeJsonFile(taskConversationFile(vaultPath, task.uid), created);
+  // 双写新 ConversationStore（D-5 P1.1）：以 anchor:task,refId:taskUid 为唯一性凭据。
+  try {
+    const orch = new ConversationOrchestrator(vaultPath);
+    const matched = await orch.findByAnchor('task', task.uid);
+    if (matched.length === 0) {
+      await orch.createConversation({
+        anchor: { kind: 'task', refId: task.uid, addedAt: now },
+        runtimeHint: 'claude',
+        title: `Task ${task.id}`
+      });
+    }
+  } catch (err) {
+    console.warn('[conversation-bridge] task createConversation failed', err);
+  }
   return created;
 }
 
@@ -127,6 +142,22 @@ export async function appendTurn(
     };
   });
   conversationEvents.emit('turn', { taskId, turn: nextTurn });
+  // 双写新 ConversationStore（D-5 P1.1）。
+  try {
+    const orch = new ConversationOrchestrator(vaultPath);
+    const matched = await orch.findByAnchor('task', taskUid);
+    const role: 'user' | 'assistant' | 'system' =
+      turn.role === 'user' || turn.role === 'assistant' ? turn.role : 'system';
+    if (matched.length > 0 && matched[0]) {
+      await orch.appendTurn({
+        conversationId: matched[0].id,
+        role,
+        content: turn.content
+      });
+    }
+  } catch (err) {
+    console.warn('[conversation-bridge] task appendTurn failed', err);
+  }
   return nextTurn;
 }
 

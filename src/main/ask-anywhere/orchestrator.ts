@@ -13,6 +13,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { BrowserWindow } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { Conversation, ConversationAnchor, ConversationMeta } from '@shared/conversation';
@@ -80,6 +82,45 @@ export class AskAnywhereOrchestrator {
   }
 
   /**
+   * Channel ingest stub（D-7 P5）：未来 SMS / IM / 邮件等外部入口的统一接入点。
+   *
+   * 当前行为：
+   *   - 找到/创建 anchor=channel_thread,refId=`${source}:${threadId}` 的 Conversation
+   *   - 把外部消息写为 user turn
+   *   - 暂不自动调度 LLM（等接入策略明确再开）
+   */
+  async ingestExternalMessage(input: {
+    source: string;
+    threadId: string;
+    text: string;
+    title?: string;
+  }): Promise<{ conversationId: string }> {
+    const refId = `${input.source}:${input.threadId}`;
+    const matched = await this.deps.conversations.findByAnchor('channel_thread', refId);
+    let conversationId: string;
+    if (matched.length > 0 && matched[0]) {
+      conversationId = matched[0].id;
+    } else {
+      const created = await this.deps.conversations.createConversation({
+        title: input.title ?? `Channel · ${input.source}`,
+        anchor: {
+          kind: 'channel_thread',
+          refId,
+          addedAt: new Date().toISOString()
+        },
+        runtimeHint: 'claude'
+      });
+      conversationId = created.id;
+    }
+    await this.deps.conversations.appendTurn({
+      conversationId,
+      role: 'user',
+      content: input.text
+    });
+    return { conversationId };
+  }
+
+  /**
    * 用户在 Ask-Anywhere 里发消息：
    *  1) 校验会话 + 并发
    *  2) 取历史 turns 构造 prompt
@@ -118,7 +159,8 @@ export class AskAnywhereOrchestrator {
 
     // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
     const history = renderHistory(conv.turns);
-    const prompt = buildPrompt({ history, userText: trimmed });
+    const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
+    const prompt = buildPrompt({ systemPrompt, history, userText: trimmed });
 
     // append user turn（必须在 spawn 前，让 UI 即便 reload 也能看到）
     await this.deps.conversations.appendTurn({
@@ -249,10 +291,33 @@ function renderHistory(turns: Conversation['turns']): string {
     .join('\n\n');
 }
 
-function buildPrompt({ history, userText }: { history: string; userText: string }): string {
-  const parts = [ASK_ANYWHERE_SYSTEM_PROMPT.trim()];
+function buildPrompt({
+  systemPrompt,
+  history,
+  userText
+}: {
+  systemPrompt: string;
+  history: string;
+  userText: string;
+}): string {
+  const parts = [systemPrompt.trim()];
   if (history) parts.push(`<conversation_history>\n${history}\n</conversation_history>`);
   parts.push(`User: ${userText}`);
   parts.push('Assistant:');
   return parts.join('\n\n');
+}
+
+/**
+ * 优先读取 vault 内 `.orbit/skills/ask-anywhere-planning.md`，
+ * 失败则回退到内置 ASK_ANYWHERE_SYSTEM_PROMPT（D-7 P4.1 skill 化）。
+ */
+async function loadAskAnywhereSystemPrompt(vaultPath: string): Promise<string> {
+  const skillFile = path.join(vaultPath, '.orbit', 'skills', 'ask-anywhere-planning.md');
+  try {
+    const raw = await fs.readFile(skillFile, 'utf8');
+    if (raw.trim().length > 0) return raw;
+  } catch {
+    /* fallback to default */
+  }
+  return ASK_ANYWHERE_SYSTEM_PROMPT;
 }

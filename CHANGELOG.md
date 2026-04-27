@@ -6,6 +6,13 @@
 
 ### Added
 
+- **Chat 解耦重构 P1-P5 落地差距收尾**：
+  - **P1 Conversation 一等公民**：TaskOrchestrator 在 `getOrCreateConversation` / `appendTurn` 同时双写到新 ConversationStore（anchor:task）；启动时一次性迁移旧 `.orbit/orchestration/conversations/<taskUid>.json` 到新格式（幂等）；新增 Conversations 中心视图（左侧统一对话列表 + 右侧只读 ChatView 历史回放），Sidebar 增加「Conversations」入口。
+  - **P3 AppBus 闭环**：ConversationOrchestrator 在 `createConversation` / `appendTurn` / `addAnchor` / `endConversation` 上发布 TraceableEvent（`conversation.started/turn.added/anchor.added/ended`），`TRACEABLE_EVENT_SOURCES` 增加 `'conversation'`。
+  - **P4 Planner 退役**：Ask-Anywhere system prompt 优先读取 vault 内 `.orbit/skills/ask-anywhere-planning.md`，找不到时回退到内置默认。
+  - **P5 Channel ingest stub**：`AskAnywhereOrchestrator.ingestExternalMessage({source, threadId, text})` 提供未来 SMS/IM/邮件等外部入口的统一接入点（创建/复用 anchor=channel_thread Conversation 并写 user turn）。
+- **Chat 解耦重构 P0 Ask-Anywhere 真实 runtime 调度**（前序提交）。
+- **Chat 解耦重构 Wave A UI 完整性**（前序提交）：ChatView 渲染 `runtime.awaiting_user / interrupt / cost / done`、ToolCard 接 Approve/Reject、MessageBubble 流式光标、HelpRequestRenderer 切到 InboxChatHost。
 - **Chat 解耦重构 M7 Planner 退役 banner**：在 `ProjectPlannerView` 顶部加入弃用提示条，引导用户跳转到新版 Ask Anywhere；现有 Planner 仍可使用作为兼容兜底。
 - **Chat 解耦重构 M6 Ask Anywhere 骨架**：新增 `src/main/ask-anywhere/orchestrator.ts`（封装 ConversationOrchestrator，使用 `ask_anywhere_session` 锚点）、`src/renderer/src/views/AskAnywhereView.tsx`（左栏会话列表 + 右侧 ChatView），在 `WorkspaceSidebar` 加入「Ask Anywhere」入口、`para.ts` 增加 `askAnywhere` view kind、`VaultView` 路由。
 - **Chat 解耦重构 M5 Host 适配层**：新增 `TaskChatHost`（Task 维度 host：拉取/订阅 TaskConversation，把旧 AgentEvent 流通过 `agentEventToRuntime` 翻译为 RuntimeEvent[]，渲染 ChatView）；`InboxChatHost` 骨架（消费 chat IPC + onRuntimeEvent）；`AskAnywhereChatHost` 由 AskAnywhereView 直接合并实现。`TaskDetailsHost` 切换为 `TaskChatHost` 替换原内嵌 `TaskConversationTab`，旧组件保留作为回滚点。

@@ -26,6 +26,11 @@ export interface ChatProps {
   welcomeMessage?: string;
   actionBarItems?: ActionBarItem[];
 
+  /** Host 自定义顶栏（M5/P2.3 visual parity）：渲染在 ActionBar 之上。 */
+  headerSlot?: import('react').ReactNode;
+  /** Host 自定义事件流上方的内容（M5/P2.3 visual parity）。 */
+  beforeEventsSlot?: import('react').ReactNode;
+
   theme?: 'light' | 'dark' | 'system';
 }
 

@@ -9,6 +9,7 @@ export type WorkspaceView =
   | { kind: 'developerConsole' }
   | { kind: 'inbox' }
   | { kind: 'askAnywhere' }
+  | { kind: 'conversations' }
   | { kind: 'today' }
   | { kind: 'journals' }
   | { kind: 'runtimes' }

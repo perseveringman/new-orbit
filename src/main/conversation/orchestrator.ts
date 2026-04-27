@@ -20,6 +20,7 @@ import type {
   ConversationTurnRole
 } from '@shared/conversation';
 import { ConversationStore } from './store';
+import { publishTraceableEvent } from '../events/bus';
 
 export interface AppendTurnInput {
   conversationId: string;
@@ -43,12 +44,19 @@ export class ConversationOrchestrator {
 
   async createConversation(input: CreateConversationInput): Promise<Conversation> {
     const id = randomUUID();
-    return this.store.create({
+    const conv = await this.store.create({
       id,
       anchors: [input.anchor],
       ...(input.runtimeHint ? { runtimeHint: input.runtimeHint } : {}),
       ...(input.title ? { title: input.title } : {})
     });
+    publishTraceableEvent({
+      source: 'conversation',
+      kind: 'conversation.started',
+      conversationId: id,
+      payload: { anchors: conv.anchors, title: conv.title, runtimeHint: conv.runtimeHint }
+    });
+    return conv;
   }
 
   async appendTurn(input: AppendTurnInput): Promise<ConversationTurn> {
@@ -60,11 +68,23 @@ export class ConversationOrchestrator {
       ...(input.runtimeEventIds ? { runtimeEventIds: input.runtimeEventIds } : {})
     };
     await this.store.appendTurn(input.conversationId, turn);
+    publishTraceableEvent({
+      source: 'conversation',
+      kind: 'conversation.turn.added',
+      conversationId: input.conversationId,
+      payload: { turn }
+    });
     return turn;
   }
 
   async addAnchor(conversationId: string, anchor: ConversationAnchor): Promise<void> {
     await this.store.addAnchor(conversationId, anchor);
+    publishTraceableEvent({
+      source: 'conversation',
+      kind: 'conversation.anchor.added',
+      conversationId,
+      payload: { anchor }
+    });
   }
 
   async bindRuntime(
@@ -80,6 +100,11 @@ export class ConversationOrchestrator {
 
   async endConversation(conversationId: string): Promise<void> {
     await this.store.updateStatus(conversationId, 'ended');
+    publishTraceableEvent({
+      source: 'conversation',
+      kind: 'conversation.ended',
+      conversationId
+    });
   }
 
   async getConversation(conversationId: string): Promise<Conversation | null> {
