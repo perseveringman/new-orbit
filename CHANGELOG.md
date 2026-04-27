@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Chat 解耦重构 M2 RuntimeEvent 协议**：新增 `src/shared/chat-protocol/`（`events.ts` 17 个 RuntimeEventKind、`actions.ts` 9 个 ChatActionKind、`host.ts` ChatHost 接口）、`src/main/agent/adapter/runtime_event_bridge.ts`（UnifiedAgentEvent → RuntimeEvent 翻译层）；新增 `IPC.chat.{runtimeEvent, action}` 通道；`broadcastPool` 在原有 agent:event 之外同步推送 RuntimeEvent；preload 暴露 `chat.onRuntimeEvent` / `chat.sendAction`。adapter 层暂保留 UnifiedAgentEvent 内部表示，仅在 IPC 边界翻译。
 - **Chat 解耦重构 M1 基础设施升级**：新增 `src/shared/events/kinds.ts`（27 个 TraceableEventKind 枚举）、`src/shared/events/payloads.ts`（按 kind 强类型 payload 映射），并升级 `src/shared/events.ts` 与 `src/main/events/bus.ts`，使 `publishTraceableEvent` 支持 `kind` 入参且自动与 `type` 双向镜像，旧 publisher 行为零变化。
 - **Orbit Phase 3.6 文档与收尾**：将 Phase 3 plans 标记为 completed，更新 `docs/architecture.md` 与 `docs/ROADMAP.md` 为 Phase 3 现状，并在 `docs/CHANGELOG.v2-implementation.md` 增补 Phase 3 偏离、权衡与后续观察项。
 - **Orbit Phase 3.5 Global Dashboard**：新增 Dashboard 聚合 IPC 与五象限工作台，覆盖待处理事项、Agent 进行中、知识增长、思考轨迹和系统健康，并接入 Activity、Inbox、Runtime、Budget、Git dirty、磁盘用量与 Developer Console 跳转。

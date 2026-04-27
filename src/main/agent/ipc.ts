@@ -66,6 +66,7 @@ import { listAreas } from '../area';
 import { readTaskFile } from '../task';
 import { getLocalRuntimeManager } from '../orchestration/runtime';
 import { currentRunRecorder, publishTraceableEvent } from '../events/bus';
+import { unifiedAgentEventToRuntimeEvent } from './adapter/runtime_event_bridge';
 import { buildAgentOnboardingPrompt } from './onboarding';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
@@ -81,6 +82,7 @@ function broadcastPool(): void {
   pool.on('event', (ev: PoolEvent) => {
     publishTraceableEvent({
       source: 'agent',
+      kind: 'agent.run.event',
       type: ev.unifiedEvent.kind,
       traceId: ev.unifiedEvent.traceId,
       spanId: ev.unifiedEvent.spanId,
@@ -91,8 +93,13 @@ function broadcastPool(): void {
       payload: ev.unifiedEvent
     });
     void recordRunReplayEvent(ev);
+    // Chat 解耦 M2：同步 RuntimeEvent 到 chat IPC 通道
+    const runtimeEvent = unifiedAgentEventToRuntimeEvent(ev.unifiedEvent);
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) w.webContents.send(AGENT_EVENT_CHANNEL, ev);
+      if (!w.isDestroyed()) {
+        w.webContents.send(AGENT_EVENT_CHANNEL, ev);
+        w.webContents.send(IPC.chat.runtimeEvent, runtimeEvent);
+      }
     }
   });
 }
@@ -307,6 +314,11 @@ export function registerAgentIpc(): void {
   registerBudgetWatch();
 
   ipcMain.handle(IPC.agent.detect, (): Promise<DetectResult> => detectClaude());
+
+  // Chat 解耦 M2：占位 handler，M5 起将路由到 ChatHost.dispatch()
+  ipcMain.handle(IPC.chat.action, async (): Promise<void> => {
+    /* no-op until M5 host adapters land */
+  });
 
   ipcMain.handle(
     IPC.agent.startTask,

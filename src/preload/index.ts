@@ -61,6 +61,7 @@ import type {
   DashboardThinkingStats
 } from '@shared/dashboard';
 import type { TraceableEvent, TraceableEventFilter } from '@shared/events';
+import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import type {
   Proposal,
   ProposalListFilter,
@@ -367,6 +368,15 @@ const api: OrbitApi = {
       manager: 'npm' | 'pnpm' | 'yarn';
       args?: string[];
     }) => ipcRenderer.invoke(IPC.agent.installInWorktree, args)
+  },
+  chat: {
+    onRuntimeEvent: (cb: (ev: RuntimeEvent) => void) => {
+      const listener = (_: unknown, ev: RuntimeEvent): void => cb(ev);
+      ipcRenderer.on(IPC.chat.runtimeEvent, listener);
+      return () => ipcRenderer.removeListener(IPC.chat.runtimeEvent, listener);
+    },
+    sendAction: (action: ChatAction): Promise<void> =>
+      ipcRenderer.invoke(IPC.chat.action, action)
   },
   distill: {
     project: (uid: string): Promise<DistillResult> =>
