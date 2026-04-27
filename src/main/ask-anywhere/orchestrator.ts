@@ -23,6 +23,7 @@ import type { ConversationOrchestrator } from '../conversation/orchestrator';
 import type { RunnerPool } from '../agent/pool';
 import type { AgentEvent } from '@shared/agent';
 import type { AgentRunner } from '../agent/runner';
+import { createStageStore, extractArtifactFences } from './stage-store';
 
 export interface AskAnywhereDeps {
   conversations: ConversationOrchestrator;
@@ -236,6 +237,13 @@ export class AskAnywhereOrchestrator {
           content: text,
           runtimeEventIds: aggregator.eventIds()
         });
+        const vault = this.deps.getVaultPath();
+        if (vault) {
+          const stage = createStageStore(vault);
+          for (const artifact of extractArtifactFences(text)) {
+            await stage.add(conversationId, artifact);
+          }
+        }
       }
     } finally {
       await this.deps.conversations

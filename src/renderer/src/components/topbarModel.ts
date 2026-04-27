@@ -14,7 +14,14 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Console', view: { kind: 'developerConsole' }, icon: '⌁' },
   { label: 'GitHub', view: { kind: 'github' }, icon: '⌘' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
-  { label: 'Today', view: { kind: 'today' }, icon: '☼' },
+  { label: 'Notes', view: { kind: 'notes' }, icon: '📝' },
+  { label: 'Library', view: { kind: 'library' }, icon: '📚' },
+  { label: 'Feeds', view: { kind: 'feeds' }, icon: '🛰️' },
+  { label: 'Knowledge', view: { kind: 'knowledgeBase' }, icon: '🧠' },
+  { label: 'Timeline', view: { kind: 'timeline' }, icon: '☼' },
+  { label: 'Scheduled', view: { kind: 'scheduled' }, icon: '⏰' },
+  { label: 'Gateway', view: { kind: 'gateway' }, icon: '✈️' },
+  { label: 'Today', view: { kind: 'today' }, icon: '✓' },
   { label: 'Journals', view: { kind: 'journals' }, icon: '📓' },
   { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
 ];
@@ -38,9 +45,16 @@ const WORKSPACE_DETAILS: Record<
   | 'dashboard'
   | 'agents'
   | 'developerConsole'
-  | 'github'
-  | 'inbox'
-  | 'today'
+   | 'github'
+   | 'inbox'
+   | 'notes'
+   | 'library'
+   | 'feeds'
+   | 'knowledgeBase'
+   | 'scheduled'
+   | 'timeline'
+   | 'gateway'
+   | 'today'
   | 'journals'
   | 'kanban'
   | 'runtimes',
@@ -51,6 +65,13 @@ const WORKSPACE_DETAILS: Record<
   developerConsole: 'Replay traceable agent, inbox, activity, and IPC events.',
   github: 'Connect accounts, import repos, and monitor GitHub delivery state.',
   inbox: 'Capture and sort incoming work before it spreads.',
+  notes: 'Create, search, and edit active Markdown notes.',
+  library: 'Save and read source material before distillation.',
+  feeds: 'Manage subscriptions and triage incoming feed items.',
+  knowledgeBase: 'Import existing archives and activate excerpts into Notes.',
+  scheduled: 'Manage recurring Orbit automations and execution history.',
+  timeline: 'Review user-visible events as a daily life log.',
+  gateway: 'Configure remote channels into Ask-Anywhere and Capture.',
   today: 'Focus on the tasks scheduled for today.',
   journals: 'Review past daily notes and decisions.',
   kanban: 'Track task flow across active projects.',
@@ -131,6 +152,13 @@ export function deriveTopBarContext({
     view.kind === 'github' ||
     view.kind === 'developerConsole' ||
     view.kind === 'inbox' ||
+    view.kind === 'notes' ||
+    view.kind === 'library' ||
+    view.kind === 'feeds' ||
+    view.kind === 'knowledgeBase' ||
+    view.kind === 'scheduled' ||
+    view.kind === 'timeline' ||
+    view.kind === 'gateway' ||
     view.kind === 'today' ||
     view.kind === 'journals' ||
     view.kind === 'kanban' ||

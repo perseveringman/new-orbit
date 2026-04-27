@@ -9,6 +9,7 @@
  */
 
 import type { UnifiedAgentEvent, UnifiedAgentRuntimeRef } from '@shared/agent-event';
+import type { Artifact } from '@shared/stage';
 
 // ---------- Agent ----------
 
@@ -125,6 +126,63 @@ export interface ChannelStatePayload {
   reason?: string;
 }
 
+// ---------- Knowledge stack ----------
+
+export interface NoteEventPayload {
+  note_id: string;
+  path?: string;
+  type?: string;
+  title?: string;
+  body?: string;
+  word_delta?: number;
+  special_marker?: unknown;
+}
+
+export interface LibraryEventPayload {
+  item_id: string;
+  title?: string;
+  url?: string;
+  status?: string;
+  path?: string;
+}
+
+export interface FeedEventPayload {
+  source_id?: string;
+  item_id?: string;
+  title?: string;
+  fetched?: number;
+  created?: number;
+}
+
+export interface KnowledgeBaseEventPayload {
+  kb_id: string;
+  name?: string;
+  path?: string;
+  item_count?: number;
+  note_id?: string;
+}
+
+export interface ParaEventPayload {
+  entity_ref: string;
+  target_ref?: string;
+  kind?: string;
+}
+
+export interface ScheduledTaskEventPayload {
+  task_id: string;
+  execution_id?: string;
+  name?: string;
+  status?: string;
+  error?: string;
+}
+
+export interface StageArtifactPayload {
+  conversation_id: string;
+  artifact_id: string;
+  artifact?: Artifact;
+  action_id?: string;
+}
+
 // ---------- Activity ----------
 
 export interface ActivityPayload {
@@ -168,6 +226,42 @@ export interface TraceableEventPayloadMap {
   'channel.outbound.message': ChannelOutboundMessagePayload;
   'channel.connected': ChannelStatePayload;
   'channel.disconnected': ChannelStatePayload;
+  'note.created': NoteEventPayload;
+  'note.updated': NoteEventPayload;
+  'note.deleted': NoteEventPayload;
+  'note.archived': NoteEventPayload;
+  'library.item.added': LibraryEventPayload;
+  'library.item.annotated': LibraryEventPayload;
+  'library.item.status_changed': LibraryEventPayload;
+  'library.item.read': LibraryEventPayload;
+  'library.item.distilled': LibraryEventPayload;
+  'feed.source.added': FeedEventPayload;
+  'feed.source.removed': FeedEventPayload;
+  'feed.items.fetched': FeedEventPayload;
+  'feed.item.saved_to_library': FeedEventPayload;
+  'feed.item.dismissed': FeedEventPayload;
+  'kb.imported': KnowledgeBaseEventPayload;
+  'kb.removed': KnowledgeBaseEventPayload;
+  'kb.scanned': KnowledgeBaseEventPayload;
+  'kb.activated': KnowledgeBaseEventPayload;
+  'kb.welcome_analysis_completed': KnowledgeBaseEventPayload;
+  'para.archived': ParaEventPayload;
+  'para.unarchived': ParaEventPayload;
+  'para.moved': ParaEventPayload;
+  'scheduled_task.created': ScheduledTaskEventPayload;
+  'scheduled_task.updated': ScheduledTaskEventPayload;
+  'scheduled_task.deleted': ScheduledTaskEventPayload;
+  'scheduled_task.paused': ScheduledTaskEventPayload;
+  'scheduled_task.resumed': ScheduledTaskEventPayload;
+  'scheduled_task.execution.started': ScheduledTaskEventPayload;
+  'scheduled_task.execution.completed': ScheduledTaskEventPayload;
+  'scheduled_task.execution.failed': ScheduledTaskEventPayload;
+  'stage.artifact.added': StageArtifactPayload;
+  'stage.artifact.updated': StageArtifactPayload;
+  'stage.artifact.removed': StageArtifactPayload;
+  'stage.artifact.action_executed': StageArtifactPayload;
+  'resource.created': ParaEventPayload;
+  'resource.engagement': ParaEventPayload;
   'activity.user': ActivityPayload;
   'activity.system': ActivityPayload;
   'ipc.events.query': IpcEventsQueryPayload;

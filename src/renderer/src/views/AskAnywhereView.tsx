@@ -15,6 +15,9 @@ import type { Conversation } from '@shared/conversation';
 import { ChatView } from '../components/chat/ChatView';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '@shared/chat-protocol';
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
+import type { ConversationStage } from '@shared/stage';
+import { StagePanel } from './ask-anywhere/StagePanel';
+import { ContextPanel } from './ask-anywhere/ContextPanel';
 
 function turnsToEvents(conv: Conversation): RuntimeEvent[] {
   return conv.turns.map((t, idx) => ({
@@ -32,6 +35,7 @@ export function AskAnywhereView(): JSX.Element {
   const [sessions, setSessions] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
+  const [stage, setStage] = useState<ConversationStage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
@@ -60,6 +64,9 @@ export function AskAnywhereView(): JSX.Element {
       setEvents(turnsToEvents(conv));
       setIsLoading(Boolean(conv.currentRunId));
     });
+    void window.orbit.stage.get(activeId).then((next) => {
+      if (!cancelled) setStage(next);
+    });
     return () => {
       cancelled = true;
     };
@@ -72,9 +79,18 @@ export function AskAnywhereView(): JSX.Element {
       setEvents((current) => [...current, event]);
       if (event.kind === 'runtime.done' || event.kind === 'runtime.error') {
         setIsLoading(false);
+        if (activeIdRef.current) {
+          void window.orbit.stage.get(activeIdRef.current).then(setStage);
+        }
       }
     });
-    return () => off();
+    const offStage = window.orbit.stage.onEvent((next) => {
+      if (next.conversation_id === activeIdRef.current) setStage(next);
+    });
+    return () => {
+      off();
+      offStage();
+    };
   }, [reload]);
 
   async function handleNew(): Promise<void> {
@@ -90,6 +106,14 @@ export function AskAnywhereView(): JSX.Element {
     setActiveId(conv.id);
     await reload();
   }
+
+  async function handleArtifactAction(artifactId: string, actionId: string): Promise<void> {
+    if (!activeId) return;
+    await window.orbit.stage.execAction(activeId, artifactId, actionId);
+    setStage(await window.orbit.stage.get(activeId));
+  }
+
+  const activeConversation = sessions.find((conv) => conv.id === activeId) ?? null;
 
   async function handleAction(action: ChatAction): Promise<void> {
     if (!activeId) return;
@@ -170,6 +194,7 @@ export function AskAnywhereView(): JSX.Element {
           )}
         </div>
       </aside>
+      <ContextPanel conversation={activeConversation} />
       <section className="flex min-w-0 flex-1 flex-col">
         {activeId ? (
           <ChatView
@@ -186,6 +211,7 @@ export function AskAnywhereView(): JSX.Element {
           </div>
         )}
       </section>
+      {activeId ? <StagePanel stage={stage} onAction={(artifactId, actionId) => void handleArtifactAction(artifactId, actionId)} /> : null}
     </div>
   );
 }

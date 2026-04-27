@@ -95,6 +95,31 @@ import type {
   SaveLibraryArticleInput,
   UpdateThoughtInput
 } from './capture';
+import type { CreateNoteInput, Note, NoteChangeEvent, NoteFilter, SearchOptions, UpdateNoteInput } from './note';
+import type {
+  ActivateKnowledgeBaseInput,
+  ImportKnowledgeBaseInput,
+  KnowledgeBase,
+  KnowledgeBaseSearchHit,
+  OnboardingStatus,
+  WelcomeAnalysisResult
+} from './knowledge-base';
+import type {
+  CreateScheduledTaskInput,
+  NaturalLanguageScheduleResult,
+  ScheduledTask,
+  ScheduledTaskExecution,
+  ScheduledTaskFilter
+} from './scheduled-task';
+import type { DailySummary, DailyTimeline, MonthlyIndex, TimelineScope, YearlyIndex } from './timeline';
+import type { Artifact, ConversationStage } from './stage';
+import type {
+  ChannelConfig,
+  ChannelInboundMessage,
+  GatewayConfig,
+  GatewayRouteResult,
+  GatewayStatus
+} from './gateway';
 import type { BudgetSettings } from './schemas';
 import type {
   ChangesSummary,
@@ -365,6 +390,76 @@ export const IPC = {
       link: 'capture:thought:link',
       dismiss: 'capture:thought:dismiss'
     }
+  },
+  notes: {
+    list: 'notes:list',
+    get: 'notes:get',
+    getByPath: 'notes:getByPath',
+    create: 'notes:create',
+    update: 'notes:update',
+    delete: 'notes:delete',
+    archive: 'notes:archive',
+    search: 'notes:search',
+    event: 'notes:event'
+  },
+  knowledgeBase: {
+    list: 'knowledgeBase:list',
+    import: 'knowledgeBase:import',
+    remove: 'knowledgeBase:remove',
+    rescan: 'knowledgeBase:rescan',
+    search: 'knowledgeBase:search',
+    activate: 'knowledgeBase:activate'
+  },
+  onboarding: {
+    status: 'onboarding:status',
+    skip: 'onboarding:skip',
+    runWelcomeAnalysis: 'onboarding:runWelcomeAnalysis',
+    applySuggestions: 'onboarding:applySuggestions'
+  },
+  scheduledTasks: {
+    list: 'scheduledTasks:list',
+    get: 'scheduledTasks:get',
+    create: 'scheduledTasks:create',
+    update: 'scheduledTasks:update',
+    delete: 'scheduledTasks:delete',
+    pause: 'scheduledTasks:pause',
+    resume: 'scheduledTasks:resume',
+    triggerNow: 'scheduledTasks:triggerNow',
+    executions: 'scheduledTasks:executions',
+    parseNaturalLanguage: 'scheduledTasks:parseNaturalLanguage',
+    event: 'scheduledTasks:event'
+  },
+  timeline: {
+    getDay: 'timeline:getDay',
+    getWeek: 'timeline:getWeek',
+    getMonth: 'timeline:getMonth',
+    getYear: 'timeline:getYear',
+    getMonthlyIndex: 'timeline:getMonthlyIndex',
+    getYearlyIndex: 'timeline:getYearlyIndex',
+    generateDailySummary: 'timeline:generateDailySummary',
+    updateDailySummary: 'timeline:updateDailySummary',
+    exportPDF: 'timeline:exportPDF',
+    event: 'timeline:event'
+  },
+  stage: {
+    get: 'stage:get',
+    addArtifact: 'stage:addArtifact',
+    execAction: 'stage:execAction',
+    removeArtifact: 'stage:removeArtifact',
+    event: 'stage:event'
+  },
+  gateway: {
+    configGet: 'gateway:config:get',
+    configUpdate: 'gateway:config:update',
+    status: 'gateway:status',
+    start: 'gateway:start',
+    stop: 'gateway:stop',
+    addChannel: 'gateway:channel:add',
+    updateChannel: 'gateway:channel:update',
+    removeChannel: 'gateway:channel:remove',
+    generateBindCode: 'gateway:channel:generateBindCode',
+    routeInbound: 'gateway:routeInbound',
+    event: 'gateway:event'
   },
   quickCapture: {
     open: 'quickCapture:open'
@@ -1096,6 +1191,76 @@ export interface OrbitApi {
       link(id: string, input: LinkThoughtInput): Promise<InboxItem>;
       dismiss(id: string, actor?: 'user' | 'agent'): Promise<InboxItem>;
     };
+  };
+  notes: {
+    list(filter?: NoteFilter): Promise<Note[]>;
+    get(noteId: string): Promise<Note | null>;
+    getByPath(path: string): Promise<Note | null>;
+    create(input: CreateNoteInput): Promise<Note>;
+    update(noteId: string, patch: UpdateNoteInput): Promise<Note>;
+    delete(noteId: string): Promise<void>;
+    archive(noteId: string): Promise<void>;
+    search(query: string, options?: SearchOptions): Promise<Note[]>;
+    onEvent(cb: (event: NoteChangeEvent) => void): () => void;
+  };
+  knowledgeBase: {
+    list(): Promise<KnowledgeBase[]>;
+    import(input: ImportKnowledgeBaseInput): Promise<KnowledgeBase>;
+    remove(kbId: string, deleteFiles?: boolean): Promise<void>;
+    rescan(kbId: string): Promise<KnowledgeBase>;
+    search(kbId: string | 'all', query: string): Promise<KnowledgeBaseSearchHit[]>;
+    activate(input: ActivateKnowledgeBaseInput): Promise<Note>;
+  };
+  onboarding: {
+    status(): Promise<OnboardingStatus>;
+    skip(): Promise<void>;
+    runWelcomeAnalysis(kbIds: string[]): Promise<WelcomeAnalysisResult>;
+    applySuggestions(result: WelcomeAnalysisResult): Promise<void>;
+  };
+  scheduledTasks: {
+    list(filter?: ScheduledTaskFilter): Promise<ScheduledTask[]>;
+    get(taskId: string): Promise<ScheduledTask | null>;
+    create(input: CreateScheduledTaskInput): Promise<ScheduledTask>;
+    update(taskId: string, patch: Partial<ScheduledTask>): Promise<ScheduledTask>;
+    delete(taskId: string): Promise<void>;
+    pause(taskId: string): Promise<ScheduledTask>;
+    resume(taskId: string): Promise<ScheduledTask>;
+    triggerNow(taskId: string): Promise<ScheduledTaskExecution>;
+    executions(taskId: string, limit?: number, offset?: number): Promise<ScheduledTaskExecution[]>;
+    parseNaturalLanguage(text: string): Promise<NaturalLanguageScheduleResult>;
+    onEvent(cb: (event: { type: string; task?: ScheduledTask; execution?: ScheduledTaskExecution }) => void): () => void;
+  };
+  timeline: {
+    getDay(date: string, options?: { developerMode?: boolean }): Promise<DailyTimeline>;
+    getWeek(isoWeek: string): Promise<DailyTimeline[]>;
+    getMonth(month: string): Promise<MonthlyIndex>;
+    getYear(year: number): Promise<YearlyIndex>;
+    getMonthlyIndex(month: string): Promise<MonthlyIndex>;
+    getYearlyIndex(year: number): Promise<YearlyIndex>;
+    generateDailySummary(date: string): Promise<DailySummary>;
+    updateDailySummary(date: string, patch: { narrative?: string; headline?: string }): Promise<DailySummary>;
+    exportPDF(scope: TimelineScope): Promise<{ path: string }>;
+    onEvent(cb: (event: DailyTimeline) => void): () => void;
+  };
+  stage: {
+    get(conversationId: string): Promise<ConversationStage>;
+    addArtifact(conversationId: string, artifact: Omit<Artifact, 'id' | 'conversation_id' | 'created_at'> & Partial<Pick<Artifact, 'id' | 'created_at'>>): Promise<Artifact>;
+    execAction(conversationId: string, artifactId: string, actionId: string, params?: unknown): Promise<void>;
+    removeArtifact(conversationId: string, artifactId: string): Promise<void>;
+    onEvent(cb: (stage: ConversationStage) => void): () => void;
+  };
+  gateway: {
+    getConfig(): Promise<GatewayConfig>;
+    updateConfig(patch: Partial<GatewayConfig>): Promise<GatewayConfig>;
+    status(): Promise<GatewayStatus>;
+    start(): Promise<GatewayStatus>;
+    stop(): Promise<GatewayStatus>;
+    addChannel(channel: Omit<ChannelConfig, 'id'> & { id?: string }): Promise<GatewayConfig>;
+    updateChannel(channelId: string, patch: Partial<ChannelConfig>): Promise<GatewayConfig>;
+    removeChannel(channelId: string): Promise<GatewayConfig>;
+    generateBindCode(orbitUserId?: string): Promise<{ code: string; expires_at: string }>;
+    routeInbound(message: ChannelInboundMessage): Promise<GatewayRouteResult>;
+    onEvent(cb: (status: GatewayStatus) => void): () => void;
   };
   quickCapture: {
     onOpen(cb: () => void): () => void;

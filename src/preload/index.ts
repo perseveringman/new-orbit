@@ -96,6 +96,31 @@ import type {
   SaveLibraryArticleInput,
   UpdateThoughtInput
 } from '@shared/capture';
+import type { CreateNoteInput, Note, NoteChangeEvent, NoteFilter, SearchOptions, UpdateNoteInput } from '@shared/note';
+import type {
+  ActivateKnowledgeBaseInput,
+  ImportKnowledgeBaseInput,
+  KnowledgeBase,
+  KnowledgeBaseSearchHit,
+  OnboardingStatus,
+  WelcomeAnalysisResult
+} from '@shared/knowledge-base';
+import type {
+  CreateScheduledTaskInput,
+  NaturalLanguageScheduleResult,
+  ScheduledTask,
+  ScheduledTaskExecution,
+  ScheduledTaskFilter
+} from '@shared/scheduled-task';
+import type { DailySummary, DailyTimeline, MonthlyIndex, TimelineScope, YearlyIndex } from '@shared/timeline';
+import type { Artifact, ConversationStage } from '@shared/stage';
+import type {
+  ChannelConfig,
+  ChannelInboundMessage,
+  GatewayConfig,
+  GatewayRouteResult,
+  GatewayStatus
+} from '@shared/gateway';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   ConversationTurn,
@@ -506,6 +531,134 @@ const api: OrbitApi = {
         ipcRenderer.invoke(IPC.capture.thought.link, id, input),
       dismiss: (id: string, actor?: 'user' | 'agent') =>
         ipcRenderer.invoke(IPC.capture.thought.dismiss, id, actor)
+    }
+  },
+  notes: {
+    list: (filter?: NoteFilter): Promise<Note[]> => ipcRenderer.invoke(IPC.notes.list, filter),
+    get: (noteId: string): Promise<Note | null> => ipcRenderer.invoke(IPC.notes.get, noteId),
+    getByPath: (notePath: string): Promise<Note | null> =>
+      ipcRenderer.invoke(IPC.notes.getByPath, notePath),
+    create: (input: CreateNoteInput): Promise<Note> => ipcRenderer.invoke(IPC.notes.create, input),
+    update: (noteId: string, patch: UpdateNoteInput): Promise<Note> =>
+      ipcRenderer.invoke(IPC.notes.update, noteId, patch),
+    delete: (noteId: string): Promise<void> => ipcRenderer.invoke(IPC.notes.delete, noteId),
+    archive: (noteId: string): Promise<void> => ipcRenderer.invoke(IPC.notes.archive, noteId),
+    search: (query: string, options?: SearchOptions): Promise<Note[]> =>
+      ipcRenderer.invoke(IPC.notes.search, query, options),
+    onEvent: (cb: (event: NoteChangeEvent) => void) => {
+      const listener = (_: unknown, event: NoteChangeEvent): void => cb(event);
+      ipcRenderer.on(IPC.notes.event, listener);
+      return () => ipcRenderer.removeListener(IPC.notes.event, listener);
+    }
+  },
+  knowledgeBase: {
+    list: (): Promise<KnowledgeBase[]> => ipcRenderer.invoke(IPC.knowledgeBase.list),
+    import: (input: ImportKnowledgeBaseInput): Promise<KnowledgeBase> =>
+      ipcRenderer.invoke(IPC.knowledgeBase.import, input),
+    remove: (kbId: string, deleteFiles?: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC.knowledgeBase.remove, kbId, deleteFiles),
+    rescan: (kbId: string): Promise<KnowledgeBase> =>
+      ipcRenderer.invoke(IPC.knowledgeBase.rescan, kbId),
+    search: (kbId: string | 'all', query: string): Promise<KnowledgeBaseSearchHit[]> =>
+      ipcRenderer.invoke(IPC.knowledgeBase.search, kbId, query),
+    activate: (input: ActivateKnowledgeBaseInput): Promise<Note> =>
+      ipcRenderer.invoke(IPC.knowledgeBase.activate, input)
+  },
+  onboarding: {
+    status: (): Promise<OnboardingStatus> => ipcRenderer.invoke(IPC.onboarding.status),
+    skip: (): Promise<void> => ipcRenderer.invoke(IPC.onboarding.skip),
+    runWelcomeAnalysis: (kbIds: string[]): Promise<WelcomeAnalysisResult> =>
+      ipcRenderer.invoke(IPC.onboarding.runWelcomeAnalysis, kbIds),
+    applySuggestions: (result: WelcomeAnalysisResult): Promise<void> =>
+      ipcRenderer.invoke(IPC.onboarding.applySuggestions, result)
+  },
+  scheduledTasks: {
+    list: (filter?: ScheduledTaskFilter): Promise<ScheduledTask[]> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.list, filter),
+    get: (taskId: string): Promise<ScheduledTask | null> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.get, taskId),
+    create: (input: CreateScheduledTaskInput): Promise<ScheduledTask> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.create, input),
+    update: (taskId: string, patch: Partial<ScheduledTask>): Promise<ScheduledTask> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.update, taskId, patch),
+    delete: (taskId: string): Promise<void> => ipcRenderer.invoke(IPC.scheduledTasks.delete, taskId),
+    pause: (taskId: string): Promise<ScheduledTask> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.pause, taskId),
+    resume: (taskId: string): Promise<ScheduledTask> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.resume, taskId),
+    triggerNow: (taskId: string): Promise<ScheduledTaskExecution> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.triggerNow, taskId),
+    executions: (taskId: string, limit?: number, offset?: number): Promise<ScheduledTaskExecution[]> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.executions, taskId, limit, offset),
+    parseNaturalLanguage: (text: string): Promise<NaturalLanguageScheduleResult> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.parseNaturalLanguage, text),
+    onEvent: (cb: (event: { type: string; task?: ScheduledTask; execution?: ScheduledTaskExecution }) => void) => {
+      const listener = (_: unknown, event: { type: string; task?: ScheduledTask; execution?: ScheduledTaskExecution }): void => cb(event);
+      ipcRenderer.on(IPC.scheduledTasks.event, listener);
+      return () => ipcRenderer.removeListener(IPC.scheduledTasks.event, listener);
+    }
+  },
+  timeline: {
+    getDay: (date: string, options?: { developerMode?: boolean }): Promise<DailyTimeline> =>
+      ipcRenderer.invoke(IPC.timeline.getDay, date, options),
+    getWeek: (isoWeek: string): Promise<DailyTimeline[]> =>
+      ipcRenderer.invoke(IPC.timeline.getWeek, isoWeek),
+    getMonth: (month: string): Promise<MonthlyIndex> => ipcRenderer.invoke(IPC.timeline.getMonth, month),
+    getYear: (year: number): Promise<YearlyIndex> => ipcRenderer.invoke(IPC.timeline.getYear, year),
+    getMonthlyIndex: (month: string): Promise<MonthlyIndex> =>
+      ipcRenderer.invoke(IPC.timeline.getMonthlyIndex, month),
+    getYearlyIndex: (year: number): Promise<YearlyIndex> =>
+      ipcRenderer.invoke(IPC.timeline.getYearlyIndex, year),
+    generateDailySummary: (date: string): Promise<DailySummary> =>
+      ipcRenderer.invoke(IPC.timeline.generateDailySummary, date),
+    updateDailySummary: (date: string, patch: { narrative?: string; headline?: string }): Promise<DailySummary> =>
+      ipcRenderer.invoke(IPC.timeline.updateDailySummary, date, patch),
+    exportPDF: (scope: TimelineScope): Promise<{ path: string }> =>
+      ipcRenderer.invoke(IPC.timeline.exportPDF, scope),
+    onEvent: (cb: (event: DailyTimeline) => void) => {
+      const listener = (_: unknown, event: DailyTimeline): void => cb(event);
+      ipcRenderer.on(IPC.timeline.event, listener);
+      return () => ipcRenderer.removeListener(IPC.timeline.event, listener);
+    }
+  },
+  stage: {
+    get: (conversationId: string): Promise<ConversationStage> =>
+      ipcRenderer.invoke(IPC.stage.get, conversationId),
+    addArtifact: (
+      conversationId: string,
+      artifact: Omit<Artifact, 'id' | 'conversation_id' | 'created_at'> & Partial<Pick<Artifact, 'id' | 'created_at'>>
+    ): Promise<Artifact> => ipcRenderer.invoke(IPC.stage.addArtifact, conversationId, artifact),
+    execAction: (conversationId: string, artifactId: string, actionId: string, params?: unknown): Promise<void> =>
+      ipcRenderer.invoke(IPC.stage.execAction, conversationId, artifactId, actionId, params),
+    removeArtifact: (conversationId: string, artifactId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.stage.removeArtifact, conversationId, artifactId),
+    onEvent: (cb: (stage: ConversationStage) => void) => {
+      const listener = (_: unknown, stage: ConversationStage): void => cb(stage);
+      ipcRenderer.on(IPC.stage.event, listener);
+      return () => ipcRenderer.removeListener(IPC.stage.event, listener);
+    }
+  },
+  gateway: {
+    getConfig: (): Promise<GatewayConfig> => ipcRenderer.invoke(IPC.gateway.configGet),
+    updateConfig: (patch: Partial<GatewayConfig>): Promise<GatewayConfig> =>
+      ipcRenderer.invoke(IPC.gateway.configUpdate, patch),
+    status: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.status),
+    start: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.start),
+    stop: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.stop),
+    addChannel: (channel: Omit<ChannelConfig, 'id'> & { id?: string }): Promise<GatewayConfig> =>
+      ipcRenderer.invoke(IPC.gateway.addChannel, channel),
+    updateChannel: (channelId: string, patch: Partial<ChannelConfig>): Promise<GatewayConfig> =>
+      ipcRenderer.invoke(IPC.gateway.updateChannel, channelId, patch),
+    removeChannel: (channelId: string): Promise<GatewayConfig> =>
+      ipcRenderer.invoke(IPC.gateway.removeChannel, channelId),
+    generateBindCode: (orbitUserId?: string): Promise<{ code: string; expires_at: string }> =>
+      ipcRenderer.invoke(IPC.gateway.generateBindCode, orbitUserId),
+    routeInbound: (message: ChannelInboundMessage): Promise<GatewayRouteResult> =>
+      ipcRenderer.invoke(IPC.gateway.routeInbound, message),
+    onEvent: (cb: (status: GatewayStatus) => void) => {
+      const listener = (_: unknown, status: GatewayStatus): void => cb(status);
+      ipcRenderer.on(IPC.gateway.event, listener);
+      return () => ipcRenderer.removeListener(IPC.gateway.event, listener);
     }
   },
   quickCapture: {

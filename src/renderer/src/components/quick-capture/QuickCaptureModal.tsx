@@ -4,19 +4,21 @@ interface QuickCaptureModalProps {
   open: boolean;
   saving?: boolean;
   error?: string | null;
-  onSave(content: string, tags: string[]): void;
+  onSave(content: string, tags: string[], specialKind: string | null): void;
   onClose(): void;
 }
 
 export function QuickCaptureModal({ open, saving = false, error = null, onSave, onClose }: QuickCaptureModalProps): JSX.Element | null {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
+  const [specialKind, setSpecialKind] = useState<string>('none');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setContent('');
     setTags('');
+    setSpecialKind('none');
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, [open]);
 
@@ -25,7 +27,7 @@ export function QuickCaptureModal({ open, saving = false, error = null, onSave, 
   function save(): void {
     const trimmed = content.trim();
     if (!trimmed || saving) return;
-    onSave(trimmed, tags.split(',').map((tag) => tag.trim()).filter(Boolean));
+    onSave(trimmed, tags.split(',').map((tag) => tag.trim()).filter(Boolean), specialKind === 'none' ? null : specialKind);
   }
 
   return (
@@ -58,12 +60,25 @@ export function QuickCaptureModal({ open, saving = false, error = null, onSave, 
             placeholder="Capture a thought…"
             className="h-36 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
           />
-          <input
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            placeholder="tags, comma separated"
+           <input
+             value={tags}
+             onChange={(event) => setTags(event.target.value)}
+             placeholder="tags, comma separated"
+             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
+           />
+          <select
+            value={specialKind}
+            onChange={(event) => setSpecialKind(event.target.value)}
             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
-          />
+          >
+            <option value="none">No special marker</option>
+            <option value="insight">💡 Insight</option>
+            <option value="breakthrough">🌟 Breakthrough</option>
+            <option value="setback">💔 Setback</option>
+            <option value="milestone">🏁 Milestone</option>
+            <option value="gratitude">🙏 Gratitude</option>
+            <option value="reflection">🪞 Reflection</option>
+          </select>
           {error && <p className="text-xs text-red-600 dark:text-red-300">{error}</p>}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-neutral-200 px-4 py-3 dark:border-neutral-800">
@@ -76,7 +91,7 @@ export function QuickCaptureModal({ open, saving = false, error = null, onSave, 
             disabled={!content.trim() || saving}
             className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Save to Inbox'}
+            {saving ? 'Saving…' : 'Save Note'}
           </button>
         </div>
       </div>

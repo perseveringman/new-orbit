@@ -13,6 +13,13 @@ describe('top bar model', () => {
       'Console',
       'GitHub',
       'Inbox',
+      'Notes',
+      'Library',
+      'Feeds',
+      'Knowledge',
+      'Timeline',
+      'Scheduled',
+      'Gateway',
       'Today',
       'Journals',
       'Kanban'

@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Phase 2 Knowledge Stack 一次性落地**：新增 Notes 一级入口（Markdown frontmatter CRUD / 搜索 / 归档）、Library / Feeds / Knowledge Base / Scheduled / Timeline / Gateway 工作区入口；补齐 Notes、KB 导入/激活、定时任务、Daily Timeline、Ask-Anywhere Stage Artifact、Gateway channel 管理的 IPC/preload/renderer 闭环，并把 Phase 2 事件接入 TraceableEvent 与 Timeline 投影。
 - **Chat 解耦重构 P1-P5 落地差距收尾**：
   - **P1 Conversation 一等公民**：TaskOrchestrator 在 `getOrCreateConversation` / `appendTurn` 同时双写到新 ConversationStore（anchor:task）；启动时一次性迁移旧 `.orbit/orchestration/conversations/<taskUid>.json` 到新格式（幂等）；新增 Conversations 中心视图（左侧统一对话列表 + 右侧只读 ChatView 历史回放），Sidebar 增加「Conversations」入口。
   - **P3 AppBus 闭环**：ConversationOrchestrator 在 `createConversation` / `appendTurn` / `addAnchor` / `endConversation` 上发布 TraceableEvent（`conversation.started/turn.added/anchor.added/ended`），`TRACEABLE_EVENT_SOURCES` 增加 `'conversation'`。

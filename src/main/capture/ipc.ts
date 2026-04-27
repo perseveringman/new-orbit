@@ -15,6 +15,7 @@ import type { InboxEvent, InboxStatus } from '@shared/inbox';
 import { createFeedService } from './feed/service';
 import { createLibraryService } from './library/service';
 import { createThoughtService } from './thoughts/service';
+import { publishTraceableEvent } from '../events/bus';
 
 export function registerCaptureIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
@@ -34,6 +35,14 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
     const service = createFeedService(vaultPath());
     const before = new Set((await service.listPending()).map((item) => item.id));
     const result = await service.refresh(id);
+    for (const item of result) {
+      publishTraceableEvent({
+        source: 'activity',
+        kind: 'feed.items.fetched',
+        summary: `Fetched feed items: ${item.created}`,
+        payload: { source_id: item.subscriptionId, fetched: item.fetched, created: item.created }
+      });
+    }
     const after = await service.listPending();
     for (const item of after) {
       if (!before.has(item.id)) broadcastInboxEvent({ type: 'created', item });
@@ -48,6 +57,12 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
   });
   ipcMain.handle(IPC.capture.feed.saveToLibrary, async (_event, id: string, input?: SaveFeedItemInput) => {
     const item = await createFeedService(vaultPath()).saveToLibrary(id, input);
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'feed.item.saved_to_library',
+      summary: `Saved feed item to Library: ${item.title}`,
+      payload: { item_id: id, title: item.title }
+    });
     broadcastInboxEvent({ type: 'created', item });
     return item;
   });
@@ -55,6 +70,12 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
 
   ipcMain.handle(IPC.capture.library.save, async (_event, input: SaveLibraryArticleInput) => {
     const item = await createLibraryService(vaultPath()).saveArticle(input);
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'library.item.added',
+      summary: `Saved Library item: ${item.title}`,
+      payload: { item_id: item.id, title: item.title, url: input.url }
+    });
     broadcastInboxEvent({ type: 'created', item });
     return item;
   });
@@ -67,11 +88,25 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
   );
   ipcMain.handle(IPC.capture.library.updateReading, async (_event, id: string, input: LibraryReadingUpdateInput) => {
     const item = await createLibraryService(vaultPath()).updateReading(id, input);
+    if (input.markRead || item.status === 'read') {
+      publishTraceableEvent({
+        source: 'activity',
+        kind: 'library.item.read',
+        summary: `Read Library item: ${item.title}`,
+        payload: { item_id: item.id, title: item.title, status: item.status }
+      });
+    }
     broadcastInboxEvent({ type: 'updated', item });
     return item;
   });
   ipcMain.handle(IPC.capture.library.promote, async (_event, id: string, input?: PromoteLibraryArticleInput) => {
     const result = await createLibraryService(vaultPath()).promote(id, input);
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'library.item.distilled',
+      summary: `Distilled Library item: ${result.item.title}`,
+      payload: { item_id: result.item.id, title: result.item.title, path: result.resourcePath }
+    });
     broadcastInboxEvent({ type: 'resolved', item: result.item });
     return result;
   });

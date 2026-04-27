@@ -28,13 +28,19 @@ export function QuickCaptureProvider(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  async function save(content: string, tags: string[]): Promise<void> {
+  async function save(content: string, tags: string[], specialKind: string | null): Promise<void> {
     setSaving(true);
     setError(null);
     try {
+      await window.orbit.notes.create({
+        type: 'thought',
+        body: content,
+        tags,
+        ...(specialKind ? { special_marker: markerFor(specialKind) } : {})
+      });
       await window.orbit.capture.thought.create({ content, tags, createdFrom: 'quick_capture', actor: 'user' });
       setOpen(false);
-      toast('Thought saved to Inbox');
+      toast('Thought saved to Notes');
     } catch (caught) {
       setError((caught as Error).message);
     } finally {
@@ -47,8 +53,23 @@ export function QuickCaptureProvider(): JSX.Element {
       open={open}
       saving={saving}
       error={error}
-      onSave={(content, tags) => void save(content, tags)}
+      onSave={(content, tags, specialKind) => void save(content, tags, specialKind)}
       onClose={() => setOpen(false)}
     />
   );
+}
+
+function markerFor(kind: string): { kind: 'insight' | 'breakthrough' | 'setback' | 'milestone' | 'gratitude' | 'reflection'; icon: string } {
+  const icons: Record<string, string> = {
+    insight: '💡',
+    breakthrough: '🌟',
+    setback: '💔',
+    milestone: '🏁',
+    gratitude: '🙏',
+    reflection: '🪞'
+  };
+  return {
+    kind: kind as 'insight' | 'breakthrough' | 'setback' | 'milestone' | 'gratitude' | 'reflection',
+    icon: icons[kind] ?? '💡'
+  };
 }

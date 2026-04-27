@@ -6,12 +6,62 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ event }: MessageBubbleProps): JSX.Element {
   const { text, isStreaming } = event.payload;
+  const parts = parseArtifactFences(text);
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white/90 px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/80 dark:text-neutral-100">
-      <div className="whitespace-pre-wrap break-words">
-        {text}
+      <div className="space-y-2">
+        {parts.map((part, index) =>
+          part.kind === 'artifact' ? (
+            <div key={index} className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
+              <div className="font-semibold">🎭 {part.title}</div>
+              {part.summary ? <div className="mt-1 opacity-80">{part.summary}</div> : null}
+              {part.refs.length > 0 ? <div className="mt-2 opacity-70">{part.refs.join(' · ')}</div> : null}
+            </div>
+          ) : (
+            <div key={index} className="whitespace-pre-wrap break-words">
+              {part.text}
+            </div>
+          )
+        )}
         {isStreaming ? <span className="ml-0.5 animate-pulse opacity-60">▍</span> : null}
       </div>
     </div>
   );
+}
+
+type MessagePart =
+  | { kind: 'text'; text: string }
+  | { kind: 'artifact'; title: string; summary?: string; refs: string[] };
+
+function parseArtifactFences(text: string): MessagePart[] {
+  const parts: MessagePart[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(/```artifact\s*([\s\S]*?)```/g)) {
+    if (match.index !== undefined && match.index > lastIndex) {
+      parts.push({ kind: 'text', text: text.slice(lastIndex, match.index) });
+    }
+    const raw = match[1]?.trim();
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as {
+          title?: unknown;
+          summary?: unknown;
+          refs?: Array<{ kind?: unknown; ref?: unknown; label?: unknown }>;
+        };
+        parts.push({
+          kind: 'artifact',
+          title: String(parsed.title ?? 'Artifact'),
+          summary: typeof parsed.summary === 'string' ? parsed.summary : undefined,
+          refs: Array.isArray(parsed.refs)
+            ? parsed.refs.map((ref) => `${String(ref.kind ?? 'ref')}: ${String(ref.label ?? ref.ref ?? '')}`)
+            : []
+        });
+      } catch {
+        parts.push({ kind: 'text', text: match[0] });
+      }
+    }
+    lastIndex = (match.index ?? 0) + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push({ kind: 'text', text: text.slice(lastIndex) });
+  return parts.length > 0 ? parts : [{ kind: 'text', text }];
 }

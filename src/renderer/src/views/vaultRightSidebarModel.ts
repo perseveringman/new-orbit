@@ -4,6 +4,13 @@ export type VaultViewKind =
   | 'developerConsole'
   | 'github'
   | 'inbox'
+  | 'notes'
+  | 'library'
+  | 'feeds'
+  | 'knowledgeBase'
+  | 'scheduled'
+  | 'timeline'
+  | 'gateway'
   | 'askAnywhere'
   | 'conversations'
   | 'today'
@@ -23,6 +30,13 @@ export type SidebarSurfaceId =
   | 'developerConsole'
   | 'github'
   | 'inbox'
+  | 'notes'
+  | 'library'
+  | 'feeds'
+  | 'knowledgeBase'
+  | 'scheduled'
+  | 'timeline'
+  | 'gateway'
   | 'askAnywhere'
   | 'conversations'
   | 'today'
@@ -98,6 +112,27 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   },
   inbox: {
     intents: [{ id: 'focus', title: 'Focus', panels: ['task-detail'] }]
+  },
+  notes: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks', 'inspector'] }]
+  },
+  library: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]
+  },
+  feeds: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+  },
+  knowledgeBase: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]
+  },
+  scheduled: {
+    intents: [{ id: 'execution', title: 'Execution', panels: ['runlog', 'inspector'] }]
+  },
+  timeline: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+  },
+  gateway: {
+    intents: [{ id: 'execution', title: 'Execution', panels: ['inspector', 'runlog'] }]
   },
   askAnywhere: {
     intents: [{ id: 'focus', title: 'Focus', panels: ['inspector'] }]

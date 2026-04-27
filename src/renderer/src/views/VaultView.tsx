@@ -18,6 +18,13 @@ import { TerminalSessionsPanel } from '../components/Sidebar/TerminalSessionsPan
 import { CloseProjectDialog } from '../components/CloseProjectDialog';
 import { InboxView } from './InboxView';
 import { AskAnywhereView } from './AskAnywhereView';
+import { NotesView } from './NotesView';
+import { LibraryView } from './LibraryView';
+import { FeedView } from './FeedView';
+import { KnowledgeBaseView } from './KnowledgeBaseView';
+import { ScheduledTasksView } from './ScheduledTasksView';
+import { TimelineView } from './TimelineView';
+import { GatewayView } from './GatewayView';
 import { ConversationsView } from './ConversationsView';
 import { TodayView } from './TodayView';
 import { KanbanView } from './KanbanView';
@@ -351,6 +358,20 @@ export function VaultView(): JSX.Element {
           </>
         ) : view.kind === 'inbox' ? (
           <InboxView />
+        ) : view.kind === 'notes' ? (
+          <NotesView />
+        ) : view.kind === 'library' ? (
+          <LibraryView />
+        ) : view.kind === 'feeds' ? (
+          <FeedView />
+        ) : view.kind === 'knowledgeBase' ? (
+          <KnowledgeBaseView />
+        ) : view.kind === 'scheduled' ? (
+          <ScheduledTasksView />
+        ) : view.kind === 'timeline' ? (
+          <TimelineView />
+        ) : view.kind === 'gateway' ? (
+          <GatewayView />
         ) : view.kind === 'askAnywhere' ? (
           <AskAnywhereView />
         ) : view.kind === 'conversations' ? (
