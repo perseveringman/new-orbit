@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Chat 解耦重构 M4 业务无关 Chat 组件**：新增 `src/renderer/src/components/Chat/`：`ChatView.tsx` 纯渲染器（输入 RuntimeEvent[]，输出 ChatAction）、子组件 `MessageBubble` / `ThinkingBlock` / `ToolCard` / `InputArea` / `ActionBar`、hooks `useRuntimeEvents` / `useChatActions`。Chat 目录 grep `'task|inbox|proposal|planner|vault|project'` 验证为空。把原 `chat/approvalCardModel.ts` 迁至 `approval/` 子目录以满足业务无关约束。
 - **Chat 解耦重构 M3 Conversation 数据模型**：新增 `src/shared/conversation/{types,index}.ts` 定义 `Conversation`、`ConversationAnchor`、`ConversationTurn` 数据契约，新增 `src/main/conversation/{store,orchestrator,ipc}.ts` 实现 NDJSON 持久化（`<vault>/.orbit/conversations/<id>.{ndjson,meta.json}`）、生命周期编排和 IPC（`chat.conversation*`）；preload 暴露 `chat.{getConversation,listConversations,createConversation,appendTurn,findConversationsByAnchor}`。
 - **Chat 解耦重构 M2 RuntimeEvent 协议**：新增 `src/shared/chat-protocol/`（`events.ts` 17 个 RuntimeEventKind、`actions.ts` 9 个 ChatActionKind、`host.ts` ChatHost 接口）、`src/main/agent/adapter/runtime_event_bridge.ts`（UnifiedAgentEvent → RuntimeEvent 翻译层）；新增 `IPC.chat.{runtimeEvent, action}` 通道；`broadcastPool` 在原有 agent:event 之外同步推送 RuntimeEvent；preload 暴露 `chat.onRuntimeEvent` / `chat.sendAction`。adapter 层暂保留 UnifiedAgentEvent 内部表示，仅在 IPC 边界翻译。
 - **Chat 解耦重构 M1 基础设施升级**：新增 `src/shared/events/kinds.ts`（27 个 TraceableEventKind 枚举）、`src/shared/events/payloads.ts`（按 kind 强类型 payload 映射），并升级 `src/shared/events.ts` 与 `src/main/events/bus.ts`，使 `publishTraceableEvent` 支持 `kind` 入参且自动与 `type` 双向镜像，旧 publisher 行为零变化。

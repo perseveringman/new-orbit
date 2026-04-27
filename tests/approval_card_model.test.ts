@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getApprovalCardState } from '../src/renderer/src/components/chat/approvalCardModel';
+import { getApprovalCardState } from '../src/renderer/src/components/approval/approvalCardModel';
 import type { Proposal } from '../src/shared/approval';
 
 describe('approval card renderer model', () => {
