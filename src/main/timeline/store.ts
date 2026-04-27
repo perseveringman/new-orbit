@@ -168,6 +168,7 @@ function iconFor(kind: string, noteType: string, specialIcon?: string): string {
   if (kind.startsWith('kb.')) return '🧠';
   if (kind.startsWith('scheduled_task.')) return '⏰';
   if (kind.startsWith('conversation.')) return '💬';
+  if (kind.startsWith('resource.')) return '🧩';
   if (kind.startsWith('agent.')) return '🤖';
   if (kind.startsWith('task.')) return '✅';
   return '•';
@@ -182,6 +183,11 @@ function titleFor(kind: string, payload: Record<string, unknown>, specialKind?: 
   if (kind === 'kb.imported') return `Imported KB ${String(payload['name'] ?? '')}`.trim();
   if (kind === 'kb.activated') return 'Activated knowledge into note';
   if (kind === 'scheduled_task.execution.completed') return 'Scheduled task ran';
+  if (kind === 'resource.created') return `Created Resource ${String(payload['title'] ?? '')}`.trim();
+  if (kind === 'resource.updated') return `Updated Resource ${String(payload['title'] ?? '')}`.trim();
+  if (kind === 'resource.ref.linked') return `Linked material to ${String(payload['title'] ?? 'Resource')}`;
+  if (kind === 'resource.engagement') return `Engaged Resource ${String(payload['title'] ?? '')}`.trim();
+  if (kind === 'resource.archived') return `Archived Resource ${String(payload['title'] ?? '')}`.trim();
   return kind.replace(/\./g, ' ');
 }
 
@@ -194,6 +200,9 @@ function refsFor(kind: string, payload: Record<string, unknown>): TimelineEntry[
   }
   if (kind.startsWith('scheduled_task.') && typeof payload['task_id'] === 'string') {
     return [{ kind: 'task', ref: payload['task_id'], label: String(payload['name'] ?? payload['task_id']) }];
+  }
+  if (kind.startsWith('resource.') && typeof payload['slug'] === 'string') {
+    return [{ kind: 'resource', ref: payload['slug'], label: String(payload['title'] ?? payload['slug']) }];
   }
   return undefined;
 }
@@ -254,4 +263,3 @@ function renderTimelineMarkdown(timeline: DailyTimeline): string {
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
-

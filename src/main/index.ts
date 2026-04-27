@@ -38,6 +38,7 @@ import { registerKnowledgeBaseIpc } from './knowledge-base/ipc';
 import { ensureScheduledSystemTasks, registerScheduledTaskIpc } from './scheduled-task/ipc';
 import { registerTimelineIpc } from './timeline/ipc';
 import { autoStartGatewayIfNeeded, registerGatewayIpc } from './gateway/ipc';
+import { registerResourceIpc } from './resource/ipc';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
 import * as terminal from './terminal/pty_manager';
@@ -373,6 +374,7 @@ function registerIpc(): void {
   registerScheduledTaskIpc(() => currentVault?.path ?? null);
   registerTimelineIpc(() => currentVault?.path ?? null);
   registerGatewayIpc(() => currentVault?.path ?? null);
+  registerResourceIpc(() => currentVault?.path ?? null);
   registerAutoRunnerIpc();
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);

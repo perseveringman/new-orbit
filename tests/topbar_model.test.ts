@@ -16,6 +16,7 @@ describe('top bar model', () => {
       'Notes',
       'Library',
       'Feeds',
+      'Resources',
       'Knowledge',
       'Timeline',
       'Scheduled',

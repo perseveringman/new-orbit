@@ -121,6 +121,7 @@ import type {
   GatewayRouteResult,
   GatewayStatus
 } from '@shared/gateway';
+import type { ResourceChangeEvent } from '@shared/resource';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   ConversationTurn,
@@ -659,6 +660,23 @@ const api: OrbitApi = {
       const listener = (_: unknown, status: GatewayStatus): void => cb(status);
       ipcRenderer.on(IPC.gateway.event, listener);
       return () => ipcRenderer.removeListener(IPC.gateway.event, listener);
+    }
+  },
+  resources: {
+    list: (filter) => ipcRenderer.invoke(IPC.resources.list, filter),
+    get: (resourceIdOrSlug) => ipcRenderer.invoke(IPC.resources.get, resourceIdOrSlug),
+    create: (input) => ipcRenderer.invoke(IPC.resources.create, input),
+    update: (resourceIdOrSlug, patch) => ipcRenderer.invoke(IPC.resources.update, resourceIdOrSlug, patch),
+    archive: (resourceIdOrSlug) => ipcRenderer.invoke(IPC.resources.archive, resourceIdOrSlug),
+    linkRef: (resourceIdOrSlug, input) => ipcRenderer.invoke(IPC.resources.linkRef, resourceIdOrSlug, input),
+    unlinkRef: (resourceIdOrSlug, refId) => ipcRenderer.invoke(IPC.resources.unlinkRef, resourceIdOrSlug, refId),
+    engage: (resourceIdOrSlug, input) => ipcRenderer.invoke(IPC.resources.engage, resourceIdOrSlug, input),
+    suggestFromNotes: (options) => ipcRenderer.invoke(IPC.resources.suggestFromNotes, options),
+    createFromSuggestion: (input) => ipcRenderer.invoke(IPC.resources.createFromSuggestion, input),
+    onEvent: (cb) => {
+      const listener = (_: unknown, event: ResourceChangeEvent): void => cb(event);
+      ipcRenderer.on(IPC.resources.event, listener);
+      return () => ipcRenderer.removeListener(IPC.resources.event, listener);
     }
   },
   quickCapture: {

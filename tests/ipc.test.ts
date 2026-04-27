@@ -33,6 +33,7 @@ describe('IPC contract', () => {
         'planner',
         'project',
         'quickCapture',
+        'resources',
         'review',
         'role',
         'runtime',

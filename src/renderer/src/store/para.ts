@@ -11,6 +11,7 @@ export type WorkspaceView =
   | { kind: 'notes' }
   | { kind: 'library' }
   | { kind: 'feeds' }
+  | { kind: 'resources' }
   | { kind: 'knowledgeBase' }
   | { kind: 'scheduled' }
   | { kind: 'timeline' }

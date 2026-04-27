@@ -114,6 +114,20 @@ import type {
 import type { DailySummary, DailyTimeline, MonthlyIndex, TimelineScope, YearlyIndex } from './timeline';
 import type { Artifact, ConversationStage } from './stage';
 import type {
+  CreateResourceFromSuggestionInput,
+  CreateResourceInput,
+  LinkResourceRefInput,
+  Resource,
+  ResourceChangeEvent,
+  ResourceEngagement,
+  ResourceEngagementInput,
+  ResourceFilter,
+  ResourceSuggestion,
+  ResourceSuggestionOptions,
+  ResourceSummary,
+  UpdateResourceInput
+} from './resource';
+import type {
   ChannelConfig,
   ChannelInboundMessage,
   GatewayConfig,
@@ -460,6 +474,19 @@ export const IPC = {
     generateBindCode: 'gateway:channel:generateBindCode',
     routeInbound: 'gateway:routeInbound',
     event: 'gateway:event'
+  },
+  resources: {
+    list: 'resources:list',
+    get: 'resources:get',
+    create: 'resources:create',
+    update: 'resources:update',
+    archive: 'resources:archive',
+    linkRef: 'resources:linkRef',
+    unlinkRef: 'resources:unlinkRef',
+    engage: 'resources:engage',
+    suggestFromNotes: 'resources:suggestFromNotes',
+    createFromSuggestion: 'resources:createFromSuggestion',
+    event: 'resources:event'
   },
   quickCapture: {
     open: 'quickCapture:open'
@@ -1261,6 +1288,19 @@ export interface OrbitApi {
     generateBindCode(orbitUserId?: string): Promise<{ code: string; expires_at: string }>;
     routeInbound(message: ChannelInboundMessage): Promise<GatewayRouteResult>;
     onEvent(cb: (status: GatewayStatus) => void): () => void;
+  };
+  resources: {
+    list(filter?: ResourceFilter): Promise<ResourceSummary[]>;
+    get(resourceIdOrSlug: string): Promise<Resource | null>;
+    create(input: CreateResourceInput): Promise<Resource>;
+    update(resourceIdOrSlug: string, patch: UpdateResourceInput): Promise<Resource>;
+    archive(resourceIdOrSlug: string): Promise<Resource>;
+    linkRef(resourceIdOrSlug: string, input: LinkResourceRefInput): Promise<Resource>;
+    unlinkRef(resourceIdOrSlug: string, refId: string): Promise<Resource>;
+    engage(resourceIdOrSlug: string, input?: ResourceEngagementInput): Promise<ResourceEngagement>;
+    suggestFromNotes(options?: ResourceSuggestionOptions): Promise<ResourceSuggestion[]>;
+    createFromSuggestion(input: CreateResourceFromSuggestionInput): Promise<Resource>;
+    onEvent(cb: (event: ResourceChangeEvent) => void): () => void;
   };
   quickCapture: {
     onOpen(cb: () => void): () => void;

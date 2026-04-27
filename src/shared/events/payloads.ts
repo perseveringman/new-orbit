@@ -168,6 +168,24 @@ export interface ParaEventPayload {
   kind?: string;
 }
 
+export interface ResourceEventPayload {
+  resource_id: string;
+  slug: string;
+  title?: string;
+  path?: string;
+  status?: string;
+  depth?: string;
+  engagement_count?: number;
+  ref_id?: string;
+  ref_kind?: string;
+  ref?: string;
+  section?: string;
+  engagement_id?: string;
+  source?: string;
+  note_count?: number;
+  tag?: string;
+}
+
 export interface ScheduledTaskEventPayload {
   task_id: string;
   execution_id?: string;
@@ -260,8 +278,11 @@ export interface TraceableEventPayloadMap {
   'stage.artifact.updated': StageArtifactPayload;
   'stage.artifact.removed': StageArtifactPayload;
   'stage.artifact.action_executed': StageArtifactPayload;
-  'resource.created': ParaEventPayload;
-  'resource.engagement': ParaEventPayload;
+  'resource.created': ResourceEventPayload;
+  'resource.updated': ResourceEventPayload;
+  'resource.ref.linked': ResourceEventPayload;
+  'resource.engagement': ResourceEventPayload;
+  'resource.archived': ResourceEventPayload;
   'activity.user': ActivityPayload;
   'activity.system': ActivityPayload;
   'ipc.events.query': IpcEventsQueryPayload;

@@ -7,6 +7,7 @@ export type VaultViewKind =
   | 'notes'
   | 'library'
   | 'feeds'
+  | 'resources'
   | 'knowledgeBase'
   | 'scheduled'
   | 'timeline'
@@ -33,6 +34,7 @@ export type SidebarSurfaceId =
   | 'notes'
   | 'library'
   | 'feeds'
+  | 'resources'
   | 'knowledgeBase'
   | 'scheduled'
   | 'timeline'
@@ -121,6 +123,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   },
   feeds: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+  },
+  resources: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks', 'inspector'] }]
   },
   knowledgeBase: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]

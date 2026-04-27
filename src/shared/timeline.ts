@@ -87,7 +87,10 @@ export const TIMELINE_LAYER_1_KINDS = new Set([
   'task.completed',
   'conversation.started',
   'resource.created',
-  'resource.engagement'
+  'resource.updated',
+  'resource.ref.linked',
+  'resource.engagement',
+  'resource.archived'
 ]);
 
 export const TIMELINE_LAYER_2_KINDS = new Set([
@@ -107,4 +110,3 @@ export function shouldShowOnTimeline(eventKind: string | undefined, developerMod
   if (developerMode && TIMELINE_LAYER_2_KINDS.has(eventKind)) return true;
   return false;
 }
-

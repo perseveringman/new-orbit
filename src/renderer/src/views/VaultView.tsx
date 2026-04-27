@@ -21,6 +21,7 @@ import { AskAnywhereView } from './AskAnywhereView';
 import { NotesView } from './NotesView';
 import { LibraryView } from './LibraryView';
 import { FeedView } from './FeedView';
+import { ResourceView } from './ResourceView';
 import { KnowledgeBaseView } from './KnowledgeBaseView';
 import { ScheduledTasksView } from './ScheduledTasksView';
 import { TimelineView } from './TimelineView';
@@ -364,6 +365,8 @@ export function VaultView(): JSX.Element {
           <LibraryView />
         ) : view.kind === 'feeds' ? (
           <FeedView />
+        ) : view.kind === 'resources' ? (
+          <ResourceView />
         ) : view.kind === 'knowledgeBase' ? (
           <KnowledgeBaseView />
         ) : view.kind === 'scheduled' ? (

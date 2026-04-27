@@ -17,6 +17,7 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Notes', view: { kind: 'notes' }, icon: '📝' },
   { label: 'Library', view: { kind: 'library' }, icon: '📚' },
   { label: 'Feeds', view: { kind: 'feeds' }, icon: '🛰️' },
+  { label: 'Resources', view: { kind: 'resources' }, icon: '🧩' },
   { label: 'Knowledge', view: { kind: 'knowledgeBase' }, icon: '🧠' },
   { label: 'Timeline', view: { kind: 'timeline' }, icon: '☼' },
   { label: 'Scheduled', view: { kind: 'scheduled' }, icon: '⏰' },
@@ -50,7 +51,8 @@ const WORKSPACE_DETAILS: Record<
    | 'notes'
    | 'library'
    | 'feeds'
-   | 'knowledgeBase'
+    | 'resources'
+    | 'knowledgeBase'
    | 'scheduled'
    | 'timeline'
    | 'gateway'
@@ -68,6 +70,7 @@ const WORKSPACE_DETAILS: Record<
   notes: 'Create, search, and edit active Markdown notes.',
   library: 'Save and read source material before distillation.',
   feeds: 'Manage subscriptions and triage incoming feed items.',
+  resources: 'Cultivate topic workstations from repeated notes, links, people, and projects.',
   knowledgeBase: 'Import existing archives and activate excerpts into Notes.',
   scheduled: 'Manage recurring Orbit automations and execution history.',
   timeline: 'Review user-visible events as a daily life log.',
@@ -155,6 +158,7 @@ export function deriveTopBarContext({
     view.kind === 'notes' ||
     view.kind === 'library' ||
     view.kind === 'feeds' ||
+    view.kind === 'resources' ||
     view.kind === 'knowledgeBase' ||
     view.kind === 'scheduled' ||
     view.kind === 'timeline' ||

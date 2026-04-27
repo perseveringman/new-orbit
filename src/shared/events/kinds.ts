@@ -77,7 +77,10 @@ export const TRACEABLE_EVENT_KINDS = [
   'stage.artifact.removed',
   'stage.artifact.action_executed',
   'resource.created',
+  'resource.updated',
+  'resource.ref.linked',
   'resource.engagement',
+  'resource.archived',
   // Activity
   'activity.user',
   'activity.system',
