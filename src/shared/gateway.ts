@@ -1,5 +1,6 @@
 export type ChannelKind = 'telegram' | 'whatsapp' | 'email' | 'sms' | 'webhook' | 'wechat';
 export type ChannelStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface ChannelConfig {
   id: string;
@@ -10,6 +11,12 @@ export interface ChannelConfig {
   bot_token?: string;
   allowed_user_ids?: string[];
   default_thread_id?: string;
+  require_bind?: boolean;
+  drop_pending_updates_on_start?: boolean;
+  poll_timeout_seconds?: number;
+  bot_username?: string;
+  last_error?: string;
+  last_seen_at?: string;
 }
 
 export interface GatewayConfig {
@@ -17,7 +24,7 @@ export interface GatewayConfig {
   daemon: {
     auto_start: boolean;
     keep_running_after_app_close: boolean;
-    log_level: 'debug' | 'info' | 'warn' | 'error';
+    log_level: GatewayLogLevel;
   };
   channels: ChannelConfig[];
   orbit: {
@@ -34,7 +41,23 @@ export interface GatewayConfig {
 export interface GatewayStatus {
   running: boolean;
   started_at?: string;
-  channels: Array<ChannelConfig & { status: ChannelStatus }>;
+  channels: GatewayChannelStatus[];
+  logs?: GatewayLogEntry[];
+}
+
+export interface GatewayChannelStatus extends ChannelConfig {
+  status: ChannelStatus;
+  started_at?: string;
+  last_error?: string;
+  last_seen_at?: string;
+}
+
+export interface GatewayLogEntry {
+  id: string;
+  at: string;
+  level: GatewayLogLevel;
+  channel_id?: string;
+  message: string;
 }
 
 export interface ChannelInboundMessage {
@@ -62,5 +85,5 @@ export interface GatewayRouteResult {
   reason?: string;
   conversationId?: string;
   artifact?: { kind: string; ref: string };
+  reply?: string;
 }
-

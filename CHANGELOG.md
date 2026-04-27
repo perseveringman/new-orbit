@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Gateway Telegram 可用化**：参照 openclaw 的 channel lifecycle 思路，把原本只会本地切状态的 Gateway 骨架升级为真实 Telegram Bot 长轮询运行时；支持 auto-start、关闭窗口后保持本地主进程运行、绑定码授权、未绑定用户拒绝、Telegram 回执、重连退避、channel 状态/错误/log 展示，并继续把 URL / `#thought` / 普通文本分别路由到 Library、Thoughts、Ask-Anywhere。
 - **Phase 2 Resource 主题工作站**：补充 `06-resource-workstation.md`，新增 Resource shared contract、main-process store/IPC、preload API、Resources 工作区入口、TraceableEvent/Timeline 投影和 Resource store 测试；支持创建主题工作站、六段目录、链接引用、手动 engagement、从 Notes tags 自下而上生成 Resource suggestions。
 - **Phase 2 Knowledge Stack 一次性落地**：新增 Notes 一级入口（Markdown frontmatter CRUD / 搜索 / 归档）、Library / Feeds / Knowledge Base / Scheduled / Timeline / Gateway 工作区入口；补齐 Notes、KB 导入/激活、定时任务、Daily Timeline、Ask-Anywhere Stage Artifact、Gateway channel 管理的 IPC/preload/renderer 闭环，并把 Phase 2 事件接入 TraceableEvent 与 Timeline 投影。
 - **Chat 解耦重构 P1-P5 落地差距收尾**：

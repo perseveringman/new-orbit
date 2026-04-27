@@ -5,22 +5,18 @@ import type {
   ChannelConfig,
   ChannelInboundMessage,
   GatewayConfig,
-  GatewayRouteResult,
-  GatewayStatus
+  GatewayRouteResult
 } from '@shared/gateway';
 import { createLibraryService } from '../capture/library/service';
 import { createThoughtService } from '../capture/thoughts/service';
 import { getAskAnywhereOrchestrator } from '../ask-anywhere/ipc';
-
-let running = false;
-let startedAt: string | undefined;
 
 export class GatewayStore {
   constructor(private readonly vaultPath: string) {}
 
   async getConfig(): Promise<GatewayConfig> {
     try {
-      return JSON.parse(await fs.readFile(this.configPath(), 'utf8')) as GatewayConfig;
+      return normalizeConfig(JSON.parse(await fs.readFile(this.configPath(), 'utf8')) as Partial<GatewayConfig>, this.vaultPath);
     } catch (error) {
       if (!isNotFound(error)) throw error;
       return {
@@ -47,37 +43,13 @@ export class GatewayStore {
     return next;
   }
 
-  async status(): Promise<GatewayStatus> {
-    const config = await this.getConfig();
-    return {
-      running,
-      ...(startedAt ? { started_at: startedAt } : {}),
-      channels: config.channels.map((channel) => ({
-        ...channel,
-        status: running && channel.enabled ? 'connected' : 'disconnected'
-      }))
-    };
-  }
-
-  async start(): Promise<GatewayStatus> {
-    running = true;
-    startedAt = startedAt ?? new Date().toISOString();
-    return this.status();
-  }
-
-  async stop(): Promise<GatewayStatus> {
-    running = false;
-    startedAt = undefined;
-    return this.status();
-  }
-
   async addChannel(channel: Omit<ChannelConfig, 'id'> & { id?: string }): Promise<GatewayConfig> {
     const config = await this.getConfig();
-    const next: ChannelConfig = {
+    const next = normalizeChannel({
       ...channel,
       id: channel.id ?? `channel-${randomUUID()}`,
       status: 'disconnected'
-    };
+    });
     config.channels.push(next);
     await this.writeConfig(config);
     return config;
@@ -86,10 +58,41 @@ export class GatewayStore {
   async updateChannel(channelId: string, patch: Partial<ChannelConfig>): Promise<GatewayConfig> {
     const config = await this.getConfig();
     config.channels = config.channels.map((channel) =>
-      channel.id === channelId ? { ...channel, ...patch, id: channel.id } : channel
+      channel.id === channelId ? normalizeChannel({ ...channel, ...patch, id: channel.id }) : channel
     );
     await this.writeConfig(config);
     return config;
+  }
+
+  async bindTelegramUser(
+    channelId: string,
+    code: string,
+    user: { id: string; name?: string }
+  ): Promise<{ accepted: boolean; reason?: string; config?: GatewayConfig }> {
+    const normalizedCode = code.trim().toUpperCase();
+    const config = await this.getConfig();
+    const now = Date.now();
+    const bind = config.pending_binds.find(
+      (item) => item.code.toUpperCase() === normalizedCode && Date.parse(item.expires_at) > now
+    );
+    if (!bind) {
+      config.pending_binds = config.pending_binds.filter((item) => Date.parse(item.expires_at) > now);
+      await this.writeConfig(config);
+      return { accepted: false, reason: 'bind_code_invalid_or_expired' };
+    }
+    const channel = config.channels.find((item) => item.id === channelId);
+    if (!channel) return { accepted: false, reason: 'channel_not_found' };
+    if (channel.kind !== 'telegram') return { accepted: false, reason: 'channel_not_telegram' };
+
+    const allowed = new Set(channel.allowed_user_ids ?? []);
+    allowed.add(user.id);
+    channel.allowed_user_ids = [...allowed];
+    channel.default_thread_id = channel.default_thread_id ?? user.id;
+    channel.require_bind = true;
+    channel.last_seen_at = new Date().toISOString();
+    config.pending_binds = config.pending_binds.filter((item) => item.code !== bind.code);
+    await this.writeConfig(config);
+    return { accepted: true, config };
   }
 
   async removeChannel(channelId: string): Promise<GatewayConfig> {
@@ -112,17 +115,21 @@ export class GatewayStore {
     const config = await this.getConfig();
     const channel = config.channels.find((item) => item.id === message.channel_id);
     if (!channel) return { accepted: false, reason: 'channel_not_found' };
+    if (channel.require_bind !== false && !channel.allowed_user_ids?.includes(message.from.id)) {
+      return { accepted: false, reason: 'sender_not_bound', reply: 'This Telegram user is not bound to Orbit yet.' };
+    }
     if (channel.allowed_user_ids?.length && !channel.allowed_user_ids.includes(message.from.id)) {
-      return { accepted: false, reason: 'sender_not_bound' };
+      return { accepted: false, reason: 'sender_not_allowed', reply: 'This Telegram user is not allowed for this Orbit channel.' };
     }
     const text = textFromMessage(message);
+    if (!text) return { accepted: false, reason: 'empty_message', reply: 'Orbit received an empty message.' };
     if (message.kind === 'url' || /^https?:\/\//i.test(text)) {
       const item = await createLibraryService(this.vaultPath).saveArticle({
         url: text,
         source: 'share',
         actor: 'user'
       });
-      return { accepted: true, artifact: { kind: 'library_item', ref: item.id } };
+      return { accepted: true, artifact: { kind: 'library_item', ref: item.id }, reply: 'Saved to Library.' };
     }
     if (text.startsWith('#')) {
       const item = await createThoughtService(this.vaultPath).create({
@@ -131,7 +138,7 @@ export class GatewayStore {
         createdFrom: 'manual',
         actor: 'user'
       });
-      return { accepted: true, artifact: { kind: 'thought', ref: item.id } };
+      return { accepted: true, artifact: { kind: 'thought', ref: item.id }, reply: 'Captured as a Thought.' };
     }
     const result = await getAskAnywhereOrchestrator().ingestExternalMessage({
       source: channel.kind,
@@ -139,7 +146,7 @@ export class GatewayStore {
       text,
       title: `${channel.name} · ${message.from.name ?? message.from.id}`
     });
-    return { accepted: true, conversationId: result.conversationId };
+    return { accepted: true, conversationId: result.conversationId, reply: 'Routed to Ask-Anywhere.' };
   }
 
   private configPath(): string {
@@ -167,7 +174,34 @@ function textFromMessage(message: ChannelInboundMessage): string {
   return '';
 }
 
+function normalizeConfig(config: Partial<GatewayConfig>, vaultPath: string): GatewayConfig {
+  return {
+    version: 1,
+    daemon: {
+      auto_start: Boolean(config.daemon?.auto_start),
+      keep_running_after_app_close: Boolean(config.daemon?.keep_running_after_app_close),
+      log_level: config.daemon?.log_level ?? 'info'
+    },
+    channels: (config.channels ?? []).map(normalizeChannel),
+    orbit: {
+      app_ipc_socket: config.orbit?.app_ipc_socket ?? path.join(vaultPath, '.orbit', 'gateway.sock'),
+      vault_path: config.orbit?.vault_path ?? vaultPath
+    },
+    pending_binds: (config.pending_binds ?? []).filter((item) => Date.parse(item.expires_at) > Date.now())
+  };
+}
+
+function normalizeChannel(channel: ChannelConfig): ChannelConfig {
+  return {
+    ...channel,
+    require_bind: channel.require_bind ?? channel.kind === 'telegram',
+    drop_pending_updates_on_start: channel.drop_pending_updates_on_start ?? channel.kind === 'telegram',
+    poll_timeout_seconds: channel.poll_timeout_seconds ?? (channel.kind === 'telegram' ? 25 : undefined),
+    allowed_user_ids: channel.allowed_user_ids ?? [],
+    status: channel.status ?? 'disconnected'
+  };
+}
+
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
-

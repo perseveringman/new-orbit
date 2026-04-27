@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { ChannelConfig, ChannelInboundMessage, GatewayConfig, GatewayStatus } from '@shared/gateway';
 import { createGatewayStore } from './store';
+import { getGatewayRuntime } from './runtime';
 import { publishTraceableEvent } from '../events/bus';
 
 export function registerGatewayIpc(getVaultPath: () => string | null): void {
@@ -11,29 +12,46 @@ export function registerGatewayIpc(getVaultPath: () => string | null): void {
     return value;
   };
   const store = () => createGatewayStore(vaultPath());
+  const runtime = () => {
+    const path = vaultPath();
+    ensureRuntimeBroadcast(path);
+    return getGatewayRuntime(path);
+  };
 
   ipcMain.handle(IPC.gateway.configGet, () => store().getConfig());
-  ipcMain.handle(IPC.gateway.configUpdate, (_event, patch: Partial<GatewayConfig>) => store().updateConfig(patch));
-  ipcMain.handle(IPC.gateway.status, () => store().status());
+  ipcMain.handle(IPC.gateway.configUpdate, async (_event, patch: Partial<GatewayConfig>) => {
+    const config = await store().updateConfig(patch);
+    await runtime().reloadConfig();
+    return config;
+  });
+  ipcMain.handle(IPC.gateway.status, () => runtime().status());
   ipcMain.handle(IPC.gateway.start, async () => {
-    const status = await store().start();
+    const status = await runtime().start();
     publishTraceableEvent({ source: 'activity', kind: 'channel.connected', payload: { channel: 'gateway' } });
     broadcast(status);
     return status;
   });
   ipcMain.handle(IPC.gateway.stop, async () => {
-    const status = await store().stop();
+    const status = await runtime().stop();
     publishTraceableEvent({ source: 'activity', kind: 'channel.disconnected', payload: { channel: 'gateway' } });
     broadcast(status);
     return status;
   });
-  ipcMain.handle(IPC.gateway.addChannel, (_event, channel: Omit<ChannelConfig, 'id'> & { id?: string }) =>
-    store().addChannel(channel)
-  );
-  ipcMain.handle(IPC.gateway.updateChannel, (_event, channelId: string, patch: Partial<ChannelConfig>) =>
-    store().updateChannel(channelId, patch)
-  );
-  ipcMain.handle(IPC.gateway.removeChannel, (_event, channelId: string) => store().removeChannel(channelId));
+  ipcMain.handle(IPC.gateway.addChannel, async (_event, channel: Omit<ChannelConfig, 'id'> & { id?: string }) => {
+    const config = await store().addChannel(channel);
+    await runtime().reloadConfig();
+    return config;
+  });
+  ipcMain.handle(IPC.gateway.updateChannel, async (_event, channelId: string, patch: Partial<ChannelConfig>) => {
+    const config = await store().updateChannel(channelId, patch);
+    await runtime().reloadConfig();
+    return config;
+  });
+  ipcMain.handle(IPC.gateway.removeChannel, async (_event, channelId: string) => {
+    const config = await store().removeChannel(channelId);
+    await runtime().reloadConfig();
+    return config;
+  });
   ipcMain.handle(IPC.gateway.generateBindCode, (_event, orbitUserId?: string) => store().generateBindCode(orbitUserId));
   ipcMain.handle(IPC.gateway.routeInbound, async (_event, message: ChannelInboundMessage) => {
     const result = await store().routeInbound(message);
@@ -56,7 +74,16 @@ export function registerGatewayIpc(getVaultPath: () => string | null): void {
 export async function autoStartGatewayIfNeeded(vaultPath: string): Promise<void> {
   const store = createGatewayStore(vaultPath);
   const config = await store.getConfig();
-  if (config.daemon.auto_start) await store.start();
+  ensureRuntimeBroadcast(vaultPath);
+  if (config.daemon.auto_start) await getGatewayRuntime(vaultPath).start();
+}
+
+const broadcastListeners = new Set<string>();
+
+function ensureRuntimeBroadcast(vaultPath: string): void {
+  if (broadcastListeners.has(vaultPath)) return;
+  broadcastListeners.add(vaultPath);
+  getGatewayRuntime(vaultPath).onStatus((status) => broadcast(status));
 }
 
 function broadcast(status: GatewayStatus): void {
@@ -64,4 +91,3 @@ function broadcast(status: GatewayStatus): void {
     if (!win.isDestroyed()) win.webContents.send(IPC.gateway.event, status);
   }
 }
-

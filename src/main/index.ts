@@ -38,6 +38,8 @@ import { registerKnowledgeBaseIpc } from './knowledge-base/ipc';
 import { ensureScheduledSystemTasks, registerScheduledTaskIpc } from './scheduled-task/ipc';
 import { registerTimelineIpc } from './timeline/ipc';
 import { autoStartGatewayIfNeeded, registerGatewayIpc } from './gateway/ipc';
+import { stopGatewayRuntime } from './gateway/runtime';
+import { createGatewayStore } from './gateway/store';
 import { registerResourceIpc } from './resource/ipc';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
@@ -270,6 +272,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.workspace.openPath, handleOpenPath);
   ipcMain.handle(IPC.workspace.current, () => currentVault);
   ipcMain.handle(IPC.workspace.close, async () => {
+    const closingVaultPath = currentVault?.path ?? null;
     currentVault = null;
     configureActivityEmitter(null);
     configureEventReplay(null);
@@ -280,6 +283,7 @@ function registerIpc(): void {
     shutdownOrchestration();
     getAutoRunnerDispatcher().detach();
     await closeFsSession();
+    if (closingVaultPath) await stopGatewayRuntime(closingVaultPath);
     await setLastVaultPath(null);
   });
   ipcMain.handle(IPC.workspace.crashLogPath, () =>
@@ -417,10 +421,23 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform === 'darwin') return;
+  void (async () => {
+    if (!(await shouldKeepGatewayRunningAfterWindowClose())) app.quit();
+  })();
 });
 
 app.on('before-quit', () => {
   globalShortcut.unregister(QUICK_CAPTURE_ACCELERATOR);
   void stopCliServer();
 });
+
+async function shouldKeepGatewayRunningAfterWindowClose(): Promise<boolean> {
+  if (!currentVault) return false;
+  try {
+    const config = await createGatewayStore(currentVault.path).getConfig();
+    return config.daemon.keep_running_after_app_close;
+  } catch {
+    return false;
+  }
+}
