@@ -11,6 +11,8 @@ const ITEMS: Item[] = [
   { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
   { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
+  { label: 'Ask Anywhere', view: { kind: 'askAnywhere' }, icon: '✨' },
+  { label: 'Conversations', view: { kind: 'conversations' }, icon: '💬' },
   { label: 'Today', view: { kind: 'today' }, icon: '☼' },
   { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
 ];

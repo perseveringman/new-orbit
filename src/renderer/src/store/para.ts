@@ -8,6 +8,8 @@ export type WorkspaceView =
   | { kind: 'github' }
   | { kind: 'developerConsole' }
   | { kind: 'inbox' }
+  | { kind: 'askAnywhere' }
+  | { kind: 'conversations' }
   | { kind: 'today' }
   | { kind: 'journals' }
   | { kind: 'runtimes' }

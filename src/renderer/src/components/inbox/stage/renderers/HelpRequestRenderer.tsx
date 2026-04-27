@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { InboxItem } from '@shared/inbox';
 import type { TaskRecord } from '@shared/schemas';
 import { TaskConversationTab } from '../../../Tasks/TaskConversationTab';
+import { InboxChatHost } from '../../InboxChatHost';
 import { usePara } from '../../../../store/para';
 import { useWorkspace } from '../../../../store/workspace';
 
@@ -11,6 +12,7 @@ export function HelpRequestRenderer({ item }: { item: InboxItem }): JSX.Element 
   const setView = usePara((state) => state.setView);
   const setActiveProjectUid = useWorkspace((state) => state.setActiveProjectUid);
   const task = findLinkedTask(tasks, item.context.task_uid);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!item.context.task_uid) return;
@@ -18,10 +20,36 @@ export function HelpRequestRenderer({ item }: { item: InboxItem }): JSX.Element 
     void refresh();
   }, [item.context.task_uid, refresh, task]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function findOrCreate(): Promise<void> {
+      try {
+        const existing = await window.orbit.chat.findConversationsByAnchor('inbox_item', item.id);
+        if (cancelled) return;
+        if (existing.length > 0) {
+          setConversationId(existing[0]!.id);
+          return;
+        }
+        const created = await window.orbit.chat.createConversation({
+          anchor: { kind: 'inbox_item', refId: item.id, addedAt: new Date().toISOString() },
+          title: item.title
+        } as Parameters<typeof window.orbit.chat.createConversation>[0]);
+        if (!cancelled) setConversationId(created.id);
+      } catch {
+        // 找不到/创建失败时，回退到旧 TaskConversationTab。
+      }
+    }
+    void findOrCreate();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, item.title]);
+
   return (
     <HelpRequestStageContent
       item={item}
       task={task}
+      conversationId={conversationId}
       onOpenTask={() => {
         if (!task) return;
         setActiveProjectUid(task.project_uid ?? null);
@@ -34,10 +62,12 @@ export function HelpRequestRenderer({ item }: { item: InboxItem }): JSX.Element 
 export function HelpRequestStageContent({
   item,
   task,
+  conversationId,
   onOpenTask
 }: {
   item: InboxItem;
   task: TaskRecord | null;
+  conversationId?: string | null;
   onOpenTask?(): void;
 }): JSX.Element {
   return (
@@ -64,7 +94,11 @@ export function HelpRequestStageContent({
         <span>Task: {item.context.task_uid ?? 'Not linked'}</span>
         <span>Run: {item.context.run_id ?? 'Not linked'}</span>
       </div>
-      {task ? (
+      {conversationId ? (
+        <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+          <InboxChatHost conversationId={conversationId} />
+        </div>
+      ) : task ? (
         <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
           <TaskConversationTab task={task} />
         </div>

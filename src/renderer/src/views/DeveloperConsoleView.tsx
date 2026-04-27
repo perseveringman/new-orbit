@@ -6,7 +6,8 @@ const SOURCE_LABELS: Record<TraceableEventSource, string> = {
   activity: 'Activity',
   agent: 'Agent',
   inbox: 'Inbox',
-  ipc: 'IPC'
+  ipc: 'IPC',
+  conversation: 'Conversation'
 };
 
 export function DeveloperConsoleView(): JSX.Element {

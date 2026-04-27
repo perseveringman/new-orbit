@@ -8,6 +8,8 @@ export interface PoolEvent {
   runId: string;
   event: AgentEvent;
   unifiedEvent: UnifiedAgentEvent;
+  /** Chat 解耦 P0：来自 SpawnOpts.conversationId，路由到 RuntimeEvent.conversationId。 */
+  conversationId?: string;
 }
 
 export class RunnerPool extends EventEmitter {
@@ -47,7 +49,12 @@ export class RunnerPool extends EventEmitter {
           name: opts.runtimeName
         }
       });
-      this.emit('event', { runId: r.runId, event: ev, unifiedEvent } satisfies PoolEvent);
+      this.emit('event', {
+        runId: r.runId,
+        event: ev,
+        unifiedEvent,
+        ...(opts.conversationId ? { conversationId: opts.conversationId } : {})
+      } satisfies PoolEvent);
     });
     r.on('exit', () => {
       if (opts.taskId && this.byTask.get(opts.taskId) === r.runId) {

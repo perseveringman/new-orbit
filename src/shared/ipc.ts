@@ -43,6 +43,27 @@ import type {
   DashboardThinkingStats
 } from './dashboard';
 import type { TraceableEvent, TraceableEventFilter, TraceableEventQueryResult } from './events';
+import type { ChatAction, RuntimeEvent as ChatRuntimeEvent } from './chat-protocol';
+import type {
+  Conversation as ChatConversation,
+  ConversationAnchor as ChatConversationAnchor,
+  ConversationMeta as ChatConversationMeta,
+  ConversationTurn as ChatConversationTurn,
+  ConversationTurnRole as ChatConversationTurnRole
+} from './conversation';
+
+export interface ChatCreateConversationInput {
+  anchor: ChatConversationAnchor;
+  runtimeHint?: string;
+  title?: string;
+}
+
+export interface ChatAppendTurnInput {
+  conversationId: string;
+  role: ChatConversationTurnRole;
+  content: string;
+  runtimeEventIds?: string[];
+}
 import type {
   Proposal,
   ProposalListFilter,
@@ -202,6 +223,18 @@ export const IPC = {
     send: 'conversation:send',
     switchRuntime: 'conversation:switchRuntime',
     event: 'conversation:event'
+  },
+  chat: {
+    /** RuntimeEvent 流（Chat 解耦 M2 起，M4/M5 消费）。 */
+    runtimeEvent: 'chat:runtimeEvent',
+    /** ChatAction 入站（renderer → main）。 */
+    action: 'chat:action',
+    /** Conversation 数据模型（M3）。 */
+    conversationGet: 'chat:conversation:get',
+    conversationList: 'chat:conversation:list',
+    conversationCreate: 'chat:conversation:create',
+    conversationAppendTurn: 'chat:conversation:appendTurn',
+    conversationFindByAnchor: 'chat:conversation:findByAnchor'
   },
   dispatch: {
     status: 'dispatch:status',
@@ -879,6 +912,18 @@ export interface OrbitApi {
     }>;
     switchRuntime(taskUid: string, runtimeId: string): Promise<{ runId: string; segmentId?: string }>;
     onEvent(cb: (ev: { taskId: string; turn: ConversationTurn }) => void): () => void;
+  };
+  chat: {
+    /** 订阅业务无关 RuntimeEvent 流（M2 起）。 */
+    onRuntimeEvent(cb: (ev: ChatRuntimeEvent) => void): () => void;
+    /** 发送 ChatAction 到 main（M5+ 实装 host 处理）。 */
+    sendAction(action: ChatAction): Promise<void>;
+    /** Conversation 数据模型（M3）。 */
+    getConversation(id: string): Promise<ChatConversation | null>;
+    listConversations(): Promise<ChatConversationMeta[]>;
+    createConversation(input: ChatCreateConversationInput): Promise<ChatConversation>;
+    appendTurn(input: ChatAppendTurnInput): Promise<ChatConversationTurn>;
+    findConversationsByAnchor(kind: string, refId: string): Promise<ChatConversationMeta[]>;
   };
   dispatch: {
     status(projectUid?: string): Promise<DispatchSnapshot>;

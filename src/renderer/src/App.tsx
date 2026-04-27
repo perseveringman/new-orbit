@@ -6,6 +6,7 @@ import { VaultView } from './views/VaultView';
 import { Toasts } from './components/Toasts';
 import { SettingsModal } from './components/SettingsModal';
 import { QuickCaptureProvider } from './components/quick-capture/QuickCaptureProvider';
+import { FloatingBall } from './components/ask-anywhere/FloatingBall';
 
 export function App(): JSX.Element {
   const { init, loading, vault, error } = useWorkspace();
@@ -36,6 +37,7 @@ export function App(): JSX.Element {
       <Toasts />
       <QuickCaptureProvider />
       <SettingsModal />
+      {vault && <FloatingBall />}
     </div>
   );
 }

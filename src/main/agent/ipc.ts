@@ -70,6 +70,7 @@ import { listAreas } from '../area';
 import { readTaskFile } from '../task';
 import { getLocalRuntimeManager } from '../orchestration/runtime';
 import { currentRunRecorder, publishTraceableEvent } from '../events/bus';
+import { unifiedAgentEventToRuntimeEvent } from './adapter/runtime_event_bridge';
 import { buildAgentOnboardingPrompt } from './onboarding';
 
 const AGENT_EVENT_CHANNEL = 'agent:event';
@@ -85,6 +86,7 @@ function broadcastPool(): void {
   pool.on('event', (ev: PoolEvent) => {
     publishTraceableEvent({
       source: 'agent',
+      kind: 'agent.run.event',
       type: ev.unifiedEvent.kind,
       traceId: ev.unifiedEvent.traceId,
       spanId: ev.unifiedEvent.spanId,
@@ -95,8 +97,15 @@ function broadcastPool(): void {
       payload: ev.unifiedEvent
     });
     void recordRunReplayEvent(ev);
+    // Chat 解耦 P0：通过 PoolEvent.conversationId 路由 RuntimeEvent
+    const runtimeEvent = unifiedAgentEventToRuntimeEvent(ev.unifiedEvent, {
+      ...(ev.conversationId ? { conversationId: ev.conversationId } : {})
+    });
     for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) w.webContents.send(AGENT_EVENT_CHANNEL, ev);
+      if (!w.isDestroyed()) {
+        w.webContents.send(AGENT_EVENT_CHANNEL, ev);
+        w.webContents.send(IPC.chat.runtimeEvent, runtimeEvent);
+      }
     }
   });
 }
@@ -315,6 +324,8 @@ export function registerAgentIpc(): void {
   registerBudgetWatch();
 
   ipcMain.handle(IPC.agent.detect, (): Promise<DetectResult> => detectClaude());
+
+  // Chat 解耦 P0：chat:action handler 由 ask-anywhere/ipc.ts 注册（registerAskAnywhereChatIpc）。
 
   ipcMain.handle(
     IPC.agent.startTask,

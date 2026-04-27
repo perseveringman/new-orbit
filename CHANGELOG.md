@@ -6,6 +6,20 @@
 
 ### Added
 
+- **Chat 解耦重构 P1-P5 落地差距收尾**：
+  - **P1 Conversation 一等公民**：TaskOrchestrator 在 `getOrCreateConversation` / `appendTurn` 同时双写到新 ConversationStore（anchor:task）；启动时一次性迁移旧 `.orbit/orchestration/conversations/<taskUid>.json` 到新格式（幂等）；新增 Conversations 中心视图（左侧统一对话列表 + 右侧只读 ChatView 历史回放），Sidebar 增加「Conversations」入口。
+  - **P3 AppBus 闭环**：ConversationOrchestrator 在 `createConversation` / `appendTurn` / `addAnchor` / `endConversation` 上发布 TraceableEvent（`conversation.started/turn.added/anchor.added/ended`），`TRACEABLE_EVENT_SOURCES` 增加 `'conversation'`。
+  - **P4 Planner 退役**：Ask-Anywhere system prompt 优先读取 vault 内 `.orbit/skills/ask-anywhere-planning.md`，找不到时回退到内置默认。
+  - **P5 Channel ingest stub**：`AskAnywhereOrchestrator.ingestExternalMessage({source, threadId, text})` 提供未来 SMS/IM/邮件等外部入口的统一接入点（创建/复用 anchor=channel_thread Conversation 并写 user turn）。
+- **Chat 解耦重构 P0 Ask-Anywhere 真实 runtime 调度**（前序提交）。
+- **Chat 解耦重构 Wave A UI 完整性**（前序提交）：ChatView 渲染 `runtime.awaiting_user / interrupt / cost / done`、ToolCard 接 Approve/Reject、MessageBubble 流式光标、HelpRequestRenderer 切到 InboxChatHost。
+- **Chat 解耦重构 M7 Planner 退役 banner**：在 `ProjectPlannerView` 顶部加入弃用提示条，引导用户跳转到新版 Ask Anywhere；现有 Planner 仍可使用作为兼容兜底。
+- **Chat 解耦重构 M6 Ask Anywhere 骨架**：新增 `src/main/ask-anywhere/orchestrator.ts`（封装 ConversationOrchestrator，使用 `ask_anywhere_session` 锚点）、`src/renderer/src/views/AskAnywhereView.tsx`（左栏会话列表 + 右侧 ChatView），在 `WorkspaceSidebar` 加入「Ask Anywhere」入口、`para.ts` 增加 `askAnywhere` view kind、`VaultView` 路由。
+- **Chat 解耦重构 M5 Host 适配层**：新增 `TaskChatHost`（Task 维度 host：拉取/订阅 TaskConversation，把旧 AgentEvent 流通过 `agentEventToRuntime` 翻译为 RuntimeEvent[]，渲染 ChatView）；`InboxChatHost` 骨架（消费 chat IPC + onRuntimeEvent）；`AskAnywhereChatHost` 由 AskAnywhereView 直接合并实现。`TaskDetailsHost` 切换为 `TaskChatHost` 替换原内嵌 `TaskConversationTab`，旧组件保留作为回滚点。
+- **Chat 解耦重构 M4 业务无关 Chat 组件**：新增 `src/renderer/src/components/Chat/`：`ChatView.tsx` 纯渲染器（输入 RuntimeEvent[]，输出 ChatAction）、子组件 `MessageBubble` / `ThinkingBlock` / `ToolCard` / `InputArea` / `ActionBar`、hooks `useRuntimeEvents` / `useChatActions`。Chat 目录 grep `'task|inbox|proposal|planner|vault|project'` 验证为空。把原 `chat/approvalCardModel.ts` 迁至 `approval/` 子目录以满足业务无关约束。
+- **Chat 解耦重构 M3 Conversation 数据模型**：新增 `src/shared/conversation/{types,index}.ts` 定义 `Conversation`、`ConversationAnchor`、`ConversationTurn` 数据契约，新增 `src/main/conversation/{store,orchestrator,ipc}.ts` 实现 NDJSON 持久化（`<vault>/.orbit/conversations/<id>.{ndjson,meta.json}`）、生命周期编排和 IPC（`chat.conversation*`）；preload 暴露 `chat.{getConversation,listConversations,createConversation,appendTurn,findConversationsByAnchor}`。
+- **Chat 解耦重构 M2 RuntimeEvent 协议**：新增 `src/shared/chat-protocol/`（`events.ts` 17 个 RuntimeEventKind、`actions.ts` 9 个 ChatActionKind、`host.ts` ChatHost 接口）、`src/main/agent/adapter/runtime_event_bridge.ts`（UnifiedAgentEvent → RuntimeEvent 翻译层）；新增 `IPC.chat.{runtimeEvent, action}` 通道；`broadcastPool` 在原有 agent:event 之外同步推送 RuntimeEvent；preload 暴露 `chat.onRuntimeEvent` / `chat.sendAction`。adapter 层暂保留 UnifiedAgentEvent 内部表示，仅在 IPC 边界翻译。
+- **Chat 解耦重构 M1 基础设施升级**：新增 `src/shared/events/kinds.ts`（27 个 TraceableEventKind 枚举）、`src/shared/events/payloads.ts`（按 kind 强类型 payload 映射），并升级 `src/shared/events.ts` 与 `src/main/events/bus.ts`，使 `publishTraceableEvent` 支持 `kind` 入参且自动与 `type` 双向镜像，旧 publisher 行为零变化。
 - **Orbit Phase 3.6 文档与收尾**：将 Phase 3 plans 标记为 completed，更新 `docs/architecture.md` 与 `docs/ROADMAP.md` 为 Phase 3 现状，并在 `docs/CHANGELOG.v2-implementation.md` 增补 Phase 3 偏离、权衡与后续观察项。
 - **Orbit Phase 3.5 Global Dashboard**：新增 Dashboard 聚合 IPC 与五象限工作台，覆盖待处理事项、Agent 进行中、知识增长、思考轨迹和系统健康，并接入 Activity、Inbox、Runtime、Budget、Git dirty、磁盘用量与 Developer Console 跳转。
 - **Orbit Phase 3.4 Event Replay Infrastructure**：新增 TraceableEvent schema、`.orbit/events/` NDJSON 按日写入与 GC、全局事件总线、agent/activity/inbox/ipc 四源接入、agent raw/abstract/ui-render 三层录像，以及 Developer Console 的实时流、trace/source/kind/task 过滤和基础 playback。

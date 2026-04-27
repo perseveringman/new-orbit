@@ -28,6 +28,9 @@ import { registerEventReplayIpc } from './events/ipc';
 import { registerDashboardIpc } from './dashboard/ipc';
 import { registerApprovalIpc } from './approval';
 import { registerInboxIpc } from './inbox';
+import { registerConversationIpc } from './conversation/ipc';
+import { registerAskAnywhereChatIpc } from './ask-anywhere/ipc';
+import { migrateLegacyTaskConversations } from './conversation/migration';
 import { QUICK_CAPTURE_ACCELERATOR, broadcastQuickCaptureOpen, registerCaptureIpc } from './capture';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
@@ -133,6 +136,9 @@ async function attachVaultRuntime(vaultPath: string): Promise<void> {
   await ensureTerminalAgentRuntimeForVault(vaultPath);
   void ensureVectorStore(vaultPath);
   void runWorktreeGc(vaultPath).catch(() => undefined);
+  void migrateLegacyTaskConversations(vaultPath).catch((err) => {
+    console.warn('[conversation-migration] failed', err);
+  });
 }
 
 async function handlePickAndOpen(): Promise<VaultResult> {
@@ -337,6 +343,8 @@ function registerIpc(): void {
 
   registerFsIpc();
   registerAgentIpc();
+  registerConversationIpc();
+  registerAskAnywhereChatIpc();
   registerGitIpc();
   registerGitHubIpc();
   registerEnvIpc();
