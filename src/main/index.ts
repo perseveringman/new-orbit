@@ -28,6 +28,7 @@ import { registerEventReplayIpc } from './events/ipc';
 import { registerDashboardIpc } from './dashboard/ipc';
 import { registerApprovalIpc } from './approval';
 import { registerInboxIpc } from './inbox';
+import { registerConversationIpc } from './conversation/ipc';
 import { QUICK_CAPTURE_ACCELERATOR, broadcastQuickCaptureOpen, registerCaptureIpc } from './capture';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
@@ -337,6 +338,7 @@ function registerIpc(): void {
 
   registerFsIpc();
   registerAgentIpc();
+  registerConversationIpc();
   registerGitIpc();
   registerGitHubIpc();
   registerEnvIpc();

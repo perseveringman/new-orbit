@@ -63,6 +63,12 @@ import type {
 import type { TraceableEvent, TraceableEventFilter } from '@shared/events';
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import type {
+  Conversation as ChatConversation,
+  ConversationMeta as ChatConversationMeta,
+  ConversationTurn as ChatConversationTurn
+} from '@shared/conversation';
+import type { ChatAppendTurnInput, ChatCreateConversationInput } from '@shared/ipc';
+import type {
   Proposal,
   ProposalListFilter,
   ProposalResolveInput,
@@ -376,7 +382,17 @@ const api: OrbitApi = {
       return () => ipcRenderer.removeListener(IPC.chat.runtimeEvent, listener);
     },
     sendAction: (action: ChatAction): Promise<void> =>
-      ipcRenderer.invoke(IPC.chat.action, action)
+      ipcRenderer.invoke(IPC.chat.action, action),
+    getConversation: (id: string): Promise<ChatConversation | null> =>
+      ipcRenderer.invoke(IPC.chat.conversationGet, id),
+    listConversations: (): Promise<ChatConversationMeta[]> =>
+      ipcRenderer.invoke(IPC.chat.conversationList),
+    createConversation: (input: ChatCreateConversationInput): Promise<ChatConversation> =>
+      ipcRenderer.invoke(IPC.chat.conversationCreate, input),
+    appendTurn: (input: ChatAppendTurnInput): Promise<ChatConversationTurn> =>
+      ipcRenderer.invoke(IPC.chat.conversationAppendTurn, input),
+    findConversationsByAnchor: (kind: string, refId: string): Promise<ChatConversationMeta[]> =>
+      ipcRenderer.invoke(IPC.chat.conversationFindByAnchor, kind, refId)
   },
   distill: {
     project: (uid: string): Promise<DistillResult> =>
