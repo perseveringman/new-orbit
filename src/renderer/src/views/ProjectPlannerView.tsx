@@ -21,6 +21,25 @@ import type {
   PlannerChatMessage
 } from '@shared/orchestration';
 import { useFiles } from '../store/files';
+import { usePara } from '../store/para';
+
+function PlannerDeprecationBanner(): JSX.Element {
+  const setView = usePara((s) => s.setView);
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200">
+      <span>
+        Planner 即将退役，新版本对话工作流统一进入 <strong>Ask Anywhere</strong>。
+        现有计划仍可继续使用，新规划建议从 Ask Anywhere 起步。
+      </span>
+      <button
+        onClick={() => setView({ kind: 'askAnywhere' })}
+        className="rounded border border-amber-300 px-2 py-0.5 hover:bg-amber-100 dark:border-amber-600 dark:hover:bg-amber-900/40"
+      >
+        前往 Ask Anywhere →
+      </button>
+    </div>
+  );
+}
 
 interface ProjectPlannerViewProps {
   projectUid: string;
@@ -249,6 +268,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-neutral-50 dark:bg-neutral-950">
+      <PlannerDeprecationBanner />
       <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
         <div>
           <h2 className="text-sm font-semibold">Project Planner</h2>

@@ -17,6 +17,7 @@ import { ProjectsNav } from '../components/Sidebar/ProjectsNav';
 import { TerminalSessionsPanel } from '../components/Sidebar/TerminalSessionsPanel';
 import { CloseProjectDialog } from '../components/CloseProjectDialog';
 import { InboxView } from './InboxView';
+import { AskAnywhereView } from './AskAnywhereView';
 import { TodayView } from './TodayView';
 import { KanbanView } from './KanbanView';
 import { AreaRoomView } from './AreaRoomView';
@@ -349,6 +350,8 @@ export function VaultView(): JSX.Element {
           </>
         ) : view.kind === 'inbox' ? (
           <InboxView />
+        ) : view.kind === 'askAnywhere' ? (
+          <AskAnywhereView />
         ) : view.kind === 'today' ? (
           <TodayView />
         ) : view.kind === 'github' ? (

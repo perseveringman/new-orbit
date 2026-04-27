@@ -6,6 +6,9 @@
 
 ### Added
 
+- **Chat 解耦重构 M7 Planner 退役 banner**：在 `ProjectPlannerView` 顶部加入弃用提示条，引导用户跳转到新版 Ask Anywhere；现有 Planner 仍可使用作为兼容兜底。
+- **Chat 解耦重构 M6 Ask Anywhere 骨架**：新增 `src/main/ask-anywhere/orchestrator.ts`（封装 ConversationOrchestrator，使用 `ask_anywhere_session` 锚点）、`src/renderer/src/views/AskAnywhereView.tsx`（左栏会话列表 + 右侧 ChatView），在 `WorkspaceSidebar` 加入「Ask Anywhere」入口、`para.ts` 增加 `askAnywhere` view kind、`VaultView` 路由。
+- **Chat 解耦重构 M5 Host 适配层**：新增 `TaskChatHost`（Task 维度 host：拉取/订阅 TaskConversation，把旧 AgentEvent 流通过 `agentEventToRuntime` 翻译为 RuntimeEvent[]，渲染 ChatView）；`InboxChatHost` 骨架（消费 chat IPC + onRuntimeEvent）；`AskAnywhereChatHost` 由 AskAnywhereView 直接合并实现。`TaskDetailsHost` 切换为 `TaskChatHost` 替换原内嵌 `TaskConversationTab`，旧组件保留作为回滚点。
 - **Chat 解耦重构 M4 业务无关 Chat 组件**：新增 `src/renderer/src/components/Chat/`：`ChatView.tsx` 纯渲染器（输入 RuntimeEvent[]，输出 ChatAction）、子组件 `MessageBubble` / `ThinkingBlock` / `ToolCard` / `InputArea` / `ActionBar`、hooks `useRuntimeEvents` / `useChatActions`。Chat 目录 grep `'task|inbox|proposal|planner|vault|project'` 验证为空。把原 `chat/approvalCardModel.ts` 迁至 `approval/` 子目录以满足业务无关约束。
 - **Chat 解耦重构 M3 Conversation 数据模型**：新增 `src/shared/conversation/{types,index}.ts` 定义 `Conversation`、`ConversationAnchor`、`ConversationTurn` 数据契约，新增 `src/main/conversation/{store,orchestrator,ipc}.ts` 实现 NDJSON 持久化（`<vault>/.orbit/conversations/<id>.{ndjson,meta.json}`）、生命周期编排和 IPC（`chat.conversation*`）；preload 暴露 `chat.{getConversation,listConversations,createConversation,appendTurn,findConversationsByAnchor}`。
 - **Chat 解耦重构 M2 RuntimeEvent 协议**：新增 `src/shared/chat-protocol/`（`events.ts` 17 个 RuntimeEventKind、`actions.ts` 9 个 ChatActionKind、`host.ts` ChatHost 接口）、`src/main/agent/adapter/runtime_event_bridge.ts`（UnifiedAgentEvent → RuntimeEvent 翻译层）；新增 `IPC.chat.{runtimeEvent, action}` 通道；`broadcastPool` 在原有 agent:event 之外同步推送 RuntimeEvent；preload 暴露 `chat.onRuntimeEvent` / `chat.sendAction`。adapter 层暂保留 UnifiedAgentEvent 内部表示，仅在 IPC 边界翻译。
