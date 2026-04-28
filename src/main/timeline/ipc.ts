@@ -24,7 +24,7 @@ export function registerTimelineIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.timeline.updateDailySummary, (_event, date: string, patch: { narrative?: string; headline?: string }) =>
     store().updateDailySummary(date, patch)
   );
-  ipcMain.handle(IPC.timeline.exportPDF, (_event, scope: TimelineScope) => store().exportMarkdown(scope));
+  ipcMain.handle(IPC.timeline.exportPDF, (_event, scope: TimelineScope) => store().exportPDF(scope));
 
   eventReplayBus.on('event', async (event) => {
     const vault = getVaultPath();
@@ -37,4 +37,3 @@ export function registerTimelineIpc(getVaultPath: () => string | null): void {
     }
   });
 }
-

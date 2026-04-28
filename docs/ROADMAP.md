@@ -364,6 +364,8 @@ Acceptance:
 
 ### 6.4 Daily Timeline
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - Timeline one-level entry
@@ -373,6 +375,16 @@ Deliverables:
 - AI daily summary from Synthesis
 - PDF export
 
+Implemented notes:
+
+- Timeline remains a projection over TraceableEvent; it does not add a new truth store.
+- Added day/week/month/year contracts, time segments, merged weekly stats, monthly/yearly indexes, and `TimelineExportResult`.
+- Layer policy is explicit: Layer 1 renders by default, Layer 2 appears only with developer mode, and raw feed fetch/noise stays hidden.
+- Daily projection now covers Notes, Library, Feed save gates, KB activation, scheduled tasks, conversations, resources, and selected developer events.
+- Aggregation merges short-window longform saves / annotations / task completions and preserves `derived_from` links.
+- Manual daily summary uses `summary.daily` SynthesisArtifact, materializes a `daily_summary` Note only on user action, and emits `daily_summary.generated`.
+- Timeline UI provides day/week/month/year modes, today glance, daily summary card, time segments, empty/loading/error states, developer toggle, and PDF export feedback.
+
 Data structures:
 
 - `TimelineEntry`
@@ -380,6 +392,9 @@ Data structures:
 - `DailyStats`
 - `MonthlyIndex`
 - `YearlyIndex`
+- `WeeklyTimeline`
+- `TimeSegmentGroup`
+- `TimelineExportResult`
 
 UI:
 

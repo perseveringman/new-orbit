@@ -136,7 +136,7 @@ import type {
   ScheduledTaskExecution,
   ScheduledTaskFilter
 } from '@shared/scheduled-task';
-import type { DailySummary, DailyTimeline, MonthlyIndex, TimelineScope, YearlyIndex } from '@shared/timeline';
+import type { DailySummary, DailyTimeline, MonthlyIndex, TimelineExportResult, TimelineScope, WeeklyTimeline, YearlyIndex } from '@shared/timeline';
 import type { Artifact, ConversationStage } from '@shared/stage';
 import type {
   ChannelConfig,
@@ -677,7 +677,7 @@ const api: OrbitApi = {
   timeline: {
     getDay: (date: string, options?: { developerMode?: boolean }): Promise<DailyTimeline> =>
       ipcRenderer.invoke(IPC.timeline.getDay, date, options),
-    getWeek: (isoWeek: string): Promise<DailyTimeline[]> =>
+    getWeek: (isoWeek: string): Promise<WeeklyTimeline> =>
       ipcRenderer.invoke(IPC.timeline.getWeek, isoWeek),
     getMonth: (month: string): Promise<MonthlyIndex> => ipcRenderer.invoke(IPC.timeline.getMonth, month),
     getYear: (year: number): Promise<YearlyIndex> => ipcRenderer.invoke(IPC.timeline.getYear, year),
@@ -689,7 +689,7 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.timeline.generateDailySummary, date),
     updateDailySummary: (date: string, patch: { narrative?: string; headline?: string }): Promise<DailySummary> =>
       ipcRenderer.invoke(IPC.timeline.updateDailySummary, date, patch),
-    exportPDF: (scope: TimelineScope): Promise<{ path: string }> =>
+    exportPDF: (scope: TimelineScope): Promise<TimelineExportResult> =>
       ipcRenderer.invoke(IPC.timeline.exportPDF, scope),
     onEvent: (cb: (event: DailyTimeline) => void) => {
       const listener = (_: unknown, event: DailyTimeline): void => cb(event);

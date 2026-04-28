@@ -168,6 +168,20 @@ Feed Reader 页面支持：
 
 这意味着 Feed 可以大胆接收噪声；真正进入长期知识系统的内容必须由用户保存。
 
+## 5.7 Daily Timeline
+
+**Timeline** 是基于 `TraceableEvent` 的人生事件投影视图，不是新的手写数据表。它把 Notes、Library、Feed 保存、KB 激活、Conversation、Resource、Task 等 Layer 1 事件按天/周/月/年重新组织。
+
+Timeline 页面支持：
+
+- **Day / Week / Month / Year**：在日视图看时段分组，在周/月/年视图看活动热力和汇总。
+- **Today at a glance**：快速查看事件数、thoughts、长文新增字数、Library、Tasks、Conversations。
+- **AI Daily Summary**：手动生成 `summary.daily` artifact，并 materialize 为 `notes/daily-summaries/...`。不会在未触发时静默写 Note。
+- **Layer 2 toggle**：默认隐藏 agent/runtime/synthesis 技术事件；打开后用于调试。
+- **Export PDF**：导出当前 day/week/month/year 范围到 `.orbit/timeline/exports/`。
+
+Feed fetch、seen、ignore 等原始信号整理不会出现在 Timeline；只有 Save to Library 这种 promotion gate 会显示。
+
 ## 6. 四段式任务编辑
 
 每个 task 文件是一份 Markdown：

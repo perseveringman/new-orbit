@@ -146,7 +146,7 @@ import type {
   ScheduledTaskExecution,
   ScheduledTaskFilter
 } from './scheduled-task';
-import type { DailySummary, DailyTimeline, MonthlyIndex, TimelineScope, YearlyIndex } from './timeline';
+import type { DailySummary, DailyTimeline, MonthlyIndex, TimelineExportResult, TimelineScope, WeeklyTimeline, YearlyIndex } from './timeline';
 import type { Artifact, ConversationStage } from './stage';
 import type {
   CreateResourceFromSuggestionInput,
@@ -1395,14 +1395,14 @@ export interface OrbitApi {
   };
   timeline: {
     getDay(date: string, options?: { developerMode?: boolean }): Promise<DailyTimeline>;
-    getWeek(isoWeek: string): Promise<DailyTimeline[]>;
+    getWeek(isoWeek: string): Promise<WeeklyTimeline>;
     getMonth(month: string): Promise<MonthlyIndex>;
     getYear(year: number): Promise<YearlyIndex>;
     getMonthlyIndex(month: string): Promise<MonthlyIndex>;
     getYearlyIndex(year: number): Promise<YearlyIndex>;
     generateDailySummary(date: string): Promise<DailySummary>;
     updateDailySummary(date: string, patch: { narrative?: string; headline?: string }): Promise<DailySummary>;
-    exportPDF(scope: TimelineScope): Promise<{ path: string }>;
+    exportPDF(scope: TimelineScope): Promise<TimelineExportResult>;
     onEvent(cb: (event: DailyTimeline) => void): () => void;
   };
   synthesis: {

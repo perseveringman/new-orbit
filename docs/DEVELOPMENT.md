@@ -138,3 +138,13 @@ must be added there (or the test will fail typecheck).
 - `feeds.items.saveToLibrary(id)` is the explicit promotion gate. It creates a first-class Library item and emits `promote.feed_to_library`.
 - `feeds.digest(date)` and `feeds.cluster(scope)` write feed-scoped SynthesisArtifacts and must not materialize Layer 1 truth automatically.
 - Focused coverage lives in `tests/feed_store.test.ts`; IPC namespace coverage lives in `tests/ipc.test.ts`.
+
+## Daily Timeline
+
+- Shared contracts live in `src/shared/timeline.ts`; IPC/preload API is `window.orbit.timeline`.
+- Main-process projection lives in `src/main/timeline/store.ts`; UI lives in `src/renderer/src/views/TimelineView.tsx`.
+- Timeline must remain a TraceableEvent projection. Do not create separate Timeline truth records for Layer 1 data.
+- Layer policy is centralized in `TIMELINE_LAYER_1_KINDS` / `TIMELINE_LAYER_2_KINDS`; raw feed fetch and other Layer 0/3 noise should stay out of both sets.
+- `timeline.generateDailySummary(date)` writes a `summary.daily` SynthesisArtifact and materializes a `daily_summary` Note only because the user explicitly requested it.
+- `timeline.exportPDF(scope)` writes PDF files under `<vault>/.orbit/timeline/exports/`.
+- Focused coverage lives in `tests/timeline_store.test.ts` and `tests/timeline_view.test.ts`.

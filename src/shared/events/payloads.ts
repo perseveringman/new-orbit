@@ -188,6 +188,13 @@ export interface LibraryEventPayload {
   resource_ref?: string;
 }
 
+export interface DailySummaryEventPayload {
+  date: string;
+  note_path?: string;
+  artifact_id?: string;
+  headline?: string;
+}
+
 export interface FeedEventPayload {
   source_id?: string;
   item_id?: string;
@@ -310,6 +317,7 @@ export interface TraceableEventPayloadMap {
   'library.item.read': LibraryEventPayload;
   'library.item.distilled': LibraryEventPayload;
   'library.item.linked_to_resource': LibraryEventPayload;
+  'daily_summary.generated': DailySummaryEventPayload;
   'feed.source.added': FeedEventPayload;
   'feed.source.removed': FeedEventPayload;
   'feed.item.fetched': FeedEventPayload;

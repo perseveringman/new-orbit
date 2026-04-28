@@ -251,6 +251,8 @@ export interface FeedItem {
 
 ## Milestone 6.4 — Daily Timeline
 
+Status: **implemented (foundation)**.
+
 ### Data model
 
 ```typescript
@@ -292,6 +294,18 @@ export interface TimelineEntry {
 - Layer 1 events render by default.
 - Layer 2 technical events are collapsed/hidden.
 - Layer 3 noise never appears.
+
+### Implementation notes
+
+- Shared contracts live in `src/shared/timeline.ts`; top-level IPC channels remain under `IPC.timeline`.
+- Main-process projection lives in `src/main/timeline/store.ts`; renderer surface lives in `src/renderer/src/views/TimelineView.tsx`.
+- Timeline is a TraceableEvent projection, not a separate Layer 1 source of truth. It reads `.orbit/events/*.ndjson` through the event replay store.
+- `getDay` returns entries plus time segments and stats; `getWeek` returns `WeeklyTimeline`; `getMonth` / `getYear` return heatmap indexes.
+- Raw feed fetch events are excluded from Timeline. `feed.item.saved_to_library` is visible because it is the explicit Feed → Library promotion gate.
+- Developer events such as agent/runtime/synthesis traces are Layer 2 and only appear when developer mode is enabled.
+- `generateDailySummary(date)` writes a `summary.daily` SynthesisArtifact, then materializes a `daily_summary` Note only as an explicit user action.
+- `exportPDF(scope)` writes a PDF file under `<vault>/.orbit/timeline/exports/`.
+- Focused coverage lives in `tests/timeline_store.test.ts` and `tests/timeline_view.test.ts`.
 
 ---
 ## Milestone 6.5 — Resource Workstation

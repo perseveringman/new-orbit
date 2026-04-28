@@ -1,5 +1,5 @@
 export interface TimelineRef {
-  kind: 'note' | 'library' | 'project' | 'area' | 'resource' | 'task' | 'conversation' | 'kb';
+  kind: 'note' | 'library' | 'project' | 'area' | 'resource' | 'task' | 'conversation' | 'kb' | 'export';
   ref: string;
   label?: string;
 }
@@ -45,8 +45,25 @@ export interface DailySummary {
 export interface DailyTimeline {
   date: string;
   entries: TimelineEntry[];
+  segments?: TimeSegmentGroup[];
   stats: DailyStats;
   summary?: DailySummary;
+}
+
+export type TimeSegmentId = 'night' | 'morning' | 'noon' | 'afternoon' | 'evening';
+
+export interface TimeSegmentGroup {
+  id: TimeSegmentId;
+  label: string;
+  range: string;
+  entries: TimelineEntry[];
+}
+
+export interface WeeklyTimeline {
+  iso_week: string;
+  range: { from: string; to: string };
+  days: DailyTimeline[];
+  stats: DailyStats;
 }
 
 export interface MonthlyIndex {
@@ -73,14 +90,25 @@ export interface TimelineScope {
   value: string;
 }
 
+export interface TimelineExportResult {
+  path: string;
+  format: 'pdf';
+  scope: TimelineScope;
+}
+
 export const TIMELINE_LAYER_1_KINDS = new Set([
   'note.created',
   'note.updated',
   'note.archived',
   'library.item.added',
+  'library.item.annotated',
+  'library.item.status_changed',
   'library.item.read',
   'library.item.distilled',
+  'library.item.linked_to_resource',
+  'feed.source.added',
   'feed.item.saved_to_library',
+  'daily_summary.generated',
   'kb.imported',
   'kb.doc.activated',
   'kb.activated',
@@ -89,6 +117,7 @@ export const TIMELINE_LAYER_1_KINDS = new Set([
   'scheduled_task.execution.completed',
   'task.completed',
   'conversation.started',
+  'conversation.meaningful',
   'resource.created',
   'resource.updated',
   'resource.ref.linked',
@@ -100,7 +129,16 @@ export const TIMELINE_LAYER_2_KINDS = new Set([
   'agent.run.started',
   'agent.run.completed',
   'agent.run.interrupted',
+  'runtime.sdk.invocation.started',
+  'runtime.sdk.cost',
+  'runtime.sdk.invocation.completed',
+  'synthesis.artifact.created',
+  'synthesis.artifact.stale',
+  'synthesis.artifact.superseded',
+  'synthesis.artifact.failed',
+  'synthesis.artifact.user_edited',
   'conversation.turn.added',
+  'conversation.message.added',
   'inbox.item.created',
   'inbox.item.resolved',
   'activity.user',
