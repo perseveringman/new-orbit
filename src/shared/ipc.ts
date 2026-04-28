@@ -152,6 +152,7 @@ import type {
   CreateResourceFromSuggestionInput,
   CreateResourceInput,
   LinkResourceRefInput,
+  PromoteResourceRefInput,
   Resource,
   ResourceChangeEvent,
   ResourceEngagement,
@@ -581,6 +582,7 @@ export const IPC = {
     archive: 'resources:archive',
     linkRef: 'resources:linkRef',
     unlinkRef: 'resources:unlinkRef',
+    promoteRef: 'resources:promoteRef',
     engage: 'resources:engage',
     suggestFromNotes: 'resources:suggestFromNotes',
     createFromSuggestion: 'resources:createFromSuggestion',
@@ -1443,6 +1445,7 @@ export interface OrbitApi {
     archive(resourceIdOrSlug: string): Promise<Resource>;
     linkRef(resourceIdOrSlug: string, input: LinkResourceRefInput): Promise<Resource>;
     unlinkRef(resourceIdOrSlug: string, refId: string): Promise<Resource>;
+    promoteRef(resourceIdOrSlug: string, input: PromoteResourceRefInput): Promise<Resource>;
     engage(resourceIdOrSlug: string, input?: ResourceEngagementInput): Promise<ResourceEngagement>;
     suggestFromNotes(options?: ResourceSuggestionOptions): Promise<ResourceSuggestion[]>;
     createFromSuggestion(input: CreateResourceFromSuggestionInput): Promise<Resource>;

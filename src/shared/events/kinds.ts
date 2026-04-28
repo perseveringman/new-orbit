@@ -96,6 +96,7 @@ export const TRACEABLE_EVENT_KINDS = [
   'resource.created',
   'resource.updated',
   'resource.ref.linked',
+  'resource.ref.promoted',
   'resource.engagement',
   'resource.archived',
   // Activity

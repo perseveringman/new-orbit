@@ -121,6 +121,7 @@ export const TIMELINE_LAYER_1_KINDS = new Set([
   'resource.created',
   'resource.updated',
   'resource.ref.linked',
+  'resource.ref.promoted',
   'resource.engagement',
   'resource.archived'
 ]);

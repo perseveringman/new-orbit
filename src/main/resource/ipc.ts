@@ -4,6 +4,7 @@ import type {
   CreateResourceFromSuggestionInput,
   CreateResourceInput,
   LinkResourceRefInput,
+  PromoteResourceRefInput,
   Resource,
   ResourceChangeEvent,
   ResourceEngagementInput,
@@ -58,6 +59,15 @@ export function registerResourceIpc(getVaultPath: () => string | null): void {
     broadcast({ type: 'unlinked', resource });
     return resource;
   });
+  ipcMain.handle(IPC.resources.promoteRef, async (_event, resourceIdOrSlug: string, input: PromoteResourceRefInput) => {
+    const resource = await store().promoteRef(resourceIdOrSlug, input);
+    publishResourceEvent('resource.ref.promoted', resource, 'promoted', {
+      ref_id: input.ref_id,
+      section: input.section ?? 'canonical'
+    });
+    broadcast({ type: 'promoted', resource });
+    return resource;
+  });
   ipcMain.handle(IPC.resources.engage, async (_event, resourceIdOrSlug: string, input?: ResourceEngagementInput) => {
     const engagement = await store().engage(resourceIdOrSlug, input);
     publishResourceEvent('resource.engagement', engagement.resource, 'engaged', {
@@ -83,7 +93,13 @@ export function registerResourceIpc(getVaultPath: () => string | null): void {
 }
 
 function publishResourceEvent(
-  kind: 'resource.created' | 'resource.updated' | 'resource.ref.linked' | 'resource.engagement' | 'resource.archived',
+  kind:
+    | 'resource.created'
+    | 'resource.updated'
+    | 'resource.ref.linked'
+    | 'resource.ref.promoted'
+    | 'resource.engagement'
+    | 'resource.archived',
   resource: Resource,
   action: string,
   extra: Record<string, unknown> = {}
@@ -100,6 +116,7 @@ function publishResourceEvent(
       status: resource.frontmatter.status,
       depth: resource.frontmatter.depth,
       engagement_count: resource.frontmatter.engagement_count,
+      areas: resource.frontmatter.areas,
       ...extra
     }
   });

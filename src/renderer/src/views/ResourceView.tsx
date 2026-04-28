@@ -6,6 +6,7 @@ import type {
   ResourceRef,
   ResourceRefKind,
   ResourceSection,
+  ResourceStatus,
   ResourceSuggestion,
   ResourceSummary
 } from '@shared/resource';
@@ -13,7 +14,8 @@ import type { SynthesisArtifact } from '@shared/synthesis';
 import { SynthesisActionCard } from '../components/synthesis';
 
 const RESOURCE_SECTIONS: ResourceSection[] = ['canonical', 'distilled', 'related', 'people', 'projects_touched'];
-const REF_KINDS: ResourceRefKind[] = ['note', 'library_item', 'feed_source', 'kb_item', 'project', 'area', 'person', 'url'];
+const REF_KINDS: ResourceRefKind[] = ['note', 'library_item', 'kb_item', 'project', 'area', 'person', 'url'];
+const RESOURCE_STATUSES: ResourceStatus[] = ['active', 'dormant', 'evolved', 'archived'];
 
 export function ResourceView(): JSX.Element {
   const [resources, setResources] = useState<ResourceSummary[]>([]);
@@ -22,6 +24,8 @@ export function ResourceView(): JSX.Element {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [tags, setTags] = useState('');
+  const [areas, setAreas] = useState('');
+  const [evolvedTo, setEvolvedTo] = useState('');
   const [createTitle, setCreateTitle] = useState('');
   const [linkRef, setLinkRef] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
@@ -31,6 +35,7 @@ export function ResourceView(): JSX.Element {
   const [engagementSummary, setEngagementSummary] = useState('');
   const [suggestions, setSuggestions] = useState<ResourceSuggestion[]>([]);
   const [suggestionArtifacts, setSuggestionArtifacts] = useState<Record<string, SynthesisArtifact | null>>({});
+  const [scopedChatMessage, setScopedChatMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +62,8 @@ export function ResourceView(): JSX.Element {
     setTitle(active.frontmatter.title);
     setBody(active.body);
     setTags(active.frontmatter.tags.join(', '));
+    setAreas((active.frontmatter.areas ?? []).map((area) => area.area_slug).join(', '));
+    setEvolvedTo(active.frontmatter.evolved_to ?? '');
   }, [active?.frontmatter.id, active?.frontmatter.updated]);
 
   const refsBySection = useMemo(() => {
@@ -83,6 +90,7 @@ export function ResourceView(): JSX.Element {
       const input: CreateResourceInput = {
         title: trimmed,
         tags: splitTags(tags),
+        areas: splitAreas(areas),
         body: `# ${trimmed}\n\n## Why this matters\n\n\n## Current understanding\n\n`
       };
       const created = await window.orbit.resources.create(input);
@@ -104,7 +112,9 @@ export function ResourceView(): JSX.Element {
       await window.orbit.resources.update(active.frontmatter.slug, {
         title,
         body,
-        tags: splitTags(tags)
+        tags: splitTags(tags),
+        areas: splitAreas(areas),
+        evolved_to: evolvedTo.trim() || undefined
       });
       await reload(active.frontmatter.slug);
     } catch (err) {
@@ -200,6 +210,31 @@ export function ResourceView(): JSX.Element {
     }
   }
 
+  async function promoteRef(refId: string, section: ResourceSection = 'canonical'): Promise<void> {
+    if (!active) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await window.orbit.resources.promoteRef(active.frontmatter.slug, { ref_id: refId, section });
+      await reload(active.frontmatter.slug);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openScopedChat(): Promise<void> {
+    if (!active) return;
+    const conversation = await window.orbit.chat.createConversation({
+      anchor: { kind: 'ask_anywhere_session', refId: `resource:${active.frontmatter.slug}`, addedAt: new Date().toISOString() },
+      scope: { kind: 'resource', resource_slug: active.frontmatter.slug },
+      title: `Resource: ${active.frontmatter.title}`
+    });
+    await window.orbit.chat.setLastActiveConversation({ kind: 'resource', resource_slug: active.frontmatter.slug }, conversation.id);
+    setScopedChatMessage(`Scoped chat ready: ${conversation.title ?? conversation.id}`);
+  }
+
   return (
     <div className="flex h-full min-h-0">
       <aside className="w-80 shrink-0 border-r border-neutral-200 bg-white/60 dark:border-neutral-800 dark:bg-neutral-950/40">
@@ -268,6 +303,15 @@ export function ResourceView(): JSX.Element {
                 className="min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
               />
               <select
+                value={active.frontmatter.status}
+                onChange={(event) => void window.orbit.resources.update(active.frontmatter.slug, { status: event.target.value as ResourceStatus }).then(() => reload(active.frontmatter.slug))}
+                className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
+              >
+                {RESOURCE_STATUSES.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+              <select
                 value={active.frontmatter.depth}
                 onChange={(event) => void window.orbit.resources.update(active.frontmatter.slug, { depth: event.target.value as Resource['frontmatter']['depth'] }).then(() => reload(active.frontmatter.slug))}
                 className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
@@ -278,6 +322,9 @@ export function ResourceView(): JSX.Element {
               </select>
               <button onClick={() => void archiveResource()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
                 Archive
+              </button>
+              <button onClick={() => void openScopedChat()} className="rounded border border-sky-300 px-3 py-1.5 text-xs text-sky-700 dark:border-sky-800 dark:text-sky-200">
+                Scoped Chat
               </button>
               <button onClick={() => void saveResource()} className="rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
                 {busy ? 'Working…' : 'Save'}
@@ -293,6 +340,21 @@ export function ResourceView(): JSX.Element {
                     placeholder="tags, comma separated"
                     className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                   />
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <input
+                      value={areas}
+                      onChange={(event) => setAreas(event.target.value)}
+                      placeholder="areas, comma separated"
+                      className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
+                    />
+                    <input
+                      value={evolvedTo}
+                      onChange={(event) => setEvolvedTo(event.target.value)}
+                      placeholder="evolved to resource slug"
+                      className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
+                    />
+                  </div>
+                  {scopedChatMessage ? <div className="mt-2 rounded bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:bg-sky-950/30 dark:text-sky-200">{scopedChatMessage}</div> : null}
                 </div>
                 <textarea
                   value={body}
@@ -344,10 +406,11 @@ export function ResourceView(): JSX.Element {
                       <div className="mt-2 space-y-2">
                         {(refsBySection.get(section) ?? []).map((ref) => (
                           <div key={ref.id} className="rounded-lg bg-neutral-50 p-2 text-xs dark:bg-neutral-900">
-                            <div className="font-medium">{ref.title ?? ref.ref}</div>
-                            <div className="truncate text-neutral-500">{ref.kind} · {ref.ref}</div>
-                            <button onClick={() => void window.orbit.resources.unlinkRef(active.frontmatter.slug, ref.id).then(() => reload(active.frontmatter.slug))} className="mt-1 text-[11px] text-red-500">Unlink</button>
-                          </div>
+                             <div className="font-medium">{ref.title ?? ref.ref}</div>
+                             <div className="truncate text-neutral-500">{ref.kind} · {ref.ref}</div>
+                             {ref.section !== 'canonical' ? <button onClick={() => void promoteRef(ref.id)} className="mt-1 mr-2 text-[11px] text-sky-600">Promote canonical</button> : null}
+                             <button onClick={() => void window.orbit.resources.unlinkRef(active.frontmatter.slug, ref.id).then(() => reload(active.frontmatter.slug))} className="mt-1 text-[11px] text-red-500">Unlink</button>
+                           </div>
                         ))}
                       </div>
                     </div>
@@ -366,6 +429,19 @@ export function ResourceView(): JSX.Element {
 
 function splitTags(value: string): string[] {
   return value.split(',').map((tag) => tag.trim()).filter(Boolean);
+}
+
+function splitAreas(value: string): NonNullable<CreateResourceInput['areas']> {
+  return value
+    .split(',')
+    .map((area) => area.trim())
+    .filter(Boolean)
+    .map((area, index) => ({
+      area_slug: area.toLowerCase().replace(/\s+/g, '-'),
+      primary: index === 0,
+      assigned_at: new Date().toISOString(),
+      assigned_by: 'user' as const
+    }));
 }
 
 function labelForSection(section: ResourceSection): string {

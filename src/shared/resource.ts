@@ -1,3 +1,5 @@
+import type { NoteAreaRef } from './note';
+
 export const RESOURCE_STATUSES = ['active', 'dormant', 'evolved', 'archived'] as const;
 export type ResourceStatus = (typeof RESOURCE_STATUSES)[number];
 
@@ -10,7 +12,6 @@ export type ResourceSection = (typeof RESOURCE_SECTIONS)[number];
 export const RESOURCE_REF_KINDS = [
   'note',
   'library_item',
-  'feed_source',
   'kb_item',
   'project',
   'area',
@@ -31,6 +32,7 @@ export interface ResourceFrontmatter {
   last_engaged?: string;
   engagement_count: number;
   tags: string[];
+  areas?: NoteAreaRef[];
   evolved_to?: string;
 }
 
@@ -78,6 +80,7 @@ export interface ResourceTimelineEntry {
 export interface ResourceFilter {
   status?: ResourceStatus;
   tag?: string;
+  area_ref?: string;
   include_archived?: boolean;
 }
 
@@ -86,6 +89,7 @@ export interface CreateResourceInput {
   slug?: string;
   body?: string;
   tags?: string[];
+  areas?: NoteAreaRef[];
   depth?: ResourceDepth;
 }
 
@@ -95,6 +99,7 @@ export interface UpdateResourceInput {
   status?: ResourceStatus;
   depth?: ResourceDepth;
   tags?: string[];
+  areas?: NoteAreaRef[];
   evolved_to?: string;
 }
 
@@ -105,6 +110,11 @@ export interface LinkResourceRefInput {
   summary?: string;
   section?: ResourceSection;
   source?: ResourceRef['source'];
+}
+
+export interface PromoteResourceRefInput {
+  ref_id: string;
+  section?: ResourceSection;
 }
 
 export interface ResourceEngagementInput {
@@ -143,6 +153,6 @@ export interface CreateResourceFromSuggestionInput {
 }
 
 export interface ResourceChangeEvent {
-  type: 'created' | 'updated' | 'archived' | 'linked' | 'unlinked' | 'engaged';
+  type: 'created' | 'updated' | 'archived' | 'linked' | 'unlinked' | 'engaged' | 'promoted';
   resource: Resource;
 }

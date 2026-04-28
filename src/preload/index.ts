@@ -755,6 +755,7 @@ const api: OrbitApi = {
     archive: (resourceIdOrSlug) => ipcRenderer.invoke(IPC.resources.archive, resourceIdOrSlug),
     linkRef: (resourceIdOrSlug, input) => ipcRenderer.invoke(IPC.resources.linkRef, resourceIdOrSlug, input),
     unlinkRef: (resourceIdOrSlug, refId) => ipcRenderer.invoke(IPC.resources.unlinkRef, resourceIdOrSlug, refId),
+    promoteRef: (resourceIdOrSlug, input) => ipcRenderer.invoke(IPC.resources.promoteRef, resourceIdOrSlug, input),
     engage: (resourceIdOrSlug, input) => ipcRenderer.invoke(IPC.resources.engage, resourceIdOrSlug, input),
     suggestFromNotes: (options) => ipcRenderer.invoke(IPC.resources.suggestFromNotes, options),
     createFromSuggestion: (input) => ipcRenderer.invoke(IPC.resources.createFromSuggestion, input),

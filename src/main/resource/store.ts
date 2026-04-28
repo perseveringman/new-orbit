@@ -5,6 +5,7 @@ import type {
   CreateResourceFromSuggestionInput,
   CreateResourceInput,
   LinkResourceRefInput,
+  PromoteResourceRefInput,
   Resource,
   ResourceCounts,
   ResourceEngagement,
@@ -19,7 +20,7 @@ import type {
   ResourceTimelineEntry,
   UpdateResourceInput
 } from '@shared/resource';
-import type { Note } from '@shared/note';
+import type { Note, NoteAreaRef } from '@shared/note';
 import * as frontmatter from '../frontmatter';
 import { toPosix } from '../pathGuard';
 import { createNoteStore } from '../note/store';
@@ -54,6 +55,7 @@ export class ResourceStore {
       .filter((resource): resource is ResourceSummary => resource !== null)
       .filter((resource) => !filter.status || resource.frontmatter.status === filter.status)
       .filter((resource) => !filter.tag || resource.frontmatter.tags.includes(filter.tag))
+      .filter((resource) => !filter.area_ref || (resource.frontmatter.areas ?? []).some((area) => area.area_slug === filter.area_ref))
       .sort((a, b) => (b.frontmatter.last_engaged ?? b.frontmatter.updated).localeCompare(a.frontmatter.last_engaged ?? a.frontmatter.updated));
   }
 
@@ -82,7 +84,8 @@ export class ResourceStore {
       created: now,
       updated: now,
       engagement_count: 0,
-      tags: normalizeTags(input.tags ?? [])
+      tags: normalizeTags(input.tags ?? []),
+      areas: normalizeAreas(input.areas ?? [])
     };
     const dir = path.join(this.vaultPath, RESOURCE_ROOT, slug);
     await fs.mkdir(dir, { recursive: true });
@@ -116,6 +119,7 @@ export class ResourceStore {
       ...(patch.status ? { status: patch.status } : {}),
       ...(patch.depth ? { depth: patch.depth } : {}),
       ...(patch.tags ? { tags: normalizeTags(patch.tags) } : {}),
+      ...(patch.areas ? { areas: normalizeAreas(patch.areas) } : {}),
       ...(patch.evolved_to ? { evolved_to: patch.evolved_to } : {}),
       updated: now
     };
@@ -155,6 +159,9 @@ export class ResourceStore {
   }
 
   async linkRef(resourceIdOrSlug: string, input: LinkResourceRefInput): Promise<Resource> {
+    if (input.kind === ('feed_source' as LinkResourceRefInput['kind'])) {
+      throw new Error('feed_source_refs_are_layer_0_save_to_library_first');
+    }
     const resource = await this.requireExisting(resourceIdOrSlug);
     const dir = this.resourceDir(resource);
     const now = new Date().toISOString();
@@ -197,6 +204,35 @@ export class ResourceStore {
     const meta = await this.readMeta(dir);
     await this.writeMeta(dir, { ...meta, refs: meta.refs.filter((ref) => ref.id !== refId) });
     await this.touch(dir, resource.frontmatter, new Date().toISOString(), false);
+    await this.refreshSectionReadmes(dir);
+    return this.readResourceFromDir(dir);
+  }
+
+  async promoteRef(resourceIdOrSlug: string, input: PromoteResourceRefInput): Promise<Resource> {
+    const resource = await this.requireExisting(resourceIdOrSlug);
+    const dir = this.resourceDir(resource);
+    const now = new Date().toISOString();
+    const meta = await this.readMeta(dir);
+    const target = meta.refs.find((ref) => ref.id === input.ref_id);
+    if (!target) throw new Error(`resource_ref_not_found:${input.ref_id}`);
+    const section = input.section ?? 'canonical';
+    const refs = meta.refs.map((ref) => (ref.id === input.ref_id ? { ...ref, section } : ref));
+    await this.writeMeta(dir, {
+      ...meta,
+      refs,
+      timeline: [
+        ...meta.timeline,
+        {
+          id: `resource-event-${randomUUID()}`,
+          at: now,
+          kind: 'updated',
+          title: `Promoted ${target.title ?? target.ref}`,
+          summary: `Moved to ${section}`,
+          ref_id: target.id
+        }
+      ]
+    });
+    await this.touch(dir, resource.frontmatter, now, false);
     await this.refreshSectionReadmes(dir);
     return this.readResourceFromDir(dir);
   }
@@ -462,6 +498,7 @@ function normalizeFrontmatter(data: Record<string, unknown>, dir: string): Resou
     last_engaged: stringValue(data['last_engaged']),
     engagement_count: numberValue(data['engagement_count']) ?? 0,
     tags: Array.isArray(data['tags']) ? normalizeTags(data['tags'].filter((tag): tag is string => typeof tag === 'string')) : [],
+    areas: normalizeAreas(Array.isArray(data['areas']) ? (data['areas'] as NoteAreaRef[]) : []),
     evolved_to: stringValue(data['evolved_to'])
   };
 }
@@ -509,6 +546,23 @@ function titleizeTag(value: string): string {
 
 function normalizeTags(tags: string[]): string[] {
   return [...new Set(tags.map(normalizeTag).filter(Boolean))];
+}
+
+function normalizeAreas(areas: NoteAreaRef[]): NoteAreaRef[] {
+  const seen = new Set<string>();
+  const normalized: NoteAreaRef[] = [];
+  for (const area of areas) {
+    const areaSlug = typeof area?.area_slug === 'string' ? area.area_slug.trim() : '';
+    if (!areaSlug || seen.has(areaSlug)) continue;
+    seen.add(areaSlug);
+    normalized.push({
+      area_slug: areaSlug,
+      primary: area.primary,
+      assigned_at: area.assigned_at || new Date().toISOString(),
+      assigned_by: area.assigned_by || 'user'
+    });
+  }
+  return normalized;
 }
 
 function normalizeTag(tag: string): string {

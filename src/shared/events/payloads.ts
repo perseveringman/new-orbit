@@ -229,6 +229,7 @@ export interface ResourceEventPayload {
   status?: string;
   depth?: string;
   engagement_count?: number;
+  areas?: unknown;
   ref_id?: string;
   ref_kind?: string;
   ref?: string;
@@ -351,6 +352,7 @@ export interface TraceableEventPayloadMap {
   'resource.created': ResourceEventPayload;
   'resource.updated': ResourceEventPayload;
   'resource.ref.linked': ResourceEventPayload;
+  'resource.ref.promoted': ResourceEventPayload;
   'resource.engagement': ResourceEventPayload;
   'resource.archived': ResourceEventPayload;
   'activity.user': ActivityPayload;

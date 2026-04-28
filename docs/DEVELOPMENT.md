@@ -148,3 +148,14 @@ must be added there (or the test will fail typecheck).
 - `timeline.generateDailySummary(date)` writes a `summary.daily` SynthesisArtifact and materializes a `daily_summary` Note only because the user explicitly requested it.
 - `timeline.exportPDF(scope)` writes PDF files under `<vault>/.orbit/timeline/exports/`.
 - Focused coverage lives in `tests/timeline_store.test.ts` and `tests/timeline_view.test.ts`.
+
+## Resource workstation
+
+- Shared contracts live in `src/shared/resource.ts`; IPC/preload API is `window.orbit.resources`.
+- Main-process store/IPC live in `src/main/resource/store.ts` and `src/main/resource/ipc.ts`; UI lives in `src/renderer/src/views/ResourceView.tsx`.
+- Resource workstations live under `<vault>/resources/<slug>/` with `index.md`, section README files, `_timeline/README.md`, and `.orbit-resource.json`.
+- Resource frontmatter supports `areas`, status/depth, engagement counters, and evolution metadata.
+- Do not link raw Feed/Feed source data to Resources. Save Feed items to Library first, then link the resulting LibraryItem.
+- `resources.suggestFromNotes()` creates `emerge.resource` synthesis output; `resources.createFromSuggestion()` is the explicit user promotion step.
+- `resources.promoteRef()` moves refs between sections, most commonly to canonical.
+- Focused coverage lives in `tests/resource_store.test.ts`; IPC namespace coverage lives in `tests/ipc.test.ts`.

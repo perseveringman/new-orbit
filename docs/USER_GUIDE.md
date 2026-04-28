@@ -182,6 +182,23 @@ Timeline 页面支持：
 
 Feed fetch、seen、ignore 等原始信号整理不会出现在 Timeline；只有 Save to Library 这种 promotion gate 会显示。
 
+## 5.8 Resource Workstation
+
+**Resource** 是长期主题工作站，不是收藏夹，也不是 tag dump。它用于沉淀一个持续感兴趣的主题，例如 “second brain”、“LLM workflows” 或 “health systems”。
+
+Resource 页面支持：
+
+- **Create / Edit**：创建主题工作站并编辑 `index.md`。
+- **Sections**：把材料放入 canonical、distilled、related、people、projects touched 等区域。
+- **Areas / Status / Depth**：记录这个主题属于哪些 Area、当前是否 active/dormant/evolved，以及掌握深度。
+- **Link material**：链接 Note、LibraryItem、KB item、Project、Area、Person 或 URL。Feed source/raw feed item 不能直接链接，必须先 Save to Library。
+- **Promote canonical**：把一个 related/distilled ref 提升到 canonical。
+- **Record engagement**：手动记录一次触及，更新 Resource 的 timeline、last engaged 和 engagement count。
+- **Suggest from Notes**：从重复出现的 note tags 生成 `emerge.resource` artifact；只有点击 Create 后才创建 Resource。
+- **Scoped Chat**：为当前 Resource 创建 resource-scoped conversation，供 Ask-Anywhere 注入主题上下文。
+
+Resource 的结构化状态保存在 `.orbit-resource.json`，同时生成 Obsidian-compatible 的 Markdown 目录和 README。
+
 ## 6. 四段式任务编辑
 
 每个 task 文件是一份 Markdown：

@@ -310,6 +310,8 @@ export interface TimelineEntry {
 ---
 ## Milestone 6.5 — Resource Workstation
 
+Status: **implemented (foundation)**.
+
 ### Data model
 
 ```typescript
@@ -368,6 +370,7 @@ resources/<slug>/
 - `resources.engage(id, input)`
 - `resources.suggestFromNotes()` → Synthesis `emerge.resource`
 - `resources.createFromSuggestion(artifactId)`
+- `resources.promoteRef(id, { ref_id, section })`
 
 ### UI
 
@@ -415,6 +418,18 @@ Required actions:
 - Feed item cannot link directly unless saved to Library.
 - Engagement affects sorting and suggestions.
 - Resource page can show topic timeline.
+
+### Implementation notes
+
+- Shared contracts live in `src/shared/resource.ts`; IPC/preload API is `window.orbit.resources`.
+- Main-process store/IPC live in `src/main/resource/store.ts` and `src/main/resource/ipc.ts`; renderer surface lives in `src/renderer/src/views/ResourceView.tsx`.
+- Each Resource persists under `<vault>/resources/<slug>/` with section README files, `_timeline/README.md`, and `.orbit-resource.json` for refs/timeline cache.
+- Resource frontmatter supports `areas`, `status`, `depth`, `engagement_count`, `last_engaged`, and `evolved_to`.
+- Raw Feed/Feed source refs are rejected as Resource refs; users must save Feed items to first-class Library items before linking.
+- `promoteRef` moves an existing ref to canonical (or another section) and emits `resource.ref.promoted`.
+- `suggestFromNotes` writes an `emerge.resource` SynthesisArtifact; `createFromSuggestion` is the user confirmation step that creates the Resource and links sample Notes.
+- Resource UI includes create/select/edit, status/depth/evolve controls, area metadata, sectioned refs, canonical promotion, manual engagement, suggestions, local Resource timeline, and resource-scoped chat creation.
+- Focused coverage lives in `tests/resource_store.test.ts`; IPC namespace coverage lives in `tests/ipc.test.ts`.
 
 ---
 

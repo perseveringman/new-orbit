@@ -22,12 +22,15 @@ describe('ResourceStore', () => {
     const resource = await store.create({
       title: 'Personal Knowledge Management',
       tags: ['pkm'],
+      areas: [{ area_slug: 'learning', primary: true, assigned_at: '2026-04-28T00:00:00.000Z', assigned_by: 'user' }],
       body: '# Personal Knowledge Management\n'
     });
 
     expect(resource.frontmatter.slug).toBe('personal-knowledge-management');
     expect(resource.frontmatter.type).toBe('resource');
     expect(resource.path).toBe('resources/personal-knowledge-management/index.md');
+    expect(resource.frontmatter.areas?.[0]?.area_slug).toBe('learning');
+    expect(await store.list({ area_ref: 'learning' })).toHaveLength(1);
     await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_canonical'))).resolves.toBeDefined();
     await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_distilled'))).resolves.toBeDefined();
     await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_related'))).resolves.toBeDefined();
@@ -44,6 +47,10 @@ describe('ResourceStore', () => {
       kind: 'url',
       ref: 'https://example.com/llm-workflows',
       title: 'Reference article',
+      section: 'related'
+    });
+    const promoted = await store.promoteRef(resource.frontmatter.slug, {
+      ref_id: linked.refs[0].id,
       section: 'canonical'
     });
     const engagement = await store.engage(resource.frontmatter.slug, {
@@ -51,14 +58,27 @@ describe('ResourceStore', () => {
       summary: 'Used the workflow while reviewing notes.'
     });
 
-    expect(linked.refs).toHaveLength(1);
-    expect(linked.counts.canonical).toBe(1);
+    expect(promoted.refs[0].section).toBe('canonical');
+    expect(promoted.counts.canonical).toBe(1);
     expect(engagement.resource.frontmatter.engagement_count).toBe(2);
     expect(engagement.resource.timeline.map((entry) => entry.kind)).toEqual([
       'created',
       'linked',
+      'updated',
       'engaged'
     ]);
+  });
+
+  it('rejects Layer 0 feed_source refs so Feed items must save to Library first', async () => {
+    const store = createResourceStore(vaultPath);
+    const resource = await store.create({ title: 'Signal Processing' });
+
+    await expect(
+      store.linkRef(resource.frontmatter.slug, {
+        kind: 'feed_source',
+        ref: 'feed-source-1'
+      } as unknown as Parameters<typeof store.linkRef>[1])
+    ).rejects.toThrow(/save_to_library_first/);
   });
 
   it('suggests resources from repeated note tags and creates one from samples', async () => {

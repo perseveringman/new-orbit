@@ -269,6 +269,7 @@ function titleFor(kind: string, payload: Record<string, unknown>, specialKind?: 
   if (kind === 'resource.created') return `Created Resource ${String(payload['title'] ?? '')}`.trim();
   if (kind === 'resource.updated') return `Updated Resource ${String(payload['title'] ?? '')}`.trim();
   if (kind === 'resource.ref.linked') return `Linked material to ${String(payload['title'] ?? 'Resource')}`;
+  if (kind === 'resource.ref.promoted') return `Promoted material in ${String(payload['title'] ?? 'Resource')}`;
   if (kind === 'resource.engagement') return `Engaged Resource ${String(payload['title'] ?? '')}`.trim();
   if (kind === 'resource.archived') return `Archived Resource ${String(payload['title'] ?? '')}`.trim();
   return kind.replace(/\./g, ' ');

@@ -217,6 +217,27 @@ describe('IPC contract', () => {
     for (const v of Object.values(IPC.feeds)) expect(v.startsWith('feeds:')).toBe(true);
   });
 
+  it('resources namespace declares Phase 6.5 workstation channels', () => {
+    const keys = Object.keys(IPC.resources).sort();
+    expect(keys).toEqual(
+      [
+        'archive',
+        'create',
+        'createFromSuggestion',
+        'engage',
+        'event',
+        'get',
+        'linkRef',
+        'list',
+        'promoteRef',
+        'suggestFromNotes',
+        'unlinkRef',
+        'update'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.resources)) expect(v.startsWith('resources:')).toBe(true);
+  });
+
   it('OrbitApi type shape is assignable', () => {
     const defSettings = {
       lastVaultPath: null,
