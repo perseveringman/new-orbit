@@ -1,0 +1,25 @@
+{
+  "project_name": "ask-anywhere-ux",
+  "mode": "evolve",
+  "current_phase": "scope-confirmed",
+  "phases_covered": ["mode-detect", "context-gather", "direction-confirm"],
+  "checklist_status": {
+    "entry-semantics": "done",
+    "popover-behavior": "done",
+    "fullpage-layout": "done",
+    "scope-boundary": "done",
+    "skills-dynamic": "deferred",
+    "planner-absorb": "deferred",
+    "channel-route": "deferred"
+  },
+  "pending_questions": [
+    "悬浮球在全页视图是否隐藏（当前代码已隐藏，但 ADR-015 未明确）",
+    "弹层位置是否允许用户拖动/记忆位置",
+    "弹层默认尺寸（我倾向 w-[380px] h-[520px]）",
+    "全页 Stage 抽屉的触发方式：artifact 产出时自动打开还是手动"
+  ],
+  "features_identified": ["ask-anywhere-ux-revamp"],
+  "features_drafted": [],
+  "last_updated": "2026-04-28T00:00:00Z",
+  "notes": "Evolve 会话：重塑 Ask-Anywhere 的入口语义（悬浮球=弹层对话框）+ 全页布局从四列压成两列+顶部 context 条+按需 Stage 抽屉。不动 ADR-015 D-3/D-5/D-6。"
+}

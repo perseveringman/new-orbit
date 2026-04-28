@@ -45,6 +45,19 @@ describe('ChatView', () => {
     expect(html.indexOf('hello')).toBeLessThan(html.indexOf('world'));
   });
 
+  it('renders user messages on the right and assistant messages on the left', () => {
+    const html = render([
+      ev('runtime.message', { text: 'user says hi', role: 'user' }, { id: 'u1' }),
+      ev('runtime.message', { text: 'assistant replies', role: 'assistant' }, { id: 'a1' })
+    ]);
+
+    expect(html).toContain('justify-end');
+    expect(html).toContain('justify-start');
+    expect(html).toContain('user says hi');
+    expect(html).toContain('assistant replies');
+    expect(html).toContain('Agent');
+  });
+
   it('pairs tool_use with matching tool_result', () => {
     const html = render([
       ev(
@@ -71,6 +84,18 @@ describe('ChatView', () => {
       { ...DEFAULT_CHAT_HOST_CAPABILITIES, supportsThinking: false }
     );
     expect(html).not.toContain('pondering');
+  });
+
+  it('skips empty runtime text placeholders', () => {
+    const html = render([
+      ev('runtime.message', { text: '   ' }, { id: 'm-empty' }),
+      ev('runtime.thinking', { text: '' }, { id: 't-empty' }),
+      ev('runtime.message', { text: 'real reply' }, { id: 'm-real' })
+    ]);
+
+    expect(html).toContain('real reply');
+    expect(html.match(/>Agent</g)?.length).toBe(1);
+    expect(html).not.toContain('Thinking</summary>');
   });
 
   it('disables Send when canSendMessage is false', () => {

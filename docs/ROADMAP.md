@@ -138,6 +138,7 @@
 
 | 方向 | 说明 | 原编号 |
 |------|------|--------|
+| **Ask-Anywhere UX Revamp** | 悬浮球→就地弹层（复用 ChatView）+ 全页两列布局重构（折叠 Context / 按需 Stage 抽屉）；落地 ADR-015 D-2。Plan: `2026-04-28-ask-anywhere-ux-revamp` | 新增 |
 | **Sandbox ExecutionContext** | 非代码项目（research / writing）的执行环境，补齐功能断层 | 原 P2 |
 | **Thinking Trail 自动化** | 每次 chat session 自动留痕、关键认知跃迁自动识别 | 原 P3 |
 | **对话沉淀 → 项目** | 从 Thoughts / Chat 自然沉淀识别主题集聚，agent 主动提议立项 | 新增 |

@@ -37,8 +37,11 @@ export const RUNTIME_EVENT_KINDS = [
 
 export type RuntimeEventKind = (typeof RUNTIME_EVENT_KINDS)[number];
 
+export type RuntimeMessageRole = 'assistant' | 'user';
+
 export interface RuntimeMessagePayload {
   text: string;
+  role?: RuntimeMessageRole;
   isStreaming?: boolean;
   isFinal?: boolean;
 }

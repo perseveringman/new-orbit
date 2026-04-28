@@ -111,6 +111,8 @@ describe('TaskConversationTimeline', () => {
     expect(html).toContain('task.md');
     expect(html).toContain('Agent');
     expect(html).toContain('再补上对话输入框');
+    expect(html).toContain('inline-flex max-w-[85%]');
+    expect(html).toContain('text-[13px] leading-5');
     expect(html).toContain('Activity');
     expect(html).toContain('Agent is working…');
   });

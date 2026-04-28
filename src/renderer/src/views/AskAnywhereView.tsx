@@ -27,7 +27,11 @@ function turnsToEvents(conv: Conversation): RuntimeEvent[] {
     conversationId: conv.id,
     runId: `hist-${conv.id}`,
     spanId: `hist-${idx}`,
-    payload: { text: t.role === 'user' ? `🧑 ${t.content}` : t.content, isFinal: true }
+    payload: {
+      text: t.content,
+      role: t.role === 'user' ? 'user' : 'assistant',
+      isFinal: true
+    }
   }));
 }
 
@@ -132,7 +136,7 @@ export function AskAnywhereView(): JSX.Element {
           conversationId: activeId,
           runId: 'local',
           spanId: localId,
-          payload: { text: `🧑 ${text}`, isFinal: true }
+          payload: { text, role: 'user', isFinal: true }
         }
       ]);
       setIsLoading(true);

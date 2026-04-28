@@ -107,12 +107,14 @@ function buildRenderItems(
     switch (ev.kind) {
       case 'runtime.message': {
         const m = ev as RuntimeEvent<'runtime.message'>;
+        if (!m.payload.text.trim()) break;
         items.push({ key: ev.id, node: <MessageBubble event={m} /> });
         break;
       }
       case 'runtime.thinking': {
         if (!capabilities.supportsThinking) break;
         const t = ev as RuntimeEvent<'runtime.thinking'>;
+        if (!t.payload.text.trim()) break;
         items.push({ key: ev.id, node: <ThinkingBlock event={t} /> });
         break;
       }

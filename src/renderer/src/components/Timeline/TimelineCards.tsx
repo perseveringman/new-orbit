@@ -38,7 +38,7 @@ export function TurnCard({ turn }: { turn: ConversationTurn }): JSX.Element {
 export function UserMessageCard({ text }: { text: string }): JSX.Element {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[78%] rounded-2xl bg-neutral-900 px-3 py-2 text-sm text-white whitespace-pre-wrap dark:bg-neutral-100 dark:text-neutral-900">
+      <div className="inline-flex max-w-[85%] whitespace-pre-wrap rounded-2xl bg-neutral-900 px-3 py-2 text-[13px] leading-5 text-white sm:max-w-[74%] dark:bg-neutral-100 dark:text-neutral-900">
         {text}
       </div>
     </div>
@@ -54,8 +54,8 @@ export function AssistantMessageCard({
 }): JSX.Element {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[82%] rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
-        <div className="mb-1 text-[11px] font-medium text-sky-500">Agent</div>
+      <div className="inline-flex max-w-[85%] flex-col rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] leading-5 text-neutral-900 sm:max-w-[74%] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+        <div className="mb-1 text-[10px] font-medium text-sky-500">Agent</div>
         <StreamingMarkdown content={text} animate={animate} />
       </div>
     </div>

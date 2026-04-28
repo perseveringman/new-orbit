@@ -21,6 +21,7 @@ describe('unifiedAgentEventToRuntimeEvent', () => {
     expect(ev.kind).toBe('runtime.message');
     expect(ev.conversationId).toBe('run-1');
     expect((ev.payload as { text: string }).text).toBe('hi');
+    expect((ev.payload as { role?: string }).role).toBe('assistant');
   });
 
   it('honors explicit conversationId', () => {

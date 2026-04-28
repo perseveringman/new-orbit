@@ -21,6 +21,10 @@ export function HelpRequestRenderer({ item }: { item: InboxItem }): JSX.Element 
   }, [item.context.task_uid, refresh, task]);
 
   useEffect(() => {
+    if (item.context.task_uid) {
+      setConversationId(null);
+      return;
+    }
     let cancelled = false;
     async function findOrCreate(): Promise<void> {
       try {
@@ -94,13 +98,13 @@ export function HelpRequestStageContent({
         <span>Task: {item.context.task_uid ?? 'Not linked'}</span>
         <span>Run: {item.context.run_id ?? 'Not linked'}</span>
       </div>
-      {conversationId ? (
-        <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-          <InboxChatHost conversationId={conversationId} />
-        </div>
-      ) : task ? (
+      {task ? (
         <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
           <TaskConversationTab task={task} />
+        </div>
+      ) : conversationId ? (
+        <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+          <InboxChatHost conversationId={conversationId} />
         </div>
       ) : (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">

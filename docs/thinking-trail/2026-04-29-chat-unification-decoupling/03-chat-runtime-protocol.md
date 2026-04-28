@@ -60,7 +60,7 @@
 
 | kind | payload | 描述 |
 |------|---------|------|
-| `runtime.message` | `{ text, isStreaming?, isFinal? }` | assistant 输出消息 |
+| `runtime.message` | `{ text, role?, isStreaming?, isFinal? }` | 消息文本；runtime 直接产出的默认是 assistant，host 回放用户 turn 时可标记 `role='user'` |
 | `runtime.thinking` | `{ text }` | 推理过程 |
 | `runtime.tool_use` | `{ toolName, toolInput?, spanId }` | 工具调用开始 |
 | `runtime.tool_result` | `{ toolName, result, parentSpanId }` | 工具返回 |
@@ -121,6 +121,7 @@ export type RuntimeEventKind = (typeof RUNTIME_EVENT_KINDS)[number];
 export interface RuntimeEventPayloadMap {
   'runtime.message': {
     text: string;
+    role?: 'assistant' | 'user';
     isStreaming?: boolean;
     isFinal?: boolean;
   };

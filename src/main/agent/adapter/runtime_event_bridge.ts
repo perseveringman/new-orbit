@@ -60,6 +60,7 @@ function mapPayload(
     case 'runtime.message':
       return {
         text: event.text ?? '',
+        role: 'assistant',
         isStreaming: false,
         isFinal: true
       } satisfies RuntimeEventPayloadMap['runtime.message'];

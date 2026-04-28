@@ -1,7 +1,7 @@
 import { TaskDetailsModal } from '../Modals/TaskDetailsModal';
 import { useTaskDetails } from '../../store/taskDetails';
 import { TaskDetailSurface } from './TaskDetailSurface';
-import { TaskChatHost } from './TaskChatHost';
+import { TaskConversationTab } from './TaskConversationTab';
 
 export function TaskDetailsHost(): JSX.Element | null {
   const open = useTaskDetails((s) => s.open);
@@ -34,7 +34,7 @@ export function TaskDetailsHost(): JSX.Element | null {
           onTaskHydrated={(nextTask) => openTask(nextTask, projectUid, tab)}
         />
       ) : (
-        <TaskChatHost task={task} />
+        <TaskConversationTab task={task} />
       )}
     </TaskDetailsModal>
   );

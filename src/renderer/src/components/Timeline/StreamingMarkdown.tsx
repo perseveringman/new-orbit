@@ -37,7 +37,7 @@ export function StreamingMarkdown({
   const rendered = shouldAnimate ? content.slice(0, visibleLength) : content;
   const lines = useMemo(() => rendered.split('\n'), [rendered]);
   return (
-    <div className="space-y-2 text-sm leading-6">
+    <div className="space-y-1.5 text-[13px] leading-5">
       {lines.map((line, index) => (
         <MarkdownLine key={`${index}:${line.slice(0, 24)}`} line={line} />
       ))}
@@ -46,9 +46,9 @@ export function StreamingMarkdown({
 }
 
 function MarkdownLine({ line }: { line: string }): JSX.Element {
-  if (line.startsWith('### ')) return <h3 className="text-base font-semibold">{inline(line.slice(4))}</h3>;
-  if (line.startsWith('## ')) return <h2 className="text-lg font-semibold">{inline(line.slice(3))}</h2>;
-  if (line.startsWith('# ')) return <h1 className="text-xl font-semibold">{inline(line.slice(2))}</h1>;
+  if (line.startsWith('### ')) return <h3 className="text-sm font-semibold">{inline(line.slice(4))}</h3>;
+  if (line.startsWith('## ')) return <h2 className="text-[15px] font-semibold">{inline(line.slice(3))}</h2>;
+  if (line.startsWith('# ')) return <h1 className="text-base font-semibold">{inline(line.slice(2))}</h1>;
   if (line.startsWith('- ')) return <p className="pl-3">• {inline(line.slice(2))}</p>;
   if (!line.trim()) return <div className="h-2" />;
   return <p>{inline(line)}</p>;

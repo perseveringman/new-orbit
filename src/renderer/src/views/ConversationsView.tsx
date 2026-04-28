@@ -62,7 +62,11 @@ export function ConversationsView(): JSX.Element {
         conversationId: conv.id,
         runId: 'history',
         spanId: t.id,
-        payload: { text: t.content, isFinal: true }
+        payload: {
+          text: t.content,
+          role: t.role === 'user' ? 'user' : 'assistant',
+          isFinal: true
+        }
       }));
       setEvents(next);
     });

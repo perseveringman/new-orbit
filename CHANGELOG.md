@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Planned
+
+- **Ask-Anywhere UX Revamp** (plan `2026-04-28-ask-anywhere-ux-revamp.md`)：把悬浮球从"跳转开关"改造成真正的就地弹层对话框（复用 ChatView，顶部会话下拉 + 新建 + 展开到全页），并把全页从四列（Session/Context/Chat/Stage）压成两列 + 顶部可折叠 Context 条 + 按需 Stage 抽屉。落地 ADR-015 D-2 的弹层形态，不扩展 D-3/D-5/D-6。
+
 ### Added
 
 - **Gateway Telegram 可用化**：参照 openclaw 的 channel lifecycle 思路，把原本只会本地切状态的 Gateway 骨架升级为真实 Telegram Bot 长轮询运行时；支持 auto-start、关闭窗口后保持本地主进程运行、绑定码授权、未绑定用户拒绝、Telegram 回执、重连退避、channel 状态/错误/log 展示，并继续把 URL / `#thought` / 普通文本分别路由到 Library、Thoughts、Ask-Anywhere。

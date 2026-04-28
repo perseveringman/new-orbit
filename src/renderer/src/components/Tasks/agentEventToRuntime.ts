@@ -46,7 +46,7 @@ export function agentEventToRuntimeEvent(
       return {
         ...base,
         kind,
-        payload: { text: event.text ?? '' }
+        payload: { text: event.text ?? '', role: 'assistant' }
       } as RuntimeEvent;
     case 'runtime.thinking':
       return { ...base, kind, payload: { text: event.text ?? '' } } as RuntimeEvent;
@@ -106,7 +106,7 @@ export function turnToRuntimeEvents(
     conversationId: ctx.conversationId,
     runId,
     spanId: turn.id,
-    payload: { text }
+    payload: { text, role: turn.role === 'user' ? 'user' : 'assistant' }
   } as RuntimeEvent);
   return events;
 }

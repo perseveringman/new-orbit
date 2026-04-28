@@ -99,7 +99,11 @@ describe('Inbox v2 renderer shell', () => {
 
   it('embeds the linked task conversation for B1 help requests', () => {
     const html = renderToStaticMarkup(
-      createElement(HelpRequestStageContent, { item: helpRequest, task: linkedTask })
+      createElement(HelpRequestStageContent, {
+        item: helpRequest,
+        task: linkedTask,
+        conversationId: 'inbox-conversation-shell'
+      })
     );
     expect(html).toContain('Agent needs input: 调研埃及的历史');
     expect(html).toContain('Open task');

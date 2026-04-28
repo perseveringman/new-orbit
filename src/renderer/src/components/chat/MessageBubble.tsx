@@ -5,25 +5,38 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ event }: MessageBubbleProps): JSX.Element {
-  const { text, isStreaming } = event.payload;
+  const { text, isStreaming, role = 'assistant' } = event.payload;
   const parts = parseArtifactFences(text);
+  const isUser = role === 'user';
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white/90 px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/80 dark:text-neutral-100">
-      <div className="space-y-2">
-        {parts.map((part, index) =>
-          part.kind === 'artifact' ? (
-            <div key={index} className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
-              <div className="font-semibold">🎭 {part.title}</div>
-              {part.summary ? <div className="mt-1 opacity-80">{part.summary}</div> : null}
-              {part.refs.length > 0 ? <div className="mt-2 opacity-70">{part.refs.join(' · ')}</div> : null}
-            </div>
-          ) : (
-            <div key={index} className="whitespace-pre-wrap break-words">
-              {part.text}
-            </div>
-          )
-        )}
-        {isStreaming ? <span className="ml-0.5 animate-pulse opacity-60">▍</span> : null}
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={
+          isUser
+            ? 'max-w-[85%] rounded-2xl bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-white shadow-sm dark:bg-neutral-100 dark:text-neutral-900'
+            : 'max-w-[85%] rounded-2xl border border-neutral-200 bg-white/90 px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/80 dark:text-neutral-100'
+        }
+      >
+        {!isUser ? <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-sky-500">Agent</div> : null}
+        <div className="space-y-2">
+          {parts.map((part, index) =>
+            part.kind === 'artifact' ? (
+              <div
+                key={index}
+                className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100"
+              >
+                <div className="font-semibold">🎭 {part.title}</div>
+                {part.summary ? <div className="mt-1 opacity-80">{part.summary}</div> : null}
+                {part.refs.length > 0 ? <div className="mt-2 opacity-70">{part.refs.join(' · ')}</div> : null}
+              </div>
+            ) : (
+              <div key={index} className="whitespace-pre-wrap break-words">
+                {part.text}
+              </div>
+            )
+          )}
+          {isStreaming ? <span className="ml-0.5 animate-pulse opacity-60">▍</span> : null}
+        </div>
       </div>
     </div>
   );
