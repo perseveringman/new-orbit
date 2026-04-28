@@ -40,6 +40,17 @@ export interface ActivateKnowledgeBaseInput {
   userText?: string;
 }
 
+export interface KnowledgeBaseActivationRecord {
+  id: string;
+  at: string;
+  kb_id: string;
+  source_file: string;
+  source_ref: string;
+  excerpt_hash: string;
+  note_id: string;
+  note_path: string;
+}
+
 export interface WelcomeAnalysisResult {
   generated_at: string;
   kb_ids: string[];
@@ -56,4 +67,3 @@ export interface OnboardingStatus {
   welcomeAnalysisDone: boolean;
   nextStep: 'import_kb' | 'welcome_analysis' | 'ready';
 }
-

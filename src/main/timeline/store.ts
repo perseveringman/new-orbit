@@ -208,7 +208,7 @@ function titleFor(kind: string, payload: Record<string, unknown>, specialKind?: 
   if (kind === 'note.archived') return `Archived ${String(payload['title'] ?? 'note')}`;
   if (kind === 'library.item.added') return `Saved Library item ${String(payload['title'] ?? '')}`.trim();
   if (kind === 'kb.imported') return `Imported KB ${String(payload['name'] ?? '')}`.trim();
-  if (kind === 'kb.activated') return 'Activated knowledge into note';
+  if (kind === 'kb.doc.activated' || kind === 'kb.activated') return 'Activated knowledge into note';
   if (kind === 'scheduled_task.execution.completed') return 'Scheduled task ran';
   if (kind === 'resource.created') return `Created Resource ${String(payload['title'] ?? '')}`.trim();
   if (kind === 'resource.updated') return `Updated Resource ${String(payload['title'] ?? '')}`.trim();

@@ -109,3 +109,12 @@ must be added there (or the test will fail typecheck).
 - Chat IPC/preload methods expose create/list/get/update/archive and scoped last-active get/set.
 - Ask-Anywhere overlay and full-page Ask should render the shared `components/conversation/ConversationShell` instead of forking chat UI.
 - Focused coverage lives in `tests/conversation_store.test.ts`, `tests/ask_anywhere_ux.test.ts`, and `tests/ipc.test.ts`.
+
+## Notes and Knowledge Base
+
+- Shared contracts live in `src/shared/note.ts` and `src/shared/knowledge-base.ts`.
+- Notes are Markdown files under `<vault>/notes/{thoughts,longforms,captures,voice_logs,daily-summaries}`. Archive moves them to `<vault>/04_Archives/notes/...`.
+- Note frontmatter supports Layer 1 links (`areas`, `resource_refs`), origin (`source`), UI markers (`special_marker`), and Layer 2 provenance (`synthesis_ref`).
+- KB import copies markdown folders into `<vault>/knowledge-base/<kb-name>` and writes registry metadata to `knowledge-base/.orbit-kb-meta/registry.json`.
+- KB activation must go through `knowledgeBase.activate`; it creates a Note, records activation metadata under `.orbit-kb-meta/annotations/`, and emits `kb.doc.activated`.
+- Focused coverage lives in `tests/notes_kb.test.ts`.

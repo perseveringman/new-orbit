@@ -1,6 +1,6 @@
 # Orbit — Roadmap
 
-> **Status**: Phase 5.1 Runtime B SDK track、Phase 5.2 Synthesis foundation、Phase 5.3 Conversation surface unification 已落地基础闭环；下一步进入 Phase 6.1 Notes + KB Import。
+> **Status**: Phase 5 已完成基础闭环，Phase 6.1 Notes + KB Import 已落地 foundation；下一步进入 Phase 6.2 Library workstation。
 > **Update cadence**: 每个里程碑落地后更新；架构方向以 `docs/architecture/` 为准；thinking-trail 记录推理过程。
 
 ---
@@ -231,6 +231,8 @@ Acceptance:
 
 ### 6.1 Notes and KB import
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - top-level Notes view
@@ -239,6 +241,16 @@ Deliverables:
 - KB import into `knowledge-base/`
 - KB activation flow → Note
 - welcome analysis flow
+
+Implemented notes:
+
+- Notes live under `notes/thoughts`, `notes/longforms`, `notes/captures`, `notes/voice_logs`, and `notes/daily-summaries`.
+- Note frontmatter supports `areas`, `resource_refs`, `source`, `special_marker`, and `synthesis_ref` so Notes can become the Layer 1 output primitive for later Resource/Area/Library flows.
+- Notes IPC supports list/get/getByPath/create/update/archive/search and emits note TraceableEvents.
+- Knowledge Base import copies Markdown folders into `knowledge-base/<kb-name>` and maintains `knowledge-base/.orbit-kb-meta/registry.json`.
+- KB activation creates a Note with `source.kind = kb`, records activation metadata under `.orbit-kb-meta/annotations/`, and emits `kb.doc.activated`.
+- Notes UI includes type/tag/area/resource filters, a Markdown editor, and a contextual side panel for backlinks/source/resources/areas/synthesis refs.
+- Knowledge Base UI includes an import wizard, KB browser/search, welcome analysis, and Activate-to-Note action.
 
 Data structures:
 

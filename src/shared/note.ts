@@ -25,6 +25,13 @@ export interface NoteSource {
   excerpt?: string;
 }
 
+export interface NoteAreaRef {
+  area_slug: string;
+  primary?: boolean;
+  assigned_at: string;
+  assigned_by: 'user' | 'synthesis';
+}
+
 export interface NoteFrontmatter {
   id: string;
   type: NoteType;
@@ -34,6 +41,8 @@ export interface NoteFrontmatter {
   para_kind: NotePARAKind;
   para_ref?: string;
   tags: string[];
+  areas?: NoteAreaRef[];
+  resource_refs?: string[];
   source?: NoteSource;
   audio?: {
     path: string;
@@ -46,6 +55,7 @@ export interface NoteFrontmatter {
   author?: string;
   visibility?: 'normal' | 'private';
   special_marker?: SpecialMarker;
+  synthesis_ref?: string;
 }
 
 export interface Note {
@@ -59,6 +69,9 @@ export interface NoteFilter {
   para_kind?: NotePARAKind;
   para_ref?: string;
   tag?: string;
+  area_slug?: string;
+  resource_ref?: string;
+  source_kind?: NoteSource['kind'];
   include_archived?: boolean;
 }
 
@@ -69,8 +82,11 @@ export interface CreateNoteInput {
   para_kind?: NotePARAKind;
   para_ref?: string;
   tags?: string[];
+  areas?: NoteAreaRef[];
+  resource_refs?: string[];
   source?: NoteSource;
   special_marker?: SpecialMarker;
+  synthesis_ref?: string;
   audio?: NoteFrontmatter['audio'];
 }
 

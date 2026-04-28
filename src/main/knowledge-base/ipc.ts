@@ -43,9 +43,30 @@ export function registerKnowledgeBaseIpc(getVaultPath: () => string | null): voi
     const note = await createKnowledgeBaseStore(vaultPath()).activate(input);
     publishTraceableEvent({
       source: 'activity',
-      kind: 'kb.activated',
+      kind: 'note.created',
+      summary: `Activated note: ${note.frontmatter.title ?? note.frontmatter.id}`,
+      payload: {
+        note_id: note.frontmatter.id,
+        path: note.path,
+        type: note.frontmatter.type,
+        title: note.frontmatter.title,
+        body: note.body,
+        areas: note.frontmatter.areas,
+        resource_refs: note.frontmatter.resource_refs,
+        synthesis_ref: note.frontmatter.synthesis_ref
+      }
+    });
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'kb.doc.activated',
       summary: `Activated KB excerpt into note: ${note.frontmatter.title ?? note.frontmatter.id}`,
-      payload: { kb_id: input.kbId, note_id: note.frontmatter.id, path: note.path }
+      payload: {
+        kb_id: input.kbId,
+        note_id: note.frontmatter.id,
+        path: note.path,
+        source_file: input.sourceFile,
+        source_ref: note.frontmatter.source?.ref
+      }
     });
     return note;
   });
@@ -66,4 +87,3 @@ export function registerKnowledgeBaseIpc(getVaultPath: () => string | null): voi
     createKnowledgeBaseStore(vaultPath()).applySuggestions(result)
   );
 }
-

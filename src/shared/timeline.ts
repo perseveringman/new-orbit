@@ -82,6 +82,7 @@ export const TIMELINE_LAYER_1_KINDS = new Set([
   'library.item.distilled',
   'feed.item.saved_to_library',
   'kb.imported',
+  'kb.doc.activated',
   'kb.activated',
   'kb.welcome_analysis_completed',
   'scheduled_task.created',

@@ -5,6 +5,7 @@ import type {
   ActivateKnowledgeBaseInput,
   ImportKnowledgeBaseInput,
   KnowledgeBase,
+  KnowledgeBaseActivationRecord,
   KnowledgeBaseSearchHit,
   OnboardingStatus,
   WelcomeAnalysisResult
@@ -118,10 +119,12 @@ export class KnowledgeBaseStore {
         excerpt: input.excerpt
       }
     });
-    await this.appendActivation(input.kbId, {
+    await this.appendActivation({
       id: `activation-${randomUUID()}`,
       at: new Date().toISOString(),
+      kb_id: input.kbId,
       source_file: sourceRel,
+      source_ref: `${kb.id}/${sourceRel.slice(kb.path.length + 1)}`,
       excerpt_hash: createHash('sha1').update(input.excerpt).digest('hex'),
       note_id: note.frontmatter.id,
       note_path: note.path
@@ -212,10 +215,22 @@ export class KnowledgeBaseStore {
     return rel;
   }
 
-  private async appendActivation(kbId: string, record: Record<string, unknown>): Promise<void> {
-    const file = path.join(this.vaultPath, KB_ROOT, KB_META, 'annotations', `${kbId}.jsonl`);
+  private async appendActivation(record: KnowledgeBaseActivationRecord): Promise<void> {
+    const file = this.activationAnnotationPath(record.kb_id, record.source_file);
+    let current: { activations: KnowledgeBaseActivationRecord[] } = { activations: [] };
+    try {
+      current = JSON.parse(await fs.readFile(file, 'utf8')) as { activations: KnowledgeBaseActivationRecord[] };
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+    current.activations.push(record);
     await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.appendFile(file, `${JSON.stringify(record)}\n`, 'utf8');
+    await fs.writeFile(file, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
+  }
+
+  private activationAnnotationPath(kbId: string, sourceFile: string): string {
+    const digest = createHash('sha1').update(sourceFile).digest('hex');
+    return path.join(this.vaultPath, KB_ROOT, KB_META, 'annotations', kbId, `${digest}.json`);
   }
 }
 
@@ -269,4 +284,3 @@ async function exists(filePath: string): Promise<boolean> {
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
-

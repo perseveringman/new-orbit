@@ -69,6 +69,7 @@ export const TRACEABLE_EVENT_KINDS = [
   'kb.imported',
   'kb.removed',
   'kb.scanned',
+  'kb.doc.activated',
   'kb.activated',
   'kb.welcome_analysis_completed',
   'para.archived',

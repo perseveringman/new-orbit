@@ -8,6 +8,8 @@
 
 ## Milestone 6.1 — Notes and KB Import
 
+Status: **implemented (foundation)**.
+
 ### Scope
 
 Build a first-class Notes system and imported KB activation path.
@@ -81,6 +83,17 @@ knowledge-base/
 - Notes are editable and searchable.
 - KB documents are not active notes until activated.
 - Activated notes retain origin metadata.
+
+### Implementation notes
+
+- Shared contracts live in `src/shared/note.ts` and `src/shared/knowledge-base.ts`.
+- Notes are stored as Markdown under `notes/thoughts`, `notes/longforms`, `notes/captures`, `notes/voice_logs`, and `notes/daily-summaries`; archived notes move to `04_Archives/notes/...`.
+- Note frontmatter now includes `areas`, `resource_refs`, `source`, `special_marker`, and `synthesis_ref` to support later Library/Resource/Area flows.
+- Main-process Notes APIs support CRUD, archive, path lookup, search, type/tag/area/resource/source filters, and TraceableEvents.
+- KB import stores copied markdown folders under `knowledge-base/<kb-name>` with registry metadata at `knowledge-base/.orbit-kb-meta/registry.json`.
+- KB activation is a promotion gate: it creates a Note with KB origin metadata, records an activation annotation under `.orbit-kb-meta/annotations/`, and emits `kb.doc.activated`.
+- Renderer surfaces: `NotesView` for list/filter/editor/context panel and `KnowledgeBaseView` for import/search/welcome-analysis/activate-to-note.
+- Focused coverage: `tests/notes_kb.test.ts`.
 
 ---
 

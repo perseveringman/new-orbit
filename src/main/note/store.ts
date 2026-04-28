@@ -37,7 +37,9 @@ export class NoteStore {
 
   async list(filter: NoteFilter = {}): Promise<Note[]> {
     await this.ensureDirs();
-    const files = await walkMarkdown(path.join(this.vaultPath, NOTE_ROOT));
+    const roots = [path.join(this.vaultPath, NOTE_ROOT)];
+    if (filter.include_archived) roots.push(path.join(this.vaultPath, '04_Archives', 'notes'));
+    const files = (await Promise.all(roots.map((root) => walkMarkdown(root)))).flat();
     const notes = await Promise.all(files.map((file) => this.readNoteFile(file)));
     return notes
       .filter((note): note is Note => note !== null)
@@ -71,12 +73,15 @@ export class NoteStore {
       para_kind: input.para_kind ?? 'floating',
       ...(input.para_ref ? { para_ref: input.para_ref } : {}),
       tags: normalizeTags(input.tags ?? []),
+      areas: normalizeAreas(input.areas ?? []),
+      resource_refs: normalizeResourceRefs(input.resource_refs ?? []),
       ...(input.source ? { source: input.source } : {}),
       ...(input.audio ? { audio: input.audio } : {}),
       links_out: extractWikilinks(body),
       backlinks: [],
       word_count: wordCount(body),
-      ...(input.special_marker ? { special_marker: input.special_marker } : {})
+      ...(input.special_marker ? { special_marker: input.special_marker } : {}),
+      ...(input.synthesis_ref ? { synthesis_ref: input.synthesis_ref } : {})
     });
     await writeNoteFile(path.join(this.vaultPath, relPath), fm, body);
     return this.requireByPath(relPath);
@@ -93,6 +98,8 @@ export class NoteStore {
       created: note.frontmatter.created,
       updated: new Date().toISOString(),
       tags: normalizeTags(patch.tags ?? note.frontmatter.tags),
+      areas: normalizeAreas(patch.areas ?? note.frontmatter.areas ?? []),
+      resource_refs: normalizeResourceRefs(patch.resource_refs ?? note.frontmatter.resource_refs ?? []),
       links_out: extractWikilinks(body),
       word_count: wordCount(body)
     });
@@ -171,6 +178,8 @@ export class NoteStore {
       para_kind: paraKindValue(parsed.data['para_kind']) ?? 'floating',
       para_ref: stringValue(parsed.data['para_ref']),
       tags: arrayOfStrings(parsed.data['tags']),
+      areas: normalizeAreas(Array.isArray(parsed.data['areas']) ? (parsed.data['areas'] as NoteFrontmatter['areas']) : []),
+      resource_refs: normalizeResourceRefs(arrayOfStrings(parsed.data['resource_refs'])),
       source: typeof parsed.data['source'] === 'object' ? (parsed.data['source'] as NoteFrontmatter['source']) : undefined,
       audio: typeof parsed.data['audio'] === 'object' ? (parsed.data['audio'] as NoteFrontmatter['audio']) : undefined,
       links_out: arrayOfStrings(parsed.data['links_out']).length ? arrayOfStrings(parsed.data['links_out']) : extractWikilinks(parsed.body),
@@ -181,7 +190,8 @@ export class NoteStore {
       special_marker:
         typeof parsed.data['special_marker'] === 'object'
           ? (parsed.data['special_marker'] as NoteFrontmatter['special_marker'])
-          : undefined
+          : undefined,
+      synthesis_ref: stringValue(parsed.data['synthesis_ref'])
     });
     return { frontmatter: fm, body: parsed.body, path: rel };
   }
@@ -220,6 +230,9 @@ function matchesFilter(note: Note, filter: NoteFilter): boolean {
   if (filter.para_kind && note.frontmatter.para_kind !== filter.para_kind) return false;
   if (filter.para_ref && note.frontmatter.para_ref !== filter.para_ref) return false;
   if (filter.tag && !note.frontmatter.tags.includes(filter.tag)) return false;
+  if (filter.area_slug && !(note.frontmatter.areas ?? []).some((area) => area.area_slug === filter.area_slug)) return false;
+  if (filter.resource_ref && !(note.frontmatter.resource_refs ?? []).includes(filter.resource_ref)) return false;
+  if (filter.source_kind && note.frontmatter.source?.kind !== filter.source_kind) return false;
   return true;
 }
 
@@ -227,6 +240,8 @@ function normalizeFrontmatter(value: NoteFrontmatter): NoteFrontmatter {
   return {
     ...value,
     tags: normalizeTags(value.tags),
+    areas: normalizeAreas(value.areas ?? []),
+    resource_refs: normalizeResourceRefs(value.resource_refs ?? []),
     links_out: [...new Set(value.links_out ?? [])],
     backlinks: [...new Set(value.backlinks ?? [])]
   };
@@ -282,6 +297,30 @@ function normalizeTags(tags: string[]): string[] {
   return [...new Set(tags.map((tag) => tag.trim().replace(/^#/, '')).filter(Boolean))];
 }
 
+function normalizeAreas(areas: NoteFrontmatter['areas']): NonNullable<NoteFrontmatter['areas']> {
+  return [
+    ...new Map(
+      (areas ?? [])
+        .filter((area): area is NonNullable<NoteFrontmatter['areas']>[number] =>
+          Boolean(area && typeof area.area_slug === 'string' && area.area_slug.trim())
+        )
+        .map((area) => [
+          area.area_slug.trim(),
+          {
+            area_slug: area.area_slug.trim(),
+            ...(area.primary ? { primary: true } : {}),
+            assigned_at: area.assigned_at || new Date().toISOString(),
+            assigned_by: area.assigned_by === 'synthesis' ? 'synthesis' : 'user'
+          } satisfies NonNullable<NoteFrontmatter['areas']>[number]
+        ])
+    ).values()
+  ];
+}
+
+function normalizeResourceRefs(refs: string[]): string[] {
+  return [...new Set(refs.map((ref) => ref.trim()).filter(Boolean))];
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -324,4 +363,3 @@ async function exists(filePath: string): Promise<boolean> {
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
-

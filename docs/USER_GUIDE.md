@@ -124,6 +124,20 @@ Ask-Anywhere overlay 和全页 Ask 现在使用同一套 Conversation。打开�
 
 后续 Resource / Area scoped chat 会复用同一套 Conversation 结构，不再为每个页面单独实现 chat。
 
+## 5.4 Notes and Knowledge Base
+
+**Notes** 是 Layer 1 的用户输出 primitive。Notes 页面可以浏览、搜索、编辑以下目录：
+
+- `notes/thoughts`
+- `notes/longforms`
+- `notes/captures`
+- `notes/voice_logs`
+- `notes/daily-summaries`
+
+Note 支持 tags、areas、resource refs、source origin、special marker 和 synthesis ref。右侧 Context 面板会显示路径、source、backlinks、outlinks 和 synthesis ref。
+
+**Knowledge Base** 用来导入旧 Markdown / Obsidian archive。导入后的文档保留在 `knowledge-base/<kb-name>`，不会自动成为活跃 Note。只有点击 **Activate to Note** 后，Orbit 才会创建带 `source.kind = kb` 的 Note，并记录 `kb.doc.activated` promotion event。
+
 ## 6. 四段式任务编辑
 
 每个 task 文件是一份 Markdown：

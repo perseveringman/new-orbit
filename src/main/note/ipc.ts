@@ -64,6 +64,9 @@ function publishNoteEvent(
       type: note.frontmatter.type,
       title: note.frontmatter.title,
       special_marker: note.frontmatter.special_marker,
+      areas: note.frontmatter.areas,
+      resource_refs: note.frontmatter.resource_refs,
+      synthesis_ref: note.frontmatter.synthesis_ref,
       ...extra
     }
   });
@@ -74,4 +77,3 @@ function broadcast(event: NoteChangeEvent): void {
     if (!win.isDestroyed()) win.webContents.send(IPC.notes.event, event);
   }
 }
-

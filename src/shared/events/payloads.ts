@@ -173,6 +173,9 @@ export interface NoteEventPayload {
   body?: string;
   word_delta?: number;
   special_marker?: unknown;
+  areas?: unknown;
+  resource_refs?: string[];
+  synthesis_ref?: string;
 }
 
 export interface LibraryEventPayload {
@@ -197,6 +200,8 @@ export interface KnowledgeBaseEventPayload {
   path?: string;
   item_count?: number;
   note_id?: string;
+  source_file?: string;
+  source_ref?: string;
 }
 
 export interface ParaEventPayload {
@@ -308,6 +313,7 @@ export interface TraceableEventPayloadMap {
   'kb.imported': KnowledgeBaseEventPayload;
   'kb.removed': KnowledgeBaseEventPayload;
   'kb.scanned': KnowledgeBaseEventPayload;
+  'kb.doc.activated': KnowledgeBaseEventPayload;
   'kb.activated': KnowledgeBaseEventPayload;
   'kb.welcome_analysis_completed': KnowledgeBaseEventPayload;
   'para.archived': ParaEventPayload;
