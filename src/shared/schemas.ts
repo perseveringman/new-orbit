@@ -231,9 +231,13 @@ export const AreaConfigSchema = z.object({
   uid: z.string(),
   slug: z.string(),
   name: z.string(),
+  description: z.string().optional(),
+  status: z.enum(['active', 'dormant', 'archived']).default('active'),
   template: z.string().optional(),
   tags: z.array(z.string()).default([]),
-  created_at: z.string()
+  created_at: z.string(),
+  updated_at: z.string().optional(),
+  vision_refs: z.array(z.string()).optional()
 });
 export type AreaConfig = z.infer<typeof AreaConfigSchema>;
 

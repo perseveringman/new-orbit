@@ -532,6 +532,16 @@ Actions:
 - Area-scoped chat uses area context.
 - Unassigned entity queue helps keep system organized.
 
+### Implementation notes
+
+- Shared contracts live in `src/shared/area.ts`; IPC/preload API extends the existing `window.orbit.area` namespace rather than introducing a parallel `areas` namespace.
+- Main-process Area logic lives in `src/main/area.ts` and keeps existing `02_Areas/<slug>/.orbit/config.json` storage while adding richer config, update/archive, dashboard assembly, assignment, unassignment, and suggestions.
+- Dashboard data is a projection from Layer 1 entities and Synthesis: Projects, Tasks, Notes, Library items, Resources, Feed sources, scheduled reviews, latest area synthesis, and an unassigned queue.
+- Notes, Library items, Resources, and Feed sources use shared `areas` refs. Projects and Tasks write `areas` while preserving compatibility with legacy `area_uid`.
+- `suggestAssignments` writes `classify.area` SynthesisArtifacts and returns suggestions; accepting a suggestion remains an explicit assignment action.
+- Area Room renders a Dashboard tab by default with health signals, active projects, resources, notes, feed radar, scheduled reviews, unassigned queue actions, and area-scoped chat entry.
+- Focused coverage lives in `tests/area_store.test.ts`, `tests/area_view.test.ts`, and `tests/ipc.test.ts`.
+
 ---
 
 ## Cross-milestone integration

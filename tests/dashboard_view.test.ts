@@ -15,9 +15,11 @@ const mockWorkspaceState = {
       uid: 'area-1',
       slug: 'vision',
       name: 'Vision',
+      status: 'active',
       template: 'vision',
       tags: [],
       created_at: '2026-04-24T00:00:00.000Z',
+      updated_at: '2026-04-24T00:00:00.000Z',
       path: '/vault/02_Areas/vision',
       relPath: '02_Areas/vision',
       hasVision: true

@@ -16,10 +16,11 @@ import {
 } from '../components/Terminal/terminalNavigationIntent';
 import { VisionRoomContent } from './VisionRoomContent';
 import { AreaSessionsView } from './AreaSessionsView';
+import { AreaOverview } from './AreaOverview';
 
 const KanbanBoard = lazy(() => import('../components/KanbanBoard'));
 
-type AreaRoomOuterTab = 'kanban' | 'terminal' | 'sessions';
+type AreaRoomOuterTab = 'dashboard' | 'kanban' | 'terminal' | 'sessions';
 
 function OuterTabButton({
   active,
@@ -71,9 +72,9 @@ export function AreaRoomView(): JSX.Element {
   const [outerTab, setOuterTabRaw] = useState<AreaRoomOuterTab>(() => {
     try {
       const value = localStorage.getItem(outerTabKey);
-      return value === 'terminal' || value === 'sessions' ? value : 'kanban';
+      return value === 'kanban' || value === 'terminal' || value === 'sessions' ? value : 'dashboard';
     } catch {
-      return 'kanban';
+      return 'dashboard';
     }
   });
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
@@ -119,9 +120,9 @@ export function AreaRoomView(): JSX.Element {
     try {
       const key = `orbit.areaRoom.outerTab.${areaUid}`;
       const value = localStorage.getItem(key);
-      setOuterTabRaw(value === 'terminal' || value === 'sessions' ? value : 'kanban');
+      setOuterTabRaw(value === 'kanban' || value === 'terminal' || value === 'sessions' ? value : 'dashboard');
     } catch {
-      setOuterTabRaw('kanban');
+      setOuterTabRaw('dashboard');
     }
   }, [areaUid]);
 
@@ -280,6 +281,9 @@ export function AreaRoomView(): JSX.Element {
       </header>
 
       <div className="flex shrink-0 border-b border-neutral-200 px-4 text-sm dark:border-neutral-800">
+        <OuterTabButton active={outerTab === 'dashboard'} onClick={() => setOuterTab('dashboard')}>
+          Dashboard
+        </OuterTabButton>
         <OuterTabButton active={outerTab === 'kanban'} onClick={() => setOuterTab('kanban')}>
           Kanban
         </OuterTabButton>
@@ -289,6 +293,10 @@ export function AreaRoomView(): JSX.Element {
         <OuterTabButton active={outerTab === 'sessions'} onClick={() => setOuterTab('sessions')}>
           Sessions
         </OuterTabButton>
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'dashboard' ? 'flex' : 'hidden'}`}>
+        <AreaOverview areaUid={area.uid} />
       </div>
 
       <div className={`flex min-h-0 flex-1 ${outerTab === 'kanban' ? 'flex' : 'hidden'}`}>

@@ -146,6 +146,14 @@ import type {
   GatewayStatus
 } from '@shared/gateway';
 import type { ResourceChangeEvent } from '@shared/resource';
+import type {
+  AreaAssignmentInput,
+  AreaAssignmentSuggestion,
+  AreaChangeEvent,
+  AreaDashboardData,
+  AreaEntityRef,
+  AreaUnassignmentInput
+} from '@shared/area';
 import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/schemas';
 import type {
   ConversationTurn,
@@ -849,10 +857,25 @@ const api: OrbitApi = {
   },
   area: {
     list: () => ipcRenderer.invoke(IPC.area.list),
+    get: (areaSlugOrUid: string) => ipcRenderer.invoke(IPC.area.get, areaSlugOrUid),
     create: (args: CreateAreaArgsDTO) => ipcRenderer.invoke(IPC.area.create, args),
+    update: (areaSlugOrUid: string, patch) =>
+      ipcRenderer.invoke(IPC.area.update, areaSlugOrUid, patch),
+    archive: (areaSlugOrUid: string) => ipcRenderer.invoke(IPC.area.archive, areaSlugOrUid),
     getConfig: (areaPath: string) => ipcRenderer.invoke(IPC.area.getConfig, areaPath),
     setConfig: (areaPath: string, patch: Partial<AreaConfigDTO>) =>
-      ipcRenderer.invoke(IPC.area.setConfig, areaPath, patch)
+      ipcRenderer.invoke(IPC.area.setConfig, areaPath, patch),
+    dashboard: (areaSlugOrUid: string): Promise<AreaDashboardData> =>
+      ipcRenderer.invoke(IPC.area.dashboard, areaSlugOrUid),
+    assign: (input: AreaAssignmentInput) => ipcRenderer.invoke(IPC.area.assign, input),
+    unassign: (input: AreaUnassignmentInput) => ipcRenderer.invoke(IPC.area.unassign, input),
+    suggestAssignments: (entity: AreaEntityRef): Promise<AreaAssignmentSuggestion[]> =>
+      ipcRenderer.invoke(IPC.area.suggestAssignments, entity),
+    onEvent: (cb: (event: AreaChangeEvent) => void) => {
+      const listener = (_: unknown, event: AreaChangeEvent): void => cb(event);
+      ipcRenderer.on(IPC.area.event, listener);
+      return () => ipcRenderer.removeListener(IPC.area.event, listener);
+    }
   },
   vaultConfig: {
     get: () => ipcRenderer.invoke(IPC.vaultConfig.get),

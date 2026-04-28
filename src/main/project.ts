@@ -41,6 +41,7 @@ export interface ProjectSummary {
   archived_at?: string;
   template?: string;
   area_uid?: string;
+  area_slugs?: string[];
   /** Absolute path to the project folder (or legacy .md file). */
   path: string;
   /** Absolute path to README.md (folder mode) or the .md file (legacy). */
@@ -240,6 +241,8 @@ function parseReadmeSummary(
   else if (typeof data['template'] === 'string') summary.template = data['template'] as string;
   if (typeof data['area_uid'] === 'string')
     summary.area_uid = data['area_uid'] as string;
+  const areaSlugs = areaSlugsFromFrontmatter(data['areas']);
+  if (areaSlugs.length) summary.area_slugs = areaSlugs;
   if (config?.github) summary.github = config.github;
   return summary;
 }
@@ -299,6 +302,8 @@ export async function listProjects(vault: string): Promise<ProjectSummary[]> {
             )
           : undefined;
         if (tags && tags.length) summary.tags = tags;
+        const areaSlugs = areaSlugsFromFrontmatter(data['areas']);
+        if (areaSlugs.length) summary.area_slugs = areaSlugs;
         out.push(summary);
       } catch {
         // ignore unreadable files
@@ -307,6 +312,24 @@ export async function listProjects(vault: string): Promise<ProjectSummary[]> {
   }
   out.sort((a, b) => a.slug.localeCompare(b.slug));
   return out;
+}
+
+function areaSlugsFromFrontmatter(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .flatMap((item): string[] => {
+          if (typeof item === 'string') return [item];
+          if (item && typeof item === 'object' && typeof (item as Record<string, unknown>)['area_slug'] === 'string') {
+            return [(item as Record<string, string>)['area_slug']];
+          }
+          return [];
+        })
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  ];
 }
 
 async function moveDir(src: string, dst: string): Promise<void> {

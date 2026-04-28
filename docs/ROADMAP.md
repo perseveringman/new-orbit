@@ -459,6 +459,8 @@ Acceptance:
 
 ### 6.6 Area dashboard and assignment
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - Area as long-term coordinate
@@ -467,6 +469,15 @@ Deliverables:
 - area-scoped Ask-Anywhere context
 - classify.area synthesis suggestions
 - area-scoped scheduled tasks and memories
+
+Implemented notes:
+
+- Area contracts now cover richer config, dashboard projection data, health/stats, entity refs, assignment inputs, suggestions, and scoped events.
+- Existing `02_Areas/<slug>` storage and `window.orbit.area` IPC namespace were extended for get/update/archive/dashboard/assign/unassign/suggestAssignments.
+- Dashboard data is assembled dynamically from Layer 1 Projects, Tasks, Notes, Library items, Resources, Feed sources, scheduled reviews, and latest area synthesis.
+- Note/Library/Resource/Feed assignments use the shared `areas` refs; Project/Task assignment remains compatible with legacy `area_uid` while also writing `areas`.
+- `suggestAssignments` creates `classify.area` SynthesisArtifacts and exposes explicit accept actions instead of mutating Layer 1 truth automatically.
+- Area Room now opens on a Dashboard tab with health signals, active work, resource/note/feed/review cards, an unassigned queue, and area-scoped chat entry.
 
 Data structures:
 

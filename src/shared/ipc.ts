@@ -170,6 +170,16 @@ import type {
   GatewayRouteResult,
   GatewayStatus
 } from './gateway';
+import type {
+  AreaAssignmentInput,
+  AreaAssignmentSuggestion,
+  AreaChangeEvent,
+  AreaConfig,
+  AreaDashboardData,
+  AreaEntityRef,
+  AreaStatus,
+  AreaUnassignmentInput
+} from './area';
 import type { BudgetSettings } from './schemas';
 import type {
   ChangesSummary,
@@ -633,9 +643,17 @@ export const IPC = {
   },
   area: {
     list: 'area:list',
+    get: 'area:get',
     create: 'area:create',
+    update: 'area:update',
+    archive: 'area:archive',
     getConfig: 'area:getConfig',
-    setConfig: 'area:setConfig'
+    setConfig: 'area:setConfig',
+    dashboard: 'area:dashboard',
+    assign: 'area:assign',
+    unassign: 'area:unassign',
+    suggestAssignments: 'area:suggestAssignments',
+    event: 'area:event'
   },
   vaultConfig: {
     get: 'vaultConfig:get',
@@ -770,6 +788,7 @@ export interface ProjectSummaryDTO {
   archived_at?: string;
   template?: string;
   area_uid?: string;
+  area_slugs?: string[];
   path: string;
   readmePath: string;
   relPath: string;
@@ -925,26 +944,23 @@ export interface AreaSummaryDTO {
   uid: string;
   slug: string;
   name: string;
+  description?: string;
+  status: AreaStatus;
   template?: string;
   tags: string[];
   created_at: string;
+  updated_at: string;
   path: string;
   relPath: string;
   hasVision: boolean;
 }
 
-export interface AreaConfigDTO {
-  uid: string;
-  slug: string;
-  name: string;
-  template?: string;
-  tags: string[];
-  created_at: string;
-}
+export interface AreaConfigDTO extends AreaConfig {}
 
 export interface CreateAreaArgsDTO {
   slug: string;
   name: string;
+  description?: string;
   template?: string;
   tags?: string[];
   uid?: string;
@@ -959,6 +975,14 @@ export interface CreateAreaResultDTO {
   relPath: string;
   uid: string;
   slug: string;
+}
+
+export interface UpdateAreaArgsDTO {
+  name?: string;
+  description?: string;
+  status?: AreaStatus;
+  tags?: string[];
+  vision_refs?: string[];
 }
 
 export interface VaultExtConfigDTO {
@@ -1496,9 +1520,17 @@ export interface OrbitApi {
   };
   area: {
     list(): Promise<AreaSummaryDTO[]>;
+    get(areaSlugOrUid: string): Promise<AreaConfigDTO | null>;
     create(args: CreateAreaArgsDTO): Promise<CreateAreaResultDTO>;
+    update(areaSlugOrUid: string, patch: UpdateAreaArgsDTO): Promise<AreaConfigDTO>;
+    archive(areaSlugOrUid: string): Promise<AreaConfigDTO>;
     getConfig(areaPath: string): Promise<AreaConfigDTO>;
     setConfig(areaPath: string, patch: Partial<AreaConfigDTO>): Promise<AreaConfigDTO>;
+    dashboard(areaSlugOrUid: string): Promise<AreaDashboardData>;
+    assign(input: AreaAssignmentInput): Promise<AreaConfigDTO | null>;
+    unassign(input: AreaUnassignmentInput): Promise<AreaConfigDTO | null>;
+    suggestAssignments(entity: AreaEntityRef): Promise<AreaAssignmentSuggestion[]>;
+    onEvent(cb: (event: AreaChangeEvent) => void): () => void;
   };
   vaultConfig: {
     get(): Promise<VaultExtConfigDTO>;

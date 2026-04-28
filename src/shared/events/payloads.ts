@@ -240,6 +240,15 @@ export interface ResourceEventPayload {
   tag?: string;
 }
 
+export interface AreaEventPayload {
+  area_uid: string;
+  area_slug: string;
+  title?: string;
+  status?: string;
+  tags?: string[];
+  entity?: unknown;
+}
+
 export interface ScheduledTaskEventPayload {
   task_id: string;
   execution_id?: string;
@@ -355,6 +364,12 @@ export interface TraceableEventPayloadMap {
   'resource.ref.promoted': ResourceEventPayload;
   'resource.engagement': ResourceEventPayload;
   'resource.archived': ResourceEventPayload;
+  'area.created': AreaEventPayload;
+  'area.updated': AreaEventPayload;
+  'area.assignment.added': AreaEventPayload;
+  'area.assignment.removed': AreaEventPayload;
+  'area.review.completed': AreaEventPayload;
+  'area.archived': AreaEventPayload;
   'activity.user': ActivityPayload;
   'activity.system': ActivityPayload;
   'ipc.events.query': IpcEventsQueryPayload;

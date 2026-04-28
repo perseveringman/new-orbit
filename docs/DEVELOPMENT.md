@@ -159,3 +159,13 @@ must be added there (or the test will fail typecheck).
 - `resources.suggestFromNotes()` creates `emerge.resource` synthesis output; `resources.createFromSuggestion()` is the explicit user promotion step.
 - `resources.promoteRef()` moves refs between sections, most commonly to canonical.
 - Focused coverage lives in `tests/resource_store.test.ts`; IPC namespace coverage lives in `tests/ipc.test.ts`.
+
+## Area Dashboard and Assignment
+
+- Shared contracts live in `src/shared/area.ts`; IPC/preload API is `window.orbit.area`.
+- Main-process logic lives in `src/main/area.ts` and preserves existing `<vault>/02_Areas/<slug>/.orbit/config.json` storage.
+- Area Dashboard data is assembled dynamically from Layer 1 Projects, Tasks, Notes, Library items, Resources, Feed sources, scheduled reviews, and latest area synthesis. Do not persist dashboard snapshots as truth.
+- Assignments use shared `areas` refs for Notes, Library items, Resources, and Feed sources. Project/Task assignment writes `areas` while preserving legacy `area_uid` compatibility.
+- `area.suggestAssignments(entity)` writes a `classify.area` SynthesisArtifact; accepting a suggestion must go through explicit `area.assign`.
+- Renderer surfaces live in `src/renderer/src/views/AreaRoomView.tsx` and `src/renderer/src/views/AreaOverview.tsx`.
+- Focused coverage lives in `tests/area_store.test.ts`, `tests/area_view.test.ts`, and `tests/ipc.test.ts`.

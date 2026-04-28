@@ -1,31 +1,51 @@
 import path from 'node:path';
-import { dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type {
-  CreateAreaArgsDTO,
   AreaConfigDTO,
+  CreateAreaArgsDTO,
   ExternalNotesPathInfoDTO,
   ImportNotesResultDTO,
+  UpdateAreaArgsDTO,
   VaultExtConfigDTO
 } from '@shared/ipc';
-import type { AreaConfig } from '@shared/schemas';
+import type {
+  AreaAssignmentInput,
+  AreaAssignmentSuggestion,
+  AreaChangeEvent,
+  AreaConfig,
+  AreaEntityRef,
+  AreaUnassignmentInput
+} from '@shared/area';
 import {
-  listAreas,
+  archiveArea,
+  assignArea,
   createArea,
+  getArea,
   getAreaConfig,
-  setAreaConfig
+  getAreaDashboard,
+  listAreas,
+  setAreaConfig,
+  suggestAreaAssignments,
+  unassignArea,
+  updateArea
 } from './area';
 import { getVaultExtConfig, updateVaultExtConfig } from './vault_config';
 import { importNotesDirectory, inspectExternalNotesPaths } from './vault_notes';
+import { publishTraceableEvent } from './events/bus';
 
 function configToDTO(config: AreaConfig): AreaConfigDTO {
   return {
     uid: config.uid,
     slug: config.slug,
     name: config.name,
+    description: config.description,
+    status: config.status,
     template: config.template,
     tags: config.tags,
-    created_at: config.created_at
+    created_at: config.created_at,
+    updated_at: config.updated_at,
+    vision_refs: config.vision_refs
   };
 }
 
@@ -36,10 +56,41 @@ export function registerAreaIpc(getVaultPath: () => string | null): void {
     return listAreas(vaultPath);
   });
 
+  ipcMain.handle(IPC.area.get, async (_e, slugOrUid: string) => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    const config = await getArea(vaultPath, slugOrUid);
+    return config ? configToDTO(config) : null;
+  });
+
   ipcMain.handle(IPC.area.create, async (_e, args: CreateAreaArgsDTO) => {
     const vaultPath = getVaultPath();
     if (!vaultPath) throw new Error('No vault open');
-    return createArea(vaultPath, args);
+    const result = await createArea(vaultPath, args);
+    const config = await getArea(vaultPath, result.slug);
+    if (config) {
+      publishAreaEvent('area.created', config, `Area created: ${config.name}`);
+      broadcast({ type: 'created', area: config });
+    }
+    return result;
+  });
+
+  ipcMain.handle(IPC.area.update, async (_e, slugOrUid: string, patch: UpdateAreaArgsDTO) => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    const config = await updateArea(vaultPath, slugOrUid, patch);
+    publishAreaEvent('area.updated', config, `Area updated: ${config.name}`);
+    broadcast({ type: 'updated', area: config });
+    return configToDTO(config);
+  });
+
+  ipcMain.handle(IPC.area.archive, async (_e, slugOrUid: string) => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    const config = await archiveArea(vaultPath, slugOrUid);
+    publishAreaEvent('area.archived', config, `Area archived: ${config.name}`);
+    broadcast({ type: 'archived', area: config });
+    return configToDTO(config);
   });
 
   ipcMain.handle(IPC.area.getConfig, async (_e, areaPath: string) => {
@@ -51,7 +102,46 @@ export function registerAreaIpc(getVaultPath: () => string | null): void {
     IPC.area.setConfig,
     async (_e, areaPath: string, patch: Partial<AreaConfigDTO>) => {
       const updated = await setAreaConfig(areaPath, patch);
+      publishAreaEvent('area.updated', updated, `Area config updated: ${updated.name}`);
+      broadcast({ type: 'updated', area: updated });
       return configToDTO(updated);
+    }
+  );
+
+  ipcMain.handle(IPC.area.dashboard, async (_e, slugOrUid: string) => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    return getAreaDashboard(vaultPath, slugOrUid);
+  });
+
+  ipcMain.handle(IPC.area.assign, async (_e, input: AreaAssignmentInput) => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    const area = await assignArea(vaultPath, input);
+    if (area) {
+      publishAreaEvent('area.assignment.added', area, `Assigned ${input.entity.kind} to ${area.name}`, input.entity);
+      broadcast({ type: 'assignment_added', area, entity: input.entity });
+    }
+    return area ? configToDTO(area) : null;
+  });
+
+  ipcMain.handle(IPC.area.unassign, async (_e, input: AreaUnassignmentInput) => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath) throw new Error('No vault open');
+    const area = await unassignArea(vaultPath, input);
+    if (area) {
+      publishAreaEvent('area.assignment.removed', area, `Unassigned ${input.entity.kind} from ${area.name}`, input.entity);
+      broadcast({ type: 'assignment_removed', area, entity: input.entity });
+    }
+    return area ? configToDTO(area) : null;
+  });
+
+  ipcMain.handle(
+    IPC.area.suggestAssignments,
+    async (_e, entity: AreaEntityRef): Promise<AreaAssignmentSuggestion[]> => {
+      const vaultPath = getVaultPath();
+      if (!vaultPath) throw new Error('No vault open');
+      return suggestAreaAssignments(vaultPath, entity);
     }
   );
 
@@ -119,4 +209,31 @@ export function registerAreaIpc(getVaultPath: () => string | null): void {
       ...imported
     };
   });
+}
+
+function publishAreaEvent(
+  kind: 'area.created' | 'area.updated' | 'area.assignment.added' | 'area.assignment.removed' | 'area.archived',
+  area: AreaConfig,
+  summary: string,
+  entity?: AreaEntityRef
+): void {
+  publishTraceableEvent({
+    source: 'activity',
+    kind,
+    summary,
+    payload: {
+      area_uid: area.uid,
+      area_slug: area.slug,
+      title: area.name,
+      status: area.status,
+      tags: area.tags,
+      entity
+    }
+  });
+}
+
+function broadcast(event: AreaChangeEvent): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.area.event, event);
+  }
 }

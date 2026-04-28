@@ -238,6 +238,27 @@ describe('IPC contract', () => {
     for (const v of Object.values(IPC.resources)) expect(v.startsWith('resources:')).toBe(true);
   });
 
+  it('area namespace declares Phase 6.6 dashboard + assignment channels', () => {
+    const keys = Object.keys(IPC.area).sort();
+    expect(keys).toEqual(
+      [
+        'archive',
+        'assign',
+        'create',
+        'dashboard',
+        'event',
+        'get',
+        'getConfig',
+        'list',
+        'setConfig',
+        'suggestAssignments',
+        'unassign',
+        'update'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.area)) expect(v.startsWith('area:')).toBe(true);
+  });
+
   it('OrbitApi type shape is assignable', () => {
     const defSettings = {
       lastVaultPath: null,
