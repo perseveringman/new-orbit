@@ -8,6 +8,8 @@
 
 ## Milestone 5.1 — Runtime B SDK Track
 
+Status: **implemented (foundation)**.
+
 ### Scope
 
 Add a native SDK runtime track for short, programmable LLM calls.
@@ -89,11 +91,22 @@ UI:
 
 - User can configure MiniMax / DeepSeek Anthropic-compatible endpoint.
 - Ask-Anywhere can stream from SDK.
-- Cost events appear in existing budget UI.
+- SDK invocation and cost events appear in the TraceableEvent observability stream.
+
+### Implementation notes
+
+- Shared contracts live in `src/shared/runtime/*` and are exposed through `IPC.runtime.sdk`.
+- Main-process services live in `src/main/runtime/sdk/*` plus `src/main/runtime/router.ts`.
+- The endpoint registry stores non-secret endpoint metadata in `.orbit/runtime/sdk-endpoints.json`.
+- Runtime B keys are stored through `SDKKeyVault`; renderer receives only configured/masked state.
+- Ask-Anywhere now asks the router for an `ask` route. If SDK is configured it streams through `@anthropic-ai/sdk`; if not, the existing Claude CLI path remains the fallback.
+- Tests: `tests/sdk_runtime.test.ts`.
 
 ---
 
 ## Milestone 5.2 — Synthesis Foundation
+
+Status: **implemented (foundation)**.
 
 ### Scope
 
@@ -256,9 +269,22 @@ Components:
 - Resource suggestion is a synthesis artifact before acceptance.
 - Stale state appears in UI.
 
+### Implementation notes
+
+- Shared contracts: `src/shared/synthesis/types.ts`, `payloads.ts`, `ipc.ts`.
+- Main-process foundation: `src/main/synthesis/store.ts`, `index-file.ts`, `scheduler.ts`, `runner.ts`, `invalidator.ts`, `ipc.ts`.
+- Prompt registry and initial templates: `src/main/synthesis/prompts/*`.
+- Storage: `.orbit/synthesis/index.json`, `.orbit/synthesis/artifacts/*.json`, `.orbit/synthesis/dlq/*.json`.
+- Daily Summary generation now writes a `summary.daily` artifact and records `synthesis_ref` in the timeline summary.
+- Resource suggestions now flow through an `emerge.resource` artifact and only become Resources after explicit user acceptance.
+- UI primitives: `components/synthesis/SynthesisBadge`, `SynthesisStatus`, `SynthesisActionCard`, `ArtifactDebugPanel`.
+- Tests: `tests/synthesis_store.test.ts`.
+
 ---
 
 ## Milestone 5.3 — Conversation Surface Unification
+
+Status: **implemented (foundation)**.
 
 ### Scope
 
@@ -331,6 +357,15 @@ UI requirements:
 
 - No duplicate chat renderer remains for Ask-Anywhere vs full page.
 - Conversations can be scoped to resource/area later without new architecture.
+
+### Implementation notes
+
+- Shared conversation contracts live in `src/shared/conversation/types.ts` and now include `ConversationScope`, `ConversationMessage`, `ConversationArtifactRef`, `conversationScopeKey`, `anchorToConversationScope`, and `turnToMessage`.
+- Conversation persistence remains local-first under `.orbit/conversations/`: `<id>.meta.json`, `<id>.ndjson`, and `index.json` for last-active-by-scope.
+- Main-process APIs now support create/list/get/update/archive plus scoped last-active get/set through chat IPC and preload.
+- Ask-Anywhere overlay and full-page Ask both render `src/renderer/src/components/conversation/ConversationShell.tsx` and share message timeline, composer, runtime status, conversation dropdown, archive, and Artifact Stage primitives.
+- `conversation.message.added` and `conversation.meaningful` TraceableEvents are emitted alongside legacy conversation turn events for observability compatibility.
+- Focused coverage: `tests/conversation_store.test.ts`, `tests/ask_anywhere_ux.test.ts`, `tests/ipc.test.ts`.
 
 ---
 

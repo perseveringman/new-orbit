@@ -23,6 +23,9 @@ import type { Note } from '@shared/note';
 import * as frontmatter from '../frontmatter';
 import { toPosix } from '../pathGuard';
 import { createNoteStore } from '../note/store';
+import type { ResourceEmergencePayload } from '@shared/synthesis';
+import { createSynthesisJob, SynthesisRunner } from '../synthesis/runner';
+import { createSynthesisStore } from '../synthesis/store';
 
 interface ResourceIndexFile {
   version: 1;
@@ -217,6 +220,22 @@ export class ResourceStore {
   }
 
   async suggestFromNotes(options: ResourceSuggestionOptions = {}): Promise<ResourceSuggestion[]> {
+    const suggestions = await this.suggestFromNotesHeuristic(options);
+    const artifact = await new SynthesisRunner(createSynthesisStore(this.vaultPath)).run(
+      createSynthesisJob({
+        kind: 'emerge.resource',
+        scope_key: `emerge:notes:${JSON.stringify({ minNotes: options.minNotes ?? 3, limit: options.limit ?? 12 })}`,
+        priority: 'interactive',
+        reason: 'manual',
+        force: true,
+        sources: [{ kind: 'raw', ref: 'resource-suggestions-from-notes', metadata: { suggestions } }]
+      })
+    );
+    const payload = artifact.payload as ResourceEmergencePayload;
+    return payload.suggestions.map((suggestion) => ({ ...suggestion, synthesis_ref: artifact.id }));
+  }
+
+  private async suggestFromNotesHeuristic(options: ResourceSuggestionOptions = {}): Promise<ResourceSuggestion[]> {
     const minNotes = Math.max(2, options.minNotes ?? 3);
     const limit = Math.max(1, options.limit ?? 12);
     const existingSlugs = new Set((await this.list({ include_archived: true })).map((resource) => resource.frontmatter.slug));

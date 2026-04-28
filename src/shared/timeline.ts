@@ -38,6 +38,8 @@ export interface DailySummary {
   headline: string;
   narrative: string;
   highlights?: string[];
+  synthesis_ref?: string;
+  status?: 'fresh' | 'stale' | 'superseded' | 'failed';
 }
 
 export interface DailyTimeline {

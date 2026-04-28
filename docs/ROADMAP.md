@@ -1,6 +1,6 @@
 # Orbit — Roadmap
 
-> **Status**: Phase 4.1 已完成；下一阶段进入 Phase 5：SDK Runtime + Synthesis Layer + Conversation Surface 稳定化。
+> **Status**: Phase 5.1 Runtime B SDK track、Phase 5.2 Synthesis foundation、Phase 5.3 Conversation surface unification 已落地基础闭环；下一步进入 Phase 6.1 Notes + KB Import。
 > **Update cadence**: 每个里程碑落地后更新；架构方向以 `docs/architecture/` 为准；thinking-trail 记录推理过程。
 
 ---
@@ -93,15 +93,25 @@ Layer 3  Surfaces         Timeline / Chat / Search / Dashboard / Resource / Area
 
 ### 5.1 Runtime B：Anthropic SDK track
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - `@anthropic-ai/sdk` integration
 - Anthropic-compatible endpoint registry
 - built-in endpoint templates: Anthropic / MiniMax / DeepSeek / Custom
 - key storage through system keychain
-- streaming adapter → unified AgentEvent
+- streaming adapter → chat RuntimeEvent stream
 - cost accounting for SDK calls
 - Settings UI for SDK endpoints
+
+Implemented notes:
+
+- Endpoint registry persists non-secret endpoint config under `.orbit/runtime/sdk-endpoints.json`.
+- API keys are stored via the SDK key vault and exposed to renderer only as masked state.
+- Ask-Anywhere routes to Runtime B SDK when an enabled endpoint with key exists, otherwise keeps the Claude CLI fallback.
+- SDK cost and invocation lifecycle are published as TraceableEvent kinds under the `runtime` source.
+- Focused tests cover registry serialization, model aliasing, route decisions, stream mapping, cost estimation, and key masking.
 
 Data structures:
 
@@ -125,6 +135,8 @@ Acceptance:
 
 ### 5.2 Synthesis Layer foundation
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - `src/shared/synthesis/*` contracts
@@ -134,6 +146,17 @@ Deliverables:
 - invalidator subscribed to TraceableEvent
 - scheduler with budget controls
 - IPC: get / ensure / recompute / list / applyUserEdit
+
+Implemented notes:
+
+- Shared contracts live in `src/shared/synthesis/*`.
+- Artifact metadata is stored under `.orbit/synthesis/` with `index.json`, `artifacts/`, and `dlq/`.
+- Recompute writes a new artifact and marks the previous artifact `superseded`; invalidation marks latest artifacts `stale`.
+- Prompt registry includes `summary.daily`, `distill.library`, `emerge.resource`, and `classify.area` v1 templates with recorded prompt versions.
+- Scheduler supports priorities and per-job/default budget checks; malformed model output is recorded as failed artifact + DLQ entry.
+- Timeline Daily Summary now creates/reads a `summary.daily` artifact before materializing the user-requested daily-summary note.
+- Resource “Suggest from Notes” now returns `emerge.resource` artifact-backed suggestions; creating a Resource remains an explicit user action.
+- Renderer primitives show generated time, status, source count, refresh action, and an artifact debug panel in Developer Console.
 
 Data structures:
 
@@ -158,6 +181,8 @@ Acceptance:
 
 ### 5.3 Conversation Surface unification
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - first-class `Conversation` store
@@ -167,6 +192,15 @@ Deliverables:
 - shared message render primitives
 - shared Stage View / Artifact cards
 - scope-aware context injection
+
+Implemented notes:
+
+- Conversation shared contracts now include `ConversationScope`, `ConversationMessage`, and `ConversationArtifactRef` while preserving legacy turn storage.
+- Main-process conversation storage persists metadata/turn logs under `.orbit/conversations/` and maintains `index.json` for last active conversation per scope.
+- Conversation IPC now supports create/list/get/update/archive plus scoped last-active get/set.
+- Ask-Anywhere overlay and full-page Ask now reuse the same `ConversationShell` component family, including shared message timeline, composer, runtime status, conversation dropdown, archive action, and artifact stage.
+- Ask-Anywhere opens the last active global conversation and keeps overlay/full-page selection synchronized through the conversation store.
+- Conversation events include `conversation.message.added` and `conversation.meaningful` in addition to existing compatibility events.
 
 Data structures:
 

@@ -79,3 +79,33 @@ eslint-disable.
 
 The `tests/ipc.test.ts` file contains a compile-time shape test — new channels
 must be added there (or the test will fail typecheck).
+
+## Runtime B SDK endpoints
+
+- Shared contracts are in `src/shared/runtime/*`; the renderer API is exposed as `window.orbit.runtime.sdk`.
+- Non-secret endpoint config is stored per vault at `.orbit/runtime/sdk-endpoints.json`.
+- API keys go through `SDKKeyVault` and should never be logged, written to endpoint config, or sent to renderer except as masked state.
+- SDK streaming emits chat `RuntimeEvent`s and TraceableEvent observability records under source `runtime`.
+- Focused coverage lives in `tests/sdk_runtime.test.ts`.
+
+## Synthesis Layer
+
+- Shared contracts are in `src/shared/synthesis/*`; renderer IPC is exposed as `window.orbit.synthesis`.
+- Artifact state lives under `<vault>/.orbit/synthesis/`:
+  - `index.json` maps `scope_key` to the latest artifact id.
+  - `artifacts/*.json` stores immutable-ish artifact records with provenance.
+  - `dlq/*.json` stores failed jobs and malformed model output.
+- Recompute creates a new artifact and marks the previous latest artifact `superseded`; invalidation marks the latest artifact `stale`.
+- Synthesis must not silently mutate Layer 1 truth. Materialization, such as Resource creation from suggestion, must go through an explicit user action/API.
+- Focused coverage lives in `tests/synthesis_store.test.ts`.
+
+## Conversation surface
+
+- Shared contracts are in `src/shared/conversation/types.ts`.
+- Main-process persistence lives under `<vault>/.orbit/conversations/`:
+  - `<id>.meta.json` stores scope, anchors, title, status, and archived state.
+  - `<id>.ndjson` stores append-only turns.
+  - `index.json` stores last active conversation per `ConversationScope`.
+- Chat IPC/preload methods expose create/list/get/update/archive and scoped last-active get/set.
+- Ask-Anywhere overlay and full-page Ask should render the shared `components/conversation/ConversationShell` instead of forking chat UI.
+- Focused coverage lives in `tests/conversation_store.test.ts`, `tests/ask_anywhere_ux.test.ts`, and `tests/ipc.test.ts`.

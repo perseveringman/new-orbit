@@ -16,9 +16,11 @@ import type {
   Conversation,
   ConversationAnchor,
   ConversationMeta,
+  ConversationScope,
   ConversationTurn,
   ConversationTurnRole
 } from '@shared/conversation';
+import { conversationScopeKey } from '@shared/conversation';
 import { ConversationStore } from './store';
 import { publishTraceableEvent } from '../events/bus';
 
@@ -27,10 +29,12 @@ export interface AppendTurnInput {
   role: ConversationTurnRole;
   content: string;
   runtimeEventIds?: string[];
+  artifactRefs?: string[];
 }
 
 export interface CreateConversationInput {
   anchor: ConversationAnchor;
+  scope?: ConversationScope;
   runtimeHint?: string;
   title?: string;
 }
@@ -47,6 +51,7 @@ export class ConversationOrchestrator {
     const conv = await this.store.create({
       id,
       anchors: [input.anchor],
+      ...(input.scope ? { scope: input.scope } : {}),
       ...(input.runtimeHint ? { runtimeHint: input.runtimeHint } : {}),
       ...(input.title ? { title: input.title } : {})
     });
@@ -65,7 +70,8 @@ export class ConversationOrchestrator {
       at: new Date().toISOString(),
       role: input.role,
       content: input.content,
-      ...(input.runtimeEventIds ? { runtimeEventIds: input.runtimeEventIds } : {})
+      ...(input.runtimeEventIds ? { runtimeEventIds: input.runtimeEventIds } : {}),
+      ...(input.artifactRefs ? { artifactRefs: input.artifactRefs } : {})
     };
     await this.store.appendTurn(input.conversationId, turn);
     publishTraceableEvent({
@@ -74,6 +80,25 @@ export class ConversationOrchestrator {
       conversationId: input.conversationId,
       payload: { turn }
     });
+    publishTraceableEvent({
+      source: 'conversation',
+      kind: 'conversation.message.added',
+      conversationId: input.conversationId,
+      payload: { conversationId: input.conversationId, turn }
+    });
+    const conv = await this.store.get(input.conversationId);
+    if (conv && conv.turns.length === 4) {
+      publishTraceableEvent({
+        source: 'conversation',
+        kind: 'conversation.meaningful',
+        conversationId: input.conversationId,
+        payload: {
+          conversationId: input.conversationId,
+          message_count: conv.turns.length,
+          ...(conv.scope ? { scope: conversationScopeKey(conv.scope) } : {})
+        }
+      });
+    }
     return turn;
   }
 
@@ -105,6 +130,31 @@ export class ConversationOrchestrator {
       kind: 'conversation.ended',
       conversationId
     });
+  }
+
+  async updateConversation(
+    conversationId: string,
+    patch: { title?: string; summary?: string; tags?: string[]; archived?: boolean; scope?: ConversationScope }
+  ): Promise<Conversation | null> {
+    return this.store.updateMeta(conversationId, patch);
+  }
+
+  async archiveConversation(conversationId: string): Promise<Conversation | null> {
+    const conv = await this.store.archive(conversationId);
+    publishTraceableEvent({
+      source: 'conversation',
+      kind: 'conversation.ended',
+      conversationId
+    });
+    return conv;
+  }
+
+  async getLastActive(scope: ConversationScope): Promise<Conversation | null> {
+    return this.store.lastActive(scope);
+  }
+
+  async setLastActive(scope: ConversationScope, conversationId: string): Promise<void> {
+    await this.store.setLastActive(scope, conversationId);
   }
 
   async getConversation(conversationId: string): Promise<Conversation | null> {

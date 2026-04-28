@@ -14,10 +14,12 @@ import { ORBIT_DIR } from '@shared/constants';
 import type {
   Conversation,
   ConversationAnchor,
+  ConversationScope,
   ConversationMeta,
   ConversationStatus,
   ConversationTurn
 } from '@shared/conversation';
+import { anchorToConversationScope, conversationScopeKey } from '@shared/conversation';
 
 export function conversationsDir(vaultPath: string): string {
   return path.join(vaultPath, ORBIT_DIR, 'conversations');
@@ -31,6 +33,15 @@ export function conversationTurnsPath(vaultPath: string, id: string): string {
   return path.join(conversationsDir(vaultPath), `${id}.ndjson`);
 }
 
+export function conversationIndexPath(vaultPath: string): string {
+  return path.join(conversationsDir(vaultPath), 'index.json');
+}
+
+interface ConversationIndex {
+  version: 1;
+  lastActiveByScope: Record<string, string>;
+}
+
 function isNotFoundError(error: unknown): boolean {
   return Boolean(
     error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'ENOENT'
@@ -40,6 +51,7 @@ function isNotFoundError(error: unknown): boolean {
 export interface CreateConversationInput {
   id: string;
   anchors: ConversationAnchor[];
+  scope?: ConversationScope;
   runtimeHint?: string;
   title?: string;
   tags?: string[];
@@ -56,11 +68,13 @@ export class ConversationStore {
       updatedAt: now,
       status: 'active',
       anchors: input.anchors,
+      scope: input.scope ?? anchorToConversationScope(input.anchors[0] ?? { kind: 'ask_anywhere_session', refId: 'global', addedAt: now }),
       ...(input.runtimeHint ? { runtimeHint: input.runtimeHint } : {}),
       ...(input.title ? { title: input.title } : {}),
       ...(input.tags ? { tags: input.tags } : {})
     };
     await this.writeMeta(meta);
+    await this.setLastActive(meta.scope ?? { kind: 'global' }, input.id);
     // 确保 ndjson 文件存在
     const turnsFile = conversationTurnsPath(this.vaultPath, input.id);
     await fs.mkdir(path.dirname(turnsFile), { recursive: true });
@@ -79,6 +93,7 @@ export class ConversationStore {
     const meta = await this.readMeta(id);
     if (meta) {
       meta.updatedAt = turn.at;
+      if (meta.scope) await this.setLastActive(meta.scope, id);
       await this.writeMeta(meta);
     }
   }
@@ -101,6 +116,30 @@ export class ConversationStore {
     meta.status = status;
     meta.updatedAt = new Date().toISOString();
     await this.writeMeta(meta);
+  }
+
+  async updateMeta(id: string, patch: {
+    title?: string;
+    summary?: string;
+    tags?: string[];
+    archived?: boolean;
+    scope?: ConversationScope;
+    status?: ConversationStatus;
+  }): Promise<Conversation | null> {
+    const meta = await this.readMeta(id);
+    if (!meta) return null;
+    const next: ConversationMeta = {
+      ...meta,
+      ...patch,
+      updatedAt: new Date().toISOString()
+    };
+    await this.writeMeta(next);
+    if (next.scope && !next.archived) await this.setLastActive(next.scope, id);
+    return this.get(id);
+  }
+
+  async archive(id: string): Promise<Conversation | null> {
+    return this.updateMeta(id, { archived: true, status: 'ended' });
   }
 
   async updateRuntime(
@@ -159,6 +198,39 @@ export class ConversationStore {
   async findByAnchor(kind: string, refId: string): Promise<ConversationMeta[]> {
     const all = await this.list();
     return all.filter((m) => m.anchors.some((a) => a.kind === kind && a.refId === refId));
+  }
+
+  async lastActive(scope: ConversationScope): Promise<Conversation | null> {
+    const index = await this.readIndex();
+    const id = index.lastActiveByScope[conversationScopeKey(scope)];
+    return id ? this.get(id) : null;
+  }
+
+  async setLastActive(scope: ConversationScope, id: string): Promise<void> {
+    const index = await this.readIndex();
+    index.lastActiveByScope[conversationScopeKey(scope)] = id;
+    await this.writeIndex(index);
+  }
+
+  private async readIndex(): Promise<ConversationIndex> {
+    try {
+      const parsed = JSON.parse(await fs.readFile(conversationIndexPath(this.vaultPath), 'utf8')) as Partial<ConversationIndex>;
+      return {
+        version: 1,
+        lastActiveByScope: parsed.lastActiveByScope && typeof parsed.lastActiveByScope === 'object'
+          ? (parsed.lastActiveByScope as Record<string, string>)
+          : {}
+      };
+    } catch (error) {
+      if (isNotFoundError(error)) return { version: 1, lastActiveByScope: {} };
+      throw error;
+    }
+  }
+
+  private async writeIndex(index: ConversationIndex): Promise<void> {
+    const file = conversationIndexPath(this.vaultPath);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
   }
 
   private async readMeta(id: string): Promise<ConversationMeta | null> {

@@ -35,6 +35,35 @@ export interface AgentRunInterruptedPayload {
   reason: string;
 }
 
+// ---------- Runtime SDK ----------
+
+export interface RuntimeSdkInvocationPayload {
+  endpoint_id: string;
+  endpoint_label?: string;
+  model?: string;
+  mode?: string;
+  conversation_id?: string;
+}
+
+export interface RuntimeSdkCostPayload {
+  endpoint_id: string;
+  model?: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_usd?: number;
+}
+
+// ---------- Synthesis ----------
+
+export interface SynthesisArtifactEventPayload {
+  artifact_id: string;
+  kind: string;
+  scope_key: string;
+  status: string;
+  superseded_by?: string;
+  error?: string;
+}
+
 // ---------- Inbox ----------
 
 export interface InboxItemPayload {
@@ -87,6 +116,14 @@ export interface ConversationTurnAddedPayload {
     content: string;
     at: string;
   };
+}
+
+export type ConversationMessageAddedPayload = ConversationTurnAddedPayload;
+
+export interface ConversationMeaningfulPayload {
+  conversationId: string;
+  message_count: number;
+  scope?: string;
 }
 
 export interface ConversationAnchorAddedPayload {
@@ -224,6 +261,14 @@ export interface TraceableEventPayloadMap {
   'agent.run.event': AgentRunEventPayload;
   'agent.run.completed': AgentRunCompletedPayload;
   'agent.run.interrupted': AgentRunInterruptedPayload;
+  'runtime.sdk.invocation.started': RuntimeSdkInvocationPayload;
+  'runtime.sdk.cost': RuntimeSdkCostPayload;
+  'runtime.sdk.invocation.completed': RuntimeSdkInvocationPayload & { output_tokens?: number };
+  'synthesis.artifact.created': SynthesisArtifactEventPayload;
+  'synthesis.artifact.stale': SynthesisArtifactEventPayload;
+  'synthesis.artifact.superseded': SynthesisArtifactEventPayload;
+  'synthesis.artifact.failed': SynthesisArtifactEventPayload;
+  'synthesis.artifact.user_edited': SynthesisArtifactEventPayload;
   'inbox.item.created': InboxItemPayload;
   'inbox.item.updated': InboxItemPayload;
   'inbox.item.snoozed': InboxItemPayload;
@@ -237,6 +282,8 @@ export interface TraceableEventPayloadMap {
   'task.failed': TaskFailedPayload;
   'conversation.started': ConversationStartedPayload;
   'conversation.turn.added': ConversationTurnAddedPayload;
+  'conversation.message.added': ConversationMessageAddedPayload;
+  'conversation.meaningful': ConversationMeaningfulPayload;
   'conversation.anchor.added': ConversationAnchorAddedPayload;
   'conversation.compacted': ConversationCompactedPayload;
   'conversation.ended': ConversationEndedPayload;

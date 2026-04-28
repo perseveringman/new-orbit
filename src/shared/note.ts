@@ -20,7 +20,7 @@ export interface SpecialMarker {
 }
 
 export interface NoteSource {
-  kind: 'library' | 'kb' | 'url' | 'conversation' | 'feed' | 'manual';
+  kind: 'library' | 'kb' | 'url' | 'conversation' | 'feed' | 'manual' | 'synthesis';
   ref?: string;
   excerpt?: string;
 }
@@ -87,4 +87,3 @@ export interface NoteChangeEvent {
   note?: Note;
   noteId: string;
 }
-

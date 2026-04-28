@@ -41,6 +41,8 @@ import { autoStartGatewayIfNeeded, registerGatewayIpc } from './gateway/ipc';
 import { stopGatewayRuntime } from './gateway/runtime';
 import { createGatewayStore } from './gateway/store';
 import { registerResourceIpc } from './resource/ipc';
+import { registerSDKRuntimeIpc } from './runtime/sdk/ipc';
+import { registerSynthesisIpc } from './synthesis/ipc';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
 import * as terminal from './terminal/pty_manager';
@@ -379,6 +381,8 @@ function registerIpc(): void {
   registerTimelineIpc(() => currentVault?.path ?? null);
   registerGatewayIpc(() => currentVault?.path ?? null);
   registerResourceIpc(() => currentVault?.path ?? null);
+  registerSDKRuntimeIpc(() => currentVault?.path ?? null);
+  registerSynthesisIpc(() => currentVault?.path ?? null);
   registerAutoRunnerIpc();
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);

@@ -1,7 +1,7 @@
 import type { TraceableEventKind } from './events/kinds';
 import type { TraceableEventPayloadMap } from './events/payloads';
 
-export const TRACEABLE_EVENT_SOURCES = ['activity', 'agent', 'inbox', 'ipc', 'conversation'] as const;
+export const TRACEABLE_EVENT_SOURCES = ['activity', 'agent', 'inbox', 'ipc', 'conversation', 'runtime', 'synthesis'] as const;
 export type TraceableEventSource = (typeof TRACEABLE_EVENT_SOURCES)[number];
 
 /**

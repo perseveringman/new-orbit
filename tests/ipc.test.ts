@@ -40,6 +40,7 @@ describe('IPC contract', () => {
         'scheduledTasks',
         'settings',
         'stage',
+        'synthesis',
         'task',
         'terminal',
         'terminalAgent',
@@ -62,6 +63,26 @@ describe('IPC contract', () => {
     for (const v of Object.values(IPC.conversation)) {
       expect(v.startsWith('conversation:')).toBe(true);
     }
+  });
+
+  it('chat namespace declares first-class conversation channels', () => {
+    const keys = Object.keys(IPC.chat).sort();
+    expect(keys).toEqual(
+      [
+        'conversationAppendTurn',
+        'conversationArchive',
+        'conversationCreate',
+        'conversationFindByAnchor',
+        'conversationGet',
+        'conversationLastActive',
+        'conversationList',
+        'conversationSetLastActive',
+        'conversationUpdate',
+        'action',
+        'runtimeEvent'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.chat)) expect(v.startsWith('chat:')).toBe(true);
   });
 
   it('agent namespace declares the M4 + M5 + M6 channels', () => {

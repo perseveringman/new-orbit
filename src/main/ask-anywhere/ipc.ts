@@ -20,6 +20,7 @@ import { getPool } from '../agent/pool';
 import { ConversationOrchestrator } from '../conversation/orchestrator';
 import { getSettings } from '../settings';
 import { getHookRuntimeConfig } from '../agent/ipc';
+import { getSDKRuntime } from '../runtime/sdk/ipc';
 import { AskAnywhereOrchestrator } from './orchestrator';
 
 let orchestrator: AskAnywhereOrchestrator | null = null;
@@ -61,6 +62,10 @@ export function getAskAnywhereOrchestrator(): AskAnywhereOrchestrator {
         } catch {
           return process.env['ANTHROPIC_API_KEY'];
         }
+      },
+      getRuntimeRouter: () => {
+        const vault = currentSession()?.vault;
+        return vault ? getSDKRuntime(vault).router : null;
       }
     });
   }

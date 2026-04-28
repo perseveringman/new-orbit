@@ -93,6 +93,37 @@ Agent 可以通过项目 context 学到 `orbit` CLI。常用命令包括：
 
 快捷键：`` ⌘` `` 把焦点扔回终端。
 
+## 5.1 配置 Runtime B SDK endpoint
+
+在 **Settings → AI Endpoints** 可以配置应用内 SDK runtime。Orbit 内置 Anthropic、MiniMax、DeepSeek 和 Custom Anthropic-compatible endpoint 模板。
+
+每个 endpoint 包含 base URL、默认模型、启用状态和 API key。API key 不会显示明文；保存后界面只展示 masked key state。可以用 **Test** 按钮验证 endpoint 是否可用，并为 Ask / Synthesis / Background 分别设置默认 endpoint。
+
+Ask-Anywhere 会优先使用已启用且带 key 的 Ask 默认 SDK endpoint 进行 streaming；如果没有可用 SDK endpoint，则继续回退到 Claude Code CLI。
+
+## 5.2 Synthesis artifacts
+
+Orbit 的 AI 摘要和建议会先进入 Layer 2 Synthesis artifact，而不是直接改写你的 truth 数据。artifact 存在 `<vault>/.orbit/synthesis/`，带有来源、prompt version、runtime/model、生成时间和状态。
+
+当前接入点：
+
+- **Daily Timeline → Summarize**：生成 `summary.daily` artifact，并在用户点击 Summarize 的动作下物化/更新 daily-summary note。
+- **Resources → Suggest from Notes**：生成 `emerge.resource` artifact-backed suggestions。只有点击 **Create** 后才创建真正的 Resource。
+- **Developer Console**：右侧 Synthesis artifacts 面板可查看 artifact payload、provenance、fresh/stale/failed/superseded 状态。
+
+## 5.3 Ask-Anywhere conversations
+
+Ask-Anywhere overlay 和全页 Ask 现在使用同一套 Conversation。打开悬浮球时会默认回到最近使用的全局 conversation；切到全页 Ask 后仍然看到同一个对话、消息和 Artifact Stage。
+
+可用动作：
+
+- 顶部下拉切换 conversation。
+- **+ New** 新建 conversation。
+- **Archive** 归档当前 conversation（历史仍保留在 `.orbit/conversations/`）。
+- 右侧 **Artifact Stage** 显示当前 conversation 生成的 artifact/action card。
+
+后续 Resource / Area scoped chat 会复用同一套 Conversation 结构，不再为每个页面单独实现 chat。
+
 ## 6. 四段式任务编辑
 
 每个 task 文件是一份 Markdown：

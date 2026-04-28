@@ -6,6 +6,7 @@ import type { ConversationStage } from '../src/shared/stage';
 import { ContextBar } from '../src/renderer/src/views/ask-anywhere/ContextBar';
 import { StageDrawer } from '../src/renderer/src/views/ask-anywhere/StageDrawer';
 import { FloatingBall } from '../src/renderer/src/components/ask-anywhere/FloatingBall';
+import { ConversationShell } from '../src/renderer/src/components/conversation';
 
 const conversation: Conversation = {
   id: 'ask-1',
@@ -80,5 +81,38 @@ describe('Ask Anywhere UX revamp components', () => {
 
     expect(html).toContain('Open Ask Anywhere');
     expect(html).toContain('aria-pressed="false"');
+  });
+
+  it('renders the unified conversation shell with shared conversation and stage state', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConversationShell, {
+        conversations: [conversation],
+        activeId: conversation.id,
+        activeConversation: conversation,
+        events: [
+          {
+            id: 'evt-1',
+            at: '2026-04-28T01:00:00Z',
+            kind: 'runtime.message',
+            conversationId: conversation.id,
+            runId: 'run-1',
+            spanId: 'span-1',
+            payload: { text: 'Hello from Orbit', role: 'assistant', isFinal: true }
+          }
+        ],
+        stage,
+        isLoading: false,
+        onSelect: vi.fn(),
+        onNew: vi.fn(),
+        onArchive: vi.fn(),
+        onAction: vi.fn(),
+        onArtifactAction: vi.fn()
+      })
+    );
+
+    expect(html).toContain('Ask Anywhere');
+    expect(html).toContain('Hello from Orbit');
+    expect(html).toContain('Artifact Stage');
+    expect(html).toContain('UX direction summary');
   });
 });

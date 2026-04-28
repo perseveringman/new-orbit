@@ -9,6 +9,8 @@ import type {
   ResourceSuggestion,
   ResourceSummary
 } from '@shared/resource';
+import type { SynthesisArtifact } from '@shared/synthesis';
+import { SynthesisActionCard } from '../components/synthesis';
 
 const RESOURCE_SECTIONS: ResourceSection[] = ['canonical', 'distilled', 'related', 'people', 'projects_touched'];
 const REF_KINDS: ResourceRefKind[] = ['note', 'library_item', 'feed_source', 'kb_item', 'project', 'area', 'person', 'url'];
@@ -28,6 +30,7 @@ export function ResourceView(): JSX.Element {
   const [engagementTitle, setEngagementTitle] = useState('');
   const [engagementSummary, setEngagementSummary] = useState('');
   const [suggestions, setSuggestions] = useState<ResourceSuggestion[]>([]);
+  const [suggestionArtifacts, setSuggestionArtifacts] = useState<Record<string, SynthesisArtifact | null>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -172,7 +175,11 @@ export function ResourceView(): JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      setSuggestions(await window.orbit.resources.suggestFromNotes({ minNotes: 2, limit: 8 }));
+      const nextSuggestions = await window.orbit.resources.suggestFromNotes({ minNotes: 2, limit: 8 });
+      setSuggestions(nextSuggestions);
+      const artifactIds = [...new Set(nextSuggestions.map((item) => item.synthesis_ref).filter((id): id is string => Boolean(id)))];
+      const artifacts = await Promise.all(artifactIds.map(async (id) => [id, await window.orbit.synthesis.getArtifact(id)] as const));
+      setSuggestionArtifacts(Object.fromEntries(artifacts));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -236,14 +243,15 @@ export function ResourceView(): JSX.Element {
             <div className="mt-3 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
               <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Emerging topics</div>
               {suggestions.map((suggestion) => (
-                <button
+                <SynthesisActionCard
                   key={suggestion.tag}
-                  onClick={() => void createFromSuggestion(suggestion)}
-                  className="block w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100"
-                >
-                  <div className="font-medium">{suggestion.topic}</div>
-                  <div>{suggestion.note_count} notes · {Math.round(suggestion.confidence * 100)}% confidence</div>
-                </button>
+                  artifact={suggestion.synthesis_ref ? suggestionArtifacts[suggestion.synthesis_ref] : null}
+                  title={suggestion.topic}
+                  description={`${suggestion.note_count} notes · ${Math.round(suggestion.confidence * 100)}% confidence`}
+                  primaryLabel="Create"
+                  onPrimary={() => void createFromSuggestion(suggestion)}
+                  onRefresh={() => void loadSuggestions()}
+                />
               ))}
             </div>
           ) : null}

@@ -17,6 +17,14 @@ export const TRACEABLE_EVENT_KINDS = [
   'agent.run.event',
   'agent.run.completed',
   'agent.run.interrupted',
+  'runtime.sdk.invocation.started',
+  'runtime.sdk.cost',
+  'runtime.sdk.invocation.completed',
+  'synthesis.artifact.created',
+  'synthesis.artifact.stale',
+  'synthesis.artifact.superseded',
+  'synthesis.artifact.failed',
+  'synthesis.artifact.user_edited',
   // Inbox
   'inbox.item.created',
   'inbox.item.updated',
@@ -33,6 +41,8 @@ export const TRACEABLE_EVENT_KINDS = [
   // Conversation（D-5）
   'conversation.started',
   'conversation.turn.added',
+  'conversation.message.added',
+  'conversation.meaningful',
   'conversation.anchor.added',
   'conversation.compacted',
   'conversation.ended',

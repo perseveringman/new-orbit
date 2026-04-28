@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TraceableEvent, TraceableEventFilter, TraceableEventSource } from '@shared/events';
 import { TRACEABLE_EVENT_SOURCES } from '@shared/events';
+import { ArtifactDebugPanel } from '../components/synthesis';
 
 const SOURCE_LABELS: Record<TraceableEventSource, string> = {
   activity: 'Activity',
   agent: 'Agent',
   inbox: 'Inbox',
+  runtime: 'Runtime',
+  synthesis: 'Synthesis',
   ipc: 'IPC',
   conversation: 'Conversation'
 };
@@ -167,6 +170,9 @@ export function DeveloperConsoleView(): JSX.Element {
         </div>
         <aside className="min-h-0 overflow-y-auto border-l border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
           <h3 className="text-sm font-semibold">Payload</h3>
+          <div className="mt-3">
+            <ArtifactDebugPanel filter={{ limit: 20 }} />
+          </div>
           {selected ? (
             <pre className="mt-3 overflow-x-auto rounded-xl bg-neutral-950 p-3 text-xs text-neutral-100">
               {JSON.stringify(selected, null, 2)}

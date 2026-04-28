@@ -26,6 +26,7 @@
     "cli": "npm run build:cli -- --log-level=warning && node out/cli/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.3",

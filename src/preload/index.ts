@@ -223,6 +223,16 @@ const api: OrbitApi = {
       const listener = (_: unknown, ev: RuntimeEventDTO): void => cb(ev);
       ipcRenderer.on(IPC.runtime.event, listener);
       return () => ipcRenderer.removeListener(IPC.runtime.event, listener);
+    },
+    sdk: {
+      snapshot: () => ipcRenderer.invoke(IPC.runtime.sdk.snapshot),
+      upsertEndpoint: (input) => ipcRenderer.invoke(IPC.runtime.sdk.upsertEndpoint, input),
+      deleteEndpoint: (endpointId) => ipcRenderer.invoke(IPC.runtime.sdk.deleteEndpoint, endpointId),
+      setApiKey: (endpointId, apiKey) => ipcRenderer.invoke(IPC.runtime.sdk.setApiKey, endpointId, apiKey),
+      deleteApiKey: (endpointId) => ipcRenderer.invoke(IPC.runtime.sdk.deleteApiKey, endpointId),
+      setDefaults: (defaults) => ipcRenderer.invoke(IPC.runtime.sdk.setDefaults, defaults),
+      testEndpoint: (endpointId, model) => ipcRenderer.invoke(IPC.runtime.sdk.testEndpoint, endpointId, model),
+      decide: (input) => ipcRenderer.invoke(IPC.runtime.sdk.decide, input)
     }
   },
   dashboard: {
@@ -415,10 +425,18 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.chat.conversationList),
     createConversation: (input: ChatCreateConversationInput): Promise<ChatConversation> =>
       ipcRenderer.invoke(IPC.chat.conversationCreate, input),
+    updateConversation: (id, patch) =>
+      ipcRenderer.invoke(IPC.chat.conversationUpdate, id, patch),
+    archiveConversation: (id) =>
+      ipcRenderer.invoke(IPC.chat.conversationArchive, id),
     appendTurn: (input: ChatAppendTurnInput): Promise<ChatConversationTurn> =>
       ipcRenderer.invoke(IPC.chat.conversationAppendTurn, input),
     findConversationsByAnchor: (kind: string, refId: string): Promise<ChatConversationMeta[]> =>
-      ipcRenderer.invoke(IPC.chat.conversationFindByAnchor, kind, refId)
+      ipcRenderer.invoke(IPC.chat.conversationFindByAnchor, kind, refId),
+    getLastActiveConversation: (scope) =>
+      ipcRenderer.invoke(IPC.chat.conversationLastActive, scope),
+    setLastActiveConversation: (scope, id) =>
+      ipcRenderer.invoke(IPC.chat.conversationSetLastActive, scope, id)
   },
   distill: {
     project: (uid: string): Promise<DistillResult> =>
@@ -621,6 +639,16 @@ const api: OrbitApi = {
       ipcRenderer.on(IPC.timeline.event, listener);
       return () => ipcRenderer.removeListener(IPC.timeline.event, listener);
     }
+  },
+  synthesis: {
+    get: (scopeKey) => ipcRenderer.invoke(IPC.synthesis.get, scopeKey),
+    getArtifact: (artifactId) => ipcRenderer.invoke(IPC.synthesis.getArtifact, artifactId),
+    getMany: (scopeKeys) => ipcRenderer.invoke(IPC.synthesis.getMany, scopeKeys),
+    list: (filter) => ipcRenderer.invoke(IPC.synthesis.list, filter),
+    ensure: (input) => ipcRenderer.invoke(IPC.synthesis.ensure, input),
+    recompute: (scopeKey, options) => ipcRenderer.invoke(IPC.synthesis.recompute, scopeKey, options),
+    markStale: (scopeKey, reason) => ipcRenderer.invoke(IPC.synthesis.markStale, scopeKey, reason),
+    applyUserEdit: (input) => ipcRenderer.invoke(IPC.synthesis.applyUserEdit, input)
   },
   stage: {
     get: (conversationId: string): Promise<ConversationStage> =>

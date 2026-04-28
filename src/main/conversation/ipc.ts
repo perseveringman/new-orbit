@@ -9,11 +9,13 @@ import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type {
   ChatAppendTurnInput,
-  ChatCreateConversationInput
+  ChatCreateConversationInput,
+  ChatUpdateConversationInput
 } from '@shared/ipc';
 import type {
   Conversation,
   ConversationMeta,
+  ConversationScope,
   ConversationTurn
 } from '@shared/conversation';
 import { currentSession } from '../fs';
@@ -60,6 +62,18 @@ export function registerConversationIpc(): void {
   );
 
   ipcMain.handle(
+    IPC.chat.conversationUpdate,
+    async (_e, id: string, patch: ChatUpdateConversationInput): Promise<Conversation | null> =>
+      getOrchestrator().updateConversation(id, patch)
+  );
+
+  ipcMain.handle(
+    IPC.chat.conversationArchive,
+    async (_e, id: string): Promise<Conversation | null> =>
+      getOrchestrator().archiveConversation(id)
+  );
+
+  ipcMain.handle(
     IPC.chat.conversationAppendTurn,
     async (_e, input: ChatAppendTurnInput): Promise<ConversationTurn> =>
       getOrchestrator().appendTurn(input)
@@ -69,5 +83,17 @@ export function registerConversationIpc(): void {
     IPC.chat.conversationFindByAnchor,
     async (_e, kind: string, refId: string): Promise<ConversationMeta[]> =>
       getOrchestrator().findByAnchor(kind, refId)
+  );
+
+  ipcMain.handle(
+    IPC.chat.conversationLastActive,
+    async (_e, scope: ConversationScope): Promise<Conversation | null> =>
+      getOrchestrator().getLastActive(scope)
+  );
+
+  ipcMain.handle(
+    IPC.chat.conversationSetLastActive,
+    async (_e, scope: ConversationScope, id: string): Promise<void> =>
+      getOrchestrator().setLastActive(scope, id)
   );
 }

@@ -134,6 +134,7 @@ export interface ResourceSuggestion {
     excerpt: string;
   }>;
   confidence: number;
+  synthesis_ref?: string;
 }
 
 export interface CreateResourceFromSuggestionInput {

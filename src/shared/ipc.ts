@@ -47,6 +47,7 @@ import type { ChatAction, RuntimeEvent as ChatRuntimeEvent } from './chat-protoc
 import type {
   Conversation as ChatConversation,
   ConversationAnchor as ChatConversationAnchor,
+  ConversationScope as ChatConversationScope,
   ConversationMeta as ChatConversationMeta,
   ConversationTurn as ChatConversationTurn,
   ConversationTurnRole as ChatConversationTurnRole
@@ -54,6 +55,7 @@ import type {
 
 export interface ChatCreateConversationInput {
   anchor: ChatConversationAnchor;
+  scope?: ChatConversationScope;
   runtimeHint?: string;
   title?: string;
 }
@@ -63,6 +65,15 @@ export interface ChatAppendTurnInput {
   role: ChatConversationTurnRole;
   content: string;
   runtimeEventIds?: string[];
+  artifactRefs?: string[];
+}
+
+export interface ChatUpdateConversationInput {
+  title?: string;
+  summary?: string;
+  tags?: string[];
+  archived?: boolean;
+  scope?: ChatConversationScope;
 }
 import type {
   Proposal,
@@ -178,6 +189,21 @@ import type {
   RuntimeRegistrySnapshot,
   TaskLease
 } from './orchestration';
+import type {
+  RuntimeRouteDecision,
+  RuntimeRouteInput,
+  SDKEndpointDefaults,
+  SDKEndpointInput,
+  SDKEndpointRegistrySnapshot,
+  SDKEndpointTestResult,
+  SDKEndpointView
+} from './runtime';
+import type {
+  ApplyUserEditInput,
+  EnsureSynthesisInput,
+  SynthesisArtifact,
+  SynthesisFilter
+} from './synthesis';
 
 /**
  * Typed IPC contract shared between main and renderer.
@@ -239,7 +265,17 @@ export const IPC = {
     list: 'runtime:list',
     refresh: 'runtime:refresh',
     get: 'runtime:get',
-    event: 'runtime:event'
+    event: 'runtime:event',
+    sdk: {
+      snapshot: 'runtime:sdk:snapshot',
+      upsertEndpoint: 'runtime:sdk:endpoint:upsert',
+      deleteEndpoint: 'runtime:sdk:endpoint:delete',
+      setApiKey: 'runtime:sdk:key:set',
+      deleteApiKey: 'runtime:sdk:key:delete',
+      setDefaults: 'runtime:sdk:defaults:set',
+      testEndpoint: 'runtime:sdk:endpoint:test',
+      decide: 'runtime:sdk:decide'
+    }
   },
   dashboard: {
     summary: 'dashboard:summary',
@@ -272,8 +308,12 @@ export const IPC = {
     conversationGet: 'chat:conversation:get',
     conversationList: 'chat:conversation:list',
     conversationCreate: 'chat:conversation:create',
+    conversationUpdate: 'chat:conversation:update',
+    conversationArchive: 'chat:conversation:archive',
     conversationAppendTurn: 'chat:conversation:appendTurn',
-    conversationFindByAnchor: 'chat:conversation:findByAnchor'
+    conversationFindByAnchor: 'chat:conversation:findByAnchor',
+    conversationLastActive: 'chat:conversation:lastActive',
+    conversationSetLastActive: 'chat:conversation:setLastActive'
   },
   dispatch: {
     status: 'dispatch:status',
@@ -454,6 +494,16 @@ export const IPC = {
     updateDailySummary: 'timeline:updateDailySummary',
     exportPDF: 'timeline:exportPDF',
     event: 'timeline:event'
+  },
+  synthesis: {
+    get: 'synthesis:get',
+    getArtifact: 'synthesis:getArtifact',
+    getMany: 'synthesis:getMany',
+    list: 'synthesis:list',
+    ensure: 'synthesis:ensure',
+    recompute: 'synthesis:recompute',
+    markStale: 'synthesis:markStale',
+    applyUserEdit: 'synthesis:applyUserEdit'
   },
   stage: {
     get: 'stage:get',
@@ -1000,6 +1050,16 @@ export interface OrbitApi {
     refresh(): Promise<RuntimeRegistrySnapshot>;
     get(runtimeId: string): Promise<RuntimeDescriptor | null>;
     onEvent(cb: (ev: RuntimeEventDTO) => void): () => void;
+    sdk: {
+      snapshot(): Promise<SDKEndpointRegistrySnapshot>;
+      upsertEndpoint(input: SDKEndpointInput): Promise<SDKEndpointView>;
+      deleteEndpoint(endpointId: string): Promise<void>;
+      setApiKey(endpointId: string, apiKey: string): Promise<SDKEndpointView>;
+      deleteApiKey(endpointId: string): Promise<SDKEndpointView>;
+      setDefaults(defaults: SDKEndpointDefaults): Promise<SDKEndpointDefaults>;
+      testEndpoint(endpointId: string, model?: string): Promise<SDKEndpointTestResult>;
+      decide(input: RuntimeRouteInput): Promise<RuntimeRouteDecision>;
+    };
   };
   dashboard: {
     summary(): Promise<DashboardSummary>;
@@ -1044,8 +1104,12 @@ export interface OrbitApi {
     getConversation(id: string): Promise<ChatConversation | null>;
     listConversations(): Promise<ChatConversationMeta[]>;
     createConversation(input: ChatCreateConversationInput): Promise<ChatConversation>;
+    updateConversation(id: string, patch: ChatUpdateConversationInput): Promise<ChatConversation | null>;
+    archiveConversation(id: string): Promise<ChatConversation | null>;
     appendTurn(input: ChatAppendTurnInput): Promise<ChatConversationTurn>;
     findConversationsByAnchor(kind: string, refId: string): Promise<ChatConversationMeta[]>;
+    getLastActiveConversation(scope: ChatConversationScope): Promise<ChatConversation | null>;
+    setLastActiveConversation(scope: ChatConversationScope, id: string): Promise<void>;
   };
   dispatch: {
     status(projectUid?: string): Promise<DispatchSnapshot>;
@@ -1268,6 +1332,16 @@ export interface OrbitApi {
     updateDailySummary(date: string, patch: { narrative?: string; headline?: string }): Promise<DailySummary>;
     exportPDF(scope: TimelineScope): Promise<{ path: string }>;
     onEvent(cb: (event: DailyTimeline) => void): () => void;
+  };
+  synthesis: {
+    get(scopeKey: string): Promise<SynthesisArtifact | null>;
+    getArtifact(artifactId: string): Promise<SynthesisArtifact | null>;
+    getMany(scopeKeys: string[]): Promise<Record<string, SynthesisArtifact | null>>;
+    list(filter?: SynthesisFilter): Promise<SynthesisArtifact[]>;
+    ensure(input: EnsureSynthesisInput): Promise<SynthesisArtifact>;
+    recompute(scopeKey: string, options?: { force?: boolean }): Promise<SynthesisArtifact>;
+    markStale(scopeKey: string, reason?: string): Promise<SynthesisArtifact | null>;
+    applyUserEdit(input: ApplyUserEditInput): Promise<SynthesisArtifact>;
   };
   stage: {
     get(conversationId: string): Promise<ConversationStage>;

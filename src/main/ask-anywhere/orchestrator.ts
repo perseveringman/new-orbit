@@ -23,6 +23,7 @@ import type { ConversationOrchestrator } from '../conversation/orchestrator';
 import type { RunnerPool } from '../agent/pool';
 import type { AgentEvent } from '@shared/agent';
 import type { AgentRunner } from '../agent/runner';
+import type { RuntimeRouter } from '../runtime/router';
 import { createStageStore, extractArtifactFences } from './stage-store';
 
 export interface AskAnywhereDeps {
@@ -45,6 +46,8 @@ export interface AskAnywhereDeps {
   >;
   /** 可选：API key 注入。 */
   getApiKey?: () => Promise<string | undefined>;
+  /** Runtime B SDK router；无可用 SDK endpoint 时返回 null。 */
+  getRuntimeRouter?: () => RuntimeRouter | null;
 }
 
 const ASK_ANYWHERE_SYSTEM_PROMPT = `You are Orbit's planning copilot ("Ask Anywhere").
@@ -148,20 +151,14 @@ export class AskAnywhereOrchestrator {
       throw new Error('no_vault');
     }
 
-    const claudePath = await this.deps.resolveClaudePath();
-    if (!claudePath) {
-      this.emitSyntheticError(
-        conversationId,
-        'cli_missing',
-        'Claude Code CLI not found. Install it from https://docs.claude.com/claude-code'
-      );
-      throw new Error('cli_missing');
-    }
-
     // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
     const history = renderHistory(conv.turns);
     const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
     const prompt = buildPrompt({ systemPrompt, history, userText: trimmed });
+    const router = this.deps.getRuntimeRouter?.() ?? null;
+    const decision = router
+      ? await router.decide({ mode: 'ask' })
+      : { track: 'cli' as const, runtime: 'claude-cli', reason: 'SDK router unavailable' };
 
     // append user turn（必须在 spawn 前，让 UI 即便 reload 也能看到）
     await this.deps.conversations.appendTurn({
@@ -169,6 +166,35 @@ export class AskAnywhereOrchestrator {
       role: 'user',
       content: trimmed
     });
+
+    if (router && decision.track === 'sdk') {
+      const runId = `sdk-${randomUUID()}`;
+      await this.deps.conversations.bindRuntime(conversationId, {
+        currentRunId: runId,
+        runtimeHint: decision.runtime
+      });
+      void this.runSdk({
+        router,
+        conversationId,
+        runId,
+        systemPrompt,
+        turns: conv.turns,
+        userText: trimmed,
+        endpointId: decision.endpointId,
+        model: decision.model
+      });
+      return { runId };
+    }
+
+    const claudePath = await this.deps.resolveClaudePath();
+    if (!claudePath) {
+      this.emitSyntheticError(
+        conversationId,
+        'cli_missing',
+        'Claude Code CLI not found. Configure an SDK endpoint or install Claude Code CLI.'
+      );
+      throw new Error('cli_missing');
+    }
 
     let hookConfig: Awaited<ReturnType<NonNullable<AskAnywhereDeps['getHookConfig']>>> | undefined;
     try {
@@ -220,7 +246,68 @@ export class AskAnywhereOrchestrator {
   async stop(conversationId: string): Promise<void> {
     const conv = await this.deps.conversations.getConversation(conversationId);
     if (!conv?.currentRunId) return;
+    if (conv.currentRunId.startsWith('sdk-')) {
+      this.emitSyntheticError(conversationId, 'sdk_stop_not_supported', 'SDK streaming cancellation is not available yet.');
+      return;
+    }
     await this.deps.pool.kill(conv.currentRunId, 'user_stop');
+  }
+
+  private async runSdk(input: {
+    router: RuntimeRouter;
+    conversationId: string;
+    runId: string;
+    systemPrompt: string;
+    turns: Conversation['turns'];
+    userText: string;
+    endpointId?: string;
+    model?: string;
+  }): Promise<void> {
+    try {
+      const result = await input.router.stream(
+        {
+          endpointId: input.endpointId,
+          model: input.model,
+          system: `${input.systemPrompt.trim()}\n\nRuntime note: this SDK route cannot use local tools. Ask for confirmation before any action that would require modifying Orbit data.`,
+          messages: [
+            ...input.turns
+              .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
+              .map((turn) => ({ role: turn.role as 'user' | 'assistant', content: turn.content })),
+            { role: 'user', content: input.userText }
+          ],
+          traceId: input.runId,
+          conversationId: input.conversationId,
+          mode: 'ask'
+        },
+        () => BrowserWindow.getAllWindows()
+      );
+      const finalText = result.text.trim();
+      if (finalText) {
+        await this.deps.conversations.appendTurn({
+          conversationId: input.conversationId,
+          role: 'assistant',
+          content: finalText,
+          runtimeEventIds: result.eventIds
+        });
+        const vault = this.deps.getVaultPath();
+        if (vault) {
+          const stage = createStageStore(vault);
+          for (const artifact of extractArtifactFences(finalText)) {
+            await stage.add(input.conversationId, artifact);
+          }
+        }
+      }
+    } catch (error) {
+      this.emitSyntheticError(
+        input.conversationId,
+        error instanceof Error ? error.message.split(':')[0] || 'sdk_failed' : 'sdk_failed',
+        error instanceof Error ? error.message : String(error)
+      );
+    } finally {
+      await this.deps.conversations
+        .bindRuntime(input.conversationId, { currentRunId: null })
+        .catch(() => undefined);
+    }
   }
 
   private async finalizeRun(

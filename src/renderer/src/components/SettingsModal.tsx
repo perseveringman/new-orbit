@@ -4,9 +4,15 @@ import { useWorkspace } from '../store/workspace';
 import type { BudgetSettings } from '@shared/schemas';
 import type { Theme } from '@shared/types';
 import type { DetectResult } from '@shared/agent';
+import type {
+  SDKEndpointDefaults,
+  SDKEndpointInput,
+  SDKEndpointProvider,
+  SDKEndpointRegistrySnapshot
+} from '@shared/runtime';
 
 type Numeric = 'perRunTokens' | 'perRunUSD' | 'dailyTokens' | 'dailyUSD';
-type TabId = 'general' | 'api' | 'budget' | 'vectors' | 'advanced';
+type TabId = 'general' | 'api' | 'endpoints' | 'budget' | 'vectors' | 'advanced';
 
 const BUDGET_FIELDS: Array<{ key: Numeric; label: string; step: number; unit: string }> = [
   { key: 'perRunTokens', label: 'Per-run tokens', step: 10_000, unit: 'tok' },
@@ -34,6 +40,34 @@ const BTN =
   `rounded border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800 ${FOCUS}`;
 const BTN_PRIMARY =
   `rounded bg-neutral-900 px-3 py-1 text-xs text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300 ${FOCUS}`;
+
+const ENDPOINT_PROVIDERS: SDKEndpointProvider[] = ['anthropic', 'minimax', 'deepseek', 'custom'];
+
+function endpointDraft(provider: SDKEndpointProvider = 'anthropic'): SDKEndpointInput {
+  const presets: Record<SDKEndpointProvider, Pick<SDKEndpointInput, 'label' | 'baseURL' | 'defaultModel'>> = {
+    anthropic: {
+      label: 'Anthropic',
+      baseURL: 'https://api.anthropic.com',
+      defaultModel: 'claude-3-5-sonnet-latest'
+    },
+    minimax: {
+      label: 'MiniMax',
+      baseURL: 'https://api.minimax.chat/anthropic',
+      defaultModel: 'minimax-m1'
+    },
+    deepseek: {
+      label: 'DeepSeek',
+      baseURL: 'https://api.deepseek.com/anthropic',
+      defaultModel: 'deepseek-chat'
+    },
+    custom: {
+      label: 'Custom Anthropic-compatible',
+      baseURL: 'https://api.example.com',
+      defaultModel: 'claude-compatible-model'
+    }
+  };
+  return { provider, ...presets[provider], enabled: true };
+}
 
 export function SettingsModal(): JSX.Element | null {
   const open = useAgent((s) => s.settingsOpen);
@@ -68,6 +102,11 @@ export function SettingsModal(): JSX.Element | null {
   const [lastReindex, setLastReindex] = useState<{ count: number } | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [endpointSnapshot, setEndpointSnapshot] = useState<SDKEndpointRegistrySnapshot | null>(null);
+  const [endpointForm, setEndpointForm] = useState<SDKEndpointInput>(() => endpointDraft());
+  const [endpointKeyInputs, setEndpointKeyInputs] = useState<Record<string, string>>({});
+  const [endpointStatus, setEndpointStatus] = useState<Record<string, string>>({});
+  const [endpointDefaults, setEndpointDefaults] = useState<SDKEndpointDefaults>({});
 
   useEffect(() => {
     if (!open) return;
@@ -82,7 +121,26 @@ export function SettingsModal(): JSX.Element | null {
     setDetectResult(null);
     setLastReindex(null);
     setResetMsg(null);
+    void loadEndpoints();
   }, [open, budget, workspaceSettings]);
+
+  async function loadEndpoints(): Promise<void> {
+    if (!vault) {
+      setEndpointSnapshot(null);
+      setEndpointDefaults({});
+      return;
+    }
+    try {
+      const snapshot = await window.orbit.runtime.sdk.snapshot();
+      setEndpointSnapshot(snapshot);
+      setEndpointDefaults(snapshot.defaults);
+    } catch (error) {
+      setEndpointStatus((s) => ({
+        ...s,
+        global: `Could not load endpoints: ${(error as Error).message}`
+      }));
+    }
+  }
 
   if (!open) return null;
 
@@ -143,9 +201,67 @@ export function SettingsModal(): JSX.Element | null {
     }
   }
 
+  async function onSaveEndpoint(): Promise<void> {
+    setEndpointStatus((s) => ({ ...s, form: 'Saving…' }));
+    try {
+      const saved = await window.orbit.runtime.sdk.upsertEndpoint(endpointForm);
+      setEndpointForm(endpointDraft(endpointForm.provider));
+      setEndpointKeyInputs((s) => ({ ...s, [saved.id]: '' }));
+      setEndpointStatus((s) => ({ ...s, form: 'Endpoint saved.' }));
+      await loadEndpoints();
+    } catch (error) {
+      setEndpointStatus((s) => ({ ...s, form: `Save failed: ${(error as Error).message}` }));
+    }
+  }
+
+  async function onSetEndpointKey(endpointId: string): Promise<void> {
+    const key = endpointKeyInputs[endpointId]?.trim();
+    if (!key) {
+      setEndpointStatus((s) => ({ ...s, [endpointId]: 'Enter a key first.' }));
+      return;
+    }
+    setEndpointStatus((s) => ({ ...s, [endpointId]: 'Saving key…' }));
+    try {
+      await window.orbit.runtime.sdk.setApiKey(endpointId, key);
+      setEndpointKeyInputs((s) => ({ ...s, [endpointId]: '' }));
+      setEndpointStatus((s) => ({ ...s, [endpointId]: 'Key saved.' }));
+      await loadEndpoints();
+    } catch (error) {
+      setEndpointStatus((s) => ({ ...s, [endpointId]: `Key failed: ${(error as Error).message}` }));
+    }
+  }
+
+  async function onTestEndpoint(endpointId: string): Promise<void> {
+    setEndpointStatus((s) => ({ ...s, [endpointId]: 'Testing…' }));
+    try {
+      const result = await window.orbit.runtime.sdk.testEndpoint(endpointId);
+      setEndpointStatus((s) => ({
+        ...s,
+        [endpointId]: result.ok
+          ? `OK (${result.latencyMs ?? 0}ms) ${result.message ?? ''}`.trim()
+          : `Failed: ${result.error ?? 'unknown error'}`
+      }));
+    } catch (error) {
+      setEndpointStatus((s) => ({ ...s, [endpointId]: `Failed: ${(error as Error).message}` }));
+    }
+  }
+
+  async function onSaveEndpointDefaults(): Promise<void> {
+    setEndpointStatus((s) => ({ ...s, defaults: 'Saving defaults…' }));
+    try {
+      const defaults = await window.orbit.runtime.sdk.setDefaults(endpointDefaults);
+      setEndpointDefaults(defaults);
+      setEndpointStatus((s) => ({ ...s, defaults: 'Defaults saved.' }));
+      await loadEndpoints();
+    } catch (error) {
+      setEndpointStatus((s) => ({ ...s, defaults: `Defaults failed: ${(error as Error).message}` }));
+    }
+  }
+
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: 'general', label: 'General' },
     { id: 'api', label: 'API / CLI' },
+    { id: 'endpoints', label: 'AI Endpoints' },
     { id: 'budget', label: 'Budget' },
     { id: 'vectors', label: 'Vectors' },
     { id: 'advanced', label: 'Advanced' }
@@ -292,9 +408,225 @@ export function SettingsModal(): JSX.Element | null {
                     className={INPUT}
                   />
                   <p className="mt-1 text-xs text-neutral-500">
-                    Overrides the shell <code>ANTHROPIC_API_KEY</code> for agent runs.
+                    Legacy Claude CLI override. Prefer AI Endpoints for Runtime B SDK keys.
                   </p>
                 </div>
+              </div>
+            )}
+            {tab === 'endpoints' && (
+              <div className="space-y-5">
+                {!vault && (
+                  <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    Open a vault to manage SDK endpoints.
+                  </p>
+                )}
+                {endpointStatus.global && (
+                  <p className="text-xs text-red-500">{endpointStatus.global}</p>
+                )}
+                <section className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Runtime B SDK endpoints</h3>
+                    <p className="text-xs text-neutral-500">
+                      Keys are kept in the SDK key vault and only masked key state is shown here.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {(endpointSnapshot?.endpoints ?? []).map((endpoint) => (
+                      <div
+                        key={endpoint.id}
+                        className="rounded border border-neutral-200 p-3 dark:border-neutral-800"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{endpoint.label}</div>
+                            <div className="text-xs text-neutral-500">
+                              {endpoint.provider} · {endpoint.defaultModel} · {endpoint.enabled ? 'enabled' : 'disabled'}
+                            </div>
+                            <div className="mt-1 break-all text-[11px] text-neutral-500">
+                              {endpoint.baseURL}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className={BTN}
+                              onClick={() =>
+                                setEndpointForm({
+                                  id: endpoint.id,
+                                  label: endpoint.label,
+                                  provider: endpoint.provider,
+                                  baseURL: endpoint.baseURL,
+                                  defaultModel: endpoint.defaultModel,
+                                  modelAlias: endpoint.modelAlias,
+                                  costProfile: endpoint.costProfile,
+                                  enabled: endpoint.enabled
+                                })
+                              }
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className={BTN}
+                              onClick={() => void onTestEndpoint(endpoint.id)}
+                              disabled={!endpoint.keyConfigured || !endpoint.enabled}
+                            >
+                              Test
+                            </button>
+                            <button
+                              type="button"
+                              className={BTN}
+                              onClick={() => {
+                                if (!confirm(`${endpoint.builtIn ? 'Disable' : 'Delete'} ${endpoint.label}?`)) return;
+                                void window.orbit.runtime.sdk.deleteEndpoint(endpoint.id).then(loadEndpoints);
+                              }}
+                            >
+                              {endpoint.builtIn ? 'Disable' : 'Delete'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                          <input
+                            type="password"
+                            value={endpointKeyInputs[endpoint.id] ?? ''}
+                            onChange={(e) =>
+                              setEndpointKeyInputs((s) => ({ ...s, [endpoint.id]: e.target.value }))
+                            }
+                            placeholder={endpoint.keyConfigured ? `Configured (${endpoint.keyMasked ?? 'masked'})` : 'API key'}
+                            autoComplete="off"
+                            className={INPUT}
+                          />
+                          <button
+                            type="button"
+                            className={BTN}
+                            onClick={() => void onSetEndpointKey(endpoint.id)}
+                          >
+                            Save key
+                          </button>
+                          <button
+                            type="button"
+                            className={BTN}
+                            onClick={() => {
+                              if (!confirm(`Clear key for ${endpoint.label}?`)) return;
+                              void window.orbit.runtime.sdk.deleteApiKey(endpoint.id).then(loadEndpoints);
+                            }}
+                            disabled={!endpoint.keyConfigured}
+                          >
+                            Clear key
+                          </button>
+                        </div>
+                        {endpointStatus[endpoint.id] && (
+                          <p className="mt-2 text-xs text-neutral-500">{endpointStatus[endpoint.id]}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <h3 className="text-sm font-semibold">
+                    {endpointForm.id ? 'Edit endpoint' : 'Add endpoint'}
+                  </h3>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="text-xs text-neutral-500">
+                      Provider
+                      <select
+                        value={endpointForm.provider}
+                        onChange={(e) => setEndpointForm(endpointDraft(e.target.value as SDKEndpointProvider))}
+                        className={`${INPUT} mt-1`}
+                      >
+                        {ENDPOINT_PROVIDERS.map((provider) => (
+                          <option key={provider} value={provider}>{provider}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs text-neutral-500">
+                      Label
+                      <input
+                        value={endpointForm.label}
+                        onChange={(e) => setEndpointForm((f) => ({ ...f, label: e.target.value }))}
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                    <label className="text-xs text-neutral-500 md:col-span-2">
+                      Base URL
+                      <input
+                        value={endpointForm.baseURL}
+                        onChange={(e) => setEndpointForm((f) => ({ ...f, baseURL: e.target.value }))}
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                    <label className="text-xs text-neutral-500">
+                      Default model
+                      <input
+                        value={endpointForm.defaultModel}
+                        onChange={(e) => setEndpointForm((f) => ({ ...f, defaultModel: e.target.value }))}
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 self-end text-xs">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(endpointForm.enabled)}
+                        onChange={(e) => setEndpointForm((f) => ({ ...f, enabled: e.target.checked }))}
+                        className={FOCUS}
+                      />
+                      Enabled
+                    </label>
+                    <label className="text-xs text-neutral-500 md:col-span-2">
+                      API key (optional on save)
+                      <input
+                        type="password"
+                        value={endpointForm.apiKey ?? ''}
+                        onChange={(e) => setEndpointForm((f) => ({ ...f, apiKey: e.target.value }))}
+                        placeholder="Stored in key vault, not endpoint config"
+                        autoComplete="off"
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className={BTN_PRIMARY} onClick={() => void onSaveEndpoint()}>
+                      Save endpoint
+                    </button>
+                    <button type="button" className={BTN} onClick={() => setEndpointForm(endpointDraft())}>
+                      New
+                    </button>
+                    {endpointStatus.form && <span className="text-xs text-neutral-500">{endpointStatus.form}</span>}
+                  </div>
+                </section>
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <h3 className="text-sm font-semibold">Defaults</h3>
+                  {(['ask', 'synthesis', 'background'] as const).map((mode) => (
+                    <label key={mode} className="flex items-center gap-3 text-xs">
+                      <span className="w-24 capitalize text-neutral-500">{mode}</span>
+                      <select
+                        value={endpointDefaults[mode] ?? ''}
+                        onChange={(e) =>
+                          setEndpointDefaults((d) => ({
+                            ...d,
+                            [mode]: e.target.value || undefined
+                          }))
+                        }
+                        className={INPUT}
+                      >
+                        <option value="">Auto / CLI fallback</option>
+                        {(endpointSnapshot?.endpoints ?? []).map((endpoint) => (
+                          <option key={endpoint.id} value={endpoint.id}>
+                            {endpoint.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <button type="button" className={BTN} onClick={() => void onSaveEndpointDefaults()}>
+                      Save defaults
+                    </button>
+                    {endpointStatus.defaults && (
+                      <span className="text-xs text-neutral-500">{endpointStatus.defaults}</span>
+                    )}
+                  </div>
+                </section>
               </div>
             )}
             {tab === 'budget' && (

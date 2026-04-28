@@ -4,6 +4,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConversationStore, conversationsDir } from '../src/main/conversation/store';
 import { ConversationOrchestrator } from '../src/main/conversation/orchestrator';
+import {
+  anchorToConversationScope,
+  conversationScopeKey,
+  turnToMessage
+} from '../src/shared/conversation';
 
 let tmp: string;
 
@@ -85,6 +90,27 @@ describe('ConversationStore', () => {
     const list = await store.findByAnchor('task', 't1');
     expect(list.map((m) => m.id)).toEqual(['c-a', 'c-b']);
   });
+
+  it('persists scoped last-active conversations and archives without deleting history', async () => {
+    const store = new ConversationStore(tmp);
+    await store.create({
+      id: 'global-1',
+      anchors: [{ kind: 'ask_anywhere_session', refId: 's1', addedAt: '2026-04-29T00:00:00Z' }],
+      scope: { kind: 'global' }
+    });
+    await store.create({
+      id: 'task-1',
+      anchors: [{ kind: 'task', refId: 'task-1', addedAt: '2026-04-29T00:00:00Z' }]
+    });
+
+    expect((await store.lastActive({ kind: 'global' }))?.id).toBe('global-1');
+    expect((await store.lastActive({ kind: 'task', task_id: 'task-1' }))?.id).toBe('task-1');
+
+    const archived = await store.archive('global-1');
+    expect(archived?.archived).toBe(true);
+    expect(archived?.status).toBe('ended');
+    expect((await store.get('global-1'))?.anchors[0].refId).toBe('s1');
+  });
 });
 
 describe('ConversationOrchestrator', () => {
@@ -114,5 +140,59 @@ describe('ConversationOrchestrator', () => {
     const got = await orch.getConversation(conv.id);
     expect(got?.currentRunId).toBe('run-9');
     expect(got?.vendorSessionId).toBe('v-99');
+  });
+
+  it('updates last active by scope through the orchestrator', async () => {
+    const orch = new ConversationOrchestrator(tmp);
+    const first = await orch.createConversation({
+      anchor: { kind: 'ask_anywhere_session', refId: 's1', addedAt: '2026-04-29T00:00:00Z' },
+      scope: { kind: 'global' }
+    });
+    const second = await orch.createConversation({
+      anchor: { kind: 'ask_anywhere_session', refId: 's2', addedAt: '2026-04-29T00:01:00Z' },
+      scope: { kind: 'global' }
+    });
+
+    expect((await orch.getLastActive({ kind: 'global' }))?.id).toBe(second.id);
+    await orch.setLastActive({ kind: 'global' }, first.id);
+    expect((await orch.getLastActive({ kind: 'global' }))?.id).toBe(first.id);
+  });
+});
+
+describe('Conversation shared helpers', () => {
+  it('maps legacy anchors to first-class scopes and stable keys', () => {
+    expect(
+      anchorToConversationScope({
+        kind: 'task',
+        refId: 'task-42',
+        addedAt: '2026-04-29T00:00:00Z'
+      })
+    ).toEqual({ kind: 'task', task_id: 'task-42' });
+    expect(conversationScopeKey({ kind: 'task', task_id: 'task-42', project_id: 'proj' })).toBe(
+      'task:proj:task-42'
+    );
+    expect(conversationScopeKey({ kind: 'resource', resource_slug: 'orbit' })).toBe(
+      'resource:orbit'
+    );
+  });
+
+  it('converts persisted turns to renderer messages with event and artifact refs', () => {
+    expect(
+      turnToMessage({
+        id: 'turn-1',
+        at: '2026-04-29T00:00:00Z',
+        role: 'assistant',
+        content: 'Done',
+        runtimeEventIds: ['evt-1'],
+        artifactRefs: ['artifact-1']
+      })
+    ).toEqual({
+      id: 'turn-1',
+      role: 'assistant',
+      content: 'Done',
+      created_at: '2026-04-29T00:00:00Z',
+      event_refs: ['evt-1'],
+      artifact_refs: ['artifact-1']
+    });
   });
 });

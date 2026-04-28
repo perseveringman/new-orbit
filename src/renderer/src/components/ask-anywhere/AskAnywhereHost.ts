@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Conversation } from '@shared/conversation';
+import type { Conversation, ConversationScope } from '@shared/conversation';
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import type { ConversationStage } from '@shared/stage';
 
 export const ASK_ANYWHERE_LAST_ACTIVE_ID_KEY = 'ask-anywhere.last-active-id';
+export const ASK_ANYWHERE_GLOBAL_SCOPE: ConversationScope = { kind: 'global' };
 
 function turnsToEvents(conv: Conversation): RuntimeEvent[] {
   return conv.turns.map((t, idx) => ({
@@ -61,6 +62,7 @@ export interface UseAskAnywhereSessionResult {
   selectActiveId(id: string | null): void;
   reload(): Promise<void>;
   handleNew(): Promise<Conversation>;
+  handleArchive(id: string): Promise<void>;
   handleAction(action: ChatAction): Promise<void>;
   handleArtifactAction(artifactId: string, actionId: string): Promise<void>;
 }
@@ -82,6 +84,7 @@ export function useAskAnywhereSession(
     activeIdRef.current = id;
     setActiveId(id);
     writeLastActiveId(id);
+    if (id) void window.orbit.chat.setLastActiveConversation(ASK_ANYWHERE_GLOBAL_SCOPE, id);
   }, []);
 
   useEffect(() => {
@@ -91,7 +94,7 @@ export function useAskAnywhereSession(
 
   const reload = useCallback(async () => {
     const list = await window.orbit.chat.listConversations();
-    const askOnly = list.filter((c) => c.anchors.some((a) => a.kind === 'ask_anywhere_session'));
+    const askOnly = list.filter((c) => !c.archived && c.anchors.some((a) => a.kind === 'ask_anywhere_session'));
     const full = await Promise.all(askOnly.map((meta) => window.orbit.chat.getConversation(meta.id)));
     const conversations = sortByUpdatedDesc(full.filter((c): c is Conversation => c !== null));
     setSessions(conversations);
@@ -100,8 +103,14 @@ export function useAskAnywhereSession(
     const current = activeIdRef.current;
     if (current && ids.has(current)) return;
 
+    const serverLast = await window.orbit.chat.getLastActiveConversation(ASK_ANYWHERE_GLOBAL_SCOPE).catch(() => null);
     const remembered = readLastActiveId();
-    const fallback = remembered && ids.has(remembered) ? remembered : conversations[0]?.id ?? null;
+    const fallback =
+      serverLast && ids.has(serverLast.id)
+        ? serverLast.id
+        : remembered && ids.has(remembered)
+          ? remembered
+          : conversations[0]?.id ?? null;
     selectActiveId(fallback);
   }, [selectActiveId]);
 
@@ -161,12 +170,21 @@ export function useAskAnywhereSession(
         refId: `ask-${Date.now()}`,
         addedAt: new Date().toISOString()
       },
+      scope: ASK_ANYWHERE_GLOBAL_SCOPE,
       title: 'Ask Anywhere',
       runtimeHint: 'claude'
     });
     selectActiveId(conv.id);
     await reload();
     return conv;
+  }, [reload, selectActiveId]);
+
+  const handleArchive = useCallback(async (id: string) => {
+    await window.orbit.chat.archiveConversation(id);
+    if (activeIdRef.current === id) {
+      selectActiveId(null);
+    }
+    await reload();
   }, [reload, selectActiveId]);
 
   const handleArtifactAction = useCallback(
@@ -229,6 +247,7 @@ export function useAskAnywhereSession(
     selectActiveId,
     reload,
     handleNew,
+    handleArchive,
     handleAction,
     handleArtifactAction
   };

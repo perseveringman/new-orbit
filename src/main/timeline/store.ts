@@ -5,6 +5,9 @@ import type { DailyStats, DailySummary, DailyTimeline, MonthlyIndex, TimelineEnt
 import { shouldShowOnTimeline, TIMELINE_LAYER_1_KINDS } from '@shared/timeline';
 import { currentEventReplayStore } from '../events/bus';
 import { createNoteStore } from '../note/store';
+import type { DailySummaryPayload } from '@shared/synthesis';
+import { SynthesisRunner, createSynthesisJob } from '../synthesis/runner';
+import { createSynthesisStore } from '../synthesis/store';
 
 export class TimelineStore {
   constructor(private readonly vaultPath: string) {}
@@ -57,25 +60,49 @@ export class TimelineStore {
 
   async generateDailySummary(date: string): Promise<DailySummary> {
     const timeline = await this.getDay(date, false);
-    const headline = timeline.entries.length > 0 ? `${timeline.entries.length} meaningful events` : 'Quiet day';
-    const highlights = timeline.entries.slice(0, 5).map((entry) => `${entry.icon} ${entry.title}`);
-    const narrative =
-      timeline.entries.length > 0
-        ? `Orbit captured ${timeline.entries.length} timeline event(s). The main thread was: ${highlights.join(' / ')}.`
-        : 'No user-visible activity was captured today.';
+    const store = createSynthesisStore(this.vaultPath);
+    const artifact = await new SynthesisRunner(store).run(
+      createSynthesisJob({
+        kind: 'summary.daily',
+        scope_key: `daily:${date}`,
+        priority: 'user-blocking',
+        reason: 'manual',
+        force: true,
+        sources: [
+          {
+            kind: 'timeline_range',
+            ref: date,
+            range: { from: `${date}T00:00:00.000Z`, to: `${date}T23:59:59.999Z` },
+            metadata: { entries: timeline.entries, stats: timeline.stats }
+          }
+        ]
+      })
+    );
+    const payload = artifact.payload as DailySummaryPayload;
+    const headline = payload.headline;
+    const highlights = payload.highlights;
+    const narrative = payload.narrative;
     const body = `# ${date} Daily Summary\n\n${narrative}\n\n## Highlights\n\n${highlights.map((item) => `- ${item}`).join('\n') || '- Rest / no captured events'}\n`;
-    const note = await createNoteStore(this.vaultPath).create({
-      type: 'daily_summary',
-      title: `${date} Daily Summary`,
-      body,
-      tags: ['daily-summary']
-    });
+    const notes = createNoteStore(this.vaultPath);
+    const current = await this.readDailySummary(date);
+    const currentNote = current?.note_path ? await notes.getByPath(current.note_path).catch(() => null) : null;
+    const note = currentNote
+      ? await notes.update(currentNote.frontmatter.id, { body })
+      : await notes.create({
+          type: 'daily_summary',
+          title: `${date} Daily Summary`,
+          body,
+          tags: ['daily-summary'],
+          source: { kind: 'synthesis', ref: artifact.id }
+        });
     const summary: DailySummary = {
       generated_at: new Date().toISOString(),
       note_path: note.path,
       headline,
       narrative,
-      highlights
+      highlights,
+      synthesis_ref: artifact.id,
+      status: artifact.status
     };
     await this.writeSummary(date, summary);
     return summary;

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { SynthesisArtifact } from '@shared/synthesis';
 import type { DailyTimeline } from '@shared/timeline';
+import { SynthesisStatus } from '../components/synthesis';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -9,10 +11,13 @@ export function TimelineView(): JSX.Element {
   const [date, setDate] = useState(today());
   const [developerMode, setDeveloperMode] = useState(false);
   const [timeline, setTimeline] = useState<DailyTimeline | null>(null);
+  const [summaryArtifact, setSummaryArtifact] = useState<SynthesisArtifact | null>(null);
   const groups = useMemo(() => groupByPeriod(timeline?.entries ?? []), [timeline]);
 
   async function reload(): Promise<void> {
-    setTimeline(await window.orbit.timeline.getDay(date, { developerMode }));
+    const next = await window.orbit.timeline.getDay(date, { developerMode });
+    setTimeline(next);
+    setSummaryArtifact(next.summary?.synthesis_ref ? await window.orbit.synthesis.getArtifact(next.summary.synthesis_ref) : null);
   }
 
   useEffect(() => {
@@ -57,7 +62,12 @@ export function TimelineView(): JSX.Element {
               </div>
             </section>
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
-              <h2 className="text-sm font-semibold">AI Summary</h2>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold">AI Summary</h2>
+                  <SynthesisStatus artifact={summaryArtifact} generatedAt={timeline.summary?.generated_at} sourceCount={summaryArtifact?.sources.length ?? 0} onRefresh={() => void summarize()} />
+                </div>
+              </div>
               <p className="mt-2 text-sm">{timeline.summary?.narrative ?? 'No summary yet. Generate one when the day has enough signal.'}</p>
             </section>
             {groups.map((group) => (
@@ -101,4 +111,3 @@ function groupByPeriod(entries: DailyTimeline['entries']): Array<{ label: string
   }
   return ['Night', 'Morning', 'Afternoon', 'Evening'].map((label) => ({ label, entries: buckets.get(label) ?? [] })).filter((group) => group.entries.length > 0);
 }
-
