@@ -7,7 +7,7 @@
 
 本 Phase 基于 Phase 1 的 8 个决策锚点（`docs/thinking-trail/2026-04-29-chat-unification-decoupling/decisions-anchor.md`），以及以下新增的 Phase 2 决策：
 
-### Phase 2 核心决策（P2-D1 ~ P2-D10）
+### Phase 2 核心决策（P2-D1 ~ P2-D18）
 
 | # | 决策 |
 |---|------|
@@ -21,6 +21,14 @@
 | **P2-D8** | Timeline 仅上 Layer 1/2 事件，Layer 3（heartbeat/cost 细粒度）完全不上 |
 | **P2-D9** | Resource 采用主题工作站完整模型（6 子目录），支持"自下而上涌现"机制 |
 | **P2-D10** | Timeline 特殊事件（insight/breakthrough/setback）融合进 Quick Capture |
+| **P2-D11** | **Feeds 不进 Layer 1**，仅作为 Layer 0 信号源，有专属 mini-synthesis 和独立 UI（修正原 P2-D1 对 Feed 归属的定位） |
+| **P2-D12** | 引入 **Runtime B（SDK 轨）**，Anthropic SDK 先行；通过兼容端点覆盖 MiniMax / DeepSeek |
+| **P2-D13** | 引入 **Synthesis Layer**：统一所有 AI 生成内容（summary / distill / emerge / relate / narrative），artifact + prompt 版本化 + 幂等键 + 失效机制 |
+| **P2-D14** | Resource 支持 **自下而上涌现**（`emerge.resource` synthesis），不要求用户先建空壳 |
+| **P2-D15** | **Area 是坐标系而非实体**，所有 Layer 1 实体都可 `areas: string[]` 归属 |
+| **P2-D16** | 每个 Area 带 `.orbit/` 子世界（配置 / memory / session / scheduled），Ask-Anywhere 可注入 area context |
+| **P2-D17** | 所有闸门动作产 `promote.*` TraceableEvent；未经过闸门 Layer 0 不入 Layer 1 |
+| **P2-D18** | Layer 2 不写 Layer 1 业务字段，只产 artifact；用户 accept 时由 UI/skill 代理写入 |
 
 ### Phase 2 延后决策
 

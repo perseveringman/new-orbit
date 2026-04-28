@@ -4,7 +4,7 @@ Orbit is a **complete local implementation of Building a Second Brain (BASB)** �
 
 Under the hood, Orbit is an Electron + React workbench that orchestrates Claude Code CLI sub-agents in isolated execution contexts. Worktree execution is the current production path; sandbox execution is a reserved v2 extension point. It is Obsidian-compatible Markdown + Git — no vendor lock-in, no proprietary format.
 
-> **v2 implementation complete.** Orbit now follows the 2026-04-26 v2 architecture: Auto-runner, Inbox hub, Proposal approval, task dependencies, Activity Log, Capture, and CLI-first agent tooling. See [`docs/architecture.md`](docs/architecture.md) for the current architecture and [`docs/archive/architecture-v1.md`](docs/archive/architecture-v1.md) for the archived v1 description.
+> **Architecture update.** Orbit now uses a four-layer model: Layer 0 Signal Sources, Layer 1 Ground Truth / Library, Layer 2 Synthesis, and Layer 3 Consumption Surfaces. Feeds are Layer 0 and only become user data after entering Library. Start from [`docs/INDEX.md`](docs/INDEX.md), then read [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/architecture/data-layering.md`](docs/architecture/data-layering.md).
 
 ## Quickstart
 
@@ -77,13 +77,16 @@ See [docs/architecture.md](docs/architecture.md) for internals and [docs/USER_GU
 
 ## Docs
 
-- [Vision](docs/VISION.md) — product vision and long-term direction.
-- [Roadmap](docs/ROADMAP.md) — completed milestones and upcoming work.
-- [Architecture](docs/architecture.md) — process model, IPC surface, vault layout.
+- [Docs Index](docs/INDEX.md) — recommended reading order and current doctrine.
+- [Roadmap](docs/ROADMAP.md) — completed milestones and Phase 5–9 plan.
+- [Data Layering](docs/architecture/data-layering.md) — Signal Sources / Ground Truth / Synthesis / Surfaces.
+- [AI Runtime + SDK](docs/architecture/ai-runtime-and-sdk.md) — external CLI runtime plus Anthropic-compatible SDK track.
+- [Synthesis Layer](docs/architecture/synthesis-layer.md) — AI-generated artifacts, provenance, invalidation, scheduler.
+- [Conversation Surface](docs/architecture/chat-conversation-surface.md) — unified overlay/full-page/scoped chat.
+- [Entity Flow](docs/architecture/entity-flow.md) — Feed / Library / Note / Resource / Area / Project lifecycle.
+- [Architecture](docs/architecture.md) — current code/process architecture snapshot.
 - [Development](docs/DEVELOPMENT.md) — scripts, layout, testing notes.
 - [User guide](docs/USER_GUIDE.md) — walkthrough of the UI.
-- [Migration (legacy → v3)](docs/MIGRATION.md) — moving single-file projects to folders, rollback.
-- [v2 implementation changelog](docs/CHANGELOG.v2-implementation.md) — implementation deviations, trade-offs, follow-ups.
 - [Changelog](CHANGELOG.md) — change history.
 
 ## License

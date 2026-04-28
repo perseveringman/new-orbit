@@ -3,7 +3,9 @@
 > **Status**: accepted (2026-04-26)
 > **Scope**: 本文是 Orbit v2 演进方向的统一总览，吸收了 2026-04-26 那次 v2 方向确立对话的全部共识。
 > **Audience**: 产品决策者、贡献者、接手迭代的 AI agent。
-> **How to read**: 先读本文建立全局认知；细节决定读 `docs/decisions/ADR-*.md`；实施方案读 `docs/plans/`；想理解"为什么这样想"读 `docs/thinking-trail/`。
+> **How to read**: 先读 `docs/INDEX.md` 获取当前导航；再读本文建立 v2 历史认知；最新稳定架构以 `docs/architecture/` 为准；当前路线图以 `docs/ROADMAP.md` 为准；细节决定读 `docs/decisions/ADR-*.md`；实施方案读 `docs/plans/`；想理解“为什么这样想”读 `docs/thinking-trail/`。
+>
+> **2026-04-30 update**: 最新共识已经把 Orbit 明确为四层数据架构：Layer 0 Signal Sources、Layer 1 Ground Truth / Library、Layer 2 Synthesis、Layer 3 Consumption Surfaces。Feeds 不再被视为用户真相数据，只有进入 Library 才算用户数据。详见 `docs/architecture/data-layering.md` 与 `docs/thinking-trail/2026-04-30-phase-2-knowledge-stack/07-sdk-synthesis-layering.md`。
 
 ---
 

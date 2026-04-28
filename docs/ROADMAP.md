@@ -1,179 +1,681 @@
 # Orbit — Roadmap
 
-> **Status**: Phase 4.0 代码实施完成（2026-04-28），进入 lifecycle dog-food 观察期
-> **Update cadence**: 每个里程碑落地后更新；大方向调整随 ADR 同步刷新。
-
-本文记录 Orbit 各阶段的目标、当前状态和下一步计划。**v2 方向的完整说明在 `docs/overview.md`，决策记录在 `docs/decisions/`。**
+> **Status**: Phase 4.1 已完成；下一阶段进入 Phase 5：SDK Runtime + Synthesis Layer + Conversation Surface 稳定化。
+> **Update cadence**: 每个里程碑落地后更新；架构方向以 `docs/architecture/` 为准；thinking-trail 记录推理过程。
 
 ---
 
-## 已完成
+## 0. 当前北极星
+
+Orbit 是一个 **local-first、vision-driven、AI-native 的个人知识与执行工作台**。
+
+最新架构共识：
+
+```text
+Layer 0  Signal Sources   Feeds / raw captures / gateway inbound
+Layer 1  Ground Truth     Notes / Library / Resources / Projects / Areas / Conversations
+Layer 2  Synthesis        AI-generated artifacts / projections / summaries / relations
+Layer 3  Surfaces         Timeline / Chat / Search / Dashboard / Resource / Area UI
+```
+
+最重要的修正：**Feeds 不是用户数据。只有进入 Library 才算用户数据。**
+
+---
+
+## 1. 已完成里程碑
 
 ### v1 基础设施（M1–M7）
 
-| 里程碑 | 内容 |
-| ------ | ---- |
-| M1 | Electron 骨架、workspace/settings IPC、WelcomeView |
-| M2 | 文件系统层 (`fs:*`)、refmap、chokidar 监听、MiniSearch 索引、CodeMirror 编辑器 |
-| M3 | PARA 目录结构、Zod schemas、任务索引、`para:*` IPC、Kanban |
-| M4 | Claude Code agent runner、hydration protocol、cost NDJSON 记录、RunnerPool |
-| M5 | Git worktree 管理、ghost-commit 流程、pre-merge check、safety gate、InstallLock、PortAllocator |
-| M6 | Token 预算系统 (BudgetGate + BudgetWatch)、每日 cost 报告 |
-| M7 | 项目 Distillation、hash-trick vector store、experience wake-up |
+| Milestone | Delivered |
+|---|---|
+| M1 | Electron shell, workspace/settings IPC, WelcomeView |
+| M2 | File system layer, refmap, watcher, MiniSearch, editor |
+| M3 | PARA directory model, schemas, task index, Kanban |
+| M4 | Claude Code runner, hydration protocol, cost logs, RunnerPool |
+| M5 | Git worktree, ghost commit, pre-merge check, InstallLock, ports |
+| M6 | BudgetGate / BudgetWatch / daily cost report |
+| M7 | Project distillation, hash-trick vector store, experience wake-up |
 
-### v1 二期改造（R1–R7，Project-as-Folder）
+### v1 Project-as-Folder rebuild（R1–R7）
 
-| 里程碑 | 内容 |
-| ------ | ---- |
-| R1 | 项目即文件夹 (`01_Projects/<slug>/`)、per-project git repo |
-| R2 | Vision-first Dashboard、+ New Project wizard |
-| R3 | 四段式 Task Editor (Description/Thinking/Execution Log/Summary) |
-| R4 | Project Room (Kanban + 嵌入式终端 + Sessions) |
-| R5 | Orbit Hooks MCP server（7 个工具）**⚠️ v2 中废弃，见 ADR-008** |
-| R6 | Night Shift 批处理 **⚠️ v2 中废弃，见 ADR-001** |
+| Milestone | Delivered |
+|---|---|
+| R1 | Project as folder, per-project git |
+| R2 | Vision-first dashboard, New Project wizard |
+| R3 | Four-section Task Editor |
+| R4 | Project Room: Kanban + terminal + sessions |
+| R5 | Orbit Hooks MCP server（later deprecated by CLI-first） |
+| R6 | Night Shift batch runner（later deprecated by Auto-runner） |
 | R7 | Worktree GC + Daily Review |
 
-### v1 近期交付（2026-04 前半月）
+### v2 Execution Model（2026-04-26）
 
-| 功能 | 描述 |
-| ---- | ---- |
-| Contextual Right Sidebar | 右侧栏跟随当前页面上下文 |
-| Workspace Inspector | Files / Changes 工作台：项目树、staged-only commit、GitHub publish |
-| `.orbit`-First Agent Exposure | Orbit 数据收敛 `.orbit/`、agent_exposure 策略 |
-| GitHub Integration | `gh` CLI 驱动的 GitHub 连接、PR 创建、状态读取 |
-| Project Session History | 终端会话作为项目级历史 + Session History tab |
-| Area Room + Vision System | Area 升级为独立工作单元；Vision 冷启动与 review 工作流 |
-| Orchestration System (v1) | Planner proposal 历史、Local Runtime registry、Dispatch lease/report 流、Role Templates/Bindings |
-| Orchestration Workspace UI | workspace 级 Runtimes / Agents 面板，React Flow proposal canvas |
+| Subsystem | Status |
+|---|---|
+| Night Shift → 24×7 Auto-runner | completed |
+| Agent autonomy boundaries / folded subtasks | completed |
+| ExecutionContext split: Worktree / Sandbox abstraction | completed |
+| Inbox as human-AI collaboration hub | completed |
+| propose-approve authorization chain | completed |
+| task dependency model | completed |
+| CLI-first AI-native interface | completed |
+| Activity Log infrastructure | completed |
+| Capture tri-partition | completed |
+| Quick Capture MVP | completed |
 
----
+### Phase 3 — Agent Observability & Resilience
 
-### v2 本期实施（2026-04-26）
+| Subsystem | Status |
+|---|---|
+| Agent Playground and scenario harness | completed |
+| Runtime adapter layer | completed |
+| Activity timeline UI | completed |
+| Task-session binding + resume | completed |
+| Runtime fallback + budget | completed |
+| Unified event replay + Developer Console | completed |
+| Global Dashboard v1 | completed |
 
-**触发**：2026-04-26 的 v2 方向 Onboard 对话，确立 10 项核心决策（ADR-001 ~ ADR-010）。
+### Phase 4 — Lifecycle + Ask-Anywhere UX
 
-**状态**：核心代码路径已落地，v1 architecture 已归档，Night Shift / MCP runtime 已清理。
-
-| 子系统 | ADR | Plan | 状态 |
-|--------|-----|------|------|
-| 废弃 Night Shift → Auto-runner | [ADR-001](decisions/ADR-001-deprecate-night-shift.md) | [auto-runner-dispatcher](plans/2026-04-26-auto-runner-dispatcher.md) | completed |
-| Agent 自主边界：子任务折叠 | [ADR-002](decisions/ADR-002-agent-autonomy-scope.md) | 同上 | completed |
-| ExecutionContext 分化 | [ADR-003](decisions/ADR-003-execution-context-split.md) | [execution-model-migration](plans/2026-04-26-execution-model-migration.md) | completed |
-| Inbox 作为人机协作枢纽 | [ADR-004](decisions/ADR-004-inbox-as-hub.md) | [inbox-v2-architecture](plans/2026-04-26-inbox-v2-architecture.md) | completed |
-| Plan Chat 定位修正 | [ADR-005](decisions/ADR-005-plan-chat-reframing.md) | （合入 inbox-v2） | completed |
-| 任务授权链路 (propose-approve) | [ADR-006](decisions/ADR-006-task-authorization-model.md) | 同 auto-runner | completed |
-| 任务依赖模型 | [ADR-007](decisions/ADR-007-task-dependency-model.md) | [task-dependency-system](plans/2026-04-26-task-dependency-system.md) | completed |
-| AI-Native + CLI-first | [ADR-008](decisions/ADR-008-ai-native-cli-first.md) | [cli-migration](plans/2026-04-26-cli-migration.md) | completed |
-| Activity Log 基础设施 | [ADR-009](decisions/ADR-009-activity-log-infrastructure.md) | [activity-log-infrastructure](plans/2026-04-26-activity-log-infrastructure.md) | completed |
-| Capture 三分 (Feed/Library/Thoughts) | [ADR-010](decisions/ADR-010-capture-tri-partition.md) | [capture-foundation](plans/2026-04-26-capture-foundation.md) | completed |
-| Quick Capture MVP | 004 + 010 | [quick-capture-mvp](plans/2026-04-26-quick-capture-mvp.md) | completed |
-
-### Phase 3 — Agent Observability & Resilience（2026-04-27）
-
-**触发**：v2 实施完成后 dog-food 发现核心问题——agent 执行是黑盒（突然渲染、没有 tool use、resume 断裂）。同时确立了 Runtime 抽象贯通、全链路事件回放、Dashboard 重做等方向。
-
-**状态**：代码实施完成，进入真实 dog-food 观察期。4 项新 ADR（ADR-011 ~ ADR-014）保持 accepted。
-
-| 子系统 | ADR | Plan | 状态 |
-|--------|-----|------|------|
-| Agent Playground 调试基础设施 | — | [agent-playground](plans/2026-04-27-agent-playground.md) | completed |
-| Runtime 抽象贯通（通用 Agent Event 协议） | [ADR-011](decisions/ADR-011-runtime-abstraction-through-capabilities.md) | [runtime-adapter-layer](plans/2026-04-27-runtime-adapter-layer.md) | completed |
-| Activity tab 时间线 UI（打字机 + markdown） | — | [activity-timeline-ui](plans/2026-04-27-activity-timeline-ui.md) | completed |
-| Task-Session 绑定（原生 resume + 双向 stream） | [ADR-012](decisions/ADR-012-task-session-binding-model.md) | [task-session-binding](plans/2026-04-27-task-session-binding.md) | completed |
-| Runtime Fallback 决策规则 + Budget | [ADR-014](decisions/ADR-014-runtime-fallback-decision-rules.md) | [runtime-fallback-rules](plans/2026-04-27-runtime-fallback-rules.md) | completed |
-| 统一事件回放（全链路 + Developer Console） | [ADR-013](decisions/ADR-013-unified-event-replay-infrastructure.md) | [event-replay-infrastructure](plans/2026-04-27-event-replay-infrastructure.md) | completed |
-| Global Dashboard 重做（5 象限） | — | [global-dashboard](plans/2026-04-27-global-dashboard.md) | completed |
-
-**观察期事项**：
-- 真实 dog-food 需要持续 2-4 天；当前只能完成代码与自动化验证，不能在同一实施会话里证明长期无阻塞问题。
-- Codex / Copilot adapter 仍是能力声明 + stub 启动路径，真实生产 fallback 需要后续接通各 vendor 的原生事件协议。
-- Sandbox ExecutionContext、Review 页面 UI、Thinking Trail 自动化和 Capture 多入口继续留在 Phase 4+。
-
-### Phase 4.0 — Task Execution Lifecycle Realignment（2026-04-28）
-
-**触发**：Phase 3 dog-food 暴露 task 状态机和 agent 会话状态机被错误耦合，导致 agent 求助即 task → blocked 死锁。
-
-**状态**：代码实施完成，进入真实 lifecycle dog-food 观察期。ADR-015 / ADR-016 已 accepted，ADR-012 已追加 Switch Runtime 修订。
-
-| 子系统 | ADR | Plan | 状态 |
-|--------|-----|------|------|
-| Task / Agent Session 状态机解耦 | [ADR-015](decisions/ADR-015-task-session-state-decoupling.md) | [task-execution-lifecycle-realignment](plans/2026-04-28-task-execution-lifecycle-realignment.md) | completed |
-| Agent Onboarding Protocol | [ADR-016](decisions/ADR-016-agent-onboarding-protocol.md) | 同上 | completed |
-| Switch Runtime 与 Session 承接 | [ADR-012](decisions/ADR-012-task-session-binding-model.md)（修订） | 同上 | completed |
-| 端到端 lifecycle scenario 基础设施 | — | 同上 | completed |
-
-**观察期事项**：
-- 真实 L01-L15 lifecycle scenario 需要在具备 vendor agent CLI 的本机设置 `ORBIT_LIFECYCLE_REAL=1` 后长跑验证。
-- Codex / Copilot adapter 仍需完成真实 process/event/transcript 能力，当前 Switch Runtime 对非 Claude 的生产运行受 runtime gate 限制。
-- Kanban awaiting-user 图标已接 UI hook，后续需把 active run segment 聚合进 task list 数据。
-
-### Phase 4.1 — Ask-Anywhere UX Revamp（2026-04-28）
-
-**触发**：Ask-Anywhere 入口语义与 ADR-015 D-2 不一致：悬浮球实际是全页跳转按钮，全页布局四列过密。
-
-**状态**：代码实施完成，进入实际 dog-food 观察期。
-
-| 子系统 | ADR | Plan | 状态 |
-|--------|-----|------|------|
-| 悬浮球就地弹层 + 全页两列布局 | [ADR-015](decisions/ADR-015-task-session-state-decoupling.md) | [ask-anywhere-ux-revamp](plans/2026-04-28-ask-anywhere-ux-revamp.md) | completed |
-
-### v1 遗留中的 "进行中" 项（仍有效）
-
-| 功能 | 文档 | 状态 |
-| ---- | ---- | ---- |
-| Planner Agent + Agent Dispatching | `plans/2026-04-24-orbit-planner-agent-dispatch-design.md` | 已落地 (v1)，v2 中接受依赖增强 |
-| Local Runtime Architecture | `plans/2026-04-24-orbit-local-runtime-architecture.md` | 已落地 (v1) |
-| Global Role Template Agents | `plans/2026-04-25-orbit-role-template-agent-design.md` | 已落地 (v1) |
+| Subsystem | Status |
+|---|---|
+| Task / Agent Session state decoupling | completed |
+| Agent Onboarding Protocol | completed |
+| Switch Runtime handoff | completed |
+| lifecycle scenario infrastructure | completed |
+| Ask-Anywhere overlay + full-page two-column revamp | completed |
 
 ---
 
-## 显式废弃 / 被覆盖
+## 2. Phase 5 — Runtime B + Synthesis Foundation + Conversation Unification
 
-| 项目 | 状态 | 被什么替代 |
-|------|------|-----------|
-| **Night Shift** (`src/main/night_shift/`) | 废弃 | 24×7 Auto-runner (ADR-001) |
-| **MCP Server** (`src/mcp/`) | 废弃观察期 | `orbit` CLI (ADR-008) |
-| **Agent 直接 `create_task` 入库** | 废弃 | `propose_new_task` 两阶段 (ADR-006) |
-| **Agent 自主创建入看板的 subtask** | 废弃 | 折叠进主任务 Execution Log (ADR-002) |
-| `plans/2026-04-22-orbit-agent-context-*.md` | superseded | ADR-008 (CLI-first 取代 context wrapper 路线) |
-| `plans/2026-04-24-capture-knowledge-funnel.md` | superseded | ADR-010 + `capture-foundation` |
+**Goal**: 把 AI 从“执行任务的外部 agent”扩展成“应用内部可编排的智能生成层”。
+
+### 5.1 Runtime B：Anthropic SDK track
+
+Deliverables:
+
+- `@anthropic-ai/sdk` integration
+- Anthropic-compatible endpoint registry
+- built-in endpoint templates: Anthropic / MiniMax / DeepSeek / Custom
+- key storage through system keychain
+- streaming adapter → unified AgentEvent
+- cost accounting for SDK calls
+- Settings UI for SDK endpoints
+
+Data structures:
+
+- `SDKEndpoint`
+- `SDKInvocation`
+- `SDKCostProfile`
+- `RuntimeRouteDecision`
+
+UI:
+
+- Settings → AI Endpoints
+- endpoint test button
+- masked key state
+- per-use-case default runtime selector（Ask / Synthesis / Background）
+
+Acceptance:
+
+- Ask-Anywhere can stream via SDK.
+- MiniMax / DeepSeek Anthropic-compatible endpoints can be configured.
+- SDK events render through existing message timeline.
+
+### 5.2 Synthesis Layer foundation
+
+Deliverables:
+
+- `src/shared/synthesis/*` contracts
+- `.orbit/synthesis/` artifact store
+- prompt registry
+- initial kinds: `summary.daily`, `distill.library`, `emerge.resource`, `classify.area`
+- invalidator subscribed to TraceableEvent
+- scheduler with budget controls
+- IPC: get / ensure / recompute / list / applyUserEdit
+
+Data structures:
+
+- `SynthesisArtifact`
+- `SynthesisSource`
+- `SynthesisProvenance`
+- `SynthesisJob`
+- `PromptTemplate`
+
+UI:
+
+- synthesis status affordance（fresh/stale/generated time/source count）
+- refresh/recompute action
+- “accept suggestion” cards
+- artifact debug panel in Developer Console
+
+Acceptance:
+
+- Daily Summary is backed by `summary.daily` artifact.
+- Resource suggestions are backed by `emerge.resource` artifacts.
+- Stale artifacts are detectable and refreshable.
+
+### 5.3 Conversation Surface unification
+
+Deliverables:
+
+- first-class `Conversation` store
+- overlay and full-page share same conversation
+- conversation dropdown in overlay top bar
+- new conversation action from overlay
+- shared message render primitives
+- shared Stage View / Artifact cards
+- scope-aware context injection
+
+Data structures:
+
+- `Conversation`
+- `ConversationMessage`
+- `ConversationScope`
+- `ConversationArtifactRef`
+
+UI:
+
+- `ConversationShell`
+- `ConversationHeader`
+- `ConversationListDropdown`
+- `MessageTimeline`
+- `MessageComposer`
+- `ArtifactStage`
+
+Acceptance:
+
+- Opening overlay defaults to last active conversation.
+- Same conversation is visible in full page.
+- Task / Ask-Anywhere / Resource / Area chat reuse same component family.
+
+---
+## 3. Phase 6 — Knowledge Stack Completion
+
+**Goal**: 完成 Notes / Library / Feeds / Timeline / Resource / Area 的知识复利闭环。
+
+### 6.1 Notes and KB import
+
+Deliverables:
+
+- top-level Notes view
+- note type directories: thoughts / longforms / captures / voice_logs / daily-summaries
+- note list / editor / search
+- KB import into `knowledge-base/`
+- KB activation flow → Note
+- welcome analysis flow
+
+Data structures:
+
+- `Note`
+- `NoteFrontmatter`
+- `NoteType`
+- `KnowledgeBaseRegistry`
+- `KBDocRef`
+- `ActivationOrigin`
+
+UI:
+
+- Notes sidebar filters by type/tag/area/resource
+- simple markdown editor
+- note detail right panel: backlinks / resources / areas / synthesis summary
+- KB import wizard
+- “activate into note” action
+
+Acceptance:
+
+- Users can browse, edit, and search Notes.
+- Imported KB remains separate until activated.
+- Activation creates Note with origin metadata.
+
+### 6.2 Library workstation
+
+Deliverables:
+
+- Library item model for articles/PDF/videos/bookmarks
+- save-from-url flow
+- reading status / progress / annotations
+- Library → Note distillation via Synthesis
+- Library → Resource linking
+
+Data structures:
+
+- `LibraryItem`
+- `LibraryStatus`
+- `LibraryAnnotation`
+- `LibrarySource`
+- `DistillationArtifactRef`
+
+UI:
+
+- Library list with status filters
+- reader panel / metadata panel
+- annotations sidebar
+- distill button
+- link to Resource action
+
+Acceptance:
+
+- A feed item or URL can become LibraryItem.
+- User can annotate and mark read.
+- Distillation produces synthesis artifact and accepted Note.
+
+### 6.3 Feed reader as Layer 0
+
+Deliverables:
+
+- Feed source management
+- feed item fetcher / dedupe / fade-out rules
+- feed reader UI separate from Inbox
+- feed-scoped synthesis: digest / cluster / relate-to-library
+- Save to Library gate
+
+Data structures:
+
+- `FeedSource`
+- `FeedItem`
+- `FeedDigestArtifact`
+- `FeedClusterArtifact`
+- `FeedRecommendation`
+
+UI:
+
+- Feed Reader page
+- source list
+- daily digest card
+- clustered topic cards
+- item action: Save to Library / Ignore / Hide source
+- “related to your Resource” badges
+
+Acceptance:
+
+- Feed items never directly enter Resource or main Library index.
+- Save creates LibraryItem and emits promote event.
+- Feed digest does not pollute main synthesis index.
+
+### 6.4 Daily Timeline
+
+Deliverables:
+
+- Timeline one-level entry
+- day/week/month/year views
+- projection from TraceableEvent
+- aggregation rules
+- AI daily summary from Synthesis
+- PDF export
+
+Data structures:
+
+- `TimelineEntry`
+- `DailyTimeline`
+- `DailyStats`
+- `MonthlyIndex`
+- `YearlyIndex`
+
+UI:
+
+- day view with time segments
+- “today glance” card
+- daily summary card
+- weekly cards
+- monthly calendar heatmap
+- yearly heatmap
+- export PDF action
+
+Acceptance:
+
+- Layer 1 events render correctly.
+- Layer 2 developer events are hidden unless developer mode.
+- Layer 3 noise never appears.
+
+### 6.5 Resource workstation
+
+Deliverables:
+
+- Resource top-level entry
+- six-section workspace
+- resource refs and counts
+- engagement tracking
+- emerge.resource suggestions
+- Resource-scoped Timeline
+- link note/library/project/person/area
+
+Data structures:
+
+- `ResourceFrontmatter`
+- `ResourceRef`
+- `ResourceEngagement`
+- `ResourceSuggestion`
+- `.orbit-resource.json`
+
+UI:
+
+- three-column Resource workstation
+- resource list + suggestions
+- center: index.md and sections
+- right: meta / timeline / actions
+- create-from-suggestion card
+
+Acceptance:
+
+- Resource can emerge from notes/library/conversation clusters.
+- Engagement updates depth/status suggestions.
+- Resource accepts only Layer 1 refs.
+
+### 6.6 Area dashboard and assignment
+
+Deliverables:
+
+- Area as long-term coordinate
+- `areas` assignment on major entities
+- Area Dashboard
+- area-scoped Ask-Anywhere context
+- classify.area synthesis suggestions
+- area-scoped scheduled tasks and memories
+
+Data structures:
+
+- `AreaConfig`
+- `AreaRef`
+- `AreaHealth`
+- `AreaDashboardData`
+- `AreaAssignmentSuggestion`
+
+UI:
+
+- Area list
+- Area Dashboard cards: active projects / resources / notes / feed radar / synthesis summary
+- unassigned entities queue
+- accept area assignment suggestions
+- Area review flow
+
+Acceptance:
+
+- Note/Library/Resource/Project can belong to Areas.
+- Area dashboard is assembled, not manually maintained.
+- Area-scoped chat injects correct context.
+
+---
+## 4. Phase 7 — Semantic Memory, Search, Review, Vision
+
+**Goal**: 让 Orbit 从“保存知识”进化到“主动唤回、关联、复盘、校准愿景”。
+
+### 7.1 Real semantic index
+
+Deliverables:
+
+- replace hash-trick embedding with real embeddings
+- unified index over Notes / Library / Resource / Project / Area / Conversations / Synthesis artifacts
+- incremental indexing on TraceableEvent
+- hybrid search: full-text + vector + graph refs
+
+Data structures:
+
+- `SemanticDocument`
+- `EmbeddingRecord`
+- `IndexShard`
+- `SearchResult`
+- `SearchAnswerArtifact`
+
+UI:
+
+- global semantic search
+- filters by layer/entity/kind/source
+- “why this result” explanation
+- search answer synthesis
+
+Acceptance:
+
+- Searching a concept surfaces notes, resources, conversations, and summaries together with layer labels.
+
+### 7.2 Memory layer
+
+Deliverables:
+
+- Memory digest artifacts
+- long-term interest model
+- entity recall counts
+- “this memory was recalled N times” metadata
+- memory explorer
+
+Data structures:
+
+- `MemoryDigest`
+- `InterestSignal`
+- `RecallEvent`
+- `MemoryNode`
+
+UI:
+
+- Memory Explorer
+- entity memory sidebar
+- recall history
+- “promote memory to Resource / Project” action
+
+Acceptance:
+
+- Past projects and notes can wake up in future tasks/Ask sessions.
+- Recall is traceable and explainable.
+
+### 7.3 Weekly / monthly review
+
+Deliverables:
+
+- system scheduled review tasks
+- weekly timeline summary
+- PARA health check
+- Area review
+- Resource review
+- open loops / stale projects detection
+
+Data structures:
+
+- `ReviewRun`
+- `ReviewFinding`
+- `ReviewAction`
+- `HealthScore`
+
+UI:
+
+- Weekly Review page
+- review inbox cards
+- accept actions: archive, refresh, create task, schedule follow-up
+
+Acceptance:
+
+- User can review a week from one page and convert findings into concrete actions.
+
+### 7.4 Vision system revival
+
+Deliverables:
+
+- Vision initialization and periodic review
+- goals → areas → projects traceability
+- vision drift detection
+- “does this still match your vision?” prompts
+
+Data structures:
+
+- `VisionDocument`
+- `VisionGoal`
+- `VisionMilestone`
+- `GoalAreaLink`
+- `VisionReviewArtifact`
+
+UI:
+
+- Vision dashboard
+- goal tree
+- area alignment heatmap
+- milestone timeline
+
+Acceptance:
+
+- Areas and projects can be traced back to Vision goals.
+- Review can detect neglected goals and overgrown areas.
 
 ---
 
-## 计划中
+## 5. Phase 8 — Gateway, Automation, External World
 
-> 按优先级排列。原 P1-P9 重新编号为 Phase 4+ 方向。
+**Goal**: 让 Orbit 脱离桌面 UI 的限制，成为随时可触达、可自动执行的个人系统。
 
-### Phase 4 后续方向
+### 8.1 Gateway daemon and Telegram channel
 
-| 方向 | 说明 | 原编号 |
-|------|------|--------|
-| **Sandbox ExecutionContext** | 非代码项目（research / writing）的执行环境，补齐功能断层 | 原 P2 |
-| **Thinking Trail 自动化** | 每次 chat session 自动留痕、关键认知跃迁自动识别 | 原 P3 |
-| **对话沉淀 → 项目** | 从 Thoughts / Chat 自然沉淀识别主题集聚，agent 主动提议立项 | 新增 |
-| **Capture 多入口** | 剪贴板识别、Library Quick Capture、浏览器插件、手机 share、Voice Log | 原 P4 |
-| **Review 页面 UI** | Activity Log 的用户可视化（时间轴、汇总、检索） | 原 P1 |
+Deliverables:
 
-### 长期方向（Phase 5+）
+- independent Gateway daemon
+- Telegram bot channel
+- app ↔ gateway IPC
+- remote capture
+- remote Ask-Anywhere
+- daily summary push
 
-| 方向 | 说明 | 原编号 |
-|------|------|--------|
-| **Orbit 自我进化** | Activity Log + Thinking Trail + Distillation 三向融合 | 原 P5 |
-| **GitHub 深度集成** | Issue ↔ Task 双向同步、PR review 展示、远程分支推送 | 原 P6 |
-| **性能与稳定性** | 大 vault 索引、启动时间、崩溃恢复 | 原 P7 |
-| **跨平台支持** | Linux / Windows 打包 + CLI 跨平台路径 | 原 P8 |
-| **CLI-first 观察期决策** | agent CLI 调用准确度监控，决定是否重新引入 MCP | 原 P9 |
+Data structures:
+
+- `GatewayConfig`
+- `GatewayChannel`
+- `InboundMessage`
+- `OutboundMessage`
+- `RemoteSession`
+
+UI:
+
+- Gateway settings
+- channel binding wizard
+- message history / health state
+
+Acceptance:
+
+- User can send message from Telegram and get Ask-Anywhere response.
+- User can forward URL from phone into Library gate.
+
+### 8.2 Scheduled automation
+
+Deliverables:
+
+- scheduled task top-level UI
+- system tasks: daily summary, weekly review, resource health scan
+- user-created recurring tasks
+- execution history
+- notifications / Inbox message integration
+
+Data structures:
+
+- `ScheduledTask`
+- `ScheduleSpec`
+- `TaskExecution`
+- `ScheduledAction`
+
+UI:
+
+- Scheduled Tasks page
+- calendar/list view
+- execution history drawer
+- create/edit wizard
+
+Acceptance:
+
+- User can create recurring AI tasks safely with visible history.
+
+### 8.3 External event connectors
+
+Future connectors:
+
+- Calendar
+- GitHub
+- Email
+- Health
+- Browser extension
+- Mobile share extension
+
+Rules:
+
+- external events first enter Layer 0
+- promotion gates decide what becomes Layer 1
+- privacy controls before feeding to Synthesis
 
 ---
 
-## 版本约定
+## 6. Phase 9+ — Scale, Portability, Collaboration Boundaries
 
-Orbit 目前处于 v1.x 阶段，尚未发布正式语义化版本号。v2 是**架构方向代号**，不一定对应 `package.json` 里的 `2.0.0` —— 版本发布策略待定。
+Long-term work:
+
+- large vault performance
+- cross-platform packaging
+- encrypted/private event classes
+- export yearly timeline book
+- optional cloud sync without proprietary lock-in
+- collaboration through Git/PR/export, not real-time multi-user editing
+- plugin/tool pack ecosystem
 
 ---
 
-## 如何更新本文件
+## 7. Recommended implementation order
 
-1. 每个 milestone 落地后，把对应条目从"进行中"挪到"已完成"
-2. 每次方向调整（新 ADR accepted），同步更新"计划中"的优先级和"废弃 / 被覆盖"列表
-3. 每两周做一次文档 review（参考 `AGENTS.md`）：清理 `plans/` 中 `completed` 的方案、校验"进行中"列表仍有效
+```text
+Phase 5.1 Runtime B SDK
+  ↓
+Phase 5.2 Synthesis Artifact Store + Prompt Registry
+  ↓
+Phase 5.3 Conversation Surface Unification
+  ↓
+Phase 6.1 Notes + KB Import
+  ↓
+Phase 6.2 Library
+  ↓
+Phase 6.3 Feed Reader as Layer 0
+  ↓
+Phase 6.4 Timeline
+  ↓
+Phase 6.5 Resource Workstation
+  ↓
+Phase 6.6 Area Dashboard
+  ↓
+Phase 7 Semantic Search + Memory + Review + Vision
+  ↓
+Phase 8 Gateway + Automation
+```
+
+Rationale:
+
+- SDK before Synthesis because Synthesis needs cheap programmable LLM calls.
+- Synthesis before Timeline/Resource/Area because summaries and suggestions should not be feature-local.
+- Conversation unification before scoped chat because Area/Resource chat should not fork UI.
+- Notes/Library before Resource because Resource only makes sense when it can aggregate real notes/materials.
+- Feeds before Timeline integration because Timeline should show feed-save events, not raw feed fetches.
+- Area after Resource because Area Dashboard needs projects/resources/notes to aggregate.
+
+---
+
+## 8. Explicit non-goals
+
+- No proprietary cloud storage as source of truth.
+- No automatic promotion from Feed to Library without user approval.
+- No AI-generated content silently overwriting user truth.
+- No team-first realtime collaboration.
+- No unbounded background AI spending.
+- No duplicate chat implementations per surface.
+
+---
+
+## 9. Core architecture documents
+
+Read in this order:
+
+1. `docs/architecture/data-layering.md`
+2. `docs/architecture/ai-runtime-and-sdk.md`
+3. `docs/architecture/synthesis-layer.md`
+4. `docs/architecture/chat-conversation-surface.md`
+5. `docs/architecture/entity-flow.md`
+6. `docs/thinking-trail/2026-04-30-phase-2-knowledge-stack/07-sdk-synthesis-layering.md`
+
+---
+
+## 10. How to update this roadmap
+
+1. Move delivered work from future phases to completed sections.
+2. Keep `docs/architecture/` as the stable source of truth.
+3. Keep `thinking-trail/` as reasoning history, not implementation contract.
+4. Every new cross-cutting decision should either create an ADR or update one of the architecture documents.
