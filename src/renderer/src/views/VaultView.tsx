@@ -376,7 +376,7 @@ export function VaultView(): JSX.Element {
         ) : view.kind === 'gateway' ? (
           <GatewayView />
         ) : view.kind === 'askAnywhere' ? (
-          <AskAnywhereView />
+          <AskAnywhereView initialActiveId={view.activeId ?? null} />
         ) : view.kind === 'conversations' ? (
           <ConversationsView />
         ) : view.kind === 'today' ? (

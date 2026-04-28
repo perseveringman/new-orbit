@@ -16,7 +16,7 @@ export type WorkspaceView =
   | { kind: 'scheduled' }
   | { kind: 'timeline' }
   | { kind: 'gateway' }
-  | { kind: 'askAnywhere' }
+  | { kind: 'askAnywhere'; activeId?: string }
   | { kind: 'conversations' }
   | { kind: 'today' }
   | { kind: 'journals' }

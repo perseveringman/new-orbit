@@ -1,6 +1,6 @@
 # Ask-Anywhere UX Revamp — 入口语义 + 全页布局重构
 
-> **Status**: draft (2026-04-28)
+> **Status**: completed (2026-04-28)
 > **Scope**: 修正悬浮球语义、重设全页布局；不扩展 ADR-015 的 skill 路由 / planner 吸收 / channel 统一
 > **Related ADRs**: ADR-015 (Ask-Anywhere as Planner Proxy), ADR-014 (Chat Decoupling), ADR-005 (Plan Chat Reframing)
 > **Owner**: Ryan
@@ -270,22 +270,22 @@ npm test
 ## 7. Checklist（实施完成前自查）
 
 **产品**：
-- [ ] 悬浮球点击 = 弹层开关（不再跳转）
-- [ ] 弹层顶部下拉能切换会话
-- [ ] 弹层"+"新建会话
-- [ ] 弹层"↗"推到全页，全页默认打开同一会话
-- [ ] 左栏 Ask Anywhere 视觉上独立突出
-- [ ] 全页默认两列（Session + Chat）
-- [ ] ContextBar 默认收起，展开显示 anchors/skills
-- [ ] Stage 徽章仅在非空时显示
-- [ ] Stage 抽屉按需打开/关闭
+- [x] 悬浮球点击 = 弹层开关（不再跳转）
+- [x] 弹层顶部下拉能切换会话
+- [x] 弹层"+"新建会话
+- [x] 弹层"↗"推到全页，全页默认打开同一会话
+- [x] 左栏 Ask Anywhere 视觉上独立突出
+- [x] 全页默认两列（Session + Chat）
+- [x] ContextBar 默认收起，展开显示 anchors/skills
+- [x] Stage 徽章仅在非空时显示
+- [x] Stage 抽屉按需打开/关闭
 
 **技术**：
-- [ ] `useAskAnywhereSession` hook 被弹层和全页共用
-- [ ] localStorage `ask-anywhere.last-active-id` 正确读写
-- [ ] 弹层和全页订阅同一 conversation 的 event 无冲突
-- [ ] `typecheck / lint / test` 全绿
-- [ ] `tests/chat_view.test.ts` 受影响时同步更新
+- [x] `useAskAnywhereSession` hook 被弹层和全页共用
+- [x] localStorage `ask-anywhere.last-active-id` 正确读写
+- [x] 弹层和全页订阅同一 conversation 的 event 无冲突
+- [x] `typecheck / lint / test` 全绿
+- [x] `tests/chat_view.test.ts` 未受影响；新增 `tests/ask_anywhere_ux.test.ts` 覆盖 revamp 组件
 
 **观察**：
 - [ ] 实际 dog-food 1-2 天后评估是否需要弹层位置记忆

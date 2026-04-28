@@ -107,6 +107,16 @@
 - Codex / Copilot adapter 仍需完成真实 process/event/transcript 能力，当前 Switch Runtime 对非 Claude 的生产运行受 runtime gate 限制。
 - Kanban awaiting-user 图标已接 UI hook，后续需把 active run segment 聚合进 task list 数据。
 
+### Phase 4.1 — Ask-Anywhere UX Revamp（2026-04-28）
+
+**触发**：Ask-Anywhere 入口语义与 ADR-015 D-2 不一致：悬浮球实际是全页跳转按钮，全页布局四列过密。
+
+**状态**：代码实施完成，进入实际 dog-food 观察期。
+
+| 子系统 | ADR | Plan | 状态 |
+|--------|-----|------|------|
+| 悬浮球就地弹层 + 全页两列布局 | [ADR-015](decisions/ADR-015-task-session-state-decoupling.md) | [ask-anywhere-ux-revamp](plans/2026-04-28-ask-anywhere-ux-revamp.md) | completed |
+
 ### v1 遗留中的 "进行中" 项（仍有效）
 
 | 功能 | 文档 | 状态 |
@@ -138,7 +148,6 @@
 
 | 方向 | 说明 | 原编号 |
 |------|------|--------|
-| **Ask-Anywhere UX Revamp** | 悬浮球→就地弹层（复用 ChatView）+ 全页两列布局重构（折叠 Context / 按需 Stage 抽屉）；落地 ADR-015 D-2。Plan: `2026-04-28-ask-anywhere-ux-revamp` | 新增 |
 | **Sandbox ExecutionContext** | 非代码项目（research / writing）的执行环境，补齐功能断层 | 原 P2 |
 | **Thinking Trail 自动化** | 每次 chat session 自动留痕、关键认知跃迁自动识别 | 原 P3 |
 | **对话沉淀 → 项目** | 从 Thoughts / Chat 自然沉淀识别主题集聚，agent 主动提议立项 | 新增 |

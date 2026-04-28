@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useWorkspace } from './store/workspace';
 import { TopBar } from './components/TopBar';
 import { WelcomeView } from './views/WelcomeView';
@@ -7,9 +7,11 @@ import { Toasts } from './components/Toasts';
 import { SettingsModal } from './components/SettingsModal';
 import { QuickCaptureProvider } from './components/quick-capture/QuickCaptureProvider';
 import { FloatingBall } from './components/ask-anywhere/FloatingBall';
+import { AskAnywherePopover } from './components/ask-anywhere/AskAnywherePopover';
 
 export function App(): JSX.Element {
   const { init, loading, vault, error } = useWorkspace();
+  const [askAnywhereOpen, setAskAnywhereOpen] = useState(false);
 
   useEffect(() => {
     void init();
@@ -37,7 +39,12 @@ export function App(): JSX.Element {
       <Toasts />
       <QuickCaptureProvider />
       <SettingsModal />
-      {vault && <FloatingBall />}
+      {vault && (
+        <>
+          <AskAnywherePopover open={askAnywhereOpen} onClose={() => setAskAnywhereOpen(false)} />
+          <FloatingBall open={askAnywhereOpen} onToggle={() => setAskAnywhereOpen((v) => !v)} />
+        </>
+      )}
     </div>
   );
 }
