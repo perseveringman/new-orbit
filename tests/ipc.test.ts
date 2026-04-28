@@ -26,6 +26,7 @@ describe('IPC contract', () => {
         'github',
         'inbox',
         'knowledgeBase',
+        'library',
         'migrations',
         'notes',
         'onboarding',
@@ -175,6 +176,24 @@ describe('IPC contract', () => {
     expect(keys).toContain('listProjectTree');
     expect(keys).toContain('createDirectory');
     for (const v of Object.values(IPC.fs)) expect(v.startsWith('fs:')).toBe(true);
+  });
+
+  it('library namespace declares Phase 6.2 workstation channels', () => {
+    const keys = Object.keys(IPC.library).sort();
+    expect(keys).toEqual(
+      [
+        'acceptDistillation',
+        'annotate',
+        'archive',
+        'distill',
+        'get',
+        'list',
+        'markRead',
+        'save',
+        'update'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.library)) expect(v.startsWith('library:')).toBe(true);
   });
 
   it('OrbitApi type shape is assignable', () => {

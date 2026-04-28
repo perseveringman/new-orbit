@@ -138,6 +138,21 @@ Note 支持 tags、areas、resource refs、source origin、special marker 和 sy
 
 **Knowledge Base** 用来导入旧 Markdown / Obsidian archive。导入后的文档保留在 `knowledge-base/<kb-name>`，不会自动成为活跃 Note。只有点击 **Activate to Note** 后，Orbit 才会创建带 `source.kind = kb` 的 Note，并记录 `kb.doc.activated` promotion event。
 
+## 5.5 Library workstation
+
+**Library** 是用户主动保存的外部素材层，属于 Layer 1。可以保存 URL/文章/PDF/视频/书签，并维护阅读状态、annotations、areas、resource refs。
+
+Library 页面支持：
+
+- **Save URL**：保存外部素材为 `library/<kind>/...md`。
+- status filters：`saved / reading / read / distilled / archived`。
+- reader/editor：编辑素材正文和 metadata。
+- annotations：记录 highlight/comment。
+- **Distill**：先生成 `distill.library` SynthesisArtifact。
+- **Accept to Note**：用户确认后才创建 Note，Note 会带 `source.kind = library` 和 `synthesis_ref`。
+
+Feed item 仍然必须先 Save to Library，不能直接进入 Resource 或 Note。
+
 ## 6. 四段式任务编辑
 
 每个 task 文件是一份 Markdown：

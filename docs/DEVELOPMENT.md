@@ -118,3 +118,13 @@ must be added there (or the test will fail typecheck).
 - KB import copies markdown folders into `<vault>/knowledge-base/<kb-name>` and writes registry metadata to `knowledge-base/.orbit-kb-meta/registry.json`.
 - KB activation must go through `knowledgeBase.activate`; it creates a Note, records activation metadata under `.orbit-kb-meta/annotations/`, and emits `kb.doc.activated`.
 - Focused coverage lives in `tests/notes_kb.test.ts`.
+
+## Library workstation
+
+- Shared contracts live in `src/shared/library.ts`.
+- Main-process store/IPC live in `src/main/library/store.ts` and `src/main/library/ipc.ts`; renderer API is `window.orbit.library`.
+- Library items are Markdown files under `<vault>/library/{articles,pdfs,videos,bookmarks}`. Archive moves them to `<vault>/04_Archives/library/...`.
+- `library.distill(id)` writes a `distill.library` SynthesisArtifact; it must not create a Note.
+- `library.acceptDistillation({ artifact_id })` is the explicit user promotion gate to materialize a Note with `source.kind = library` and `synthesis_ref`.
+- The older `capture.library` API remains for Inbox/Capture compatibility; new workstation features should prefer the top-level `library` API.
+- Focused coverage lives in `tests/library_store.test.ts`.

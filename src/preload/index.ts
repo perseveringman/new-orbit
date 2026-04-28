@@ -98,6 +98,17 @@ import type {
 } from '@shared/capture';
 import type { CreateNoteInput, Note, NoteChangeEvent, NoteFilter, SearchOptions, UpdateNoteInput } from '@shared/note';
 import type {
+  AcceptLibraryDistillationInput,
+  AddLibraryAnnotationInput,
+  LibraryAcceptDistillationResult,
+  LibraryDistillationResult,
+  LibraryFilter,
+  LibraryItem,
+  LibraryReadingUpdateInputV2,
+  SaveLibraryItemInput,
+  UpdateLibraryItemInput
+} from '@shared/library';
+import type {
   ActivateKnowledgeBaseInput,
   ImportKnowledgeBaseInput,
   KnowledgeBase,
@@ -569,6 +580,21 @@ const api: OrbitApi = {
       ipcRenderer.on(IPC.notes.event, listener);
       return () => ipcRenderer.removeListener(IPC.notes.event, listener);
     }
+  },
+  library: {
+    save: (input: SaveLibraryItemInput): Promise<LibraryItem> => ipcRenderer.invoke(IPC.library.save, input),
+    list: (filter?: LibraryFilter): Promise<LibraryItem[]> => ipcRenderer.invoke(IPC.library.list, filter),
+    get: (id: string): Promise<LibraryItem | null> => ipcRenderer.invoke(IPC.library.get, id),
+    update: (id: string, patch: UpdateLibraryItemInput): Promise<LibraryItem> =>
+      ipcRenderer.invoke(IPC.library.update, id, patch),
+    annotate: (id: string, input: AddLibraryAnnotationInput): Promise<LibraryItem> =>
+      ipcRenderer.invoke(IPC.library.annotate, id, input),
+    markRead: (id: string, input?: LibraryReadingUpdateInputV2): Promise<LibraryItem> =>
+      ipcRenderer.invoke(IPC.library.markRead, id, input),
+    archive: (id: string): Promise<LibraryItem> => ipcRenderer.invoke(IPC.library.archive, id),
+    distill: (id: string): Promise<LibraryDistillationResult> => ipcRenderer.invoke(IPC.library.distill, id),
+    acceptDistillation: (input: AcceptLibraryDistillationInput): Promise<LibraryAcceptDistillationResult> =>
+      ipcRenderer.invoke(IPC.library.acceptDistillation, input)
   },
   knowledgeBase: {
     list: (): Promise<KnowledgeBase[]> => ipcRenderer.invoke(IPC.knowledgeBase.list),

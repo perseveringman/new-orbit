@@ -184,6 +184,8 @@ export interface LibraryEventPayload {
   url?: string;
   status?: string;
   path?: string;
+  artifact_id?: string;
+  resource_ref?: string;
 }
 
 export interface FeedEventPayload {
@@ -305,6 +307,7 @@ export interface TraceableEventPayloadMap {
   'library.item.status_changed': LibraryEventPayload;
   'library.item.read': LibraryEventPayload;
   'library.item.distilled': LibraryEventPayload;
+  'library.item.linked_to_resource': LibraryEventPayload;
   'feed.source.added': FeedEventPayload;
   'feed.source.removed': FeedEventPayload;
   'feed.items.fetched': FeedEventPayload;

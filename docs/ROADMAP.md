@@ -277,6 +277,8 @@ Acceptance:
 
 ### 6.2 Library workstation
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - Library item model for articles/PDF/videos/bookmarks
@@ -284,6 +286,15 @@ Deliverables:
 - reading status / progress / annotations
 - Library → Note distillation via Synthesis
 - Library → Resource linking
+
+Implemented notes:
+
+- Added first-class `LibraryItem` contracts for article/pdf/video/bookmark, reading status/progress, annotations, source metadata, area refs, resource refs, and distillation refs.
+- Added top-level `window.orbit.library` IPC/API for save/list/get/update/archive/annotate/markRead/distill/acceptDistillation.
+- Library items persist as Markdown under `library/articles`, `library/pdfs`, `library/videos`, and `library/bookmarks`; archive moves them to `04_Archives/library/...`.
+- Distillation creates a `distill.library` SynthesisArtifact first; only `acceptDistillation` materializes a Note with source and synthesis provenance.
+- Library UI now provides save URL, status filters, reader/editor panel, metadata panel, annotations, Distill, and Accept-to-Note actions.
+- Existing `capture.library` APIs remain for Inbox/Feed compatibility until Phase 6.3 promotion gate migration.
 
 Data structures:
 

@@ -61,6 +61,7 @@ export const TRACEABLE_EVENT_KINDS = [
   'library.item.status_changed',
   'library.item.read',
   'library.item.distilled',
+  'library.item.linked_to_resource',
   'feed.source.added',
   'feed.source.removed',
   'feed.items.fetched',

@@ -99,6 +99,8 @@ knowledge-base/
 
 ## Milestone 6.2 — Library Workstation
 
+Status: **implemented (foundation)**.
+
 ### Data model
 
 ```typescript
@@ -154,6 +156,17 @@ export interface LibraryItem {
 - URL/feed item can become LibraryItem.
 - Distillation is synthesis-backed.
 - LibraryItem can link to Resource after being saved.
+
+### Implementation notes
+
+- Shared contracts live in `src/shared/library.ts`.
+- Main-process store lives in `src/main/library/store.ts`; IPC lives in `src/main/library/ipc.ts`.
+- Library items are Markdown files under `library/articles`, `library/pdfs`, `library/videos`, and `library/bookmarks`, with archived items moved to `04_Archives/library/...`.
+- Top-level renderer API is `window.orbit.library`; the older `window.orbit.capture.library` path remains for Inbox/Capture compatibility.
+- `library.distill(id)` writes a `distill.library` SynthesisArtifact with scope `library:<item-id>`.
+- `library.acceptDistillation({ artifact_id })` is the explicit promotion gate that creates a Note with `source.kind = library` and `synthesis_ref`.
+- Renderer surface: `LibraryView` now includes save URL, status filters, reader/editor, metadata side panel, annotations, distill card, and accept-to-note action.
+- Focused coverage: `tests/library_store.test.ts`.
 
 ---
 

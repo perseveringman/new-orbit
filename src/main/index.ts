@@ -34,6 +34,7 @@ import { registerStageIpc } from './ask-anywhere/stage-ipc';
 import { migrateLegacyTaskConversations } from './conversation/migration';
 import { QUICK_CAPTURE_ACCELERATOR, broadcastQuickCaptureOpen, registerCaptureIpc } from './capture';
 import { registerNoteIpc } from './note/ipc';
+import { registerLibraryIpc } from './library/ipc';
 import { registerKnowledgeBaseIpc } from './knowledge-base/ipc';
 import { ensureScheduledSystemTasks, registerScheduledTaskIpc } from './scheduled-task/ipc';
 import { registerTimelineIpc } from './timeline/ipc';
@@ -376,6 +377,7 @@ function registerIpc(): void {
   registerInboxIpc(() => currentVault?.path ?? null);
   registerCaptureIpc(() => currentVault?.path ?? null);
   registerNoteIpc(() => currentVault?.path ?? null);
+  registerLibraryIpc(() => currentVault?.path ?? null);
   registerKnowledgeBaseIpc(() => currentVault?.path ?? null);
   registerScheduledTaskIpc(() => currentVault?.path ?? null);
   registerTimelineIpc(() => currentVault?.path ?? null);

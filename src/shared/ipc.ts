@@ -108,6 +108,17 @@ import type {
 } from './capture';
 import type { CreateNoteInput, Note, NoteChangeEvent, NoteFilter, SearchOptions, UpdateNoteInput } from './note';
 import type {
+  AcceptLibraryDistillationInput,
+  AddLibraryAnnotationInput,
+  LibraryAcceptDistillationResult,
+  LibraryDistillationResult,
+  LibraryFilter,
+  LibraryItem,
+  LibraryReadingUpdateInputV2,
+  SaveLibraryItemInput,
+  UpdateLibraryItemInput
+} from './library';
+import type {
   ActivateKnowledgeBaseInput,
   ImportKnowledgeBaseInput,
   KnowledgeBase,
@@ -455,6 +466,17 @@ export const IPC = {
     archive: 'notes:archive',
     search: 'notes:search',
     event: 'notes:event'
+  },
+  library: {
+    save: 'library:save',
+    list: 'library:list',
+    get: 'library:get',
+    update: 'library:update',
+    annotate: 'library:annotate',
+    markRead: 'library:markRead',
+    archive: 'library:archive',
+    distill: 'library:distill',
+    acceptDistillation: 'library:acceptDistillation'
   },
   knowledgeBase: {
     list: 'knowledgeBase:list',
@@ -1293,6 +1315,17 @@ export interface OrbitApi {
     archive(noteId: string): Promise<void>;
     search(query: string, options?: SearchOptions): Promise<Note[]>;
     onEvent(cb: (event: NoteChangeEvent) => void): () => void;
+  };
+  library: {
+    save(input: SaveLibraryItemInput): Promise<LibraryItem>;
+    list(filter?: LibraryFilter): Promise<LibraryItem[]>;
+    get(id: string): Promise<LibraryItem | null>;
+    update(id: string, patch: UpdateLibraryItemInput): Promise<LibraryItem>;
+    annotate(id: string, input: AddLibraryAnnotationInput): Promise<LibraryItem>;
+    markRead(id: string, input?: LibraryReadingUpdateInputV2): Promise<LibraryItem>;
+    archive(id: string): Promise<LibraryItem>;
+    distill(id: string): Promise<LibraryDistillationResult>;
+    acceptDistillation(input: AcceptLibraryDistillationInput): Promise<LibraryAcceptDistillationResult>;
   };
   knowledgeBase: {
     list(): Promise<KnowledgeBase[]>;
