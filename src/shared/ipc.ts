@@ -119,6 +119,19 @@ import type {
   UpdateLibraryItemInput
 } from './library';
 import type {
+  CreateFeedSourceInput,
+  FeedFetchResult,
+  FeedItem,
+  FeedItemFilter,
+  FeedSource,
+  FeedSynthesisResult,
+  FeedClusterPayload,
+  FeedDigestPayload,
+  SaveFeedToLibraryInput,
+  SaveFeedToLibraryResult,
+  UpdateFeedSourceInput
+} from './feed';
+import type {
   ActivateKnowledgeBaseInput,
   ImportKnowledgeBaseInput,
   KnowledgeBase,
@@ -455,6 +468,19 @@ export const IPC = {
       link: 'capture:thought:link',
       dismiss: 'capture:thought:dismiss'
     }
+  },
+  feeds: {
+    sourcesList: 'feeds:sources:list',
+    sourcesCreate: 'feeds:sources:create',
+    sourcesUpdate: 'feeds:sources:update',
+    sourcesDelete: 'feeds:sources:delete',
+    fetch: 'feeds:fetch',
+    itemsList: 'feeds:items:list',
+    itemsMarkSeen: 'feeds:items:markSeen',
+    itemsIgnore: 'feeds:items:ignore',
+    itemsSaveToLibrary: 'feeds:items:saveToLibrary',
+    digest: 'feeds:digest',
+    cluster: 'feeds:cluster'
   },
   notes: {
     list: 'notes:list',
@@ -1326,6 +1352,19 @@ export interface OrbitApi {
     archive(id: string): Promise<LibraryItem>;
     distill(id: string): Promise<LibraryDistillationResult>;
     acceptDistillation(input: AcceptLibraryDistillationInput): Promise<LibraryAcceptDistillationResult>;
+  };
+  feeds: {
+    listSources(): Promise<FeedSource[]>;
+    createSource(input: CreateFeedSourceInput): Promise<FeedSource>;
+    updateSource(id: string, patch: UpdateFeedSourceInput): Promise<FeedSource>;
+    deleteSource(id: string): Promise<FeedSource | null>;
+    fetch(sourceId?: string): Promise<FeedFetchResult[]>;
+    listItems(filter?: FeedItemFilter): Promise<FeedItem[]>;
+    markSeen(id: string): Promise<FeedItem>;
+    ignore(id: string): Promise<FeedItem>;
+    saveToLibrary(id: string, input?: SaveFeedToLibraryInput): Promise<SaveFeedToLibraryResult>;
+    digest(date: string): Promise<FeedSynthesisResult<FeedDigestPayload>>;
+    cluster(scope?: string): Promise<FeedSynthesisResult<FeedClusterPayload>>;
   };
   knowledgeBase: {
     list(): Promise<KnowledgeBase[]>;

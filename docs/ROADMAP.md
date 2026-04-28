@@ -320,6 +320,8 @@ Acceptance:
 
 ### 6.3 Feed reader as Layer 0
 
+Status: **implemented (foundation)**.
+
 Deliverables:
 
 - Feed source management
@@ -327,6 +329,15 @@ Deliverables:
 - feed reader UI separate from Inbox
 - feed-scoped synthesis: digest / cluster / relate-to-library
 - Save to Library gate
+
+Implemented notes:
+
+- Added first-class `FeedSource` / `FeedItem` contracts and top-level `window.orbit.feeds` IPC/API for source CRUD, fetch, item listing, seen/ignore, Save to Library, digest, and cluster.
+- Raw feed items persist as Layer 0 JSON under `feeds/<source-id>/...`; `_sources.json` tracks feed subscriptions.
+- RSS fetch uses source-level dedupe and never creates Notes, Resources, or Library items by itself.
+- Save to Library is the promotion gate: it creates a first-class `LibraryItem`, marks the feed item as saved, and emits `promote.feed_to_library`.
+- Feed digest and cluster produce feed-scoped SynthesisArtifacts (`feed.digest`, `feed.cluster`) and remain outside Layer 1 truth.
+- Feed Reader UI provides source management, fetch controls, filters, item stream, save/seen/ignore actions, and digest/cluster previews.
 
 Data structures:
 

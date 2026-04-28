@@ -191,9 +191,11 @@ export interface LibraryEventPayload {
 export interface FeedEventPayload {
   source_id?: string;
   item_id?: string;
+  library_item_id?: string;
   title?: string;
   fetched?: number;
   created?: number;
+  url?: string;
 }
 
 export interface KnowledgeBaseEventPayload {
@@ -310,8 +312,12 @@ export interface TraceableEventPayloadMap {
   'library.item.linked_to_resource': LibraryEventPayload;
   'feed.source.added': FeedEventPayload;
   'feed.source.removed': FeedEventPayload;
+  'feed.item.fetched': FeedEventPayload;
+  'feed.item.seen': FeedEventPayload;
+  'feed.item.ignored': FeedEventPayload;
   'feed.items.fetched': FeedEventPayload;
   'feed.item.saved_to_library': FeedEventPayload;
+  'promote.feed_to_library': FeedEventPayload;
   'feed.item.dismissed': FeedEventPayload;
   'kb.imported': KnowledgeBaseEventPayload;
   'kb.removed': KnowledgeBaseEventPayload;

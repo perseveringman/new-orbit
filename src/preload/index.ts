@@ -109,6 +109,19 @@ import type {
   UpdateLibraryItemInput
 } from '@shared/library';
 import type {
+  CreateFeedSourceInput,
+  FeedClusterPayload,
+  FeedDigestPayload,
+  FeedFetchResult,
+  FeedItem,
+  FeedItemFilter,
+  FeedSource,
+  FeedSynthesisResult,
+  SaveFeedToLibraryInput,
+  SaveFeedToLibraryResult,
+  UpdateFeedSourceInput
+} from '@shared/feed';
+import type {
   ActivateKnowledgeBaseInput,
   ImportKnowledgeBaseInput,
   KnowledgeBase,
@@ -595,6 +608,24 @@ const api: OrbitApi = {
     distill: (id: string): Promise<LibraryDistillationResult> => ipcRenderer.invoke(IPC.library.distill, id),
     acceptDistillation: (input: AcceptLibraryDistillationInput): Promise<LibraryAcceptDistillationResult> =>
       ipcRenderer.invoke(IPC.library.acceptDistillation, input)
+  },
+  feeds: {
+    listSources: (): Promise<FeedSource[]> => ipcRenderer.invoke(IPC.feeds.sourcesList),
+    createSource: (input: CreateFeedSourceInput): Promise<FeedSource> =>
+      ipcRenderer.invoke(IPC.feeds.sourcesCreate, input),
+    updateSource: (id: string, patch: UpdateFeedSourceInput): Promise<FeedSource> =>
+      ipcRenderer.invoke(IPC.feeds.sourcesUpdate, id, patch),
+    deleteSource: (id: string): Promise<FeedSource | null> => ipcRenderer.invoke(IPC.feeds.sourcesDelete, id),
+    fetch: (sourceId?: string): Promise<FeedFetchResult[]> => ipcRenderer.invoke(IPC.feeds.fetch, sourceId),
+    listItems: (filter?: FeedItemFilter): Promise<FeedItem[]> => ipcRenderer.invoke(IPC.feeds.itemsList, filter),
+    markSeen: (id: string): Promise<FeedItem> => ipcRenderer.invoke(IPC.feeds.itemsMarkSeen, id),
+    ignore: (id: string): Promise<FeedItem> => ipcRenderer.invoke(IPC.feeds.itemsIgnore, id),
+    saveToLibrary: (id: string, input?: SaveFeedToLibraryInput): Promise<SaveFeedToLibraryResult> =>
+      ipcRenderer.invoke(IPC.feeds.itemsSaveToLibrary, id, input),
+    digest: (date: string): Promise<FeedSynthesisResult<FeedDigestPayload>> =>
+      ipcRenderer.invoke(IPC.feeds.digest, date),
+    cluster: (scope?: string): Promise<FeedSynthesisResult<FeedClusterPayload>> =>
+      ipcRenderer.invoke(IPC.feeds.cluster, scope)
   },
   knowledgeBase: {
     list: (): Promise<KnowledgeBase[]> => ipcRenderer.invoke(IPC.knowledgeBase.list),

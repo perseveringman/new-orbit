@@ -153,6 +153,21 @@ Library 页面支持：
 
 Feed item 仍然必须先 Save to Library，不能直接进入 Resource 或 Note。
 
+## 5.6 Feed Reader
+
+**Feed Reader** 是 Layer 0 信号源阅读器，用来跟踪 RSS 等外部输入。原始 feed item 只是候选信号，不会自动进入主 Timeline、Library、Resource、Note 或主知识库。
+
+Feed Reader 页面支持：
+
+- **Sources**：添加、选择、移除 feed source。
+- **Fetch**：从选中的 source 或全部 source 拉取最新条目，并做去重。
+- **Filters**：查看 new / seen / ignored / saved / all 状态。
+- **Save to Library**：显式 promotion gate。只有点击保存后，feed item 才会成为 Layer 1 `LibraryItem`。
+- **Seen / Ignore**：整理阅读状态，不改变 Layer 1 truth。
+- **Digest / Cluster**：生成 feed-scoped synthesis artifact，用于快速浏览当日摘要或主题簇，不会自动写入 Note。
+
+这意味着 Feed 可以大胆接收噪声；真正进入长期知识系统的内容必须由用户保存。
+
 ## 6. 四段式任务编辑
 
 每个 task 文件是一份 Markdown：

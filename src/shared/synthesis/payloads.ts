@@ -1,4 +1,5 @@
 import type { ResourceSuggestion } from '../resource';
+import type { FeedClusterPayload, FeedDigestPayload } from '../feed';
 import type { SynthesisSource } from './types';
 
 export interface DailySummaryPayload {
@@ -42,5 +43,6 @@ export interface SynthesisPayloadMap {
   'distill.library': LibraryDistillPayload;
   'emerge.resource': ResourceEmergencePayload;
   'classify.area': AreaClassificationPayload;
+  'feed.digest': FeedDigestPayload;
+  'feed.cluster': FeedClusterPayload;
 }
-

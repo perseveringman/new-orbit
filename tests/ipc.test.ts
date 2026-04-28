@@ -20,6 +20,7 @@ describe('IPC contract', () => {
         'env',
         'envExt',
         'events',
+        'feeds',
         'fs',
         'gateway',
         'git',
@@ -194,6 +195,26 @@ describe('IPC contract', () => {
       ].sort()
     );
     for (const v of Object.values(IPC.library)) expect(v.startsWith('library:')).toBe(true);
+  });
+
+  it('feeds namespace declares Phase 6.3 reader channels', () => {
+    const keys = Object.keys(IPC.feeds).sort();
+    expect(keys).toEqual(
+      [
+        'cluster',
+        'digest',
+        'fetch',
+        'itemsIgnore',
+        'itemsList',
+        'itemsMarkSeen',
+        'itemsSaveToLibrary',
+        'sourcesCreate',
+        'sourcesDelete',
+        'sourcesList',
+        'sourcesUpdate'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.feeds)) expect(v.startsWith('feeds:')).toBe(true);
   });
 
   it('OrbitApi type shape is assignable', () => {

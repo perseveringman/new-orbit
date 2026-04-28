@@ -172,6 +172,8 @@ export interface LibraryItem {
 
 ## Milestone 6.3 — Feed Reader as Layer 0
 
+Status: **implemented (foundation)**.
+
 ### Data model
 
 ```typescript
@@ -234,6 +236,16 @@ export interface FeedItem {
 - Raw feed fetches do not appear in main Timeline.
 - Save emits promote event and creates LibraryItem.
 - Feed digest stays isolated from main synthesis unless saved.
+
+### Implementation notes
+
+- Shared contracts live in `src/shared/feed.ts`; top-level IPC channels live under `IPC.feeds`.
+- Main-process store/IPC live in `src/main/feed/store.ts` and `src/main/feed/ipc.ts`; renderer API is `window.orbit.feeds`.
+- Feed sources are stored in `<vault>/feeds/_sources.json`; raw Layer 0 items are stored as JSON files under `<vault>/feeds/<source-id>/`.
+- Fetching only updates Layer 0 feed item state. It must not write Notes, LibraryItems, Resources, or main search truth.
+- `saveToLibrary` is the explicit promotion gate. It creates a first-class Library item, updates the raw feed item to `saved`, and emits `promote.feed_to_library`.
+- `digest` and `cluster` write feed-scoped SynthesisArtifacts (`feed.digest`, `feed.cluster`) for reader assistance; they are not materialized into Layer 1 by default.
+- Focused coverage lives in `tests/feed_store.test.ts` plus IPC namespace coverage in `tests/ipc.test.ts`.
 
 ---
 
