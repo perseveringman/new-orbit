@@ -148,6 +148,7 @@ function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknow
     };
   }
   if (kind === 'classify.area') return { suggestions: [] };
+  if (kind === 'search.answer') return localSearchAnswer(sources);
   return {};
 }
 
@@ -172,4 +173,21 @@ function localResourceEmergence(sources: SynthesisSource[]): ResourceEmergencePa
   const raw = sources.find((source) => source.kind === 'raw')?.metadata;
   const suggestions = Array.isArray(raw?.['suggestions']) ? raw['suggestions'] : [];
   return { suggestions: suggestions as ResourceEmergencePayload['suggestions'] };
+}
+
+function localSearchAnswer(sources: SynthesisSource[]): { answer: string; citations: Array<{ doc_id: string; title: string }>; confidence: number } {
+  const top = sources.slice(0, 5);
+  if (!top.length) {
+    return {
+      answer: 'No matching Orbit documents were found.',
+      citations: [],
+      confidence: 0
+    };
+  }
+  const citations = top.map((source) => ({
+    doc_id: source.ref ?? 'unknown',
+    title: source.title ?? source.ref ?? 'Untitled'
+  }));
+  const answer = `I found ${top.length} relevant Orbit document(s). The strongest matches are ${citations.map((item) => item.title).join(', ')}.`;
+  return { answer, citations, confidence: 0.55 };
 }

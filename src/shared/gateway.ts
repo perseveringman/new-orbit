@@ -14,9 +14,25 @@ export interface ChannelConfig {
   require_bind?: boolean;
   drop_pending_updates_on_start?: boolean;
   poll_timeout_seconds?: number;
+  permissions?: {
+    capture?: boolean;
+    ask?: boolean;
+    save_url?: boolean;
+    save_file?: boolean;
+    summary?: boolean;
+  };
   bot_username?: string;
   last_error?: string;
   last_seen_at?: string;
+}
+
+export type GatewayChannel = ChannelConfig;
+
+export interface TelegramConfig {
+  token: string;
+  allowed_user_ids: string[];
+  require_bind: boolean;
+  permissions?: ChannelConfig['permissions'];
 }
 
 export interface GatewayConfig {
@@ -73,11 +89,29 @@ export interface ChannelInboundMessage {
   raw?: unknown;
 }
 
+export type InboundMessage = ChannelInboundMessage;
+
 export interface ChannelOutboundMessage {
   channel_id: string;
   to: string;
   kind: 'text' | 'image' | 'file' | 'link_card';
   content: unknown;
+}
+
+export interface GatewayMessage {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  channel_id: string;
+  at: string;
+  from?: ChannelInboundMessage['from'];
+  to?: string;
+  kind: ChannelInboundMessage['kind'] | ChannelOutboundMessage['kind'];
+  content: unknown;
+  accepted?: boolean;
+  reason?: string;
+  reply?: string;
+  artifact?: GatewayRouteResult['artifact'];
+  conversationId?: string;
 }
 
 export interface GatewayRouteResult {

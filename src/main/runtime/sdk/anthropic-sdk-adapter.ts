@@ -106,15 +106,16 @@ export class AnthropicSDKAdapter {
     }
   }
 
-  async test(invocation: SDKResolvedInvocation): Promise<string> {
+  async test(invocation: SDKResolvedInvocation, prompt?: string): Promise<string> {
     const client = new Anthropic({
       apiKey: invocation.apiKey,
       baseURL: invocation.endpoint.baseURL
     });
+    const userPrompt = prompt?.trim() ? prompt.trim() : 'Reply with OK.';
     const response = await client.messages.create({
       model: invocation.model,
-      max_tokens: 16,
-      messages: [{ role: 'user', content: 'Reply with OK.' }]
+      max_tokens: prompt?.trim() ? 1024 : 16,
+      messages: [{ role: 'user', content: userPrompt }]
     });
     return extractMessageText(response);
   }

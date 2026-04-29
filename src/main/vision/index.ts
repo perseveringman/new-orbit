@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
-import * as frontmatter from './frontmatter';
+import * as frontmatter from '../frontmatter';
 
 export const VISION_FILENAME = 'Vision.md';
 export const VISION_SECTION_HEADING = '## 北极星 / North Star';
@@ -51,10 +51,6 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-/**
- * Write the default Vision.md template in the vault root if it doesn't
- * already exist. Idempotent — never overwrites user content.
- */
 export async function ensureVision(vaultPath: string): Promise<{ created: boolean; path: string }> {
   const p = visionPath(vaultPath);
   if (await exists(p)) return { created: false, path: p };
@@ -73,10 +69,6 @@ export async function readVision(vaultPath: string): Promise<VisionRecord> {
   }
 }
 
-/**
- * Overwrite Vision.md with the provided raw content. Caller is expected to
- * supply a full frontmatter + body blob. Creates the file if missing.
- */
 export async function writeVision(vaultPath: string, raw: string): Promise<VisionRecord> {
   const p = visionPath(vaultPath);
   await fs.writeFile(p, raw, 'utf8');
@@ -84,7 +76,6 @@ export async function writeVision(vaultPath: string, raw: string): Promise<Visio
   return { exists: true, raw, data, body };
 }
 
-/** First non-empty N lines of the body for Dashboard excerpts. */
 export function excerptFromBody(body: string, maxLines = 8): string {
   const lines = body.split(/\r?\n/);
   const out: string[] = [];

@@ -9,6 +9,7 @@ export interface WorkspaceDestination {
 
 export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
+  { label: 'Vision', view: { kind: 'vision' }, icon: '✦' },
   { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
   { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
   { label: 'Console', view: { kind: 'developerConsole' }, icon: '⌁' },
@@ -16,6 +17,9 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Notes', view: { kind: 'notes' }, icon: '📝' },
   { label: 'Library', view: { kind: 'library' }, icon: '📚' },
+  { label: 'Search', view: { kind: 'search' }, icon: '⌕' },
+  { label: 'Memory', view: { kind: 'memory' }, icon: '🧠' },
+  { label: 'Review', view: { kind: 'review' }, icon: '☑' },
   { label: 'Feeds', view: { kind: 'feeds' }, icon: '🛰️' },
   { label: 'Resources', view: { kind: 'resources' }, icon: '🧩' },
   { label: 'Knowledge', view: { kind: 'knowledgeBase' }, icon: '🧠' },
@@ -43,14 +47,18 @@ interface TopBarContextInput {
 }
 
 const WORKSPACE_DETAILS: Record<
-  | 'dashboard'
+   | 'dashboard'
+   | 'vision'
   | 'agents'
   | 'developerConsole'
    | 'github'
    | 'inbox'
    | 'notes'
-   | 'library'
-   | 'feeds'
+    | 'library'
+    | 'feeds'
+    | 'search'
+    | 'memory'
+    | 'review'
     | 'resources'
     | 'knowledgeBase'
    | 'scheduled'
@@ -63,12 +71,16 @@ const WORKSPACE_DETAILS: Record<
   string
 > = {
   dashboard: 'Vision, PARA health, and project activity.',
+  vision: 'Trace goals to Areas, Projects, Resources, and milestones.',
   agents: 'Inspect reusable role templates, versions, and cross-project execution coverage.',
   developerConsole: 'Replay traceable agent, inbox, activity, and IPC events.',
   github: 'Connect accounts, import repos, and monitor GitHub delivery state.',
   inbox: 'Capture and sort incoming work before it spreads.',
   notes: 'Create, search, and edit active Markdown notes.',
   library: 'Save and read source material before distillation.',
+  search: 'Find Layer 1 truth and Layer 2 synthesis across the vault.',
+  memory: 'Manage recalled preferences, lessons, interests, and patterns.',
+  review: 'Generate weekly and monthly health findings with actions.',
   feeds: 'Manage subscriptions and triage incoming feed items.',
   resources: 'Cultivate topic workstations from repeated notes, links, people, and projects.',
   knowledgeBase: 'Import existing archives and activate excerpts into Notes.',

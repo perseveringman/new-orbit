@@ -2,6 +2,7 @@ import type { SynthesisKind } from '@shared/synthesis';
 import { classifyAreaPrompt } from './classify.area.v1';
 import { distillLibraryPrompt } from './distill.library.v1';
 import { emergeResourcePrompt } from './emerge.resource.v1';
+import { searchAnswerPrompt } from './search.answer.v1';
 import { summaryDailyPrompt } from './summary.daily.v1';
 
 export interface RenderedPrompt {
@@ -21,7 +22,8 @@ const PROMPTS = [
   summaryDailyPrompt,
   distillLibraryPrompt,
   emergeResourcePrompt,
-  classifyAreaPrompt
+  classifyAreaPrompt,
+  searchAnswerPrompt
 ] satisfies SynthesisPromptTemplate[];
 
 export function getPromptTemplate(kind: SynthesisKind): SynthesisPromptTemplate {
@@ -40,4 +42,3 @@ export function parseJsonResponse(response: unknown): unknown {
 export function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
-

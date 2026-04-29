@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { ChannelConfig, ChannelInboundMessage, GatewayConfig, GatewayStatus } from '@shared/gateway';
+import type { ChannelConfig, ChannelInboundMessage, ChannelOutboundMessage, GatewayConfig, GatewayStatus } from '@shared/gateway';
 import { createGatewayStore } from './store';
 import { getGatewayRuntime } from './runtime';
 import { publishTraceableEvent } from '../events/bus';
@@ -25,7 +25,14 @@ export function registerGatewayIpc(getVaultPath: () => string | null): void {
     return config;
   });
   ipcMain.handle(IPC.gateway.status, () => runtime().status());
+  ipcMain.handle(IPC.gateway.getStatus, () => runtime().status());
   ipcMain.handle(IPC.gateway.start, async () => {
+    const status = await runtime().start();
+    publishTraceableEvent({ source: 'activity', kind: 'channel.connected', payload: { channel: 'gateway' } });
+    broadcast(status);
+    return status;
+  });
+  ipcMain.handle(IPC.gateway.startDaemon, async () => {
     const status = await runtime().start();
     publishTraceableEvent({ source: 'activity', kind: 'channel.connected', payload: { channel: 'gateway' } });
     broadcast(status);
@@ -37,8 +44,31 @@ export function registerGatewayIpc(getVaultPath: () => string | null): void {
     broadcast(status);
     return status;
   });
+  ipcMain.handle(IPC.gateway.stopDaemon, async () => {
+    const status = await runtime().stop();
+    publishTraceableEvent({ source: 'activity', kind: 'channel.disconnected', payload: { channel: 'gateway' } });
+    broadcast(status);
+    return status;
+  });
+  ipcMain.handle(IPC.gateway.setVaultPath, async (_event, nextVaultPath: string) => {
+    if (!nextVaultPath.trim()) throw new Error('vault path is required');
+    const config = await store().updateConfig({ orbit: { app_ipc_socket: `${nextVaultPath}/.orbit/gateway.sock`, vault_path: nextVaultPath } });
+    await runtime().reloadConfig();
+    return config;
+  });
+  ipcMain.handle(IPC.gateway.listChannels, async () => (await store().getConfig()).channels);
   ipcMain.handle(IPC.gateway.addChannel, async (_event, channel: Omit<ChannelConfig, 'id'> & { id?: string }) => {
     const config = await store().addChannel(channel);
+    await runtime().reloadConfig();
+    return config;
+  });
+  ipcMain.handle(IPC.gateway.enableChannel, async (_event, channelId: string) => {
+    const config = await store().updateChannel(channelId, { enabled: true });
+    await runtime().reloadConfig();
+    return config;
+  });
+  ipcMain.handle(IPC.gateway.disableChannel, async (_event, channelId: string) => {
+    const config = await store().updateChannel(channelId, { enabled: false });
     await runtime().reloadConfig();
     return config;
   });
@@ -53,6 +83,8 @@ export function registerGatewayIpc(getVaultPath: () => string | null): void {
     return config;
   });
   ipcMain.handle(IPC.gateway.generateBindCode, (_event, orbitUserId?: string) => store().generateBindCode(orbitUserId));
+  ipcMain.handle(IPC.gateway.getMessages, (_event, limit?: number) => store().listMessages(limit));
+  ipcMain.handle(IPC.gateway.sendOutbound, (_event, message: ChannelOutboundMessage) => store().sendOutbound(message));
   ipcMain.handle(IPC.gateway.routeInbound, async (_event, message: ChannelInboundMessage) => {
     const result = await store().routeInbound(message);
     publishTraceableEvent({

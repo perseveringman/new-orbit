@@ -15,10 +15,10 @@ type Numeric = 'perRunTokens' | 'perRunUSD' | 'dailyTokens' | 'dailyUSD';
 type TabId = 'general' | 'api' | 'endpoints' | 'budget' | 'vectors' | 'advanced';
 
 const BUDGET_FIELDS: Array<{ key: Numeric; label: string; step: number; unit: string }> = [
-  { key: 'perRunTokens', label: 'Per-run tokens', step: 10_000, unit: 'tok' },
-  { key: 'perRunUSD', label: 'Per-run USD', step: 0.5, unit: 'USD' },
-  { key: 'dailyTokens', label: 'Daily tokens', step: 100_000, unit: 'tok' },
-  { key: 'dailyUSD', label: 'Daily USD', step: 1, unit: 'USD' }
+  { key: 'perRunTokens', label: '单次运行 tokens', step: 10_000, unit: 'tok' },
+  { key: 'perRunUSD', label: '单次运行美元', step: 0.5, unit: 'USD' },
+  { key: 'dailyTokens', label: '每日 tokens', step: 100_000, unit: 'tok' },
+  { key: 'dailyUSD', label: '每日美元', step: 1, unit: 'USD' }
 ];
 
 function toFieldString(v: number | null): string {
@@ -52,13 +52,13 @@ function endpointDraft(provider: SDKEndpointProvider = 'anthropic'): SDKEndpoint
     },
     minimax: {
       label: 'MiniMax',
-      baseURL: 'https://api.minimax.chat/anthropic',
-      defaultModel: 'minimax-m1'
+      baseURL: 'https://api.minimaxi.com/anthropic',
+      defaultModel: 'MiniMax-M2.7'
     },
     deepseek: {
       label: 'DeepSeek',
       baseURL: 'https://api.deepseek.com/anthropic',
-      defaultModel: 'deepseek-chat'
+      defaultModel: 'deepseek-v4-pro'
     },
     custom: {
       label: 'Custom Anthropic-compatible',
@@ -107,6 +107,12 @@ export function SettingsModal(): JSX.Element | null {
   const [endpointKeyInputs, setEndpointKeyInputs] = useState<Record<string, string>>({});
   const [endpointStatus, setEndpointStatus] = useState<Record<string, string>>({});
   const [endpointDefaults, setEndpointDefaults] = useState<SDKEndpointDefaults>({});
+  const [chatEndpointId, setChatEndpointId] = useState<string>('');
+  const [chatModel, setChatModel] = useState<string>('');
+  const [chatPrompt, setChatPrompt] = useState<string>('你好，请用一句话简短回复。');
+  const [chatResponse, setChatResponse] = useState<string>('');
+  const [chatStatus, setChatStatus] = useState<string>('');
+  const [chatBusy, setChatBusy] = useState<boolean>(false);
 
   useEffect(() => {
     if (!open) return;
@@ -134,10 +140,15 @@ export function SettingsModal(): JSX.Element | null {
       const snapshot = await window.orbit.runtime.sdk.snapshot();
       setEndpointSnapshot(snapshot);
       setEndpointDefaults(snapshot.defaults);
+      setChatEndpointId((current) => {
+        if (current && snapshot.endpoints.some((e) => e.id === current)) return current;
+        const firstReady = snapshot.endpoints.find((e) => e.enabled && e.keyConfigured);
+        return firstReady?.id ?? snapshot.endpoints[0]?.id ?? '';
+      });
     } catch (error) {
       setEndpointStatus((s) => ({
         ...s,
-        global: `Could not load endpoints: ${(error as Error).message}`
+        global: `加载端点失败：${(error as Error).message}`
       }));
     }
   }
@@ -188,84 +199,149 @@ export function SettingsModal(): JSX.Element | null {
   }
 
   async function onResetAll(): Promise<void> {
-    if (!confirm('Force-remove all unmerged worktrees? Uncommitted changes will be lost.')) return;
+    if (!confirm('确定强制移除所有未合并的 worktree？未提交的修改会丢失。')) return;
     setResetting(true);
     setResetMsg(null);
     try {
       const r = await window.orbit.git.resetAll();
-      setResetMsg(`Removed ${r.removed} worktree(s). Errors: ${r.errors.length}.`);
+      setResetMsg(`已移除 ${r.removed} 个 worktree，错误 ${r.errors.length} 条。`);
     } catch (e) {
-      setResetMsg(`Reset failed: ${(e as Error).message}`);
+      setResetMsg(`重置失败：${(e as Error).message}`);
     } finally {
       setResetting(false);
     }
   }
 
   async function onSaveEndpoint(): Promise<void> {
-    setEndpointStatus((s) => ({ ...s, form: 'Saving…' }));
+    setEndpointStatus((s) => ({ ...s, form: '保存中…' }));
     try {
       const saved = await window.orbit.runtime.sdk.upsertEndpoint(endpointForm);
       setEndpointForm(endpointDraft(endpointForm.provider));
       setEndpointKeyInputs((s) => ({ ...s, [saved.id]: '' }));
-      setEndpointStatus((s) => ({ ...s, form: 'Endpoint saved.' }));
+      setEndpointStatus((s) => ({ ...s, form: '端点已保存。' }));
       await loadEndpoints();
     } catch (error) {
-      setEndpointStatus((s) => ({ ...s, form: `Save failed: ${(error as Error).message}` }));
+      setEndpointStatus((s) => ({ ...s, form: `保存失败：${(error as Error).message}` }));
     }
   }
 
   async function onSetEndpointKey(endpointId: string): Promise<void> {
     const key = endpointKeyInputs[endpointId]?.trim();
     if (!key) {
-      setEndpointStatus((s) => ({ ...s, [endpointId]: 'Enter a key first.' }));
+      setEndpointStatus((s) => ({ ...s, [endpointId]: '请先填入 API 密钥。' }));
       return;
     }
-    setEndpointStatus((s) => ({ ...s, [endpointId]: 'Saving key…' }));
+    setEndpointStatus((s) => ({ ...s, [endpointId]: '保存密钥中…' }));
     try {
       await window.orbit.runtime.sdk.setApiKey(endpointId, key);
       setEndpointKeyInputs((s) => ({ ...s, [endpointId]: '' }));
-      setEndpointStatus((s) => ({ ...s, [endpointId]: 'Key saved.' }));
+      setEndpointStatus((s) => ({ ...s, [endpointId]: '密钥已保存。' }));
       await loadEndpoints();
     } catch (error) {
-      setEndpointStatus((s) => ({ ...s, [endpointId]: `Key failed: ${(error as Error).message}` }));
+      setEndpointStatus((s) => ({ ...s, [endpointId]: `保存密钥失败:${(error as Error).message}` }));
     }
   }
 
   async function onTestEndpoint(endpointId: string): Promise<void> {
-    setEndpointStatus((s) => ({ ...s, [endpointId]: 'Testing…' }));
+    setEndpointStatus((s) => ({ ...s, [endpointId]: '测试中…' }));
     try {
       const result = await window.orbit.runtime.sdk.testEndpoint(endpointId);
       setEndpointStatus((s) => ({
         ...s,
         [endpointId]: result.ok
-          ? `OK (${result.latencyMs ?? 0}ms) ${result.message ?? ''}`.trim()
-          : `Failed: ${result.error ?? 'unknown error'}`
+          ? `成功 (${result.latencyMs ?? 0}ms) ${result.message ?? ''}`.trim()
+          : `失败：${result.error ?? '未知错误'}`
       }));
     } catch (error) {
-      setEndpointStatus((s) => ({ ...s, [endpointId]: `Failed: ${(error as Error).message}` }));
+      setEndpointStatus((s) => ({ ...s, [endpointId]: `失败：${(error as Error).message}` }));
+    }
+  }
+
+  async function onToggleEndpointEnabled(endpoint: SDKEndpointRegistrySnapshot['endpoints'][number]): Promise<void> {
+    setEndpointStatus((s) => ({ ...s, [endpoint.id]: endpoint.enabled ? '禁用中…' : '启用中…' }));
+    try {
+      await window.orbit.runtime.sdk.upsertEndpoint({
+        id: endpoint.id,
+        label: endpoint.label,
+        provider: endpoint.provider,
+        baseURL: endpoint.baseURL,
+        defaultModel: endpoint.defaultModel,
+        modelAlias: endpoint.modelAlias,
+        costProfile: endpoint.costProfile,
+        enabled: !endpoint.enabled
+      });
+      setEndpointStatus((s) => ({ ...s, [endpoint.id]: endpoint.enabled ? '已禁用。' : '已启用。' }));
+      await loadEndpoints();
+    } catch (error) {
+      setEndpointStatus((s) => ({ ...s, [endpoint.id]: `操作失败：${(error as Error).message}` }));
+    }
+  }
+
+  async function onSendChat(): Promise<void> {
+    if (!chatEndpointId) {
+      setChatStatus('请先选择一个端点。');
+      return;
+    }
+    const prompt = chatPrompt.trim();
+    if (!prompt) {
+      setChatStatus('请先输入提示词。');
+      return;
+    }
+    setChatBusy(true);
+    setChatStatus('发送中…');
+    setChatResponse('');
+    try {
+      const result = await window.orbit.runtime.sdk.testEndpoint(
+        chatEndpointId,
+        chatModel.trim() || undefined,
+        prompt
+      );
+      if (result.ok) {
+        setChatResponse(result.message ?? '');
+        setChatStatus(`成功 · ${result.model ?? '?'} · ${result.latencyMs ?? 0}ms`);
+      } else {
+        setChatResponse('');
+        setChatStatus(`失败：${result.error ?? '未知错误'}`);
+      }
+    } catch (error) {
+      setChatStatus(`失败：${(error as Error).message}`);
+    } finally {
+      setChatBusy(false);
     }
   }
 
   async function onSaveEndpointDefaults(): Promise<void> {
-    setEndpointStatus((s) => ({ ...s, defaults: 'Saving defaults…' }));
+    setEndpointStatus((s) => ({ ...s, defaults: '保存默认中…' }));
     try {
       const defaults = await window.orbit.runtime.sdk.setDefaults(endpointDefaults);
       setEndpointDefaults(defaults);
-      setEndpointStatus((s) => ({ ...s, defaults: 'Defaults saved.' }));
+      setEndpointStatus((s) => ({ ...s, defaults: '默认已保存。' }));
       await loadEndpoints();
     } catch (error) {
-      setEndpointStatus((s) => ({ ...s, defaults: `Defaults failed: ${(error as Error).message}` }));
+      setEndpointStatus((s) => ({ ...s, defaults: `保存默认失败：${(error as Error).message}` }));
     }
   }
 
   const tabs: Array<{ id: TabId; label: string }> = [
-    { id: 'general', label: 'General' },
+    { id: 'general', label: '通用' },
     { id: 'api', label: 'API / CLI' },
-    { id: 'endpoints', label: 'AI Endpoints' },
-    { id: 'budget', label: 'Budget' },
-    { id: 'vectors', label: 'Vectors' },
-    { id: 'advanced', label: 'Advanced' }
+    { id: 'endpoints', label: 'AI 端点' },
+    { id: 'budget', label: '预算' },
+    { id: 'vectors', label: '向量' },
+    { id: 'advanced', label: '高级' }
   ];
+
+  const themeLabels: Record<Theme, string> = {
+    light: '浅色',
+    dark: '深色',
+    system: '跟随系统'
+  };
+
+  const modeLabels: Record<'ask' | 'synthesis' | 'background', string> = {
+    ask: '问答（Ask）',
+    synthesis: '综合（Synthesis）',
+    background: '后台（Background）'
+  };
 
   return (
     <div
@@ -273,19 +349,19 @@ export function SettingsModal(): JSX.Element | null {
       role="dialog"
       aria-modal="true"
     >
-      <div className="flex w-full max-w-2xl flex-col rounded-lg border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="flex items-center justify-between border-b border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="text-base font-semibold">Settings</h2>
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="text-base font-semibold">设置</h2>
           <button
             onClick={close}
-            aria-label="Close settings"
+            aria-label="关闭设置"
             className={`rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${FOCUS}`}
           >
             ✕
           </button>
         </div>
-        <div className="flex min-h-[360px]">
-          <nav className="flex w-36 flex-col gap-1 border-r border-neutral-200 p-2 text-sm dark:border-neutral-800">
+        <div className="flex min-h-0 flex-1">
+          <nav className="flex w-36 flex-shrink-0 flex-col gap-1 overflow-y-auto border-r border-neutral-200 p-2 text-sm dark:border-neutral-800">
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -304,11 +380,11 @@ export function SettingsModal(): JSX.Element | null {
             {tab === 'general' && (
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-xs text-neutral-500">Vault</label>
+                  <label className="mb-1 block text-xs text-neutral-500">工作库</label>
                   <div className="flex items-center gap-2">
                     <input
                       readOnly
-                      value={vault?.path ?? '(no vault open)'}
+                      value={vault?.path ?? '（未打开工作库）'}
                       className={INPUT}
                     />
                     <button
@@ -319,12 +395,12 @@ export function SettingsModal(): JSX.Element | null {
                       }}
                       className={BTN}
                     >
-                      {vault ? 'Switch vault' : 'Open vault'}
+                      {vault ? '切换工作库' : '打开工作库'}
                     </button>
                   </div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-neutral-500">Theme</label>
+                  <label className="mb-1 block text-xs text-neutral-500">主题</label>
                   <div className="flex gap-2">
                     {(['light', 'dark', 'system'] as Theme[]).map((t) => (
                       <button
@@ -333,7 +409,7 @@ export function SettingsModal(): JSX.Element | null {
                         onClick={() => setThemeDraft(t)}
                         className={`${BTN} ${theme === t ? 'bg-neutral-100 dark:bg-neutral-800' : ''}`}
                       >
-                        {t}
+                        {themeLabels[t]}
                       </button>
                     ))}
                   </div>
@@ -345,7 +421,7 @@ export function SettingsModal(): JSX.Element | null {
                     onChange={(e) => setReopen(e.target.checked)}
                     className={FOCUS}
                   />
-                  <span>Reopen last vault on startup</span>
+                  <span>启动时自动打开上次的工作库</span>
                 </label>
                 <label className="flex items-center gap-2 text-xs">
                   <input
@@ -354,7 +430,7 @@ export function SettingsModal(): JSX.Element | null {
                     onChange={(e) => setAutoReview(e.target.checked)}
                     className={FOCUS}
                   />
-                  <span>Auto-generate Daily Review at</span>
+                  <span>每天定时自动生成日报</span>
                   <input
                     type="time"
                     value={autoReviewAt}
@@ -369,7 +445,7 @@ export function SettingsModal(): JSX.Element | null {
               <div className="space-y-4">
                 <div>
                   <label className="mb-1 block text-xs text-neutral-500">
-                    Claude Code CLI path (leave blank to auto-detect)
+                    Claude Code CLI 路径（留空则自动检测）
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -384,20 +460,20 @@ export function SettingsModal(): JSX.Element | null {
                       disabled={detecting}
                       className={BTN}
                     >
-                      {detecting ? 'Detecting…' : 'Auto-detect'}
+                      {detecting ? '检测中…' : '自动检测'}
                     </button>
                   </div>
                   {detectResult && (
                     <p className="mt-1 text-xs text-neutral-500">
                       {detectResult.available
-                        ? `Found ${detectResult.path} (v${detectResult.version ?? '?'})`
-                        : `Not found: ${detectResult.error ?? 'unknown'}`}
+                        ? `已找到 ${detectResult.path}（v${detectResult.version ?? '?'}）`
+                        : `未找到：${detectResult.error ?? '未知错误'}`}
                     </p>
                   )}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-neutral-500">
-                    ANTHROPIC_API_KEY (stored locally in userData)
+                    ANTHROPIC_API_KEY（仅保存在本地 userData）
                   </label>
                   <input
                     type="password"
@@ -408,7 +484,7 @@ export function SettingsModal(): JSX.Element | null {
                     className={INPUT}
                   />
                   <p className="mt-1 text-xs text-neutral-500">
-                    Legacy Claude CLI override. Prefer AI Endpoints for Runtime B SDK keys.
+                    历史的 Claude CLI 替代项。新版本请优先在「AI 端点」中配置 Runtime B SDK 密钥。
                   </p>
                 </div>
               </div>
@@ -417,7 +493,7 @@ export function SettingsModal(): JSX.Element | null {
               <div className="space-y-5">
                 {!vault && (
                   <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                    Open a vault to manage SDK endpoints.
+                    请先打开工作库才能管理 SDK 端点。
                   </p>
                 )}
                 {endpointStatus.global && (
@@ -425,9 +501,9 @@ export function SettingsModal(): JSX.Element | null {
                 )}
                 <section className="space-y-3">
                   <div>
-                    <h3 className="text-sm font-semibold">Runtime B SDK endpoints</h3>
+                    <h3 className="text-sm font-semibold">Runtime B SDK 端点</h3>
                     <p className="text-xs text-neutral-500">
-                      Keys are kept in the SDK key vault and only masked key state is shown here.
+                      API 密钥保存在本机的 SDK 钥匙环中，这里只展示是否已配置以及脱敏后的状态。
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -440,7 +516,7 @@ export function SettingsModal(): JSX.Element | null {
                           <div>
                             <div className="font-medium">{endpoint.label}</div>
                             <div className="text-xs text-neutral-500">
-                              {endpoint.provider} · {endpoint.defaultModel} · {endpoint.enabled ? 'enabled' : 'disabled'}
+                              {endpoint.provider} · {endpoint.defaultModel} · {endpoint.enabled ? '已启用' : '已禁用'}
                             </div>
                             <div className="mt-1 break-all text-[11px] text-neutral-500">
                               {endpoint.baseURL}
@@ -463,26 +539,37 @@ export function SettingsModal(): JSX.Element | null {
                                 })
                               }
                             >
-                              Edit
+                              编辑
                             </button>
                             <button
                               type="button"
                               className={BTN}
                               onClick={() => void onTestEndpoint(endpoint.id)}
-                              disabled={!endpoint.keyConfigured || !endpoint.enabled}
+                              disabled={!endpoint.keyConfigured}
                             >
-                              Test
+                              测试
                             </button>
                             <button
                               type="button"
                               className={BTN}
-                              onClick={() => {
-                                if (!confirm(`${endpoint.builtIn ? 'Disable' : 'Delete'} ${endpoint.label}?`)) return;
-                                void window.orbit.runtime.sdk.deleteEndpoint(endpoint.id).then(loadEndpoints);
-                              }}
+                              onClick={() => void onToggleEndpointEnabled(endpoint)}
                             >
-                              {endpoint.builtIn ? 'Disable' : 'Delete'}
+                              {endpoint.enabled ? '禁用' : '启用'}
                             </button>
+                            {!endpoint.builtIn && (
+                              <button
+                                type="button"
+                                className={`${BTN} text-red-600 dark:text-red-400`}
+                                onClick={() => {
+                                  if (!confirm(`删除 ${endpoint.label}？`)) return;
+                                  void window.orbit.runtime.sdk
+                                    .deleteEndpoint(endpoint.id)
+                                    .then(loadEndpoints);
+                                }}
+                              >
+                                删除
+                              </button>
+                            )}
                           </div>
                         </div>
                         <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
@@ -492,7 +579,7 @@ export function SettingsModal(): JSX.Element | null {
                             onChange={(e) =>
                               setEndpointKeyInputs((s) => ({ ...s, [endpoint.id]: e.target.value }))
                             }
-                            placeholder={endpoint.keyConfigured ? `Configured (${endpoint.keyMasked ?? 'masked'})` : 'API key'}
+                            placeholder={endpoint.keyConfigured ? `已配置（${endpoint.keyMasked ?? '已脱敏'}）` : 'API 密钥'}
                             autoComplete="off"
                             className={INPUT}
                           />
@@ -501,18 +588,18 @@ export function SettingsModal(): JSX.Element | null {
                             className={BTN}
                             onClick={() => void onSetEndpointKey(endpoint.id)}
                           >
-                            Save key
+                            保存密钥
                           </button>
                           <button
                             type="button"
                             className={BTN}
                             onClick={() => {
-                              if (!confirm(`Clear key for ${endpoint.label}?`)) return;
+                              if (!confirm(`清除 ${endpoint.label} 的密钥？`)) return;
                               void window.orbit.runtime.sdk.deleteApiKey(endpoint.id).then(loadEndpoints);
                             }}
                             disabled={!endpoint.keyConfigured}
                           >
-                            Clear key
+                            清除密钥
                           </button>
                         </div>
                         {endpointStatus[endpoint.id] && (
@@ -524,11 +611,11 @@ export function SettingsModal(): JSX.Element | null {
                 </section>
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
                   <h3 className="text-sm font-semibold">
-                    {endpointForm.id ? 'Edit endpoint' : 'Add endpoint'}
+                    {endpointForm.id ? '编辑端点' : '新增端点'}
                   </h3>
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="text-xs text-neutral-500">
-                      Provider
+                      提供商
                       <select
                         value={endpointForm.provider}
                         onChange={(e) => setEndpointForm(endpointDraft(e.target.value as SDKEndpointProvider))}
@@ -540,7 +627,7 @@ export function SettingsModal(): JSX.Element | null {
                       </select>
                     </label>
                     <label className="text-xs text-neutral-500">
-                      Label
+                      显示名称
                       <input
                         value={endpointForm.label}
                         onChange={(e) => setEndpointForm((f) => ({ ...f, label: e.target.value }))}
@@ -556,7 +643,7 @@ export function SettingsModal(): JSX.Element | null {
                       />
                     </label>
                     <label className="text-xs text-neutral-500">
-                      Default model
+                      默认模型
                       <input
                         value={endpointForm.defaultModel}
                         onChange={(e) => setEndpointForm((f) => ({ ...f, defaultModel: e.target.value }))}
@@ -570,15 +657,15 @@ export function SettingsModal(): JSX.Element | null {
                         onChange={(e) => setEndpointForm((f) => ({ ...f, enabled: e.target.checked }))}
                         className={FOCUS}
                       />
-                      Enabled
+                      启用
                     </label>
                     <label className="text-xs text-neutral-500 md:col-span-2">
-                      API key (optional on save)
+                      API 密钥（保存时可选）
                       <input
                         type="password"
                         value={endpointForm.apiKey ?? ''}
                         onChange={(e) => setEndpointForm((f) => ({ ...f, apiKey: e.target.value }))}
-                        placeholder="Stored in key vault, not endpoint config"
+                        placeholder="保存到本地钥匙环，不写入端点配置文件"
                         autoComplete="off"
                         className={`${INPUT} mt-1`}
                       />
@@ -586,19 +673,19 @@ export function SettingsModal(): JSX.Element | null {
                   </div>
                   <div className="flex items-center gap-2">
                     <button type="button" className={BTN_PRIMARY} onClick={() => void onSaveEndpoint()}>
-                      Save endpoint
+                      保存端点
                     </button>
                     <button type="button" className={BTN} onClick={() => setEndpointForm(endpointDraft())}>
-                      New
+                      新建
                     </button>
                     {endpointStatus.form && <span className="text-xs text-neutral-500">{endpointStatus.form}</span>}
                   </div>
                 </section>
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-                  <h3 className="text-sm font-semibold">Defaults</h3>
+                  <h3 className="text-sm font-semibold">默认端点</h3>
                   {(['ask', 'synthesis', 'background'] as const).map((mode) => (
                     <label key={mode} className="flex items-center gap-3 text-xs">
-                      <span className="w-24 capitalize text-neutral-500">{mode}</span>
+                      <span className="w-32 text-neutral-500">{modeLabels[mode]}</span>
                       <select
                         value={endpointDefaults[mode] ?? ''}
                         onChange={(e) =>
@@ -609,7 +696,7 @@ export function SettingsModal(): JSX.Element | null {
                         }
                         className={INPUT}
                       >
-                        <option value="">Auto / CLI fallback</option>
+                        <option value="">自动 / 回退到 CLI</option>
                         {(endpointSnapshot?.endpoints ?? []).map((endpoint) => (
                           <option key={endpoint.id} value={endpoint.id}>
                             {endpoint.label}
@@ -620,20 +707,107 @@ export function SettingsModal(): JSX.Element | null {
                   ))}
                   <div className="flex items-center gap-2">
                     <button type="button" className={BTN} onClick={() => void onSaveEndpointDefaults()}>
-                      Save defaults
+                      保存默认
                     </button>
                     {endpointStatus.defaults && (
                       <span className="text-xs text-neutral-500">{endpointStatus.defaults}</span>
                     )}
                   </div>
                 </section>
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <div>
+                    <h3 className="text-sm font-semibold">测试端点</h3>
+                    <p className="text-xs text-neutral-500">
+                      发送一条提示词，验证端点和模型是否可用。使用已保存的 API 密钥，端点处于「禁用」状态时也能测试。
+                    </p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="text-xs text-neutral-500">
+                      端点
+                      <select
+                        value={chatEndpointId}
+                        onChange={(e) => {
+                          setChatEndpointId(e.target.value);
+                          setChatModel('');
+                        }}
+                        className={`${INPUT} mt-1`}
+                        disabled={!endpointSnapshot?.endpoints.length}
+                      >
+                        {!endpointSnapshot?.endpoints.length && (
+                          <option value="">尚未配置端点</option>
+                        )}
+                        {(endpointSnapshot?.endpoints ?? []).map((endpoint) => (
+                          <option key={endpoint.id} value={endpoint.id}>
+                            {endpoint.label}
+                            {endpoint.keyConfigured ? '' : '（未配置密钥）'}
+                            {endpoint.enabled ? '' : ' · 已禁用'}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs text-neutral-500">
+                      模型（可选，覆盖默认）
+                      <input
+                        value={chatModel}
+                        onChange={(e) => setChatModel(e.target.value)}
+                        placeholder={
+                          endpointSnapshot?.endpoints.find((e) => e.id === chatEndpointId)?.defaultModel ??
+                          '使用端点默认模型'
+                        }
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                  </div>
+                  <label className="block text-xs text-neutral-500">
+                    提示词
+                    <textarea
+                      value={chatPrompt}
+                      onChange={(e) => setChatPrompt(e.target.value)}
+                      rows={3}
+                      className={`${INPUT} mt-1 font-mono text-xs`}
+                      placeholder="输入要发送的内容"
+                    />
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className={BTN_PRIMARY}
+                      onClick={() => void onSendChat()}
+                      disabled={chatBusy || !chatEndpointId}
+                    >
+                      {chatBusy ? '发送中…' : '发送测试'}
+                    </button>
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => {
+                        setChatResponse('');
+                        setChatStatus('');
+                      }}
+                      disabled={chatBusy}
+                    >
+                      清空
+                    </button>
+                    {chatStatus && <span className="text-xs text-neutral-500">{chatStatus}</span>}
+                  </div>
+                  {chatResponse && (
+                    <div className="rounded border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-950">
+                      <div className="mb-1 text-[11px] uppercase tracking-wide text-neutral-500">
+                        回复
+                      </div>
+                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
+{chatResponse}
+                      </pre>
+                    </div>
+                  )}
+                </section>
               </div>
             )}
             {tab === 'budget' && (
               <div className="space-y-3">
                 <p className="text-xs text-neutral-500">
-                  Leave a field blank to treat it as{' '}
-                  <span className="font-semibold">unlimited</span>.
+                  留空表示
+                  <span className="font-semibold">不限制</span>。
                 </p>
                 {BUDGET_FIELDS.map((f) => (
                   <div key={f.key} className="flex items-center gap-3">
@@ -648,7 +822,7 @@ export function SettingsModal(): JSX.Element | null {
                       onChange={(e) =>
                         setDraft((d) => ({ ...d, [f.key]: parseField(e.target.value) }))
                       }
-                      placeholder="unlimited"
+                      placeholder="不限制"
                       className={INPUT}
                     />
                     <span className="w-10 text-xs text-neutral-500">{f.unit}</span>
@@ -656,7 +830,7 @@ export function SettingsModal(): JSX.Element | null {
                 ))}
                 <div className="flex items-center gap-3">
                   <label className="w-32 text-xs text-neutral-600 dark:text-neutral-300">
-                    Warn at %
+                    提醒阈值 %
                   </label>
                   <input
                     type="number"
@@ -682,8 +856,8 @@ export function SettingsModal(): JSX.Element | null {
                     className={`mt-0.5 ${FOCUS}`}
                   />
                   <span>
-                    <span className="font-semibold">Hard stop</span> — block runs that would
-                    exceed a cap. Disable to only warn.
+                    <span className="font-semibold">硬性停止</span> —
+                    超过上限时阻止运行；关闭则只发出提醒。
                   </span>
                 </label>
               </div>
@@ -691,12 +865,12 @@ export function SettingsModal(): JSX.Element | null {
             {tab === 'vectors' && (
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-xs text-neutral-500">Provider</label>
-                  <input readOnly value="hash-trick (local)" className={INPUT} />
+                  <label className="mb-1 block text-xs text-neutral-500">提供商</label>
+                  <input readOnly value="hash-trick（本地）" className={INPUT} />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-neutral-500">
-                    Wake-up injection threshold ({vectorThreshold.toFixed(2)})
+                    唤醒注入阈值（{vectorThreshold.toFixed(2)}）
                   </label>
                   <input
                     type="range"
@@ -710,7 +884,7 @@ export function SettingsModal(): JSX.Element | null {
                 </div>
                 <div className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
                   <p className="mb-2 text-xs text-neutral-500">
-                    Rebuild the local semantic index. Embeddings stay on this machine.
+                    重建本机的语义索引；嵌入向量保留在本机，不上传。
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -718,15 +892,15 @@ export function SettingsModal(): JSX.Element | null {
                       disabled={reindexing}
                       className={BTN}
                     >
-                      {reindexing ? 'Re-indexing…' : 'Re-index vectors'}
+                      {reindexing ? '重建中…' : '重建向量索引'}
                     </button>
                     {lastReindex && lastReindex.count >= 0 && (
                       <span className="text-xs text-neutral-500">
-                        Indexed {lastReindex.count} files.
+                        已索引 {lastReindex.count} 个文件。
                       </span>
                     )}
                     {lastReindex && lastReindex.count < 0 && (
-                      <span className="text-xs text-red-500">Re-index failed.</span>
+                      <span className="text-xs text-red-500">重建失败。</span>
                     )}
                   </div>
                 </div>
@@ -740,7 +914,7 @@ export function SettingsModal(): JSX.Element | null {
                     onClick={() => void window.orbit.workspace.revealUserData()}
                     className={BTN}
                   >
-                    Reveal userData folder
+                    在 Finder 中打开 userData
                   </button>
                   <button
                     type="button"
@@ -748,7 +922,7 @@ export function SettingsModal(): JSX.Element | null {
                     disabled={!vault}
                     className={BTN}
                   >
-                    Reveal vault .orbit folder
+                    在 Finder 中打开工作库 .orbit
                   </button>
                 </div>
                 <div className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
@@ -758,7 +932,7 @@ export function SettingsModal(): JSX.Element | null {
                     disabled={resetting}
                     className={`${BTN} text-red-600 dark:text-red-400`}
                   >
-                    {resetting ? 'Resetting…' : 'Reset all unmerged worktrees'}
+                    {resetting ? '重置中…' : '重置所有未合并的 worktree'}
                   </button>
                   {resetMsg && <p className="mt-1 text-xs text-neutral-500">{resetMsg}</p>}
                 </div>
@@ -766,12 +940,12 @@ export function SettingsModal(): JSX.Element | null {
             )}
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-neutral-200 p-4 dark:border-neutral-800">
+        <div className="flex flex-shrink-0 justify-end gap-2 border-t border-neutral-200 p-4 dark:border-neutral-800">
           <button onClick={close} className={BTN}>
-            Cancel
+            取消
           </button>
           <button onClick={() => void onSave()} disabled={saving} className={BTN_PRIMARY}>
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? '保存中…' : '保存'}
           </button>
         </div>
       </div>

@@ -6,6 +6,9 @@ export type VaultViewKind =
   | 'inbox'
   | 'notes'
   | 'library'
+  | 'search'
+  | 'memory'
+  | 'review'
   | 'feeds'
   | 'resources'
   | 'knowledgeBase'
@@ -16,6 +19,7 @@ export type VaultViewKind =
   | 'conversations'
   | 'today'
   | 'dashboard'
+  | 'vision'
   | 'journals'
   | 'project'
   | 'kanban'
@@ -33,6 +37,9 @@ export type SidebarSurfaceId =
   | 'inbox'
   | 'notes'
   | 'library'
+  | 'search'
+  | 'memory'
+  | 'review'
   | 'feeds'
   | 'resources'
   | 'knowledgeBase'
@@ -43,6 +50,7 @@ export type SidebarSurfaceId =
   | 'conversations'
   | 'today'
   | 'dashboard'
+  | 'vision'
   | 'journals'
   | 'kanban'
   | 'runtimes'
@@ -121,6 +129,15 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   library: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]
   },
+  search: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+  },
+  memory: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+  },
+  review: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['review', 'inspector'] }]
+  },
   feeds: {
     intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
   },
@@ -153,6 +170,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
       { id: 'overview', title: 'Overview', panels: ['review', 'worktrees'] },
       { id: 'execution', title: 'Execution', panels: ['agent', 'runlog', 'diff'] }
     ]
+  },
+  vision: {
+    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]
   },
   agents: {
     intents: [

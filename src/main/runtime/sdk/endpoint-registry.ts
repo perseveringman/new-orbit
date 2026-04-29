@@ -38,11 +38,11 @@ export const BUILT_IN_SDK_ENDPOINTS: SDKEndpoint[] = [
     label: 'MiniMax',
     provider: 'minimax',
     protocol: 'anthropic-compatible',
-    baseURL: 'https://api.minimax.chat/anthropic',
+    baseURL: 'https://api.minimaxi.com/anthropic',
     keyRef: 'sdk:endpoint:minimax',
-    defaultModel: 'minimax-m1',
+    defaultModel: 'MiniMax-M2.7',
     modelAlias: {
-      'claude-3-5-sonnet-latest': 'minimax-m1'
+      'claude-3-5-sonnet-latest': 'MiniMax-M2.7'
     },
     enabled: false,
     builtIn: true
@@ -54,9 +54,9 @@ export const BUILT_IN_SDK_ENDPOINTS: SDKEndpoint[] = [
     protocol: 'anthropic-compatible',
     baseURL: 'https://api.deepseek.com/anthropic',
     keyRef: 'sdk:endpoint:deepseek',
-    defaultModel: 'deepseek-chat',
+    defaultModel: 'deepseek-v4-pro',
     modelAlias: {
-      'claude-3-5-sonnet-latest': 'deepseek-chat'
+      'claude-3-5-sonnet-latest': 'deepseek-v4-pro'
     },
     enabled: false,
     builtIn: true
@@ -238,11 +238,44 @@ function normalizeRegistry(file: RegistryFile): RegistryFile {
   };
 }
 
+// Built-in baselines that previous Orbit versions wrote to user vaults.
+// When a stored built-in still matches one of these legacy snapshots, we treat
+// the values as untouched defaults and refresh them to the current built-in
+// definition so users automatically pick up upstream changes (e.g. new model
+// names, base URLs). User-customized values are preserved as-is.
+const LEGACY_BUILT_IN_SNAPSHOTS: Record<string, Array<Pick<SDKEndpoint, 'baseURL' | 'defaultModel'>>> = {
+  minimax: [
+    { baseURL: 'https://api.minimax.chat/anthropic', defaultModel: 'minimax-m1' },
+    { baseURL: 'https://api.minimaxi.com/anthropic', defaultModel: 'minimax-m1' }
+  ],
+  deepseek: [
+    { baseURL: 'https://api.deepseek.com/anthropic', defaultModel: 'deepseek-chat' }
+  ]
+};
+
+function isLegacyBuiltIn(id: string, endpoint: SDKEndpoint): boolean {
+  const snapshots = LEGACY_BUILT_IN_SNAPSHOTS[id];
+  if (!snapshots) return false;
+  return snapshots.some(
+    (snap) => snap.baseURL === endpoint.baseURL && snap.defaultModel === endpoint.defaultModel
+  );
+}
+
 function mergeBuiltIns(endpoints: SDKEndpoint[]): SDKEndpoint[] {
   const byId = new Map<string, SDKEndpoint>();
   for (const endpoint of BUILT_IN_SDK_ENDPOINTS) byId.set(endpoint.id, endpoint);
   for (const endpoint of endpoints) {
     const builtIn = byId.get(endpoint.id);
+    if (builtIn && isLegacyBuiltIn(endpoint.id, endpoint)) {
+      // Refresh stale built-in defaults but preserve user-controlled flags.
+      byId.set(endpoint.id, {
+        ...builtIn,
+        enabled: endpoint.enabled,
+        keyRef: builtIn.keyRef,
+        builtIn: true
+      });
+      continue;
+    }
     byId.set(endpoint.id, builtIn ? { ...builtIn, ...endpoint, keyRef: builtIn.keyRef, builtIn: true } : endpoint);
   }
   return [...byId.values()];

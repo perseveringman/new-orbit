@@ -166,7 +166,9 @@ import type {
 import type {
   ChannelConfig,
   ChannelInboundMessage,
+  ChannelOutboundMessage,
   GatewayConfig,
+  GatewayMessage,
   GatewayRouteResult,
   GatewayStatus
 } from './gateway';
@@ -239,6 +241,44 @@ import type {
   SynthesisArtifact,
   SynthesisFilter
 } from './synthesis';
+import type {
+  SearchAnswerResponse,
+  SearchQuery,
+  SearchResponse,
+  SemanticDocument,
+  SemanticIndexStatus
+} from './semantic';
+import type {
+  CreateMemoryInput,
+  MemoryCluster,
+  MemoryDigestResult,
+  MemoryFilter,
+  MemoryNode,
+  PromoteMemoryToProjectResult,
+  PromoteMemoryToResourceResult,
+  RecallOptions,
+  RecallResult,
+  RecallStats,
+  UpdateMemoryInput
+} from './memory';
+import type {
+  ReviewAction,
+  ReviewFilter,
+  ReviewKind,
+  ReviewRun,
+  ReviewRunDetail
+} from './review';
+import type {
+  CreateGoalInput,
+  UpdateGoalInput,
+  VisionAlignmentMap,
+  VisionDriftWarning,
+  VisionGoal,
+  VisionGoalDetail,
+  VisionHorizon,
+  VisionMilestone,
+  VisionReview
+} from './vision';
 
 /**
  * Typed IPC contract shared between main and renderer.
@@ -378,7 +418,15 @@ export const IPC = {
   },
   vision: {
     get: 'vision:get',
-    update: 'vision:update'
+    update: 'vision:update',
+    listGoals: 'vision:listGoals',
+    getGoal: 'vision:getGoal',
+    createGoal: 'vision:createGoal',
+    updateGoal: 'vision:updateGoal',
+    completeMilestone: 'vision:completeMilestone',
+    getAlignment: 'vision:getAlignment',
+    detectDrift: 'vision:detectDrift',
+    triggerReview: 'vision:triggerReview'
   },
   git: {
     status: 'git:status',
@@ -537,8 +585,12 @@ export const IPC = {
     delete: 'scheduledTasks:delete',
     pause: 'scheduledTasks:pause',
     resume: 'scheduledTasks:resume',
+    enable: 'scheduledTasks:enable',
+    disable: 'scheduledTasks:disable',
     triggerNow: 'scheduledTasks:triggerNow',
+    runNow: 'scheduledTasks:runNow',
     executions: 'scheduledTasks:executions',
+    getExecutions: 'scheduledTasks:getExecutions',
     parseNaturalLanguage: 'scheduledTasks:parseNaturalLanguage',
     event: 'scheduledTasks:event'
   },
@@ -564,6 +616,29 @@ export const IPC = {
     markStale: 'synthesis:markStale',
     applyUserEdit: 'synthesis:applyUserEdit'
   },
+  semantic: {
+    search: 'semantic:search',
+    getDocument: 'semantic:getDocument',
+    indexStatus: 'semantic:indexStatus',
+    rebuildIndex: 'semantic:rebuildIndex',
+    searchAndAnswer: 'semantic:searchAndAnswer',
+    event: 'semantic:event'
+  },
+  memory: {
+    list: 'memory:list',
+    get: 'memory:get',
+    create: 'memory:create',
+    update: 'memory:update',
+    archive: 'memory:archive',
+    merge: 'memory:merge',
+    promoteToResource: 'memory:promoteToResource',
+    promoteToProject: 'memory:promoteToProject',
+    recall: 'memory:recall',
+    recallStats: 'memory:recallStats',
+    clusters: 'memory:clusters',
+    generateDigest: 'memory:generateDigest',
+    event: 'memory:event'
+  },
   stage: {
     get: 'stage:get',
     addArtifact: 'stage:addArtifact',
@@ -575,12 +650,21 @@ export const IPC = {
     configGet: 'gateway:config:get',
     configUpdate: 'gateway:config:update',
     status: 'gateway:status',
+    getStatus: 'gateway:getStatus',
     start: 'gateway:start',
+    startDaemon: 'gateway:daemon:start',
     stop: 'gateway:stop',
+    stopDaemon: 'gateway:daemon:stop',
+    setVaultPath: 'gateway:daemon:setVaultPath',
+    listChannels: 'gateway:channels:list',
     addChannel: 'gateway:channel:add',
     updateChannel: 'gateway:channel:update',
+    enableChannel: 'gateway:channel:enable',
+    disableChannel: 'gateway:channel:disable',
     removeChannel: 'gateway:channel:remove',
     generateBindCode: 'gateway:channel:generateBindCode',
+    getMessages: 'gateway:messages:get',
+    sendOutbound: 'gateway:outbound:send',
     routeInbound: 'gateway:routeInbound',
     event: 'gateway:event'
   },
@@ -618,7 +702,13 @@ export const IPC = {
   review: {
     generate: 'review:generate',
     get: 'review:get',
-    list: 'review:list'
+    list: 'review:list',
+    listRuns: 'review:listRuns',
+    getRun: 'review:getRun',
+    triggerReview: 'review:triggerReview',
+    acknowledge: 'review:acknowledge',
+    executeAction: 'review:executeAction',
+    archiveRun: 'review:archiveRun'
   },
   autoRunner: {
     status: 'autoRunner:status',
@@ -1131,7 +1221,11 @@ export interface OrbitApi {
       setApiKey(endpointId: string, apiKey: string): Promise<SDKEndpointView>;
       deleteApiKey(endpointId: string): Promise<SDKEndpointView>;
       setDefaults(defaults: SDKEndpointDefaults): Promise<SDKEndpointDefaults>;
-      testEndpoint(endpointId: string, model?: string): Promise<SDKEndpointTestResult>;
+      testEndpoint(
+        endpointId: string,
+        model?: string,
+        prompt?: string
+      ): Promise<SDKEndpointTestResult>;
       decide(input: RuntimeRouteInput): Promise<RuntimeRouteDecision>;
     };
   };
@@ -1225,6 +1319,14 @@ export interface OrbitApi {
   vision: {
     get(): Promise<VisionDTO>;
     update(raw: string): Promise<VisionDTO>;
+    listGoals(horizon?: VisionHorizon): Promise<VisionGoal[]>;
+    getGoal(id: string): Promise<VisionGoalDetail | null>;
+    createGoal(input: CreateGoalInput): Promise<VisionGoal>;
+    updateGoal(id: string, patch: UpdateGoalInput): Promise<VisionGoal>;
+    completeMilestone(id: string): Promise<VisionMilestone>;
+    getAlignment(): Promise<VisionAlignmentMap[]>;
+    detectDrift(): Promise<VisionDriftWarning[]>;
+    triggerReview(): Promise<VisionReview>;
   };
   git: {
     status(opts?: { cwd?: string }): Promise<GitStatusSummary>;
@@ -1414,8 +1516,12 @@ export interface OrbitApi {
     delete(taskId: string): Promise<void>;
     pause(taskId: string): Promise<ScheduledTask>;
     resume(taskId: string): Promise<ScheduledTask>;
+    enable(taskId: string): Promise<ScheduledTask>;
+    disable(taskId: string): Promise<ScheduledTask>;
     triggerNow(taskId: string): Promise<ScheduledTaskExecution>;
+    runNow(taskId: string): Promise<ScheduledTaskExecution>;
     executions(taskId: string, limit?: number, offset?: number): Promise<ScheduledTaskExecution[]>;
+    getExecutions(taskId: string, limit?: number, offset?: number): Promise<ScheduledTaskExecution[]>;
     parseNaturalLanguage(text: string): Promise<NaturalLanguageScheduleResult>;
     onEvent(cb: (event: { type: string; task?: ScheduledTask; execution?: ScheduledTaskExecution }) => void): () => void;
   };
@@ -1441,6 +1547,29 @@ export interface OrbitApi {
     markStale(scopeKey: string, reason?: string): Promise<SynthesisArtifact | null>;
     applyUserEdit(input: ApplyUserEditInput): Promise<SynthesisArtifact>;
   };
+  semantic: {
+    search(query: SearchQuery): Promise<SearchResponse>;
+    getDocument(docId: string): Promise<SemanticDocument>;
+    indexStatus(): Promise<SemanticIndexStatus>;
+    rebuildIndex(): Promise<SemanticIndexStatus>;
+    searchAndAnswer(query: SearchQuery): Promise<SearchAnswerResponse>;
+    onEvent(cb: (event: { type: string; status?: SemanticIndexStatus }) => void): () => void;
+  };
+  memory: {
+    list(filter?: MemoryFilter): Promise<MemoryNode[]>;
+    get(id: string): Promise<MemoryNode | null>;
+    create(input: CreateMemoryInput): Promise<MemoryNode>;
+    update(id: string, patch: UpdateMemoryInput): Promise<MemoryNode>;
+    archive(id: string): Promise<void>;
+    merge(fromId: string, toId: string): Promise<MemoryNode>;
+    promoteToResource(id: string): Promise<PromoteMemoryToResourceResult>;
+    promoteToProject(id: string): Promise<PromoteMemoryToProjectResult>;
+    recall(query: string, options?: RecallOptions): Promise<RecallResult>;
+    recallStats(id: string): Promise<RecallStats>;
+    clusters(): Promise<MemoryCluster[]>;
+    generateDigest(): Promise<MemoryDigestResult>;
+    onEvent(cb: (event: { type: string; count?: number }) => void): () => void;
+  };
   stage: {
     get(conversationId: string): Promise<ConversationStage>;
     addArtifact(conversationId: string, artifact: Omit<Artifact, 'id' | 'conversation_id' | 'created_at'> & Partial<Pick<Artifact, 'id' | 'created_at'>>): Promise<Artifact>;
@@ -1452,12 +1581,21 @@ export interface OrbitApi {
     getConfig(): Promise<GatewayConfig>;
     updateConfig(patch: Partial<GatewayConfig>): Promise<GatewayConfig>;
     status(): Promise<GatewayStatus>;
+    getStatus(): Promise<GatewayStatus>;
     start(): Promise<GatewayStatus>;
+    startDaemon(): Promise<GatewayStatus>;
     stop(): Promise<GatewayStatus>;
+    stopDaemon(): Promise<GatewayStatus>;
+    setVaultPath(vaultPath: string): Promise<GatewayConfig>;
+    listChannels(): Promise<ChannelConfig[]>;
     addChannel(channel: Omit<ChannelConfig, 'id'> & { id?: string }): Promise<GatewayConfig>;
     updateChannel(channelId: string, patch: Partial<ChannelConfig>): Promise<GatewayConfig>;
+    enableChannel(channelId: string): Promise<GatewayConfig>;
+    disableChannel(channelId: string): Promise<GatewayConfig>;
     removeChannel(channelId: string): Promise<GatewayConfig>;
     generateBindCode(orbitUserId?: string): Promise<{ code: string; expires_at: string }>;
+    getMessages(limit?: number): Promise<GatewayMessage[]>;
+    sendOutbound(message: ChannelOutboundMessage): Promise<GatewayRouteResult>;
     routeInbound(message: ChannelInboundMessage): Promise<GatewayRouteResult>;
     onEvent(cb: (status: GatewayStatus) => void): () => void;
   };
@@ -1496,6 +1634,12 @@ export interface OrbitApi {
     generate(date?: string): Promise<DailyReviewDTO>;
     get(date?: string): Promise<DailyReviewDTO | null>;
     list(): Promise<JournalListItemDTO[]>;
+    listRuns(filter?: ReviewFilter): Promise<ReviewRun[]>;
+    getRun(id: string): Promise<ReviewRunDetail | null>;
+    triggerReview(kind: ReviewKind, scopeRef?: string): Promise<ReviewRun>;
+    acknowledge(findingId: string): Promise<void>;
+    executeAction(actionId: string): Promise<ReviewAction>;
+    archiveRun(id: string): Promise<void>;
   };
   autoRunner: {
     status(): Promise<AutoRunnerStatusDTO>;

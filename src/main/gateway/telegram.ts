@@ -128,6 +128,10 @@ async function handleMessage(
     await sendTelegramMessage(doFetch, token, message.chat.id, 'Orbit currently supports Telegram text, links, and captions.');
     return;
   }
+  if (/^\/start(?:@\w+)?$/i.test(text)) {
+    await sendTelegramMessage(doFetch, token, message.chat.id, 'Welcome to Orbit Gateway. Generate a bind code in Orbit, then send /start <code>.');
+    return;
+  }
 
   const bindCode = parseBindCommand(text);
   if (bindCode) {

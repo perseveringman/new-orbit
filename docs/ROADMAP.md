@@ -508,9 +508,11 @@ Acceptance:
 
 ### 7.1 Real semantic index
 
+Status: **implemented v1 (local deterministic embeddings; model-backed embeddings remain swappable behind the same embedder contract).**
+
 Deliverables:
 
-- replace hash-trick embedding with real embeddings
+- replace hash-trick embedding with real embeddings *(adapter contract is in place; current default is `orbit-local-hash-embedding-v1` to avoid a heavyweight runtime dependency)*
 - unified index over Notes / Library / Resource / Project / Area / Conversations / Synthesis artifacts
 - incremental indexing on TraceableEvent
 - hybrid search: full-text + vector + graph refs
@@ -529,12 +531,17 @@ UI:
 - filters by layer/entity/kind/source
 - “why this result” explanation
 - search answer synthesis
+- Ask across results handoff to Ask-Anywhere conversation context
 
 Acceptance:
 
 - Searching a concept surfaces notes, resources, conversations, and summaries together with layer labels.
+- `search.answer` is stored as a Layer 2 Synthesis artifact with provenance and source citations.
+- Raw Feed items are not indexed directly; they enter search only after Save to Library promotion.
 
 ### 7.2 Memory layer
+
+Status: **implemented v1** — MemoryNode store, stability evolution, recall service, Memory Explorer, Ask-Anywhere memory chips, digest artifact, and explicit Resource/Project promotion are wired.
 
 Deliverables:
 
@@ -562,8 +569,12 @@ Acceptance:
 
 - Past projects and notes can wake up in future tasks/Ask sessions.
 - Recall is traceable and explainable.
+- Memory promotion to Resource/Project is explicit and user-triggered; synthesis does not silently write Truth.
+- `memory.digest` is stored as a Layer 2 Synthesis artifact with provenance.
 
 ### 7.3 Weekly / monthly review
+
+Status: **implemented v1** — review runs/findings/actions store, discovery checks, system task definitions, Review workspace, synthesis-backed run artifact, and acknowledge/execute/archive flows are wired.
 
 Deliverables:
 
@@ -590,8 +601,12 @@ UI:
 Acceptance:
 
 - User can review a week from one page and convert findings into concrete actions.
+- Review discovery covers unassigned notes/projects, dormant resources, and read-but-undistilled library items.
+- Existing Daily Review journal IPC remains available while the new ReviewRun API powers the Review workspace.
 
 ### 7.4 Vision system revival
+
+Status: **implemented v1** — structured goals/milestones, alignment scoring, drift warnings, quarterly review artifact, and Vision Dashboard are wired while preserving `Vision.md`.
 
 Deliverables:
 
@@ -619,6 +634,8 @@ Acceptance:
 
 - Areas and projects can be traced back to Vision goals.
 - Review can detect neglected goals and overgrown areas.
+- Vision Dashboard renders goal tree, alignment bars, drift warnings, and milestone status.
+- Quarterly review creates a provenance-bearing Layer 2 synthesis artifact.
 
 ---
 
@@ -627,6 +644,8 @@ Acceptance:
 **Goal**: 让 Orbit 脱离桌面 UI 的限制，成为随时可触达、可自动执行的个人系统。
 
 ### 8.1 Gateway daemon and Telegram channel
+
+Status: **implemented v1** — Gateway runtime, daemon/app IPC aliases, Telegram long polling, binding/whitelist settings, command routing, message history, URL save, capture note, Ask routing, summary request, and file vault-save path are wired.
 
 Deliverables:
 
@@ -655,13 +674,17 @@ Acceptance:
 
 - User can send message from Telegram and get Ask-Anywhere response.
 - User can forward URL from phone into Library gate.
+- `/capture`, `/ask`, `/summary`, forwarded URLs, and forwarded files are routed explicitly and recorded in Gateway message history.
+- App-side Gateway Settings shows daemon status, channel permissions, whitelist/bind state, logs, and recent messages.
 
 ### 8.2 Scheduled automation
+
+Status: **implemented v1** — Scheduled Tasks now supports Phase 8 system/user automation, flexible weekly/monthly schedules, synthesis/review/memory-digest actions, run history, budget disabling, retry metadata, and enable/disable/runNow IPC aliases.
 
 Deliverables:
 
 - scheduled task top-level UI
-- system tasks: daily summary, weekly review, resource health scan
+- system tasks: daily summary, weekly review, monthly review, resource health scan, feed daily digest, vision quarterly review, memory weekly digest
 - user-created recurring tasks
 - execution history
 - notifications / Inbox message integration
@@ -683,6 +706,9 @@ UI:
 Acceptance:
 
 - User can create recurring AI tasks safely with visible history.
+- Required system task list is seeded automatically.
+- Budget-exceeded runs are recorded and disable the task instead of silently continuing.
+- Retry and notification preferences are explicit task metadata.
 
 ### 8.3 External event connectors
 

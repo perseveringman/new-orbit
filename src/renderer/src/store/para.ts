@@ -4,6 +4,7 @@ import type { EntitySummary, TaskFilter, TaskRecord, TaskStatus } from '@shared/
 export type WorkspaceView =
   | { kind: 'editor' }
   | { kind: 'dashboard' }
+  | { kind: 'vision' }
   | { kind: 'agents' }
   | { kind: 'github' }
   | { kind: 'developerConsole' }
@@ -11,6 +12,9 @@ export type WorkspaceView =
   | { kind: 'notes' }
   | { kind: 'library' }
   | { kind: 'feeds' }
+  | { kind: 'search' }
+  | { kind: 'memory' }
+  | { kind: 'review' }
   | { kind: 'resources' }
   | { kind: 'knowledgeBase' }
   | { kind: 'scheduled' }
