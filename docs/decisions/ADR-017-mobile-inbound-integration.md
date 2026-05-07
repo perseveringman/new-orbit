@@ -9,7 +9,7 @@ Orbit Mobile is a Capture-only iOS app. It writes complete capture directories t
 
 ## Decision
 
-Desktop Orbit will add `src/main/capture/mobile_inbound/` as a fourth Capture domain. The module watches `~/Library/Mobile Documents/iCloud~com.orbit.capture/Documents/inbox/*/.complete`, verifies `manifest.json.sha256`, parses schema version 1 manifests, creates a Thought through `ThoughtService`, copies attachments into `<vault>/.orbit/capture/attachments/<capture_id>/`, then moves the iCloud directory to `processed/<id>/` with `.acked`.
+Desktop Orbit will add `src/main/capture/mobile_inbound/` as a fourth Capture domain. The module watches `~/Library/Mobile Documents/iCloud~com.zhouyanbo.orbit.capture/Documents/inbox/*/.complete`, verifies `manifest.json.sha256`, parses schema version 1 manifests, creates a Thought through `ThoughtService`, copies attachments into `<vault>/.orbit/capture/attachments/<capture_id>/`, then moves the iCloud directory to `processed/<id>/` with `.acked`.
 
 Failures move the directory to `failed/<id>/` with `.failed.json` so Orbit Mobile can surface retryable versus conflicted states.
 

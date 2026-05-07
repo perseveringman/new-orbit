@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const DEFAULT_ORBIT_MOBILE_BUNDLE_ID = 'com.orbit.capture';
+export const DEFAULT_ORBIT_MOBILE_BUNDLE_ID = 'com.zhouyanbo.orbit.capture';
 
 export function iCloudContainerName(bundleId = DEFAULT_ORBIT_MOBILE_BUNDLE_ID): string {
   return `iCloud~${bundleId}`;
