@@ -323,11 +323,12 @@ The CLI talks to the Electron main process over the local vault socket. Missing 
 
 ## 13. Capture
 
-Capture v2 is split into three domains under `src/main/capture/`:
+Capture v2 is split into four domains under `src/main/capture/`:
 
 - **Feed**: RSS subscriptions, item de-duplication, refresh, fade-out/history.
 - **Library**: saved articles, reading state, promotion to Resource.
 - **Thoughts**: quick thought capture, edit/link/dismiss/promote lifecycle.
+- **Mobile inbound**: watches Orbit Mobile's iCloud Drive inbox, validates manifests, creates Thoughts, and writes ACK/failure sentinels.
 
 `quickCapture` binds the global shortcut (`⌘⇧I` on macOS) and opens a Thought-only renderer modal. Capture writes Inbox items so triage happens in the same attention hub.
 

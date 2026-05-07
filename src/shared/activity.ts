@@ -31,6 +31,8 @@ export const ACTIVITY_ACTIONS = [
   'thought.created',
   'thought.promoted',
   'thought.dismissed',
+  'mobile_capture.ingested',
+  'mobile_capture.failed',
   'agent.run_started',
   'agent.run_completed',
   'agent.run_failed',
