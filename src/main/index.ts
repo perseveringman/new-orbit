@@ -32,7 +32,13 @@ import { registerConversationIpc } from './conversation/ipc';
 import { registerAskAnywhereChatIpc } from './ask-anywhere/ipc';
 import { registerStageIpc } from './ask-anywhere/stage-ipc';
 import { migrateLegacyTaskConversations } from './conversation/migration';
-import { QUICK_CAPTURE_ACCELERATOR, broadcastQuickCaptureOpen, registerCaptureIpc } from './capture';
+import {
+  QUICK_CAPTURE_ACCELERATOR,
+  broadcastQuickCaptureOpen,
+  registerCaptureIpc,
+  startMobileInboundWatcher,
+  type MobileInboundWatcher
+} from './capture';
 import { registerNoteIpc } from './note/ipc';
 import { registerLibraryIpc } from './library/ipc';
 import { registerFeedIpc } from './feed/ipc';
@@ -73,6 +79,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 let currentVault: VaultInfo | null = null;
+let mobileInboundWatcher: MobileInboundWatcher | null = null;
 
 // Install crash handlers as early as possible.
 installMainCrashHandlers({
@@ -149,6 +156,7 @@ async function attachVaultRuntime(vaultPath: string): Promise<void> {
   await ensureScheduledSystemTasks(vaultPath);
   await autoStartGatewayIfNeeded(vaultPath);
   await ensureTerminalAgentRuntimeForVault(vaultPath);
+  mobileInboundWatcher = await startMobileInboundWatcher(vaultPath);
   void ensureVectorStore(vaultPath);
   void runWorktreeGc(vaultPath).catch(() => undefined);
   void migrateLegacyTaskConversations(vaultPath).catch((err) => {
@@ -283,6 +291,8 @@ function registerIpc(): void {
     await terminal.killAll();
     terminal.setVaultRoot(null);
     await closeVectorStore();
+    await mobileInboundWatcher?.stop();
+    mobileInboundWatcher = null;
     await stopCliServer();
     shutdownOrchestration();
     getAutoRunnerDispatcher().detach();

@@ -62,6 +62,7 @@ Layer 3  Surfaces         Timeline / Chat / Search / Dashboard / Resource / Area
 | Activity Log infrastructure | completed |
 | Capture tri-partition | completed |
 | Quick Capture MVP | completed |
+| Orbit Mobile inbound ingest | completed |
 
 ### Phase 3 — Agent Observability & Resilience
 
