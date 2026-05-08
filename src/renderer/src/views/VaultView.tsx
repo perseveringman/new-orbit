@@ -21,6 +21,9 @@ import { AskAnywhereView } from './AskAnywhereView';
 import { NotesView } from './NotesView';
 import { LibraryView } from './LibraryView';
 import { FeedView } from './FeedView';
+import { SearchView } from './SearchView';
+import { MemoryView } from './MemoryView';
+import { ReviewView } from './ReviewView';
 import { ResourceView } from './ResourceView';
 import { KnowledgeBaseView } from './KnowledgeBaseView';
 import { ScheduledTasksView } from './ScheduledTasksView';
@@ -31,6 +34,7 @@ import { TodayView } from './TodayView';
 import { KanbanView } from './KanbanView';
 import { AreaRoomView } from './AreaRoomView';
 import { AreaOverview } from './AreaOverview';
+import { VisionView } from './VisionView';
 import { DashboardView } from './DashboardView';
 import { GitHubWorkspaceView } from './GitHubWorkspaceView';
 import { ProjectRoomView } from './ProjectRoomView';
@@ -365,6 +369,12 @@ export function VaultView(): JSX.Element {
           <LibraryView />
         ) : view.kind === 'feeds' ? (
           <FeedView />
+        ) : view.kind === 'search' ? (
+          <SearchView />
+        ) : view.kind === 'memory' ? (
+          <MemoryView />
+        ) : view.kind === 'review' ? (
+          <ReviewView />
         ) : view.kind === 'resources' ? (
           <ResourceView />
         ) : view.kind === 'knowledgeBase' ? (
@@ -383,6 +393,8 @@ export function VaultView(): JSX.Element {
           <TodayView />
         ) : view.kind === 'github' ? (
           <GitHubWorkspaceView />
+        ) : view.kind === 'vision' ? (
+          <VisionView />
         ) : view.kind === 'dashboard' ? (
           <DashboardView />
         ) : view.kind === 'runtimes' ? (

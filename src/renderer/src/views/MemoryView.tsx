@@ -1,0 +1,224 @@
+import { useEffect, useMemo, useState } from 'react';
+import type { MemoryDigestResult, MemoryKind, MemoryNode } from '@shared/memory';
+import { MEMORY_KINDS } from '@shared/memory';
+
+type LoadState = 'loading' | 'success' | 'empty' | 'error';
+
+export function MemoryView(): JSX.Element {
+  const [kind, setKind] = useState<MemoryKind | 'all'>('all');
+  const [nodes, setNodes] = useState<MemoryNode[]>([]);
+  const [state, setState] = useState<LoadState>('loading');
+  const [error, setError] = useState<string | null>(null);
+  const [digest, setDigest] = useState<MemoryDigestResult | null>(null);
+
+  const load = async (): Promise<void> => {
+    setState('loading');
+    setError(null);
+    try {
+      const next = await window.orbit.memory.list({ kind });
+      setNodes(next);
+      setState(next.length ? 'success' : 'empty');
+    } catch (err) {
+      setError((err as Error).message);
+      setState('error');
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    const off = window.orbit.memory.onEvent(() => void load());
+    return off;
+  }, [kind]);
+
+  async function createManual(): Promise<void> {
+    const title = window.prompt('Memory title');
+    if (!title) return;
+    const summary = window.prompt('Memory summary');
+    if (!summary) return;
+    await window.orbit.memory.create({ kind: 'preference', title, summary, user_confirmed: true, confidence: 0.7 });
+    await load();
+  }
+
+  async function archive(id: string): Promise<void> {
+    if (!window.confirm('Archive this memory?')) return;
+    await window.orbit.memory.archive(id);
+    await load();
+  }
+
+  async function confirmMemory(node: MemoryNode): Promise<void> {
+    await window.orbit.memory.update(node.id, { user_confirmed: true, confidence: Math.max(node.confidence, 0.75), evidence_count: Math.max(node.evidence_count, 3) });
+    await load();
+  }
+
+  async function generateDigest(): Promise<void> {
+    setDigest(await window.orbit.memory.generateDigest());
+    await load();
+  }
+
+  async function promote(id: string, target: 'resource' | 'project'): Promise<void> {
+    if (target === 'resource') await window.orbit.memory.promoteToResource(id);
+    else await window.orbit.memory.promoteToProject(id);
+    await load();
+  }
+
+  return (
+    <MemoryContent
+      kind={kind}
+      nodes={nodes}
+      state={state}
+      error={error}
+      digest={digest}
+      onKindChange={setKind}
+      onReload={() => void load()}
+      onCreate={() => void createManual()}
+      onArchive={(id) => void archive(id)}
+      onConfirm={(node) => void confirmMemory(node)}
+      onDigest={() => void generateDigest()}
+      onPromote={(id, target) => void promote(id, target)}
+    />
+  );
+}
+
+export function MemoryContent(props: {
+  kind: MemoryKind | 'all';
+  nodes: MemoryNode[];
+  state: LoadState;
+  error: string | null;
+  digest: MemoryDigestResult | null;
+  onKindChange(kind: MemoryKind | 'all'): void;
+  onReload(): void;
+  onCreate(): void;
+  onArchive(id: string): void;
+  onConfirm(node: MemoryNode): void;
+  onDigest(): void;
+  onPromote(id: string, target: 'resource' | 'project'): void;
+}): JSX.Element {
+  const stats = useMemo(() => summarize(props.nodes), [props.nodes]);
+  return (
+    <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5">
+        <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Memory Explorer</p>
+              <h1 className="mt-1 text-2xl font-semibold">Transparent long-term memory</h1>
+              <p className="mt-2 max-w-3xl text-sm text-neutral-500">
+                Review, confirm, edit, archive, and promote memories extracted from conversations and reviews.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={props.onDigest} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">Generate digest</button>
+              <button onClick={props.onCreate} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">+ Memory</button>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <Stat label="Total" value={stats.total} />
+            <Stat label="Stable" value={stats.stable} />
+            <Stat label="Core" value={stats.core} />
+            <Stat label="Recalls" value={stats.recalls} />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(['all', ...MEMORY_KINDS] as const).map((item) => (
+              <button
+                key={item}
+                onClick={() => props.onKindChange(item)}
+                className={`rounded-full border px-3 py-1.5 text-xs ${props.kind === item ? 'border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'}`}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {props.digest && (
+          <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 text-sm dark:border-violet-900 dark:bg-violet-950/40">
+            <strong>Memory digest generated</strong>
+            <p className="mt-1 text-neutral-600 dark:text-neutral-300">
+              {props.digest.artifact.scope_key}: {props.digest.artifact.payload.new_memories.length} new, {props.digest.artifact.payload.reinforced_memories.length} reinforced.
+            </p>
+          </section>
+        )}
+
+        {props.state === 'loading' ? (
+          <MemorySkeleton />
+        ) : props.state === 'error' ? (
+          <StateCard title="Memory failed to load" body={props.error ?? 'Unknown memory error.'} actionLabel="Retry" onAction={props.onReload} />
+        ) : props.state === 'empty' ? (
+          <StateCard title="No memories yet" body="Start an Ask-Anywhere conversation or create a memory manually. Orbit will extract preferences, lessons, goals, and patterns transparently." actionLabel="Create memory" onAction={props.onCreate} />
+        ) : (
+          <section className="grid gap-3">
+            {props.nodes.map((node) => (
+              <MemoryCard key={node.id} node={node} onArchive={props.onArchive} onConfirm={props.onConfirm} onPromote={props.onPromote} />
+            ))}
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function MemoryCard(props: {
+  node: MemoryNode;
+  onArchive(id: string): void;
+  onConfirm(node: MemoryNode): void;
+  onPromote(id: string, target: 'resource' | 'project'): void;
+}): JSX.Element {
+  const tone =
+    props.node.stability === 'core'
+      ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
+      : props.node.stability === 'stable'
+        ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+        : 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300';
+  return (
+    <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap gap-2">
+        <span className={`rounded-full border px-2 py-1 text-xs ${tone}`}>{props.node.stability}</span>
+        <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">{props.node.kind}</span>
+        <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">confidence {props.node.confidence.toFixed(2)}</span>
+      </div>
+      <h2 className="mt-3 text-lg font-semibold">{props.node.title}</h2>
+      <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-300">{props.node.summary}</p>
+      <p className="mt-3 text-xs text-neutral-500">
+        evidence {props.node.evidence_count} · recalls {props.node.recall_count} · sources {props.node.sources.length}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button onClick={() => props.onConfirm(props.node)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Confirm</button>
+        <button onClick={() => props.onPromote(props.node.id, 'resource')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Promote to Resource</button>
+        <button onClick={() => props.onPromote(props.node.id, 'project')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Promote to Project</button>
+        <button onClick={() => props.onArchive(props.node.id)} className="rounded-lg border border-red-300 px-3 py-1.5 text-xs text-red-600 dark:border-red-900 dark:text-red-300">Archive</button>
+      </div>
+    </article>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-950">
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-1 text-xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function MemorySkeleton(): JSX.Element {
+  return <div className="h-40 animate-pulse rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900" />;
+}
+
+function StateCard(props: { title: string; body: string; actionLabel: string; onAction(): void }): JSX.Element {
+  return (
+    <section className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center dark:border-neutral-700 dark:bg-neutral-900">
+      <h2 className="text-lg font-semibold">{props.title}</h2>
+      <p className="mx-auto mt-2 max-w-2xl text-sm text-neutral-500">{props.body}</p>
+      <button onClick={props.onAction} className="mt-4 rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">{props.actionLabel}</button>
+    </section>
+  );
+}
+
+function summarize(nodes: MemoryNode[]): { total: number; stable: number; core: number; recalls: number } {
+  return {
+    total: nodes.length,
+    stable: nodes.filter((node) => node.stability === 'stable').length,
+    core: nodes.filter((node) => node.stability === 'core').length,
+    recalls: nodes.reduce((sum, node) => sum + node.recall_count, 0)
+  };
+}

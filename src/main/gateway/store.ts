@@ -4,12 +4,17 @@ import path from 'node:path';
 import type {
   ChannelConfig,
   ChannelInboundMessage,
+  ChannelOutboundMessage,
   GatewayConfig,
+  GatewayMessage,
   GatewayRouteResult
 } from '@shared/gateway';
 import { createLibraryService } from '../capture/library/service';
 import { createThoughtService } from '../capture/thoughts/service';
 import { getAskAnywhereOrchestrator } from '../ask-anywhere/ipc';
+import { createNoteStore } from '../note/store';
+import { parseGatewayCommand, textFromMessage } from './router';
+import { saveGatewayFile } from './vault-io';
 
 export class GatewayStore {
   constructor(private readonly vaultPath: string) {}
@@ -102,6 +107,39 @@ export class GatewayStore {
     return config;
   }
 
+  async listMessages(limit = 50): Promise<GatewayMessage[]> {
+    try {
+      return (await fs.readFile(this.messagesPath(), 'utf8'))
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as GatewayMessage)
+        .sort((a, b) => b.at.localeCompare(a.at))
+        .slice(0, limit);
+    } catch (error) {
+      if (isNotFound(error)) return [];
+      throw error;
+    }
+  }
+
+  async sendOutbound(message: ChannelOutboundMessage): Promise<GatewayRouteResult> {
+    const config = await this.getConfig();
+    const channel = config.channels.find((item) => item.id === message.channel_id);
+    if (!channel) return { accepted: false, reason: 'channel_not_found' };
+    const saved: GatewayMessage = {
+      id: `gateway-message-${randomUUID()}`,
+      direction: 'outbound',
+      channel_id: message.channel_id,
+      to: message.to,
+      at: new Date().toISOString(),
+      kind: message.kind,
+      content: message.content,
+      accepted: true,
+      reply: 'Outbound message queued.'
+    };
+    await this.appendMessage(saved);
+    return { accepted: true, reply: 'Outbound message queued.' };
+  }
+
   async generateBindCode(orbitUserId = 'local-user'): Promise<{ code: string; expires_at: string }> {
     const config = await this.getConfig();
     const code = randomUUID().slice(0, 6).toUpperCase();
@@ -114,23 +152,64 @@ export class GatewayStore {
   async routeInbound(message: ChannelInboundMessage): Promise<GatewayRouteResult> {
     const config = await this.getConfig();
     const channel = config.channels.find((item) => item.id === message.channel_id);
-    if (!channel) return { accepted: false, reason: 'channel_not_found' };
+    if (!channel) return this.recordInbound(message, { accepted: false, reason: 'channel_not_found' });
     if (channel.require_bind !== false && !channel.allowed_user_ids?.includes(message.from.id)) {
-      return { accepted: false, reason: 'sender_not_bound', reply: 'This Telegram user is not bound to Orbit yet.' };
+      return this.recordInbound(message, { accepted: false, reason: 'sender_not_bound', reply: 'This Telegram user is not bound to Orbit yet.' });
     }
     if (channel.allowed_user_ids?.length && !channel.allowed_user_ids.includes(message.from.id)) {
-      return { accepted: false, reason: 'sender_not_allowed', reply: 'This Telegram user is not allowed for this Orbit channel.' };
+      return this.recordInbound(message, { accepted: false, reason: 'sender_not_allowed', reply: 'This Telegram user is not allowed for this Orbit channel.' });
     }
-    const text = textFromMessage(message);
-    if (!text) return { accepted: false, reason: 'empty_message', reply: 'Orbit received an empty message.' };
-    if (message.kind === 'url' || /^https?:\/\//i.test(text)) {
+    const command = parseGatewayCommand(message);
+    if (command.kind === 'start') {
+      return this.recordInbound(message, { accepted: true, reply: 'Telegram is connected. Use /capture, /ask, /summary, or forward a URL.' });
+    }
+    if (command.kind === 'capture') {
+      if (channel.permissions?.capture === false) return this.recordInbound(message, { accepted: false, reason: 'permission_denied', reply: 'Capture is disabled for this channel.' });
+      const note = await createNoteStore(this.vaultPath).create({
+        type: 'capture',
+        title: command.text.slice(0, 60),
+        body: command.text,
+        tags: ['gateway', channel.kind],
+        source: { kind: 'manual', ref: `${channel.kind}:${message.from.id}` }
+      });
+      return this.recordInbound(message, { accepted: true, artifact: { kind: 'note', ref: note.frontmatter.id }, reply: 'Captured as a Note.' });
+    }
+    if (command.kind === 'ask') {
+      if (channel.permissions?.ask === false) return this.recordInbound(message, { accepted: false, reason: 'permission_denied', reply: 'Ask is disabled for this channel.' });
+      const result = await getAskAnywhereOrchestrator().ingestExternalMessage({
+        source: channel.kind,
+        threadId: channel.default_thread_id ?? message.from.id,
+        text: command.question,
+        title: `${channel.name} · ${message.from.name ?? message.from.id}`
+      });
+      return this.recordInbound(message, { accepted: true, conversationId: result.conversationId, reply: 'Routed to Ask-Anywhere.' });
+    }
+    if (command.kind === 'summary') {
+      if (channel.permissions?.summary === false) return this.recordInbound(message, { accepted: false, reason: 'permission_denied', reply: 'Summary is disabled for this channel.' });
+      const result = await getAskAnywhereOrchestrator().ingestExternalMessage({
+        source: channel.kind,
+        threadId: channel.default_thread_id ?? message.from.id,
+        text: "Generate today's daily summary.",
+        title: `${channel.name} · Daily summary`
+      });
+      return this.recordInbound(message, { accepted: true, conversationId: result.conversationId, reply: 'Daily summary requested.' });
+    }
+    if (command.kind === 'url') {
+      if (channel.permissions?.save_url === false) return this.recordInbound(message, { accepted: false, reason: 'permission_denied', reply: 'URL saving is disabled for this channel.' });
       const item = await createLibraryService(this.vaultPath).saveArticle({
-        url: text,
+        url: command.url,
         source: 'share',
         actor: 'user'
       });
-      return { accepted: true, artifact: { kind: 'library_item', ref: item.id }, reply: 'Saved to Library.' };
+      return this.recordInbound(message, { accepted: true, artifact: { kind: 'library_item', ref: item.id }, reply: 'Saved to Library.' });
     }
+    if (command.kind === 'file') {
+      if (channel.permissions?.save_file === false) return this.recordInbound(message, { accepted: false, reason: 'permission_denied', reply: 'File saving is disabled for this channel.' });
+      const relPath = await saveGatewayFile(this.vaultPath, command.name ?? 'telegram-file.txt', JSON.stringify(message.raw ?? message.content, null, 2));
+      return this.recordInbound(message, { accepted: true, artifact: { kind: 'file', ref: relPath }, reply: 'Saved forwarded file to vault.' });
+    }
+    const text = textFromMessage(message);
+    if (!text) return this.recordInbound(message, { accepted: false, reason: 'empty_message', reply: 'Orbit received an empty message.' });
     if (text.startsWith('#')) {
       const item = await createThoughtService(this.vaultPath).create({
         content: text.replace(/^#+\s*/, ''),
@@ -138,7 +217,7 @@ export class GatewayStore {
         createdFrom: 'manual',
         actor: 'user'
       });
-      return { accepted: true, artifact: { kind: 'thought', ref: item.id }, reply: 'Captured as a Thought.' };
+      return this.recordInbound(message, { accepted: true, artifact: { kind: 'thought', ref: item.id }, reply: 'Captured as a Thought.' });
     }
     const result = await getAskAnywhereOrchestrator().ingestExternalMessage({
       source: channel.kind,
@@ -146,32 +225,48 @@ export class GatewayStore {
       text,
       title: `${channel.name} · ${message.from.name ?? message.from.id}`
     });
-    return { accepted: true, conversationId: result.conversationId, reply: 'Routed to Ask-Anywhere.' };
+    return this.recordInbound(message, { accepted: true, conversationId: result.conversationId, reply: 'Routed to Ask-Anywhere.' });
   }
 
   private configPath(): string {
     return path.join(this.vaultPath, '.orbit', 'gateway', 'config.json');
   }
 
+  private messagesPath(): string {
+    return path.join(this.vaultPath, '.orbit', 'gateway', 'messages.ndjson');
+  }
+
   private async writeConfig(config: GatewayConfig): Promise<void> {
     await fs.mkdir(path.dirname(this.configPath()), { recursive: true });
     await fs.writeFile(this.configPath(), `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  }
+
+  private async recordInbound(message: ChannelInboundMessage, result: GatewayRouteResult): Promise<GatewayRouteResult> {
+    await this.appendMessage({
+      id: `gateway-message-${randomUUID()}`,
+      direction: 'inbound',
+      channel_id: message.channel_id,
+      at: message.timestamp,
+      from: message.from,
+      kind: message.kind,
+      content: message.content,
+      accepted: result.accepted,
+      ...(result.reason ? { reason: result.reason } : {}),
+      ...(result.reply ? { reply: result.reply } : {}),
+      ...(result.artifact ? { artifact: result.artifact } : {}),
+      ...(result.conversationId ? { conversationId: result.conversationId } : {})
+    });
+    return result;
+  }
+
+  private async appendMessage(message: GatewayMessage): Promise<void> {
+    await fs.mkdir(path.dirname(this.messagesPath()), { recursive: true });
+    await fs.appendFile(this.messagesPath(), `${JSON.stringify(message)}\n`, 'utf8');
   }
 }
 
 export function createGatewayStore(vaultPath: string): GatewayStore {
   return new GatewayStore(vaultPath);
-}
-
-function textFromMessage(message: ChannelInboundMessage): string {
-  if (typeof message.content === 'string') return message.content.trim();
-  if (typeof message.content === 'object' && message.content && 'text' in message.content) {
-    return String((message.content as { text?: unknown }).text ?? '').trim();
-  }
-  if (typeof message.content === 'object' && message.content && 'url' in message.content) {
-    return String((message.content as { url?: unknown }).url ?? '').trim();
-  }
-  return '';
 }
 
 function normalizeConfig(config: Partial<GatewayConfig>, vaultPath: string): GatewayConfig {
@@ -197,6 +292,7 @@ function normalizeChannel(channel: ChannelConfig): ChannelConfig {
     require_bind: channel.require_bind ?? channel.kind === 'telegram',
     drop_pending_updates_on_start: channel.drop_pending_updates_on_start ?? channel.kind === 'telegram',
     poll_timeout_seconds: channel.poll_timeout_seconds ?? (channel.kind === 'telegram' ? 25 : undefined),
+    permissions: channel.permissions ?? { capture: true, ask: true, save_url: true, save_file: true, summary: true },
     allowed_user_ids: channel.allowed_user_ids ?? [],
     status: channel.status ?? 'disconnected'
   };

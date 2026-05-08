@@ -1,0 +1,172 @@
+import { useEffect, useState } from 'react';
+import type { ReviewFinding, ReviewKind, ReviewRun, ReviewRunDetail } from '@shared/review';
+
+type LoadState = 'loading' | 'success' | 'empty' | 'error';
+
+export function ReviewView(): JSX.Element {
+  const [tab, setTab] = useState<ReviewKind>('weekly');
+  const [runs, setRuns] = useState<ReviewRun[]>([]);
+  const [detail, setDetail] = useState<ReviewRunDetail | null>(null);
+  const [state, setState] = useState<LoadState>('loading');
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async (): Promise<void> => {
+    setState('loading');
+    setError(null);
+    try {
+      const next = await window.orbit.review.listRuns({ kind: tab });
+      setRuns(next);
+      setDetail(next[0] ? await window.orbit.review.getRun(next[0].id) : null);
+      setState(next.length ? 'success' : 'empty');
+    } catch (err) {
+      setError((err as Error).message);
+      setState('error');
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [tab]);
+
+  async function trigger(): Promise<void> {
+    setState('loading');
+    const run = await window.orbit.review.triggerReview(tab);
+    setRuns([run, ...runs.filter((item) => item.id !== run.id)]);
+    setDetail(await window.orbit.review.getRun(run.id));
+    setState('success');
+  }
+
+  async function acknowledge(findingId: string): Promise<void> {
+    await window.orbit.review.acknowledge(findingId);
+    if (detail) setDetail(await window.orbit.review.getRun(detail.run.id));
+  }
+
+  async function execute(actionId: string): Promise<void> {
+    await window.orbit.review.executeAction(actionId);
+    if (detail) setDetail(await window.orbit.review.getRun(detail.run.id));
+  }
+
+  return (
+    <ReviewContent
+      tab={tab}
+      runs={runs}
+      detail={detail}
+      state={state}
+      error={error}
+      onTab={setTab}
+      onTrigger={() => void trigger()}
+      onReload={() => void load()}
+      onAcknowledge={(id) => void acknowledge(id)}
+      onExecute={(id) => void execute(id)}
+    />
+  );
+}
+
+export function ReviewContent(props: {
+  tab: ReviewKind;
+  runs: ReviewRun[];
+  detail: ReviewRunDetail | null;
+  state: LoadState;
+  error: string | null;
+  onTab(tab: ReviewKind): void;
+  onTrigger(): void;
+  onReload(): void;
+  onAcknowledge(id: string): void;
+  onExecute(id: string): void;
+}): JSX.Element {
+  const findings = props.detail?.findings ?? [];
+  return (
+    <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5">
+        <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Review System</p>
+              <h1 className="mt-1 text-2xl font-semibold">Find stale, unassigned, and dormant work</h1>
+              <p className="mt-2 max-w-3xl text-sm text-neutral-500">
+                Generate daily, weekly, monthly, Area, and Resource reviews from Layer 1 truth and traceable events.
+              </p>
+            </div>
+            <button onClick={props.onTrigger} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">
+              Run review now
+            </button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(['daily', 'weekly', 'monthly', 'area', 'resource'] as const).map((kind) => (
+              <button key={kind} onClick={() => props.onTab(kind)} className={`rounded-full border px-3 py-1.5 text-xs ${props.tab === kind ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300' : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'}`}>
+                {kind}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {props.state === 'loading' ? (
+          <div className="h-36 animate-pulse rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900" />
+        ) : props.state === 'error' ? (
+          <StateCard title="Review failed" body={props.error ?? 'Unknown review error.'} actionLabel="Retry" onAction={props.onReload} />
+        ) : props.state === 'empty' ? (
+          <StateCard title="No review runs yet" body="Run a review to generate findings for stale projects, unassigned notes, dormant resources, and library items waiting for distillation." actionLabel="Run review now" onAction={props.onTrigger} />
+        ) : (
+          <>
+            <section className="grid gap-3 md:grid-cols-4">
+              <HealthCard label="Runs" value={props.runs.length} detail={`${props.tab} history`} />
+              <HealthCard label="Findings" value={findings.length} detail="current run" />
+              <HealthCard label="Warnings" value={findings.filter((finding) => finding.severity === 'warning').length} detail="need attention" />
+              <HealthCard label="Resolved" value={findings.filter((finding) => finding.resolved_at || finding.acknowledged).length} detail={props.detail?.run.status ?? 'unknown'} />
+            </section>
+            <section className="grid gap-3">
+              {findings.map((finding) => (
+                <FindingCard key={finding.id} finding={finding} onAcknowledge={props.onAcknowledge} onExecute={props.onExecute} />
+              ))}
+            </section>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function FindingCard(props: { finding: ReviewFinding; onAcknowledge(id: string): void; onExecute(id: string): void }): JSX.Element {
+  const tone = props.finding.severity === 'warning' ? 'text-amber-700 dark:text-amber-300' : props.finding.severity === 'suggestion' ? 'text-sky-700 dark:text-sky-300' : 'text-neutral-500';
+  return (
+    <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${tone}`}>{props.finding.severity}</span>
+        <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">{props.finding.category}</span>
+        {props.finding.acknowledged && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">acknowledged</span>}
+      </div>
+      <h2 className="mt-3 text-lg font-semibold">{props.finding.title}</h2>
+      <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">{props.finding.rationale}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {props.finding.suggested_actions.map((action) => (
+          <button key={action.id} disabled={action.executed} onClick={() => props.onExecute(action.id)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs disabled:opacity-40 dark:border-neutral-700">
+            {action.executed ? 'Done' : action.description}
+          </button>
+        ))}
+        <button onClick={() => props.onAcknowledge(props.finding.id)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
+          Acknowledge
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function HealthCard({ label, value, detail }: { label: string; value: number; detail: string }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold">{value}</p>
+      <p className="mt-1 text-xs text-neutral-500">{detail}</p>
+    </div>
+  );
+}
+
+function StateCard(props: { title: string; body: string; actionLabel: string; onAction(): void }): JSX.Element {
+  return (
+    <section className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center dark:border-neutral-700 dark:bg-neutral-900">
+      <h2 className="text-lg font-semibold">{props.title}</h2>
+      <p className="mx-auto mt-2 max-w-2xl text-sm text-neutral-500">{props.body}</p>
+      <button onClick={props.onAction} className="mt-4 rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">{props.actionLabel}</button>
+    </section>
+  );
+}

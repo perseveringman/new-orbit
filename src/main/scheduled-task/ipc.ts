@@ -43,6 +43,18 @@ export function registerScheduledTaskIpc(getVaultPath: () => string | null): voi
     broadcast({ type: 'resumed', task });
     return task;
   });
+  ipcMain.handle(IPC.scheduledTasks.disable, async (_event, taskId: string) => {
+    const task = await store().pause(taskId);
+    publishTaskEvent('scheduled_task.paused', task);
+    broadcast({ type: 'disabled', task });
+    return task;
+  });
+  ipcMain.handle(IPC.scheduledTasks.enable, async (_event, taskId: string) => {
+    const task = await store().resume(taskId);
+    publishTaskEvent('scheduled_task.resumed', task);
+    broadcast({ type: 'enabled', task });
+    return task;
+  });
   ipcMain.handle(IPC.scheduledTasks.triggerNow, async (_event, taskId: string) => {
     const execution = await store().triggerNow(taskId);
     publishTraceableEvent({
@@ -54,7 +66,21 @@ export function registerScheduledTaskIpc(getVaultPath: () => string | null): voi
     broadcast({ type: 'execution', execution });
     return execution;
   });
+  ipcMain.handle(IPC.scheduledTasks.runNow, async (_event, taskId: string) => {
+    const execution = await store().triggerNow(taskId);
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'scheduled_task.execution.completed',
+      summary: `Scheduled task executed: ${taskId}`,
+      payload: { task_id: taskId, execution_id: execution.id, status: execution.status }
+    });
+    broadcast({ type: 'execution', execution });
+    return execution;
+  });
   ipcMain.handle(IPC.scheduledTasks.executions, (_event, taskId: string, limit?: number, offset?: number) =>
+    store().executions(taskId, limit, offset)
+  );
+  ipcMain.handle(IPC.scheduledTasks.getExecutions, (_event, taskId: string, limit?: number, offset?: number) =>
     store().executions(taskId, limit, offset)
   );
   ipcMain.handle(IPC.scheduledTasks.parseNaturalLanguage, (_event, text: string) =>
@@ -80,4 +106,3 @@ function broadcast(event: { type: string; task?: ScheduledTask; execution?: Sche
     if (!win.isDestroyed()) win.webContents.send(IPC.scheduledTasks.event, event);
   }
 }
-

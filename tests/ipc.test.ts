@@ -28,6 +28,7 @@ describe('IPC contract', () => {
         'inbox',
         'knowledgeBase',
         'library',
+        'memory',
         'migrations',
         'notes',
         'onboarding',
@@ -42,6 +43,7 @@ describe('IPC contract', () => {
         'scheduledTasks',
         'settings',
         'stage',
+        'semantic',
         'synthesis',
         'task',
         'terminal',
@@ -152,6 +154,59 @@ describe('IPC contract', () => {
     }
   });
 
+  it('scheduledTasks namespace declares Phase 8 management aliases', () => {
+    const keys = Object.keys(IPC.scheduledTasks).sort();
+    expect(keys).toEqual(
+      [
+        'create',
+        'delete',
+        'disable',
+        'enable',
+        'event',
+        'executions',
+        'get',
+        'getExecutions',
+        'list',
+        'parseNaturalLanguage',
+        'pause',
+        'resume',
+        'runNow',
+        'triggerNow',
+        'update'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.scheduledTasks)) expect(v.startsWith('scheduledTasks:')).toBe(true);
+  });
+
+  it('gateway namespace declares daemon, channel, and message APIs', () => {
+    const keys = Object.keys(IPC.gateway).sort();
+    expect(keys).toEqual(
+      [
+        'addChannel',
+        'configGet',
+        'configUpdate',
+        'disableChannel',
+        'enableChannel',
+        'event',
+        'generateBindCode',
+        'getMessages',
+        'getStatus',
+        'listChannels',
+        'removeChannel',
+        'routeInbound',
+        'sendOutbound',
+        'setVaultPath',
+        'start',
+        'startDaemon',
+        'status',
+        'stop',
+        'stopDaemon',
+        'updateChannel'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.gateway)) expect(v.startsWith('gateway:')).toBe(true);
+  });
+
   it('github namespace declares workspace + project + binding channels', () => {
     const keys = Object.keys(IPC.github).sort();
     expect(keys).toEqual(
@@ -257,6 +312,73 @@ describe('IPC contract', () => {
       ].sort()
     );
     for (const v of Object.values(IPC.area)) expect(v.startsWith('area:')).toBe(true);
+  });
+
+  it('semantic namespace declares Phase 7 search channels', () => {
+    const keys = Object.keys(IPC.semantic).sort();
+    expect(keys).toEqual(
+      ['search', 'getDocument', 'indexStatus', 'rebuildIndex', 'searchAndAnswer', 'event'].sort()
+    );
+    for (const v of Object.values(IPC.semantic)) expect(v.startsWith('semantic:')).toBe(true);
+  });
+
+  it('memory namespace declares Phase 7 memory channels', () => {
+    const keys = Object.keys(IPC.memory).sort();
+    expect(keys).toEqual(
+      [
+        'archive',
+        'clusters',
+        'create',
+        'event',
+        'generateDigest',
+        'get',
+        'list',
+        'merge',
+        'promoteToProject',
+        'promoteToResource',
+        'recall',
+        'recallStats',
+        'update'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.memory)) expect(v.startsWith('memory:')).toBe(true);
+  });
+
+  it('review namespace declares Phase 7 review-system channels while preserving daily journal channels', () => {
+    const keys = Object.keys(IPC.review).sort();
+    expect(keys).toEqual(
+      [
+        'acknowledge',
+        'archiveRun',
+        'executeAction',
+        'generate',
+        'get',
+        'getRun',
+        'list',
+        'listRuns',
+        'triggerReview'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.review)) expect(v.startsWith('review:')).toBe(true);
+  });
+
+  it('vision namespace declares structured goal channels while preserving Vision.md channels', () => {
+    const keys = Object.keys(IPC.vision).sort();
+    expect(keys).toEqual(
+      [
+        'completeMilestone',
+        'createGoal',
+        'detectDrift',
+        'get',
+        'getAlignment',
+        'getGoal',
+        'listGoals',
+        'triggerReview',
+        'update',
+        'updateGoal'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.vision)) expect(v.startsWith('vision:')).toBe(true);
   });
 
   it('OrbitApi type shape is assignable', () => {

@@ -33,8 +33,10 @@ export function registerSDKRuntimeIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.runtime.sdk.setDefaults, async (_event, defaults: SDKEndpointDefaults) =>
     getRegistry(getVaultPath).setDefaults(defaults)
   );
-  ipcMain.handle(IPC.runtime.sdk.testEndpoint, async (_event, endpointId: string, model?: string) =>
-    getRuntime(getVaultPath).router.testEndpoint(endpointId, model)
+  ipcMain.handle(
+    IPC.runtime.sdk.testEndpoint,
+    async (_event, endpointId: string, model?: string, prompt?: string) =>
+      getRuntime(getVaultPath).router.testEndpoint(endpointId, model, prompt)
   );
   ipcMain.handle(IPC.runtime.sdk.decide, async (_event, input) => getRuntime(getVaultPath).router.decide(input));
 }

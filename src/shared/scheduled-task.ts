@@ -6,9 +6,11 @@ export interface ScheduleConfig {
   interval_minutes?: number;
   time?: string;
   day_of_week?: number[];
+  days?: number[];
   day_of_month?: number;
   target_datetime?: string;
   timezone?: string;
+  flexible_days?: number[];
 }
 
 export type ScheduledTaskAction =
@@ -16,6 +18,9 @@ export type ScheduledTaskAction =
   | { kind: 'agent_run'; agent: string; prompt: string; runtime?: string }
   | { kind: 'shell'; command: string; cwd?: string }
   | { kind: 'feed_refresh'; source_id?: string }
+  | { kind: 'synthesis'; synthesis_kind: 'summary.daily' | 'summary.weekly' | 'summary.monthly' | 'summary.yearly' | 'review.weekly' | 'memory.digest' | 'summary.entity'; scope?: string }
+  | { kind: 'review'; review_kind: 'daily' | 'weekly' | 'monthly' | 'area' | 'resource'; scope_ref?: string }
+  | { kind: 'memory_digest'; period?: string }
   | { kind: 'webhook'; url: string; method: 'GET' | 'POST'; body?: unknown };
 
 export interface ScheduledTask {
@@ -35,6 +40,10 @@ export interface ScheduledTask {
   total_runs: number;
   success_runs: number;
   failure_runs: number;
+  budget_usd?: number;
+  retry?: { max_attempts: number; backoff_minutes?: number };
+  notify_channels?: string[];
+  disabled_reason?: string;
   tags?: string[];
 }
 
@@ -63,6 +72,9 @@ export interface CreateScheduledTaskInput {
   action: ScheduledTaskAction;
   source?: ScheduledTask['source'];
   para_ref?: string;
+  budget_usd?: number;
+  retry?: ScheduledTask['retry'];
+  notify_channels?: string[];
   tags?: string[];
 }
 
@@ -71,4 +83,3 @@ export interface NaturalLanguageScheduleResult {
   action: ScheduledTaskAction;
   confidence: number;
 }
-

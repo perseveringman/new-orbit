@@ -199,6 +199,81 @@ Resource 页面支持：
 
 Resource 的结构化状态保存在 `.orbit-resource.json`，同时生成 Obsidian-compatible 的 Markdown 目录和 README。
 
+## 5.9 Semantic Search
+
+**Search** 是跨 vault 的语义入口，会同时检索 Layer 1 truth（Notes、Library、Resources、Projects、Areas、Conversations、KB docs）和 Layer 2 synthesis artifacts。Feed 原始条目不会直接出现在搜索里；只有 **Save to Library** 后才进入 Layer 1 并被索引。
+
+Search 页面支持：
+
+- natural-language query，输入后 300ms debounce 搜索。
+- filters：entity kind、Layer 1/2、Area slug、时间范围，以及 semantic / keyword / hybrid mode。
+- index status：如果 TraceableEvent 标记索引 stale，页面会显示 stale badge 和 Refresh 按钮。
+- **Generate answer**：生成 `search.answer` synthesis artifact，带 provenance 和引用来源，不会写入 Notes/Library/Resources。
+- **Ask across results**：创建 Ask-Anywhere conversation，并把当前搜索结果作为上下文注入。
+
+## 5.10 Memory Explorer
+
+**Memory** 是可解释的长期记忆层，用来管理 Orbit 从对话、复盘和手动输入中提取的偏好、兴趣、行为模式、教训、目标和实体记忆。记忆不是 Note/Resource/Project truth；只有用户点击提升动作时才会写入 Layer 1。
+
+Memory 页面支持：
+
+- filter by kind：interest / preference / pattern / lesson / entity memory / goal。
+- stability：volatile / stable / core，会根据 evidence、confidence、recall count 和用户确认自动演化。
+- actions：Confirm、Archive、Promote to Resource、Promote to Project。
+- **Generate digest**：生成 `memory.digest` synthesis artifact，汇总新增、增强、可能衰退的记忆和 clusters。
+- Ask-Anywhere：有相关记忆被唤回时，会在对话顶部显示 memory chips，并可隐藏。
+
+## 5.11 Review System
+
+**Review** 会从 Layer 1 truth 中生成结构化复盘运行记录（ReviewRun）和 findings，用于发现 stale、unassigned、dormant、undistilled 等异常。旧的 Daily Review journal 仍然保留；新的 Review 页面面向周/月/Area/Resource 等结构化复盘。
+
+Review 页面支持：
+
+- tabs：daily / weekly / monthly / area / resource。
+- **Run review now**：立即生成一条 ReviewRun，并写入 `review.weekly` 或对应 summary synthesis artifact 作为 Layer 2 输出。
+- findings：warning / suggestion / info，带 rationale、evidence 和 suggested actions。
+- actions：Acknowledge、Ignore、Create Task、Archive Project、Assign Area、Refresh Resource 等；写 Truth 的动作必须由用户点击触发。
+- review history：已生成或归档的 run 会保存在 `.orbit/review/`。
+
+## 5.12 Vision Dashboard
+
+**Vision** 保留根目录 `Vision.md` 作为可读的 North Star，同时新增结构化目标层：goal、milestone、alignment 和 drift review。结构化数据保存在 `vision/.orbit/vision-store.json`。
+
+Vision 页面支持：
+
+- 创建不同 horizon 的目标：life / 5y / 1y / quarter。
+- 将目标关联到 Area slug，并通过 Area 下的 Projects、Resources、Notes 计算 alignment score。
+- drift warnings：发现目标关联 Area 缺失、inactive 或活动不足时提示。
+- milestone completion：里程碑完成会记录 TraceableEvent。
+- **Quarterly review**：生成 Vision review synthesis artifact，不会自动改写目标。
+
+## 5.13 Scheduled Automation
+
+**Scheduled** 用来管理 Orbit 的系统任务和用户自定义自动化。系统任务包括 Daily Summary、Weekly Review、Monthly Review、Resource Health Scan、Feed Daily Digest、Vision Quarterly Review 和 Memory Weekly Digest。
+
+Scheduled 页面支持：
+
+- 系统任务区和用户任务区，显示状态、下一次执行时间和执行历史。
+- 自然语言创建自动化，并可设置 budget、retry attempts 和通知渠道。
+- **Run now** 立即执行任务并记录 execution；synthesis、review 和 memory digest 动作只生成 Layer 2 产物或排队执行，不会静默写入 Truth。
+- **Enable / Disable** 管理任务状态；用户任务删除前会二次确认。
+- budget exceeded 会写入失败执行记录并禁用任务，避免后台无限消耗。
+
+## 5.14 Gateway + Telegram
+
+**Gateway** 是 Orbit 与外部世界连接的本地守护进程入口。当前 v1 支持 Telegram long polling、用户绑定/白名单、权限开关、消息历史和基础路由。
+
+Telegram 支持：
+
+- `/start <code>`：在 Gateway 页面生成一次性 bind code 后绑定 Telegram 用户。
+- `/capture <text>`：创建 capture note，写入 Layer 1 需要用户显式发送命令。
+- `/ask <question>`：把问题路由到 Ask-Anywhere conversation。
+- `/summary`：请求生成当天 summary。
+- 转发 URL：保存到 Library gate。
+- 转发文件：保存到 vault 的 gateway inbox 路径。
+
+Gateway 页面支持启动/停止 daemon、配置 Telegram token、维护 whitelist、查看 channel permissions、最近消息和 Gateway logs。App 侧 IPC 也提供 `getStatus/listChannels/enableChannel/disableChannel/getMessages/sendOutbound/startDaemon/stopDaemon/setVaultPath`，方便后续拆成真正独立进程。
+
 ## 6. 四段式任务编辑
 
 每个 task 文件是一份 Markdown：

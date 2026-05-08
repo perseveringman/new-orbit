@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createGatewayStore } from '../src/main/gateway/store';
 import { runTelegramLongPolling } from '../src/main/gateway/telegram';
+import { parseGatewayCommand } from '../src/main/gateway/router';
 import { configureActivityEmitter } from '../src/main/activity';
 import type { ChannelConfig, ChannelInboundMessage } from '../src/shared/gateway';
 
@@ -55,6 +56,64 @@ describe('Gateway runtime', () => {
     expect(routed.accepted).toBe(true);
     expect(routed.artifact?.kind).toBe('thought');
     expect(routed.reply).toBe('Captured as a Thought.');
+  });
+
+  it('parses Telegram commands and routes /capture to a capture note', async () => {
+    const store = createGatewayStore(vaultPath);
+    const config = await store.addChannel({
+      kind: 'telegram',
+      name: 'Telegram',
+      enabled: true,
+      bot_token: 'token',
+      allowed_user_ids: ['42'],
+      require_bind: true
+    });
+    const channel = config.channels[0]!;
+    const message: ChannelInboundMessage = {
+      channel_id: channel.id,
+      from: { id: '42', name: 'Ryan', identity_verified: true },
+      kind: 'text',
+      content: '/capture remember the blue notebook',
+      timestamp: new Date().toISOString()
+    };
+
+    expect(parseGatewayCommand(message)).toMatchObject({ kind: 'capture', text: 'remember the blue notebook' });
+    const routed = await store.routeInbound(message);
+    const messages = await store.listMessages();
+
+    expect(routed).toMatchObject({ accepted: true, artifact: { kind: 'note' }, reply: 'Captured as a Note.' });
+    expect(messages[0]).toMatchObject({ direction: 'inbound', reply: 'Captured as a Note.' });
+  });
+
+  it('routes forwarded URLs into Library and records outbound messages', async () => {
+    const store = createGatewayStore(vaultPath);
+    const config = await store.addChannel({
+      kind: 'telegram',
+      name: 'Telegram',
+      enabled: true,
+      bot_token: 'token',
+      allowed_user_ids: ['42'],
+      require_bind: true
+    });
+    const channel = config.channels[0]!;
+
+    const routed = await store.routeInbound({
+      channel_id: channel.id,
+      from: { id: '42', name: 'Ryan', identity_verified: true },
+      kind: 'url',
+      content: 'https://example.com/article',
+      timestamp: new Date().toISOString()
+    });
+    const outbound = await store.sendOutbound({
+      channel_id: channel.id,
+      to: '42',
+      kind: 'text',
+      content: 'Saved.'
+    });
+
+    expect(routed).toMatchObject({ accepted: true, artifact: { kind: 'library_item' }, reply: 'Saved to Library.' });
+    expect(outbound).toMatchObject({ accepted: true, reply: 'Outbound message queued.' });
+    expect(await store.listMessages()).toHaveLength(2);
   });
 
   it('polls Telegram updates, routes inbound text, and sends a reply', async () => {

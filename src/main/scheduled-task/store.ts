@@ -16,44 +16,60 @@ interface ScheduledTaskFile {
 
 const SYSTEM_TASKS: CreateScheduledTaskInput[] = [
   {
-    name: 'Daily timeline summary',
+    name: 'Daily Summary',
     description: 'Generate the AI summary card for today.',
-    schedule: { kind: 'daily', time: '21:30' },
-    action: { kind: 'ask_anywhere', prompt: 'Generate today timeline summary.', skills: ['timeline'] },
+    schedule: { kind: 'daily', time: '21:30', timezone: 'local' },
+    action: { kind: 'synthesis', synthesis_kind: 'summary.daily', scope: 'timeline:today' },
     source: 'system',
     tags: ['timeline', 'summary']
   },
   {
-    name: 'Feed refresh',
-    description: 'Refresh all feed subscriptions.',
-    schedule: { kind: 'interval', interval_minutes: 180 },
-    action: { kind: 'feed_refresh' },
+    name: 'Weekly Review',
+    description: 'Generate the weekly PARA review.',
+    schedule: { kind: 'weekly', days: [0], day_of_week: [0], time: '20:00', timezone: 'local' },
+    action: { kind: 'review', review_kind: 'weekly' },
     source: 'system',
-    tags: ['feed']
+    tags: ['review']
   },
   {
-    name: 'Resource health scan',
+    name: 'Monthly Review',
+    description: 'Generate the monthly PARA review.',
+    schedule: { kind: 'monthly', day_of_month: -1, time: '20:00', timezone: 'local' },
+    action: { kind: 'review', review_kind: 'monthly' },
+    source: 'system',
+    tags: ['review']
+  },
+  {
+    name: 'Resource Health Scan',
     description: 'Scan resource activity and surface dormant topics.',
-    schedule: { kind: 'weekly', day_of_week: [1], time: '09:00' },
-    action: { kind: 'ask_anywhere', prompt: 'Scan resource health and flag dormant resources.', skills: ['resources'] },
+    schedule: { kind: 'weekly', days: [1], day_of_week: [1], time: '09:00', timezone: 'local' },
+    action: { kind: 'review', review_kind: 'resource' },
     source: 'system',
     tags: ['resource']
   },
   {
-    name: 'Area weekly review',
-    description: 'Prepare a weekly review prompt for active Areas.',
-    schedule: { kind: 'weekly', day_of_week: [0], time: '20:00' },
-    action: { kind: 'ask_anywhere', prompt: 'Prepare my weekly Area review.', skills: ['areas'] },
+    name: 'Feed Daily Digest',
+    description: 'Generate a daily synthesis digest for saved feed signals.',
+    schedule: { kind: 'daily', time: '19:00', timezone: 'local' },
+    action: { kind: 'synthesis', synthesis_kind: 'summary.daily', scope: 'feed:digest:today' },
     source: 'system',
-    tags: ['area', 'review']
+    tags: ['feed', 'digest']
   },
   {
-    name: 'Knowledge-base rescan',
-    description: 'Rescan imported knowledge bases for external edits.',
-    schedule: { kind: 'daily', time: '08:30' },
-    action: { kind: 'ask_anywhere', prompt: 'Rescan knowledge bases and report changes.', skills: ['knowledge-base'] },
+    name: 'Vision Quarterly Review',
+    description: 'Review structured Vision goals and drift.',
+    schedule: { kind: 'monthly', day_of_month: -1, time: '20:00', timezone: 'local', flexible_days: [90] },
+    action: { kind: 'synthesis', synthesis_kind: 'summary.entity', scope: 'vision:quarterly' },
     source: 'system',
-    tags: ['kb']
+    tags: ['vision', 'review']
+  },
+  {
+    name: 'Memory Weekly Digest',
+    description: 'Generate the weekly memory digest artifact.',
+    schedule: { kind: 'weekly', days: [0], day_of_week: [0], time: '18:00', timezone: 'local' },
+    action: { kind: 'memory_digest' },
+    source: 'system',
+    tags: ['memory', 'digest']
   }
 ];
 
@@ -135,6 +151,18 @@ export class ScheduledTaskStore {
     const task = await this.get(taskId);
     if (!task) throw new Error(`scheduled task not found: ${taskId}`);
     const now = new Date().toISOString();
+    if (task.budget_usd !== undefined && task.budget_usd <= 0) {
+      const execution = failedExecution(taskId, now, 'scheduled_task_budget_exceeded');
+      await this.appendExecution(execution);
+      await this.update(taskId, {
+        status: 'disabled',
+        disabled_reason: 'budget_exceeded',
+        last_run_at: now,
+        total_runs: task.total_runs + 1,
+        failure_runs: task.failure_runs + 1
+      });
+      return execution;
+    }
     const execution: ScheduledTaskExecution = {
       id: `exec-${randomUUID()}`,
       task_id: taskId,
@@ -202,6 +230,9 @@ export class ScheduledTaskStore {
       source: input.source ?? 'user',
       ...(systemKey ? { system_key: systemKey } : {}),
       ...(input.para_ref ? { para_ref: input.para_ref } : {}),
+      ...(input.budget_usd !== undefined ? { budget_usd: input.budget_usd } : {}),
+      ...(input.retry ? { retry: input.retry } : {}),
+      ...(input.notify_channels ? { notify_channels: input.notify_channels } : {}),
       total_runs: 0,
       success_runs: 0,
       failure_runs: 0,
@@ -263,11 +294,18 @@ function computeNextRun(schedule: ScheduledTask['schedule']): string | undefined
   const next = new Date(now);
   next.setHours(hour || 9, minute || 0, 0, 0);
   if (next <= now) next.setDate(next.getDate() + 1);
-  if (schedule.kind === 'weekly' && schedule.day_of_week?.length) {
-    while (!schedule.day_of_week.includes(next.getDay())) next.setDate(next.getDate() + 1);
+  if (schedule.kind === 'weekly') {
+    const days = schedule.days?.length ? schedule.days : schedule.day_of_week;
+    if (days?.length) {
+      while (!days.includes(next.getDay())) next.setDate(next.getDate() + 1);
+    }
   }
   if (schedule.kind === 'monthly' && schedule.day_of_month) {
-    next.setDate(schedule.day_of_month);
+    if (schedule.day_of_month === -1) {
+      next.setMonth(next.getMonth() + 1, 0);
+    } else {
+      next.setDate(schedule.day_of_month);
+    }
     if (next <= now) next.setMonth(next.getMonth() + 1);
   }
   return next.toISOString();
@@ -275,9 +313,24 @@ function computeNextRun(schedule: ScheduledTask['schedule']): string | undefined
 
 function outputForAction(action: ScheduledTask['action']): unknown {
   if (action.kind === 'feed_refresh') return { message: 'Feed refresh queued.' };
+  if (action.kind === 'synthesis') return { artifact_kind: action.synthesis_kind, scope: action.scope ?? 'global', message: 'Synthesis task queued.' };
+  if (action.kind === 'review') return { review_kind: action.review_kind, scope_ref: action.scope_ref ?? null, message: 'Review task queued.' };
+  if (action.kind === 'memory_digest') return { artifact_kind: 'memory.digest', period: action.period ?? 'current', message: 'Memory digest queued.' };
   if (action.kind === 'ask_anywhere') return { prompt: action.prompt, message: 'Ask-Anywhere task recorded.' };
   if (action.kind === 'shell') return { command: action.command, message: 'Shell execution is disabled in this safe trigger path.' };
   return { message: `${action.kind} trigger recorded.` };
+}
+
+function failedExecution(taskId: string, now: string, error: string): ScheduledTaskExecution {
+  return {
+    id: `exec-${randomUUID()}`,
+    task_id: taskId,
+    triggered_at: now,
+    started_at: now,
+    completed_at: now,
+    status: 'failure',
+    error
+  };
 }
 
 function slugify(value: string): string {
@@ -287,4 +340,3 @@ function slugify(value: string): string {
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
-

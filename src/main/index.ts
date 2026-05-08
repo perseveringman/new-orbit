@@ -51,6 +51,10 @@ import { createGatewayStore } from './gateway/store';
 import { registerResourceIpc } from './resource/ipc';
 import { registerSDKRuntimeIpc } from './runtime/sdk/ipc';
 import { registerSynthesisIpc } from './synthesis/ipc';
+import { getSemanticRuntime, registerSemanticIpc } from './semantic/ipc';
+import { registerMemoryIpc } from './memory/ipc';
+import { registerReviewSystemIpc } from './review/ipc';
+import { registerVisionSystemIpc } from './vision/ipc';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
 import * as terminal from './terminal/pty_manager';
@@ -158,6 +162,9 @@ async function attachVaultRuntime(vaultPath: string): Promise<void> {
   await ensureTerminalAgentRuntimeForVault(vaultPath);
   mobileInboundWatcher = await startMobileInboundWatcher(vaultPath);
   void ensureVectorStore(vaultPath);
+  void getSemanticRuntime(vaultPath).store.rebuildIndex().catch((err) => {
+    console.warn('[semantic] initial index failed', err);
+  });
   void runWorktreeGc(vaultPath).catch(() => undefined);
   void migrateLegacyTaskConversations(vaultPath).catch((err) => {
     console.warn('[conversation-migration] failed', err);
@@ -397,6 +404,10 @@ function registerIpc(): void {
   registerResourceIpc(() => currentVault?.path ?? null);
   registerSDKRuntimeIpc(() => currentVault?.path ?? null);
   registerSynthesisIpc(() => currentVault?.path ?? null);
+  registerSemanticIpc(() => currentVault?.path ?? null);
+  registerMemoryIpc(() => currentVault?.path ?? null);
+  registerReviewSystemIpc(() => currentVault?.path ?? null);
+  registerVisionSystemIpc(() => currentVault?.path ?? null);
   registerAutoRunnerIpc();
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);

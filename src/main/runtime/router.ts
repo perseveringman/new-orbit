@@ -117,11 +117,20 @@ export class RuntimeRouter {
     return result;
   }
 
-  async testEndpoint(endpointId: string, modelHint?: string): Promise<SDKEndpointTestResult> {
+  async testEndpoint(
+    endpointId: string,
+    modelHint?: string,
+    prompt?: string
+  ): Promise<SDKEndpointTestResult> {
     const started = Date.now();
-    const resolved = await this.resolveInvocation({ endpointId, model: modelHint, messages: [{ role: 'user', content: 'test' }] });
+    let resolvedModel: string | undefined;
     try {
-      const message = await this.adapter.test(resolved);
+      const resolved = await this.resolveInvocation(
+        { endpointId, model: modelHint, messages: [{ role: 'user', content: 'test' }] },
+        { allowDisabled: true }
+      );
+      resolvedModel = resolved.model;
+      const message = await this.adapter.test(resolved, prompt);
       return {
         ok: true,
         endpointId,
@@ -133,20 +142,25 @@ export class RuntimeRouter {
       return {
         ok: false,
         endpointId,
-        model: resolved.model,
+        ...(resolvedModel ? { model: resolvedModel } : {}),
         latencyMs: Date.now() - started,
         error: error instanceof Error ? error.message : String(error)
       };
     }
   }
 
-  private async resolveInvocation(input: SDKInvocationInput): Promise<SDKResolvedInvocation> {
+  private async resolveInvocation(
+    input: SDKInvocationInput,
+    options: { allowDisabled?: boolean } = {}
+  ): Promise<SDKResolvedInvocation> {
     const mode = defaultMode(input.mode ?? 'ask');
     const endpoint = input.endpointId
       ? await this.registry.require(input.endpointId)
       : await this.registry.defaultEndpoint(mode);
     if (!endpoint) throw new Error('sdk_endpoint_not_configured');
-    if (!endpoint.enabled) throw new Error(`sdk_endpoint_disabled:${endpoint.id}`);
+    if (!options.allowDisabled && !endpoint.enabled) {
+      throw new Error(`sdk_endpoint_disabled:${endpoint.id}`);
+    }
     const apiKey = await this.keyVault.get(endpoint.keyRef);
     if (!apiKey) throw new Error(`sdk_key_missing:${endpoint.id}`);
     return {

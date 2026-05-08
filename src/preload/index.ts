@@ -141,11 +141,17 @@ import type { Artifact, ConversationStage } from '@shared/stage';
 import type {
   ChannelConfig,
   ChannelInboundMessage,
+  ChannelOutboundMessage,
   GatewayConfig,
+  GatewayMessage,
   GatewayRouteResult,
   GatewayStatus
 } from '@shared/gateway';
 import type { ResourceChangeEvent } from '@shared/resource';
+import type { SearchQuery, SemanticIndexStatus } from '@shared/semantic';
+import type { CreateMemoryInput, MemoryFilter, RecallOptions, UpdateMemoryInput } from '@shared/memory';
+import type { ReviewFilter, ReviewKind } from '@shared/review';
+import type { CreateGoalInput, UpdateGoalInput, VisionHorizon } from '@shared/vision';
 import type {
   AreaAssignmentInput,
   AreaAssignmentSuggestion,
@@ -263,7 +269,8 @@ const api: OrbitApi = {
       setApiKey: (endpointId, apiKey) => ipcRenderer.invoke(IPC.runtime.sdk.setApiKey, endpointId, apiKey),
       deleteApiKey: (endpointId) => ipcRenderer.invoke(IPC.runtime.sdk.deleteApiKey, endpointId),
       setDefaults: (defaults) => ipcRenderer.invoke(IPC.runtime.sdk.setDefaults, defaults),
-      testEndpoint: (endpointId, model) => ipcRenderer.invoke(IPC.runtime.sdk.testEndpoint, endpointId, model),
+      testEndpoint: (endpointId, model, prompt) =>
+        ipcRenderer.invoke(IPC.runtime.sdk.testEndpoint, endpointId, model, prompt),
       decide: (input) => ipcRenderer.invoke(IPC.runtime.sdk.decide, input)
     }
   },
@@ -379,7 +386,15 @@ const api: OrbitApi = {
   },
   vision: {
     get: () => ipcRenderer.invoke(IPC.vision.get),
-    update: (raw: string) => ipcRenderer.invoke(IPC.vision.update, raw)
+    update: (raw: string) => ipcRenderer.invoke(IPC.vision.update, raw),
+    listGoals: (horizon?: VisionHorizon) => ipcRenderer.invoke(IPC.vision.listGoals, horizon),
+    getGoal: (id: string) => ipcRenderer.invoke(IPC.vision.getGoal, id),
+    createGoal: (input: CreateGoalInput) => ipcRenderer.invoke(IPC.vision.createGoal, input),
+    updateGoal: (id: string, patch: UpdateGoalInput) => ipcRenderer.invoke(IPC.vision.updateGoal, id, patch),
+    completeMilestone: (id: string) => ipcRenderer.invoke(IPC.vision.completeMilestone, id),
+    getAlignment: () => ipcRenderer.invoke(IPC.vision.getAlignment),
+    detectDrift: () => ipcRenderer.invoke(IPC.vision.detectDrift),
+    triggerReview: () => ipcRenderer.invoke(IPC.vision.triggerReview)
   },
   git: {
     status: (opts?: { cwd?: string }) => ipcRenderer.invoke(IPC.git.status, opts),
@@ -670,10 +685,18 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.scheduledTasks.pause, taskId),
     resume: (taskId: string): Promise<ScheduledTask> =>
       ipcRenderer.invoke(IPC.scheduledTasks.resume, taskId),
+    disable: (taskId: string): Promise<ScheduledTask> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.disable, taskId),
+    enable: (taskId: string): Promise<ScheduledTask> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.enable, taskId),
     triggerNow: (taskId: string): Promise<ScheduledTaskExecution> =>
       ipcRenderer.invoke(IPC.scheduledTasks.triggerNow, taskId),
+    runNow: (taskId: string): Promise<ScheduledTaskExecution> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.runNow, taskId),
     executions: (taskId: string, limit?: number, offset?: number): Promise<ScheduledTaskExecution[]> =>
       ipcRenderer.invoke(IPC.scheduledTasks.executions, taskId, limit, offset),
+    getExecutions: (taskId: string, limit?: number, offset?: number): Promise<ScheduledTaskExecution[]> =>
+      ipcRenderer.invoke(IPC.scheduledTasks.getExecutions, taskId, limit, offset),
     parseNaturalLanguage: (text: string): Promise<NaturalLanguageScheduleResult> =>
       ipcRenderer.invoke(IPC.scheduledTasks.parseNaturalLanguage, text),
     onEvent: (cb: (event: { type: string; task?: ScheduledTask; execution?: ScheduledTaskExecution }) => void) => {
@@ -715,6 +738,37 @@ const api: OrbitApi = {
     markStale: (scopeKey, reason) => ipcRenderer.invoke(IPC.synthesis.markStale, scopeKey, reason),
     applyUserEdit: (input) => ipcRenderer.invoke(IPC.synthesis.applyUserEdit, input)
   },
+  semantic: {
+    search: (query: SearchQuery) => ipcRenderer.invoke(IPC.semantic.search, query),
+    getDocument: (docId: string) => ipcRenderer.invoke(IPC.semantic.getDocument, docId),
+    indexStatus: () => ipcRenderer.invoke(IPC.semantic.indexStatus),
+    rebuildIndex: () => ipcRenderer.invoke(IPC.semantic.rebuildIndex),
+    searchAndAnswer: (query: SearchQuery) => ipcRenderer.invoke(IPC.semantic.searchAndAnswer, query),
+    onEvent: (cb: (event: { type: string; status?: SemanticIndexStatus }) => void) => {
+      const listener = (_: unknown, event: { type: string; status?: SemanticIndexStatus }): void => cb(event);
+      ipcRenderer.on(IPC.semantic.event, listener);
+      return () => ipcRenderer.removeListener(IPC.semantic.event, listener);
+    }
+  },
+  memory: {
+    list: (filter?: MemoryFilter) => ipcRenderer.invoke(IPC.memory.list, filter),
+    get: (id: string) => ipcRenderer.invoke(IPC.memory.get, id),
+    create: (input: CreateMemoryInput) => ipcRenderer.invoke(IPC.memory.create, input),
+    update: (id: string, patch: UpdateMemoryInput) => ipcRenderer.invoke(IPC.memory.update, id, patch),
+    archive: (id: string) => ipcRenderer.invoke(IPC.memory.archive, id),
+    merge: (fromId: string, toId: string) => ipcRenderer.invoke(IPC.memory.merge, fromId, toId),
+    promoteToResource: (id: string) => ipcRenderer.invoke(IPC.memory.promoteToResource, id),
+    promoteToProject: (id: string) => ipcRenderer.invoke(IPC.memory.promoteToProject, id),
+    recall: (query: string, options?: RecallOptions) => ipcRenderer.invoke(IPC.memory.recall, query, options),
+    recallStats: (id: string) => ipcRenderer.invoke(IPC.memory.recallStats, id),
+    clusters: () => ipcRenderer.invoke(IPC.memory.clusters),
+    generateDigest: () => ipcRenderer.invoke(IPC.memory.generateDigest),
+    onEvent: (cb: (event: { type: string; count?: number }) => void) => {
+      const listener = (_: unknown, event: { type: string; count?: number }): void => cb(event);
+      ipcRenderer.on(IPC.memory.event, listener);
+      return () => ipcRenderer.removeListener(IPC.memory.event, listener);
+    }
+  },
   stage: {
     get: (conversationId: string): Promise<ConversationStage> =>
       ipcRenderer.invoke(IPC.stage.get, conversationId),
@@ -737,16 +791,30 @@ const api: OrbitApi = {
     updateConfig: (patch: Partial<GatewayConfig>): Promise<GatewayConfig> =>
       ipcRenderer.invoke(IPC.gateway.configUpdate, patch),
     status: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.status),
+    getStatus: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.getStatus),
     start: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.start),
+    startDaemon: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.startDaemon),
     stop: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.stop),
+    stopDaemon: (): Promise<GatewayStatus> => ipcRenderer.invoke(IPC.gateway.stopDaemon),
+    setVaultPath: (vaultPath: string): Promise<GatewayConfig> =>
+      ipcRenderer.invoke(IPC.gateway.setVaultPath, vaultPath),
+    listChannels: (): Promise<ChannelConfig[]> => ipcRenderer.invoke(IPC.gateway.listChannels),
     addChannel: (channel: Omit<ChannelConfig, 'id'> & { id?: string }): Promise<GatewayConfig> =>
       ipcRenderer.invoke(IPC.gateway.addChannel, channel),
     updateChannel: (channelId: string, patch: Partial<ChannelConfig>): Promise<GatewayConfig> =>
       ipcRenderer.invoke(IPC.gateway.updateChannel, channelId, patch),
+    enableChannel: (channelId: string): Promise<GatewayConfig> =>
+      ipcRenderer.invoke(IPC.gateway.enableChannel, channelId),
+    disableChannel: (channelId: string): Promise<GatewayConfig> =>
+      ipcRenderer.invoke(IPC.gateway.disableChannel, channelId),
     removeChannel: (channelId: string): Promise<GatewayConfig> =>
       ipcRenderer.invoke(IPC.gateway.removeChannel, channelId),
     generateBindCode: (orbitUserId?: string): Promise<{ code: string; expires_at: string }> =>
       ipcRenderer.invoke(IPC.gateway.generateBindCode, orbitUserId),
+    getMessages: (limit?: number): Promise<GatewayMessage[]> =>
+      ipcRenderer.invoke(IPC.gateway.getMessages, limit),
+    sendOutbound: (message: ChannelOutboundMessage): Promise<GatewayRouteResult> =>
+      ipcRenderer.invoke(IPC.gateway.sendOutbound, message),
     routeInbound: (message: ChannelInboundMessage): Promise<GatewayRouteResult> =>
       ipcRenderer.invoke(IPC.gateway.routeInbound, message),
     onEvent: (cb: (status: GatewayStatus) => void) => {
@@ -816,7 +884,14 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.review.generate, date),
     get: (date?: string): Promise<DailyReviewDTO | null> =>
       ipcRenderer.invoke(IPC.review.get, date),
-    list: (): Promise<JournalListItemDTO[]> => ipcRenderer.invoke(IPC.review.list)
+    list: (): Promise<JournalListItemDTO[]> => ipcRenderer.invoke(IPC.review.list),
+    listRuns: (filter?: ReviewFilter) => ipcRenderer.invoke(IPC.review.listRuns, filter),
+    getRun: (id: string) => ipcRenderer.invoke(IPC.review.getRun, id),
+    triggerReview: (kind: ReviewKind, scopeRef?: string) =>
+      ipcRenderer.invoke(IPC.review.triggerReview, kind, scopeRef),
+    acknowledge: (findingId: string) => ipcRenderer.invoke(IPC.review.acknowledge, findingId),
+    executeAction: (actionId: string) => ipcRenderer.invoke(IPC.review.executeAction, actionId),
+    archiveRun: (id: string) => ipcRenderer.invoke(IPC.review.archiveRun, id)
   },
   autoRunner: {
     status: (): Promise<AutoRunnerStatusDTO> => ipcRenderer.invoke(IPC.autoRunner.status),

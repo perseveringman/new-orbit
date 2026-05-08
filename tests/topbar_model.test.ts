@@ -8,6 +8,7 @@ describe('top bar model', () => {
   it('keeps workspace destinations in the sidebar navigation model', () => {
     expect(WORKSPACE_DESTINATIONS.map((item) => item.label)).toEqual([
       'Dashboard',
+      'Vision',
       'Runtimes',
       'Agents',
       'Console',
@@ -15,6 +16,9 @@ describe('top bar model', () => {
       'Inbox',
       'Notes',
       'Library',
+      'Search',
+      'Memory',
+      'Review',
       'Feeds',
       'Resources',
       'Knowledge',
