@@ -48,6 +48,8 @@ import { registerTimelineIpc } from './timeline/ipc';
 import { autoStartGatewayIfNeeded, registerGatewayIpc } from './gateway/ipc';
 import { stopGatewayRuntime } from './gateway/runtime';
 import { createGatewayStore } from './gateway/store';
+import { autoStartExternalGatewayIfNeeded, registerExternalGatewayIpc } from './external-orchestrator/ipc';
+import { stopExternalGatewayRuntime } from './external-orchestrator/runtime';
 import { registerResourceIpc } from './resource/ipc';
 import { registerSDKRuntimeIpc } from './runtime/sdk/ipc';
 import { registerSynthesisIpc } from './synthesis/ipc';
@@ -159,6 +161,7 @@ async function attachVaultRuntime(vaultPath: string): Promise<void> {
   await getAutoRunnerDispatcher().attach(vaultPath);
   await ensureScheduledSystemTasks(vaultPath);
   await autoStartGatewayIfNeeded(vaultPath);
+  await autoStartExternalGatewayIfNeeded(vaultPath);
   await ensureTerminalAgentRuntimeForVault(vaultPath);
   mobileInboundWatcher = await startMobileInboundWatcher(vaultPath);
   void ensureVectorStore(vaultPath);
@@ -305,6 +308,7 @@ function registerIpc(): void {
     getAutoRunnerDispatcher().detach();
     await closeFsSession();
     if (closingVaultPath) await stopGatewayRuntime(closingVaultPath);
+    if (closingVaultPath) await stopExternalGatewayRuntime(closingVaultPath);
     await setLastVaultPath(null);
   });
   ipcMain.handle(IPC.workspace.crashLogPath, () =>
@@ -401,6 +405,7 @@ function registerIpc(): void {
   registerScheduledTaskIpc(() => currentVault?.path ?? null);
   registerTimelineIpc(() => currentVault?.path ?? null);
   registerGatewayIpc(() => currentVault?.path ?? null);
+  registerExternalGatewayIpc(() => currentVault?.path ?? null);
   registerResourceIpc(() => currentVault?.path ?? null);
   registerSDKRuntimeIpc(() => currentVault?.path ?? null);
   registerSynthesisIpc(() => currentVault?.path ?? null);

@@ -92,7 +92,8 @@ export class ConversationStore {
     await fs.appendFile(file, `${JSON.stringify(turn)}\n`, 'utf8');
     const meta = await this.readMeta(id);
     if (meta) {
-      meta.updatedAt = turn.at;
+      const writtenAt = new Date().toISOString();
+      meta.updatedAt = [meta.updatedAt, turn.at, writtenAt].sort().at(-1) ?? writtenAt;
       if (meta.scope) await this.setLastActive(meta.scope, id);
       await this.writeMeta(meta);
     }

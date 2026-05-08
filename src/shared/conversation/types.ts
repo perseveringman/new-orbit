@@ -9,6 +9,7 @@ export const CONVERSATION_ANCHOR_KINDS = [
   'inbox_item',
   'ask_anywhere_session',
   'channel_thread',
+  'external_session',
   'capture_item',
   'planner_session'
 ] as const;
@@ -52,7 +53,8 @@ export type ConversationScope =
   | { kind: 'area'; area_slug: string }
   | { kind: 'resource'; resource_slug: string }
   | { kind: 'note'; note_id: string }
-  | { kind: 'library'; item_id: string };
+  | { kind: 'library'; item_id: string }
+  | { kind: 'external'; platform: string; user_id: string; session_id?: string };
 
 export interface ConversationArtifactRef {
   artifact_id: string;
@@ -102,6 +104,8 @@ export function conversationScopeKey(scope: ConversationScope): string {
       return `note:${scope.note_id}`;
     case 'library':
       return `library:${scope.item_id}`;
+    case 'external':
+      return `external:${scope.platform}:${scope.user_id}:${scope.session_id ?? ''}`;
   }
 }
 

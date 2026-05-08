@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: implemented
 created: 2026-05-08
 updated: 2026-05-08
 related: ADR-017, ROADMAP Phase 8.1
@@ -8,7 +8,7 @@ related: ADR-017, ROADMAP Phase 8.1
 # cc-connect 集成架构 — External Gateway 与 Orbit 域能力的联姻
 
 > 日期：2026-05-08
-> 状态：Proposed（设计方案，尚未实施）
+> 状态：Implemented（Orbit 侧 External Gateway 已落地；cc-connect 上游内置 agent 仍按协议对接）
 > 范围：External Gateway 协议、cc-connect agent 适配层、Orbit 能力暴露、流式响应模型
 > 关联 ADR：ADR-017（External Gateway via cc-connect）
 
@@ -740,4 +740,5 @@ MVP 交付时全部 ✅：
 
 | 日期 | 变更 | 作者 |
 |---|---|---|
+| 2026-05-08 | 落地 Orbit 侧 External Gateway：协议、socket server、session bridge、能力 adapter、Settings UI、请求日志与测试 | Copilot |
 | 2026-05-08 | 初始提案 | @ryanbzhou |

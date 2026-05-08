@@ -147,6 +147,13 @@ import type {
   GatewayRouteResult,
   GatewayStatus
 } from '@shared/gateway';
+import type {
+  ExternalGatewayConfig,
+  ExternalGatewayPushSubscription,
+  ExternalGatewayRequestLogEntry,
+  ExternalGatewaySessionMapping,
+  ExternalGatewayStatus
+} from '@shared/external-gateway';
 import type { ResourceChangeEvent } from '@shared/resource';
 import type { SearchQuery, SemanticIndexStatus } from '@shared/semantic';
 import type { CreateMemoryInput, MemoryFilter, RecallOptions, UpdateMemoryInput } from '@shared/memory';
@@ -821,6 +828,28 @@ const api: OrbitApi = {
       const listener = (_: unknown, status: GatewayStatus): void => cb(status);
       ipcRenderer.on(IPC.gateway.event, listener);
       return () => ipcRenderer.removeListener(IPC.gateway.event, listener);
+    }
+  },
+  externalGateway: {
+    getConfig: (): Promise<ExternalGatewayConfig> => ipcRenderer.invoke(IPC.externalGateway.configGet),
+    updateConfig: (patch: Partial<ExternalGatewayConfig>): Promise<ExternalGatewayConfig> =>
+      ipcRenderer.invoke(IPC.externalGateway.configUpdate, patch),
+    status: (): Promise<ExternalGatewayStatus> => ipcRenderer.invoke(IPC.externalGateway.status),
+    start: (): Promise<ExternalGatewayStatus> => ipcRenderer.invoke(IPC.externalGateway.start),
+    stop: (): Promise<ExternalGatewayStatus> => ipcRenderer.invoke(IPC.externalGateway.stop),
+    listSessions: (): Promise<ExternalGatewaySessionMapping[]> => ipcRenderer.invoke(IPC.externalGateway.sessions),
+    listRequestLog: (limit?: number): Promise<ExternalGatewayRequestLogEntry[]> =>
+      ipcRenderer.invoke(IPC.externalGateway.requestLog, limit),
+    listSubscriptions: (): Promise<ExternalGatewayPushSubscription[]> =>
+      ipcRenderer.invoke(IPC.externalGateway.subscriptions),
+    upsertSubscription: (
+      input: Omit<ExternalGatewayPushSubscription, 'id' | 'createdAt'> & Partial<Pick<ExternalGatewayPushSubscription, 'id' | 'createdAt'>>
+    ): Promise<ExternalGatewayPushSubscription> =>
+      ipcRenderer.invoke(IPC.externalGateway.upsertSubscription, input),
+    onEvent: (cb: (status: ExternalGatewayStatus) => void) => {
+      const listener = (_: unknown, status: ExternalGatewayStatus): void => cb(status);
+      ipcRenderer.on(IPC.externalGateway.event, listener);
+      return () => ipcRenderer.removeListener(IPC.externalGateway.event, listener);
     }
   },
   resources: {

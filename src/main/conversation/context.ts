@@ -22,6 +22,7 @@ export function summarizeConversationScope(scope: ConversationScope): Conversati
       return { scope, title: `Note ${scope.note_id}`, hints: ['note body', 'backlinks'] };
     case 'library':
       return { scope, title: `Library ${scope.item_id}`, hints: ['library item', 'annotations', 'related resources'] };
+    case 'external':
+      return { scope, title: `${scope.platform} ${scope.user_id}`, hints: ['external session', 'conversation history', 'vault context'] };
   }
 }
-

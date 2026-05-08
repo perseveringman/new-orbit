@@ -163,6 +163,14 @@ export interface ChannelStatePayload {
   reason?: string;
 }
 
+export interface ExternalGatewayMessagePayload {
+  platform: string;
+  userId: string;
+  capability?: string;
+  requestId?: string;
+  outcome?: string;
+}
+
 // ---------- Knowledge stack ----------
 
 export interface NoteEventPayload {
@@ -317,6 +325,9 @@ export interface TraceableEventPayloadMap {
   'channel.outbound.message': ChannelOutboundMessagePayload;
   'channel.connected': ChannelStatePayload;
   'channel.disconnected': ChannelStatePayload;
+  'external.gateway.message': ExternalGatewayMessagePayload;
+  'external.gateway.connected': ChannelStatePayload;
+  'external.gateway.disconnected': ChannelStatePayload;
   'note.created': NoteEventPayload;
   'note.updated': NoteEventPayload;
   'note.deleted': NoteEventPayload;

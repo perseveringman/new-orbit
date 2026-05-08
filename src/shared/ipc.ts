@@ -173,6 +173,13 @@ import type {
   GatewayStatus
 } from './gateway';
 import type {
+  ExternalGatewayConfig,
+  ExternalGatewayPushSubscription,
+  ExternalGatewayRequestLogEntry,
+  ExternalGatewaySessionMapping,
+  ExternalGatewayStatus
+} from './external-gateway';
+import type {
   AreaAssignmentInput,
   AreaAssignmentSuggestion,
   AreaChangeEvent,
@@ -667,6 +674,18 @@ export const IPC = {
     sendOutbound: 'gateway:outbound:send',
     routeInbound: 'gateway:routeInbound',
     event: 'gateway:event'
+  },
+  externalGateway: {
+    configGet: 'externalGateway:config:get',
+    configUpdate: 'externalGateway:config:update',
+    status: 'externalGateway:status',
+    start: 'externalGateway:start',
+    stop: 'externalGateway:stop',
+    sessions: 'externalGateway:sessions',
+    requestLog: 'externalGateway:requestLog',
+    subscriptions: 'externalGateway:subscriptions',
+    upsertSubscription: 'externalGateway:subscription:upsert',
+    event: 'externalGateway:event'
   },
   resources: {
     list: 'resources:list',
@@ -1598,6 +1617,20 @@ export interface OrbitApi {
     sendOutbound(message: ChannelOutboundMessage): Promise<GatewayRouteResult>;
     routeInbound(message: ChannelInboundMessage): Promise<GatewayRouteResult>;
     onEvent(cb: (status: GatewayStatus) => void): () => void;
+  };
+  externalGateway: {
+    getConfig(): Promise<ExternalGatewayConfig>;
+    updateConfig(patch: Partial<ExternalGatewayConfig>): Promise<ExternalGatewayConfig>;
+    status(): Promise<ExternalGatewayStatus>;
+    start(): Promise<ExternalGatewayStatus>;
+    stop(): Promise<ExternalGatewayStatus>;
+    listSessions(): Promise<ExternalGatewaySessionMapping[]>;
+    listRequestLog(limit?: number): Promise<ExternalGatewayRequestLogEntry[]>;
+    listSubscriptions(): Promise<ExternalGatewayPushSubscription[]>;
+    upsertSubscription(
+      input: Omit<ExternalGatewayPushSubscription, 'id' | 'createdAt'> & Partial<Pick<ExternalGatewayPushSubscription, 'id' | 'createdAt'>>
+    ): Promise<ExternalGatewayPushSubscription>;
+    onEvent(cb: (status: ExternalGatewayStatus) => void): () => void;
   };
   resources: {
     list(filter?: ResourceFilter): Promise<ResourceSummary[]>;

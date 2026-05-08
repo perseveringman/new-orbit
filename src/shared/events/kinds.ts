@@ -51,6 +51,9 @@ export const TRACEABLE_EVENT_KINDS = [
   'channel.outbound.message',
   'channel.connected',
   'channel.disconnected',
+  'external.gateway.message',
+  'external.gateway.connected',
+  'external.gateway.disconnected',
   // Knowledge stack（Phase 2）
   'note.created',
   'note.updated',

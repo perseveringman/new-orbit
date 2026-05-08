@@ -1,7 +1,7 @@
 ---
 id: ADR-017
 title: External Gateway — 借助 cc-connect 生态，保留 Orbit 域能力
-status: proposed
+status: accepted
 date: 2026-05-08
 related: ADR-008, ADR-011, ADR-014, ADR-015
 implementation: plans/2026-05-08-cc-connect-integration-architecture.md

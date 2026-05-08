@@ -20,6 +20,7 @@ describe('IPC contract', () => {
         'env',
         'envExt',
         'events',
+        'externalGateway',
         'feeds',
         'fs',
         'gateway',

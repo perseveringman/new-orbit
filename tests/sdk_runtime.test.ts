@@ -73,7 +73,7 @@ describe('Runtime B SDK foundation', () => {
 
   it('resolves model aliases for Anthropic-compatible providers', async () => {
     const endpoint = await registry.require('minimax');
-    expect(registry.resolveModel(endpoint, 'claude-3-5-sonnet-latest')).toBe('minimax-m1');
+    expect(registry.resolveModel(endpoint, 'claude-3-5-sonnet-latest')).toBe('MiniMax-M2.7');
     expect(registry.resolveModel(endpoint, 'minimax-text-01')).toBe('minimax-text-01');
   });
 
@@ -136,4 +136,3 @@ describe('Runtime B SDK foundation', () => {
     expect(maskSecret('')).toBeUndefined();
   });
 });
-

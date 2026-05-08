@@ -52,6 +52,7 @@ Orbit v2 keeps the local-first Markdown + Git foundation and replaces the old ba
 - **Proposal + Inbox** — agents propose independent new tasks instead of directly mutating the board; users approve/reject through Inbox/chat.
 - **Task dependencies** — `depends_on` gives task graphs explicit topological unlock semantics and cascade blocking.
 - **Capture** — Feed / Library / Thoughts plus Quick Capture feed the same Inbox triage surface.
+- **External Gateway** — Settings → External Gateway exposes a local JSONL/Unix Socket for cc-connect's `orbit` agent. cc-connect handles IM transport; Orbit keeps Ask-Anywhere, Capture, Library, Inbox, Memory, Synthesis, audit logs, and delegate context as the domain layer.
 - **Daily Review** — `02_Areas/Journal/YYYY-MM-DD.md` generated on demand (or scheduled), with "Recommended today" badges on the Kanban + an LLM-written summary of the previous day. A Journals tab lists every past review.
 - **Worktree GC** — done/aborted worktrees are cleaned on launch and every 24h (configurable in settings: `worktreeGcEnabled`, `worktreeGcDays`).
 

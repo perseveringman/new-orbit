@@ -10,9 +10,16 @@ import type {
   SDKEndpointProvider,
   SDKEndpointRegistrySnapshot
 } from '@shared/runtime';
+import type {
+  ExternalGatewayConfig,
+  ExternalGatewayRequestLogEntry,
+  ExternalGatewaySessionMapping,
+  ExternalGatewayStatus
+} from '@shared/external-gateway';
+import type { ExternalGatewayCapability } from '@shared/external-gateway-protocol';
 
 type Numeric = 'perRunTokens' | 'perRunUSD' | 'dailyTokens' | 'dailyUSD';
-type TabId = 'general' | 'api' | 'endpoints' | 'budget' | 'vectors' | 'advanced';
+type TabId = 'general' | 'api' | 'endpoints' | 'externalGateway' | 'budget' | 'vectors' | 'advanced';
 
 const BUDGET_FIELDS: Array<{ key: Numeric; label: string; step: number; unit: string }> = [
   { key: 'perRunTokens', label: '单次运行 tokens', step: 10_000, unit: 'tok' },
@@ -113,6 +120,12 @@ export function SettingsModal(): JSX.Element | null {
   const [chatResponse, setChatResponse] = useState<string>('');
   const [chatStatus, setChatStatus] = useState<string>('');
   const [chatBusy, setChatBusy] = useState<boolean>(false);
+  const [externalConfig, setExternalConfig] = useState<ExternalGatewayConfig | null>(null);
+  const [externalStatus, setExternalStatus] = useState<ExternalGatewayStatus | null>(null);
+  const [externalSessions, setExternalSessions] = useState<ExternalGatewaySessionMapping[]>([]);
+  const [externalRequestLog, setExternalRequestLog] = useState<ExternalGatewayRequestLogEntry[]>([]);
+  const [externalAllowedUsers, setExternalAllowedUsers] = useState<string>('');
+  const [externalMessage, setExternalMessage] = useState<string>('');
 
   useEffect(() => {
     if (!open) return;
@@ -128,7 +141,17 @@ export function SettingsModal(): JSX.Element | null {
     setLastReindex(null);
     setResetMsg(null);
     void loadEndpoints();
+    void loadExternalGateway();
   }, [open, budget, workspaceSettings]);
+
+  useEffect(() => {
+    if (!open || tab !== 'externalGateway') return undefined;
+    const off = window.orbit.externalGateway.onEvent((status) => {
+      setExternalStatus(status);
+      void loadExternalGateway(false);
+    });
+    return off;
+  }, [open, tab]);
 
   async function loadEndpoints(): Promise<void> {
     if (!vault) {
@@ -150,6 +173,31 @@ export function SettingsModal(): JSX.Element | null {
         ...s,
         global: `加载端点失败：${(error as Error).message}`
       }));
+    }
+  }
+
+  async function loadExternalGateway(updateStatus = true): Promise<void> {
+    if (!vault) {
+      setExternalConfig(null);
+      setExternalStatus(null);
+      setExternalSessions([]);
+      setExternalRequestLog([]);
+      return;
+    }
+    try {
+      const [config, status, sessions, requestLog] = await Promise.all([
+        window.orbit.externalGateway.getConfig(),
+        updateStatus ? window.orbit.externalGateway.status() : Promise.resolve(externalStatus),
+        window.orbit.externalGateway.listSessions(),
+        window.orbit.externalGateway.listRequestLog(20)
+      ]);
+      setExternalConfig(config);
+      if (status) setExternalStatus(status);
+      setExternalSessions(sessions);
+      setExternalRequestLog(requestLog);
+      setExternalAllowedUsers(config.allowed_users.map((user) => `${user.platform}:${user.userId}`).join('\n'));
+    } catch (error) {
+      setExternalMessage(`加载 External Gateway 失败：${(error as Error).message}`);
     }
   }
 
@@ -322,10 +370,59 @@ export function SettingsModal(): JSX.Element | null {
     }
   }
 
+  async function onToggleExternalGateway(nextEnabled: boolean): Promise<void> {
+    setExternalMessage(nextEnabled ? '启动 External Gateway…' : '停止 External Gateway…');
+    try {
+      const status = nextEnabled ? await window.orbit.externalGateway.start() : await window.orbit.externalGateway.stop();
+      setExternalStatus(status);
+      await loadExternalGateway();
+      setExternalMessage(nextEnabled ? 'External Gateway 已启动。' : 'External Gateway 已停止。');
+    } catch (error) {
+      setExternalMessage(`操作失败：${(error as Error).message}`);
+    }
+  }
+
+  async function onSaveExternalGateway(): Promise<void> {
+    if (!externalConfig) return;
+    setExternalMessage('保存 External Gateway 配置…');
+    const allowed_users = externalAllowedUsers
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const [platform, ...rest] = item.split(':');
+        return { platform: platform || 'unknown', userId: rest.join(':') || item };
+      });
+    try {
+      const saved = await window.orbit.externalGateway.updateConfig({
+        ...externalConfig,
+        allowed_users
+      });
+      setExternalConfig(saved);
+      setExternalMessage('External Gateway 配置已保存。');
+      await loadExternalGateway();
+    } catch (error) {
+      setExternalMessage(`保存失败：${(error as Error).message}`);
+    }
+  }
+
+  async function onToggleExternalCapability(capability: ExternalGatewayCapability): Promise<void> {
+    if (!externalConfig) return;
+    const saved = await window.orbit.externalGateway.updateConfig({
+      capability_permissions: {
+        ...externalConfig.capability_permissions,
+        [capability]: !externalConfig.capability_permissions[capability]
+      }
+    });
+    setExternalConfig(saved);
+    await loadExternalGateway();
+  }
+
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: 'general', label: '通用' },
     { id: 'api', label: 'API / CLI' },
     { id: 'endpoints', label: 'AI 端点' },
+    { id: 'externalGateway', label: 'External Gateway' },
     { id: 'budget', label: '预算' },
     { id: 'vectors', label: '向量' },
     { id: 'advanced', label: '高级' }
@@ -800,6 +897,173 @@ export function SettingsModal(): JSX.Element | null {
                       </pre>
                     </div>
                   )}
+                </section>
+              </div>
+            )}
+            {tab === 'externalGateway' && (
+              <div className="space-y-5">
+                {!vault && (
+                  <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    请先打开工作库才能启用 cc-connect External Gateway。
+                  </p>
+                )}
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">cc-connect External Gateway</h3>
+                      <p className="text-xs text-neutral-500">
+                        Orbit 监听 Unix Socket，cc-connect 的 orbit-agent 只负责传输和会话桥接。
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className={BTN_PRIMARY}
+                        disabled={!vault || externalStatus?.running}
+                        onClick={() => void onToggleExternalGateway(true)}
+                      >
+                        启动
+                      </button>
+                      <button
+                        type="button"
+                        className={BTN}
+                        disabled={!vault || !externalStatus?.running}
+                        onClick={() => void onToggleExternalGateway(false)}
+                      >
+                        停止
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 text-xs md:grid-cols-2">
+                    <div className="rounded bg-neutral-50 p-2 dark:bg-neutral-950">
+                      <div className="text-neutral-500">状态</div>
+                      <div className="font-medium">{externalStatus?.running ? 'running' : 'stopped'}</div>
+                    </div>
+                    <div className="rounded bg-neutral-50 p-2 dark:bg-neutral-950">
+                      <div className="text-neutral-500">连接 / 请求 / Session</div>
+                      <div className="font-medium">
+                        {externalStatus?.connected_clients ?? 0} / {externalStatus?.active_requests ?? 0} / {externalStatus?.active_sessions ?? 0}
+                      </div>
+                    </div>
+                    <label className="md:col-span-2 text-xs text-neutral-500">
+                      Socket path
+                      <input
+                        value={externalConfig?.socket_path ?? ''}
+                        onChange={(e) => setExternalConfig((config) => config ? { ...config, socket_path: e.target.value } : config)}
+                        className={`${INPUT} mt-1 font-mono text-[11px]`}
+                        disabled={!externalConfig}
+                      />
+                    </label>
+                  </div>
+                  {externalMessage && <p className="text-xs text-neutral-500">{externalMessage}</p>}
+                  {externalStatus?.last_error && (
+                    <p className="rounded bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">
+                      {externalStatus.last_error}
+                    </p>
+                  )}
+                </section>
+
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <h3 className="text-sm font-semibold">安全与权限</h3>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(externalConfig?.require_allowed_user)}
+                      onChange={(e) => setExternalConfig((config) => config ? { ...config, require_allowed_user: e.target.checked } : config)}
+                      className={FOCUS}
+                    />
+                    仅允许绑定用户访问
+                  </label>
+                  <label className="block text-xs text-neutral-500">
+                    Allowed users（每行 platform:userId，例如 telegram:123）
+                    <textarea
+                      value={externalAllowedUsers}
+                      onChange={(e) => setExternalAllowedUsers(e.target.value)}
+                      rows={3}
+                      className={`${INPUT} mt-1 font-mono text-xs`}
+                    />
+                  </label>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {externalStatus?.capabilities.map((item) => (
+                      <label key={item.capability} className="flex items-center gap-2 rounded border border-neutral-200 px-2 py-1 text-xs dark:border-neutral-800">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(externalConfig?.capability_permissions[item.capability])}
+                          onChange={() => void onToggleExternalCapability(item.capability)}
+                          className={FOCUS}
+                        />
+                        {item.capability}
+                      </label>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(externalConfig?.delegate.enabled)}
+                      onChange={(e) => setExternalConfig((config) => config ? { ...config, delegate: { ...config.delegate, enabled: e.target.checked } } : config)}
+                      className={FOCUS}
+                    />
+                    允许 delegate 到 cc-connect agent
+                  </label>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <label className="text-xs text-neutral-500">
+                      Delegate target agent
+                      <input
+                        value={externalConfig?.delegate.target_agent ?? 'claudecode'}
+                        onChange={(e) => setExternalConfig((config) => config ? { ...config, delegate: { ...config.delegate, target_agent: e.target.value } } : config)}
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                    <label className="text-xs text-neutral-500">
+                      每用户每分钟请求数
+                      <input
+                        type="number"
+                        min={1}
+                        value={externalConfig?.rate_limit.requests_per_minute ?? 10}
+                        onChange={(e) => setExternalConfig((config) => config ? { ...config, rate_limit: { requests_per_minute: Math.max(1, Number(e.target.value) || 1) } } : config)}
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                  </div>
+                  <button type="button" className={BTN_PRIMARY} disabled={!externalConfig} onClick={() => void onSaveExternalGateway()}>
+                    保存 External Gateway 配置
+                  </button>
+                </section>
+
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <h3 className="text-sm font-semibold">Session Bindings</h3>
+                  <div className="max-h-40 space-y-2 overflow-y-auto">
+                    {externalSessions.length === 0 ? (
+                      <p className="text-xs text-neutral-500">暂无外部 session。</p>
+                    ) : externalSessions.map((session) => (
+                      <div key={session.sessionId} className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-950">
+                        <div className="font-medium">{session.platform}:{session.userName ?? session.userId}</div>
+                        <div className="font-mono text-[11px] text-neutral-500">{session.sessionId} → {session.conversationId}</div>
+                        <div className="text-[11px] text-neutral-500">
+                          {session.archived ? 'archived' : 'active'} · {new Date(session.lastActivityAt).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <h3 className="text-sm font-semibold">Request Log</h3>
+                  <div className="max-h-52 space-y-2 overflow-y-auto">
+                    {externalRequestLog.length === 0 ? (
+                      <p className="text-xs text-neutral-500">暂无请求日志。</p>
+                    ) : externalRequestLog.map((entry) => (
+                      <div key={entry.requestId} className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-950">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{entry.routedTo}</span>
+                          <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] dark:bg-neutral-800">{entry.outcome}</span>
+                          <span className="ml-auto text-[11px] text-neutral-500">{entry.durationMs}ms</span>
+                        </div>
+                        <div className="font-mono text-[11px] text-neutral-500">{entry.platform}:{entry.userId} · {entry.requestId}</div>
+                        {entry.errorCode && <div className="text-[11px] text-red-500">{entry.errorCode}</div>}
+                      </div>
+                    ))}
+                  </div>
                 </section>
               </div>
             )}
