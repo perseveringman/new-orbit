@@ -94,7 +94,8 @@ export function getAskAnywhereOrchestrator(): AskAnywhereOrchestrator {
         return vault ? getSDKRuntime(vault).router : null;
       },
       getAgentTools: () => getAgentTools(),
-      getAgentMaxIterations: () => 25
+      getAgentMaxIterations: () => 25,
+      getAgentInputTokenBudget: () => 150_000
     });
   }
   return orchestrator;

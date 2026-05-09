@@ -70,6 +70,10 @@ export interface AskAnywhereDeps {
   } | null;
   /** 单次 agent turn 的循环上限，默认 25。 */
   getAgentMaxIterations?: () => number;
+  /**
+   * Phase D：累计 input_tokens 超此阈值 → budget_halt。默认 150_000；设 0 禁用。
+   */
+  getAgentInputTokenBudget?: () => number;
 }
 
 const ASK_ANYWHERE_SYSTEM_PROMPT = `You are Orbit's planning copilot ("Ask Anywhere").
@@ -87,6 +91,9 @@ Your job:
 `;
 
 export class AskAnywhereOrchestrator {
+  /** Phase D：每个进行中的 agent run 对应一个 AbortController，stop() 用它真中断 LLM stream。 */
+  private readonly agentRunAborts = new Map<string, AbortController>();
+
   constructor(private readonly deps: AskAnywhereDeps) {}
 
   async createSession(opts: { title?: string } = {}): Promise<Conversation> {
@@ -306,11 +313,10 @@ export class AskAnywhereOrchestrator {
     const conv = await this.deps.conversations.getConversation(conversationId);
     if (!conv?.currentRunId) return;
     if (conv.currentRunId.startsWith('sdk-agent-')) {
-      this.emitSyntheticError(
-        conversationId,
-        'sdk_agent_stop_not_supported',
-        'Agent run cancellation is not yet implemented; please wait for it to finish.'
-      );
+      // Phase D：真中断 LLM stream；已 started 的 tool execute 仍跑完（cli handler 不接 signal）
+      const ctrl = this.agentRunAborts.get(conv.currentRunId);
+      if (ctrl) ctrl.abort();
+      this.emitRuntimeInterrupt(conversationId, conv.currentRunId, 'user_stop');
       return;
     }
     if (conv.currentRunId.startsWith('sdk-')) {
@@ -318,6 +324,40 @@ export class AskAnywhereOrchestrator {
       return;
     }
     await this.deps.pool.kill(conv.currentRunId, 'user_stop');
+  }
+
+  private emitRuntimeInterrupt(conversationId: string, runId: string, reason: string): void {
+    const ev: RuntimeEvent = {
+      id: `ask-interrupt-${Date.now()}`,
+      at: new Date().toISOString(),
+      kind: 'runtime.interrupt',
+      conversationId,
+      runId,
+      spanId: `ask-interrupt-${Date.now()}`,
+      payload: { reason }
+    };
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send(IPC.chat.runtimeEvent, ev);
+    }
+  }
+
+  private emitRuntimeBudgetHalt(
+    conversationId: string,
+    runId: string,
+    limit: number
+  ): void {
+    const ev: RuntimeEvent = {
+      id: `ask-budget-halt-${Date.now()}`,
+      at: new Date().toISOString(),
+      kind: 'runtime.budget_halt',
+      conversationId,
+      runId,
+      spanId: `ask-budget-halt-${Date.now()}`,
+      payload: { code: 'input_tokens', limit }
+    };
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send(IPC.chat.runtimeEvent, ev);
+    }
   }
 
   private async runSdkAgentLoop(input: {
@@ -393,6 +433,11 @@ export class AskAnywhereOrchestrator {
       appendUserText: input.userText
     });
 
+    // Phase D：AbortController + token budget
+    const abortController = new AbortController();
+    this.agentRunAborts.set(input.runId, abortController);
+    const inputTokenBudget = this.deps.getAgentInputTokenBudget?.() ?? 150_000;
+
     try {
       const result = await input.router.runAgentLoop(
         {
@@ -404,7 +449,9 @@ export class AskAnywhereOrchestrator {
           maxIterations,
           endpointId: input.endpointId,
           model: input.model,
-          mode: 'ask'
+          mode: 'ask',
+          signal: abortController.signal,
+          inputTokenBudget
         },
         input.toolExecutor,
         () => BrowserWindow.getAllWindows()
@@ -416,6 +463,15 @@ export class AskAnywhereOrchestrator {
           'agent_max_iterations',
           `Agent reached the iteration limit (${maxIterations}). Please continue with a new message.`
         );
+      } else if (result.stopReason === 'budget_halt') {
+        this.emitRuntimeBudgetHalt(input.conversationId, input.runId, inputTokenBudget);
+        this.emitSyntheticError(
+          input.conversationId,
+          'agent_budget_halt',
+          `Agent stopped: accumulated input tokens (${result.totalInputTokens}) exceeded the budget (${inputTokenBudget}). Please start a new conversation.`
+        );
+      } else if (result.stopReason === 'aborted') {
+        // stop() 已发过 runtime.interrupt，这里不重复
       }
 
       const finalText = result.text.trim();
@@ -442,6 +498,7 @@ export class AskAnywhereOrchestrator {
         error instanceof Error ? error.message : String(error)
       );
     } finally {
+      this.agentRunAborts.delete(input.runId);
       await this.deps.conversations
         .bindRuntime(input.conversationId, { currentRunId: null })
         .catch(() => undefined);
