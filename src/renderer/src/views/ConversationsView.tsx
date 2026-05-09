@@ -3,11 +3,21 @@
  *
  * 列出所有 Conversation（task/inbox_item/ask_anywhere_session/...），点击右侧打开对应 ChatView。
  * 这是"Conversation 一等公民"的统一入口。
+ *
+ * Phase E.2.2：对 `ask_anywhere_session` anchor 启用续谈（canSendMessage + canStop + canRetry），
+ *              action 走 IPC.chat.action 与 AskAnywhereHost 同一路径；
+ *              其它 anchor 仍保持只读。
+ *              同时 turnsToEvents 展开 toolTrace 为 ToolCard（复用 shared helper）。
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import type { ConversationMeta, ConversationAnchor } from '@shared/conversation';
-import type { RuntimeEvent, ChatHostCapabilities } from '@shared/chat-protocol';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Conversation, ConversationMeta, ConversationAnchor, ConversationTurn } from '@shared/conversation';
+import type {
+  ChatAction,
+  ChatHostCapabilities,
+  RuntimeEvent
+} from '@shared/chat-protocol';
+import { toolTraceToRuntimeEvents } from '@shared/agent-tools';
 import { ChatView } from '../components/chat/ChatView';
 
 function describeAnchor(a: ConversationAnchor): string {
@@ -27,6 +37,65 @@ function describeAnchor(a: ConversationAnchor): string {
     default:
       return `${a.kind}:${a.refId}`;
   }
+}
+
+/**
+ * 构造历史 RuntimeEvent 序列：先展开 assistant turn 的 toolTrace 为 tool_use/tool_result（Phase E.2.2），
+ * 再追加 runtime.message。与 AskAnywhereHost.turnsToEvents 保持一致，让三个入口的历史渲染一致。
+ */
+function buildHistoryEvents(conv: Conversation): RuntimeEvent[] {
+  const out: RuntimeEvent[] = [];
+  conv.turns.forEach((t) => {
+    if (t.role === 'assistant' && t.toolTrace && t.toolTrace.length > 0) {
+      out.push(
+        ...toolTraceToRuntimeEvents(t.toolTrace, {
+          conversationId: conv.id,
+          runId: `hist-${conv.id}`,
+          idPrefix: `hist-${t.id}`
+        })
+      );
+    }
+    out.push(buildMessageEvent(conv.id, t));
+  });
+  return out;
+}
+
+function buildMessageEvent(conversationId: string, t: ConversationTurn): RuntimeEvent {
+  return {
+    id: t.id,
+    at: t.at,
+    kind: 'runtime.message',
+    conversationId,
+    runId: 'history',
+    spanId: t.id,
+    payload: {
+      text: t.content,
+      role: t.role === 'user' ? 'user' : 'assistant',
+      isFinal: true
+    }
+  };
+}
+
+/**
+ * Phase E.2.2：计算 ConversationsView 的 chat 能力开关。
+ * - ask_anywhere_session anchor → 允许续谈（send / stop / retry）
+ * - 其它 anchor（task / inbox_item / ...） → 只读
+ * 抽成纯函数便于单测。
+ */
+export function computeConversationsViewCapabilities(
+  meta: ConversationMeta | null
+): ChatHostCapabilities {
+  const canContinue = meta?.anchors.some((a) => a.kind === 'ask_anywhere_session') ?? false;
+  return {
+    canSendMessage: canContinue,
+    canStop: canContinue,
+    canRetry: canContinue,
+    canCompact: false,
+    canApproveTool: false,
+    supportsStreaming: canContinue,
+    supportsThinking: false,
+    supportsFileChanges: false
+  };
 }
 
 export function ConversationsView(): JSX.Element {
@@ -55,20 +124,7 @@ export function ConversationsView(): JSX.Element {
     let cancelled = false;
     void window.orbit.chat.getConversation(activeId).then((conv) => {
       if (cancelled || !conv) return;
-      const next: RuntimeEvent[] = conv.turns.map((t) => ({
-        id: t.id,
-        at: t.at,
-        kind: 'runtime.message' as const,
-        conversationId: conv.id,
-        runId: 'history',
-        spanId: t.id,
-        payload: {
-          text: t.content,
-          role: t.role === 'user' ? 'user' : 'assistant',
-          isFinal: true
-        }
-      }));
-      setEvents(next);
+      setEvents(buildHistoryEvents(conv));
     });
     return () => {
       cancelled = true;
@@ -78,17 +134,28 @@ export function ConversationsView(): JSX.Element {
   const activeMeta = useMemo(() => list.find((c) => c.id === activeId) ?? null, [list, activeId]);
 
   const capabilities: ChatHostCapabilities = useMemo(
-    () => ({
-      canSendMessage: false,
-      canStop: false,
-      canRetry: false,
-      canCompact: false,
-      canApproveTool: false,
-      supportsStreaming: false,
-      supportsThinking: false,
-      supportsFileChanges: false
-    }),
-    []
+    () => computeConversationsViewCapabilities(activeMeta),
+    [activeMeta]
+  );
+
+  const canContinue = capabilities.canSendMessage;
+
+  // 监听实时 RuntimeEvent，把发出去后 backend 推回来的事件追加到本地 events
+  useEffect(() => {
+    if (!canContinue || !activeId) return;
+    const unsub = window.orbit.chat.onRuntimeEvent((ev) => {
+      if (ev.conversationId !== activeId) return;
+      setEvents((prev) => [...prev, ev]);
+    });
+    return () => unsub();
+  }, [canContinue, activeId]);
+
+  const handleAction = useCallback(
+    (action: ChatAction) => {
+      if (!canContinue) return;
+      void window.orbit.chat.sendAction(action);
+    },
+    [canContinue]
   );
 
   return (
@@ -135,8 +202,8 @@ export function ConversationsView(): JSX.Element {
                 capabilities={capabilities}
                 events={events}
                 isLoading={false}
-                onAction={() => undefined}
-                welcomeMessage="Read-only history."
+                onAction={handleAction}
+                welcomeMessage={canContinue ? 'Continue this Ask-Anywhere conversation.' : 'Read-only history.'}
               />
             </div>
           </div>
