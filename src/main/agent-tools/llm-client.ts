@@ -56,12 +56,14 @@ export interface AgentTurnResult {
  *   1. 把 input.tools 透传给 LLM provider；
  *   2. 流式产生 RuntimeEvent（runtime.message / runtime.thinking / runtime.tool_use 等）；
  *   3. tool_use 出现 partial_json 解析失败时，标记 parseError 但不中断 turn；
- *   4. 在 turn 结束时聚合 usage / cost / done 事件。
+ *   4. 在 turn 结束时聚合 usage / cost / done 事件；
+ *   5. 可选 AbortSignal：上游 stop() 触发时，尽力中断 LLM stream 并抛出（runner 捕获）。
  */
 export interface AgentLLMClient {
   streamAgentTurn(
     invocation: SDKResolvedInvocation,
     input: SDKInvocationInput,
-    emit: AgentRuntimeEventSink
+    emit: AgentRuntimeEventSink,
+    signal?: AbortSignal
   ): Promise<AgentTurnResult>;
 }

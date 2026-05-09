@@ -160,6 +160,10 @@ export class RuntimeRouter {
       endpointId?: string;
       model?: string;
       mode?: SDKInvocationInput['mode'];
+      /** Phase D：AbortSignal 透传给 adapter.streamAgentTurn。 */
+      signal?: AbortSignal;
+      /** Phase D：累计 input_tokens 上限（默认 150_000）。 */
+      inputTokenBudget?: number;
     },
     executor: OrbitToolExecutor,
     windows: () => BrowserWindow[]
@@ -182,7 +186,11 @@ export class RuntimeRouter {
         conversationId: input.conversationId,
         runId: input.runId,
         maxIterations: input.maxIterations,
-        ...(input.mode ? { mode: input.mode } : {})
+        ...(input.mode ? { mode: input.mode } : {}),
+        ...(input.signal ? { signal: input.signal } : {}),
+        ...(input.inputTokenBudget !== undefined
+          ? { inputTokenBudget: input.inputTokenBudget }
+          : {})
       },
       async (event) => {
         for (const window of windows()) {

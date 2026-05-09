@@ -39,6 +39,13 @@ export interface AgentLoopInput {
   /** 单次 send 的循环上限（默认 25，建议 1-50）。 */
   maxIterations: number;
   mode?: SDKInvocationInput['mode'];
+  /**
+   * Phase D：累积 input_tokens 超过该阈值时触发 budget_halt（硬停）。
+   * 默认 150_000。设为 0 禁用预算检查。
+   */
+  inputTokenBudget?: number;
+  /** Phase D：上游 stop() 触发时透传给 adapter，尽力中断 LLM stream。 */
+  signal?: AbortSignal;
 }
 
 export interface AgentLoopResult {
@@ -49,7 +56,13 @@ export interface AgentLoopResult {
   /** 总迭代次数（实际跑了几轮 LLM）。 */
   iterations: number;
   /** 退出原因。 */
-  stopReason: 'end_turn' | 'max_iterations' | 'aborted' | 'tool_use_finalized' | 'other';
+  stopReason:
+    | 'end_turn'
+    | 'max_iterations'
+    | 'aborted'
+    | 'budget_halt'
+    | 'tool_use_finalized'
+    | 'other';
   /** 最后一轮 LLM 的 stop_reason 原值（便于诊断）。 */
   lastTurnStopReason?: AgentTurnResult['stopReason'];
   /**
@@ -57,6 +70,8 @@ export interface AgentLoopResult {
    * orchestrator 把它持久化到 assistant turn.toolTrace，下次 send 由 rebuildMessages 回放。
    */
   toolTrace: ToolTraceBlock[];
+  /** Phase D：累计 input_tokens（便于 orchestrator 展示预算使用）。 */
+  totalInputTokens: number;
 }
 
 /**
@@ -82,30 +97,55 @@ export async function runAgentLoop(
   const messages: SDKInvocationMessage[] = input.messages.slice();
   const maxIter = Math.max(1, Math.min(50, input.maxIterations));
   const toolTrace: ToolTraceBlock[] = [];
+  const budget = input.inputTokenBudget ?? 150_000;
+  let totalInputTokens = 0;
 
   let turnsRun = 0;
   let iter = 0;
   for (; iter < maxIter; iter += 1) {
-    const turn = await client.streamAgentTurn(
-      input.invocation,
-      {
-        endpointId: input.invocation.endpoint.id,
-        model: input.invocation.model,
-        system: input.system,
-        messages,
-        tools: input.tools,
-        traceId: input.runId,
-        conversationId: input.conversationId,
-        ...(input.mode ? { mode: input.mode } : {})
-      },
-      trackingEmit
-    );
+    // 进入下一轮前检查 abort
+    if (input.signal?.aborted) {
+      stopReason = 'aborted';
+      break;
+    }
+    let turn: AgentTurnResult;
+    try {
+      turn = await client.streamAgentTurn(
+        input.invocation,
+        {
+          endpointId: input.invocation.endpoint.id,
+          model: input.invocation.model,
+          system: input.system,
+          messages,
+          tools: input.tools,
+          traceId: input.runId,
+          conversationId: input.conversationId,
+          ...(input.mode ? { mode: input.mode } : {})
+        },
+        trackingEmit,
+        input.signal
+      );
+    } catch (err) {
+      // Anthropic / fetch abort：signal abort 时抛出 AbortError / DOMException
+      if (isAbortError(err, input.signal)) {
+        stopReason = 'aborted';
+        break;
+      }
+      throw err;
+    }
     turnsRun += 1;
     lastTurnStopReason = turn.stopReason;
+    totalInputTokens += turn.usage.inputTokens;
     if (turn.text) lastText = turn.text;
 
     if (turn.stopReason !== 'tool_use' || turn.toolUses.length === 0) {
       stopReason = turn.stopReason === 'end_turn' ? 'end_turn' : 'tool_use_finalized';
+      break;
+    }
+
+    // budget_halt：累计 input_tokens 超阈值 → 硬停（本轮已完成，tool_use 不再执行）
+    if (budget > 0 && totalInputTokens >= budget) {
+      stopReason = 'budget_halt';
       break;
     }
 
@@ -117,7 +157,7 @@ export async function runAgentLoop(
     );
     messages.push({ role: 'assistant', content: assistantBlocks });
 
-    // 串行执行 tool_use
+    // 串行执行 tool_use（已 started 的 tool 不受 abort 中断，跑完）
     const toolResultBlocks: SDKInvocationMessageContentBlock[] = [];
     for (const toolUse of turn.toolUses) {
       const startedAt = new Date().toISOString();
@@ -157,6 +197,18 @@ export async function runAgentLoop(
     iterations: turnsRun,
     stopReason,
     toolTrace,
+    totalInputTokens,
     ...(lastTurnStopReason ? { lastTurnStopReason } : {})
   };
+}
+
+function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  if (!err) return false;
+  if (signal?.aborted) return true;
+  if (err instanceof Error) {
+    if (err.name === 'AbortError') return true;
+    // Anthropic SDK 抛的类型为 APIUserAbortError
+    if (err.name === 'APIUserAbortError') return true;
+  }
+  return false;
 }

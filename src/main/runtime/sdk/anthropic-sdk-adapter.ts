@@ -71,11 +71,13 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
    * - 接受 SDKInvocationInput.tools / toolChoice
    * - 流式累积 text 与 tool_use（按 content block index 分桶）
    * - 在 turn 结束聚合 cost & done 事件
+   * - 可选 AbortSignal：中止时 fetch 会抛，我们在外层转成 runtime.error + 向上抛
    */
   async streamAgentTurn(
     invocation: SDKResolvedInvocation,
     input: SDKInvocationInput,
-    emit: AgentRuntimeEventSink
+    emit: AgentRuntimeEventSink,
+    signal?: AbortSignal
   ): Promise<AgentTurnResult> {
     const runId = input.traceId ?? `sdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const conversationId = input.conversationId ?? runId;
@@ -110,7 +112,7 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
         ...(input.toolChoice ? { tool_choice: toAnthropicToolChoice(input.toolChoice) } : {}),
         stream: true
       };
-      const stream = await client.messages.create(requestBody);
+      const stream = await client.messages.create(requestBody, signal ? { signal } : undefined);
 
       for await (const vendorEvent of stream as AsyncIterable<unknown>) {
         // 1) text delta + tool_use input_json_delta：按 index 路由
