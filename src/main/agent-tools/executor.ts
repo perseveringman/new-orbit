@@ -8,8 +8,7 @@
  *   - 序列化 result 到 string，截断到上限（避免下一轮 LLM 撑爆）
  *   - 每次执行后发 runtime.tool_result RuntimeEvent +
  *     runtime.sdk.tool_use.completed TraceableEvent（成功/失败合一，用 ok 字段区分）
- *
- * Phase A：不写 Activity / Journal（Phase B 引入）。
+ *   - Phase B：destructive=true 的工具额外发 Activity Log + 写 journal
  */
 
 import { randomUUID } from 'node:crypto';
@@ -18,15 +17,31 @@ import type {
   RuntimeToolResultPayload
 } from '@shared/chat-protocol';
 import type { AgentTurnToolUse } from '@shared/agent-tools';
+import type { ActivityAction, ActivityEventInput } from '@shared/activity';
 import { publishTraceableEvent } from '../events/bus';
 import type { CliHandlerRegistry } from '../cli_server/registry';
 import type { CliResponse } from '@shared/cli_protocol';
 import type { OrbitToolRegistry } from './registry';
 import type { AgentRuntimeEventSink } from './llm-client';
+import type { AgentJournal } from './journal';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** Tool 结果序列化字节上限（约 10KB），超过截断 + 注明。 */
 const RESULT_MAX_BYTES = 10 * 1024;
+
+/** 简化的 Activity emitter 抽象，兼容 main 里的 emitActivity / 默认 emitter。 */
+export interface ActivityEmitterLike {
+  emit(input: ActivityEventInput): unknown;
+}
+
+export interface OrbitToolExecutorDeps {
+  toolRegistry: OrbitToolRegistry;
+  cliRegistry: CliHandlerRegistry;
+  /** Phase B：Activity Log emitter（destructive tool 才会用）。 */
+  activity?: ActivityEmitterLike;
+  /** Phase B：Agent journal（destructive tool 执行前追加 before-state）。 */
+  journal?: AgentJournal;
+}
 
 export interface OrbitToolExecuteContext {
   runId: string;
@@ -47,10 +62,35 @@ export interface OrbitToolExecuteResult {
 }
 
 export class OrbitToolExecutor {
+  private readonly toolRegistry: OrbitToolRegistry;
+  private readonly cliRegistry: CliHandlerRegistry;
+  private readonly activity: ActivityEmitterLike | undefined;
+  private readonly journal: AgentJournal | undefined;
+
+  /**
+   * 兼容两种构造：
+   *   new OrbitToolExecutor(toolRegistry, cliRegistry)  // Phase A 兼容
+   *   new OrbitToolExecutor({ toolRegistry, cliRegistry, activity, journal })  // Phase B
+   */
+  constructor(toolRegistry: OrbitToolRegistry, cliRegistry: CliHandlerRegistry);
+  constructor(deps: OrbitToolExecutorDeps);
   constructor(
-    private readonly toolRegistry: OrbitToolRegistry,
-    private readonly cliRegistry: CliHandlerRegistry
-  ) {}
+    a: OrbitToolRegistry | OrbitToolExecutorDeps,
+    b?: CliHandlerRegistry
+  ) {
+    if (b) {
+      this.toolRegistry = a as OrbitToolRegistry;
+      this.cliRegistry = b;
+      this.activity = undefined;
+      this.journal = undefined;
+    } else {
+      const deps = a as OrbitToolExecutorDeps;
+      this.toolRegistry = deps.toolRegistry;
+      this.cliRegistry = deps.cliRegistry;
+      this.activity = deps.activity;
+      this.journal = deps.journal;
+    }
+  }
 
   /**
    * 执行单个 tool_use。
@@ -76,6 +116,7 @@ export class OrbitToolExecutor {
         toolDef?.destructive ?? false,
         ctx
       );
+      this.recordActivityFailure(toolDef, toolUse, result, ctx);
       const ev = await emitToolResult(emit, ctx, toolUse, result);
       eventIds.push(ev.id);
       return { ...result, eventIds };
@@ -97,6 +138,20 @@ export class OrbitToolExecutor {
     }
 
     const timeoutMs = toolDef.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const isDestructive = toolDef.destructive ?? false;
+
+    // Phase B：destructive tool 在执行前先写 journal
+    if (isDestructive && this.journal) {
+      await this.journal.record({
+        runId: ctx.runId,
+        conversationId: ctx.conversationId,
+        toolName: toolUse.name,
+        toolUseId: toolUse.id,
+        input: toolUse.input ?? null,
+        at: new Date().toISOString(),
+        destructive: true
+      });
+    }
 
     // 3) 串行调用 CliHandlerRegistry，包裹超时
     let response: CliResponse;
@@ -118,9 +173,10 @@ export class OrbitToolExecutor {
         startedAt,
         code,
         message,
-        toolDef.destructive ?? false,
+        isDestructive,
         ctx
       );
+      this.recordActivityFailure(toolDef, toolUse, result, ctx);
       const ev = await emitToolResult(emit, ctx, toolUse, result);
       eventIds.push(ev.id);
       return { ...result, eventIds };
@@ -143,7 +199,7 @@ export class OrbitToolExecutor {
           run_id: ctx.runId,
           duration_ms: durationMs,
           result_size: size,
-          destructive: toolDef.destructive ?? false
+          destructive: isDestructive
         }
       });
       const result: OrbitToolExecuteResult = {
@@ -154,6 +210,24 @@ export class OrbitToolExecutor {
         durationMs,
         eventIds: []
       };
+      // Phase B：destructive tool 成功 → Activity Log
+      if (isDestructive) {
+        const action = (toolDef.activity?.successAction ?? 'agent.tool_invoked') as ActivityAction;
+        this.recordActivity(action, {
+          summary: `agent invoked ${toolUse.name}`,
+          context: {
+            run_id: ctx.runId,
+            conversation_id: ctx.conversationId,
+            tool_name: toolUse.name,
+            tool_use_id: toolUse.id
+          },
+          payload: {
+            input: toolUse.input ?? null,
+            duration_ms: durationMs,
+            result_size: size
+          }
+        });
+      }
       const ev = await emitToolResult(emit, ctx, toolUse, result);
       eventIds.push(ev.id);
       return { ...result, eventIds };
@@ -176,7 +250,7 @@ export class OrbitToolExecutor {
         duration_ms: durationMs,
         error_code: response.error.code,
         error_message: response.error.message,
-        destructive: toolDef.destructive ?? false
+        destructive: isDestructive
       }
     });
     const result: OrbitToolExecuteResult = {
@@ -188,6 +262,7 @@ export class OrbitToolExecutor {
       errorCode: response.error.code,
       eventIds: []
     };
+    this.recordActivityFailure(toolDef, toolUse, result, ctx);
     const ev = await emitToolResult(emit, ctx, toolUse, result);
     eventIds.push(ev.id);
     return { ...result, eventIds };
@@ -229,6 +304,50 @@ export class OrbitToolExecutor {
       errorCode: code,
       eventIds: []
     };
+  }
+
+  private recordActivity(
+    action: ActivityAction,
+    extras: { summary: string; context: ActivityEventInput['context']; payload?: unknown }
+  ): void {
+    const emitter = this.activity;
+    if (!emitter) return;
+    try {
+      emitter.emit({
+        actor: 'agent',
+        action,
+        summary: extras.summary,
+        ...(extras.context ? { context: extras.context } : {}),
+        ...(extras.payload !== undefined ? { payload: extras.payload } : {})
+      });
+    } catch (err) {
+      console.warn('[agent-tools] activity emit failed', err);
+    }
+  }
+
+  private recordActivityFailure(
+    toolDef: { destructive?: boolean; activity?: { failureAction?: string } } | undefined,
+    toolUse: AgentTurnToolUse,
+    result: OrbitToolExecuteResult,
+    ctx: OrbitToolExecuteContext
+  ): void {
+    if (!toolDef?.destructive) return;
+    const action = (toolDef.activity?.failureAction ?? 'agent.tool_failed') as ActivityAction;
+    this.recordActivity(action, {
+      summary: `agent tool failed: ${toolUse.name}`,
+      context: {
+        run_id: ctx.runId,
+        conversation_id: ctx.conversationId,
+        tool_name: toolUse.name,
+        tool_use_id: toolUse.id
+      },
+      payload: {
+        input: toolUse.input ?? null,
+        error_code: result.errorCode,
+        error_message: result.content,
+        duration_ms: result.durationMs
+      }
+    });
   }
 }
 
