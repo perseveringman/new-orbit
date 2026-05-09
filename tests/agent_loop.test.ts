@@ -338,4 +338,40 @@ describe('runAgentLoop', () => {
     });
     expect(typeof (blocks?.[0] as { content?: string })?.content).toBe('string');
   });
+
+  it('captures toolTrace entries for each tool_use across iterations', async () => {
+    const llm = new FakeLLMClient([
+      {
+        toolUses: [
+          { id: 'toolu_a', name: 'orbit_search', input: { query: 'a' } },
+          { id: 'toolu_b', name: 'orbit_search', input: { query: 'b' } }
+        ]
+      },
+      { toolUses: [{ id: 'toolu_c', name: 'orbit_search', input: { query: 'c' } }] },
+      { text: 'all done' }
+    ]);
+    const executor = buildExecutor((req) => ({ id: req.id, ok: true, data: req.params }));
+    const result = await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: 'multi-iter' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5
+      },
+      sink
+    );
+    expect(result.iterations).toBe(3);
+    expect(result.toolTrace).toHaveLength(3);
+    expect(result.toolTrace.map((t) => t.toolUseId)).toEqual(['toolu_a', 'toolu_b', 'toolu_c']);
+    expect(result.toolTrace[0]?.toolName).toBe('orbit_search');
+    expect(result.toolTrace[0]?.input).toEqual({ query: 'a' });
+    expect(typeof result.toolTrace[0]?.result).toBe('string');
+    expect(typeof result.toolTrace[0]?.at).toBe('string');
+    expect(typeof result.toolTrace[0]?.durationMs).toBe('number');
+  });
 });

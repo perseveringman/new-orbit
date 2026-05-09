@@ -4,8 +4,13 @@ import type { CliHandlerRegistry } from '../src/main/cli_server/registry';
 import type { AgentRuntimeEventSink } from '../src/main/agent-tools/llm-client';
 import type { RuntimeEvent } from '@shared/chat-protocol';
 import type { AgentToolDef, AgentTurnToolUse } from '@shared/agent-tools';
+import type { ActivityEventInput } from '@shared/activity';
+import type { AgentJournal } from '../src/main/agent-tools/journal';
 import { OrbitToolRegistry } from '../src/main/agent-tools/registry';
-import { OrbitToolExecutor } from '../src/main/agent-tools/executor';
+import {
+  OrbitToolExecutor,
+  type ActivityEmitterLike
+} from '../src/main/agent-tools/executor';
 
 vi.mock('../src/main/events/bus', () => ({
   publishTraceableEvent: vi.fn(),
@@ -26,6 +31,14 @@ const FAST_TOOL_DEF: AgentToolDef = {
   ...TOOL_DEF,
   name: 'orbit_slow',
   timeoutMs: 20
+};
+
+const DESTRUCTIVE_TOOL_DEF: AgentToolDef = {
+  name: 'orbit_resource_create',
+  description: 'create resource',
+  cliMethod: 'resource.create',
+  destructive: true,
+  inputSchema: { type: 'object' }
 };
 
 class FakeCli implements Pick<CliHandlerRegistry, 'handle'> {
@@ -119,5 +132,126 @@ describe('OrbitToolExecutor', () => {
     expect(result.isError).toBe(false);
     expect(result.content.length).toBeLessThan(big.length);
     expect(result.content).toContain('orbit_truncated');
+  });
+
+  describe('Phase B activity & journal hooks', () => {
+    function makeExecutorWithDeps(opts: {
+      defs: AgentToolDef[];
+      handler: (r: CliRequest) => CliResponse | Promise<CliResponse>;
+      activity?: ActivityEmitterLike;
+      journal?: Pick<AgentJournal, 'record'>;
+    }): OrbitToolExecutor {
+      const registry = new OrbitToolRegistry();
+      registry.registerMany(opts.defs);
+      return new OrbitToolExecutor({
+        toolRegistry: registry,
+        cliRegistry: new FakeCli(opts.handler) as unknown as CliHandlerRegistry,
+        ...(opts.activity ? { activity: opts.activity } : {}),
+        ...(opts.journal ? { journal: opts.journal as AgentJournal } : {})
+      });
+    }
+
+    it('records Activity Log entry on destructive tool success', async () => {
+      const seen: ActivityEventInput[] = [];
+      const executor = makeExecutorWithDeps({
+        defs: [DESTRUCTIVE_TOOL_DEF],
+        handler: () => ({ id: 'x', ok: true, data: { id: 'res-1' } }),
+        activity: {
+          emit: (input) => {
+            seen.push(input);
+          }
+        }
+      });
+      const tu: AgentTurnToolUse = {
+        id: 'toolu_w1',
+        name: 'orbit_resource_create',
+        input: { title: 'Hello' }
+      };
+      await executor.execute(tu, ctx, sink);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.action).toBe('agent.tool_invoked');
+      expect(seen[0]?.actor).toBe('agent');
+      expect(seen[0]?.context?.tool_name).toBe('orbit_resource_create');
+    });
+
+    it('records Activity Log on destructive tool failure with agent.tool_failed', async () => {
+      const seen: ActivityEventInput[] = [];
+      const executor = makeExecutorWithDeps({
+        defs: [DESTRUCTIVE_TOOL_DEF],
+        handler: () => ({ id: 'x', ok: false, error: { code: 'forbidden', message: 'no' } }),
+        activity: {
+          emit: (input) => {
+            seen.push(input);
+          }
+        }
+      });
+      const tu: AgentTurnToolUse = {
+        id: 'toolu_w2',
+        name: 'orbit_resource_create',
+        input: { title: 'X' }
+      };
+      const result = await executor.execute(tu, ctx, sink);
+      expect(result.isError).toBe(true);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.action).toBe('agent.tool_failed');
+    });
+
+    it('does NOT record Activity for non-destructive tools', async () => {
+      const seen: ActivityEventInput[] = [];
+      const executor = makeExecutorWithDeps({
+        defs: [TOOL_DEF],
+        handler: () => ({ id: 'x', ok: true, data: { hits: [] } }),
+        activity: {
+          emit: (input) => {
+            seen.push(input);
+          }
+        }
+      });
+      const tu: AgentTurnToolUse = { id: 'toolu_r1', name: 'orbit_search', input: {} };
+      await executor.execute(tu, ctx, sink);
+      expect(seen).toHaveLength(0);
+    });
+
+    it('writes journal entry before destructive tool execution', async () => {
+      const journalCalls: unknown[] = [];
+      const executor = makeExecutorWithDeps({
+        defs: [DESTRUCTIVE_TOOL_DEF],
+        handler: () => ({ id: 'x', ok: true, data: {} }),
+        journal: {
+          record: async (entry) => {
+            journalCalls.push(entry);
+          }
+        }
+      });
+      const tu: AgentTurnToolUse = {
+        id: 'toolu_w3',
+        name: 'orbit_resource_create',
+        input: { title: 'J' }
+      };
+      await executor.execute(tu, ctx, sink);
+      expect(journalCalls).toHaveLength(1);
+      expect(journalCalls[0]).toMatchObject({
+        runId: 'run',
+        toolName: 'orbit_resource_create',
+        toolUseId: 'toolu_w3',
+        destructive: true
+      });
+    });
+
+    it('does not write journal for non-destructive tools', async () => {
+      const journalCalls: unknown[] = [];
+      const executor = makeExecutorWithDeps({
+        defs: [TOOL_DEF],
+        handler: () => ({ id: 'x', ok: true, data: {} }),
+        journal: {
+          record: async (entry) => {
+            journalCalls.push(entry);
+          }
+        }
+      });
+      const tu: AgentTurnToolUse = { id: 'toolu_r2', name: 'orbit_search', input: {} };
+      await executor.execute(tu, ctx, sink);
+      expect(journalCalls).toHaveLength(0);
+    });
   });
 });
