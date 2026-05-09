@@ -6,10 +6,14 @@ import type {
   RuntimeRouteMode,
   SDKEndpointTestResult,
   SDKInvocationInput,
-  SDKResolvedInvocation
+  SDKResolvedInvocation,
+  SDKToolDef
 } from '@shared/runtime';
 import { publishTraceableEvent } from '../events/bus';
 import { AnthropicSDKAdapter, type SDKInvocationResult } from './sdk/anthropic-sdk-adapter';
+import type { AgentTurnResult } from '../agent-tools/llm-client';
+import { runAgentLoop, type AgentLoopResult } from '../agent-tools/runner';
+import type { OrbitToolExecutor } from '../agent-tools/executor';
 import type { SDKEndpointRegistry } from './sdk/endpoint-registry';
 import type { SDKKeyVault } from './sdk/key-vault';
 
@@ -21,6 +25,29 @@ export class RuntimeRouter {
   ) {}
 
   async decide(input: RuntimeRouteInput): Promise<RuntimeRouteDecision> {
+    // Agent 模式优先级最高：SDK 必须可用，否则直接拒绝（不 fallback CLI）。
+    if (input.agentMode) {
+      const endpoint = input.endpointHint
+        ? await this.registry.get(input.endpointHint)
+        : await this.registry.defaultEndpoint(defaultMode(input.mode));
+      if (!endpoint) {
+        return {
+          mode: input.mode,
+          track: 'cli',
+          runtime: 'sdk-agent-unavailable',
+          reason: 'agent mode requires a configured SDK endpoint'
+        };
+      }
+      const model = this.registry.resolveModel(endpoint, input.modelHint);
+      return {
+        mode: input.mode,
+        track: 'sdk_agent',
+        runtime: `sdk_agent:${endpoint.provider}`,
+        endpointId: endpoint.id,
+        model,
+        reason: 'agent mode dispatched to SDK with tool support'
+      };
+    }
     if (input.mode === 'task' || input.requiresTools) {
       return {
         mode: input.mode,
@@ -115,6 +142,75 @@ export class RuntimeRouter {
       }
     });
     return result;
+  }
+
+  /**
+   * Phase A: agent 主循环包装。
+   * 解析 endpoint/key/model → 委托纯函数 runAgentLoop，
+   * adapter 在每次 streamAgentTurn 里负责广播 RuntimeEvent。
+   */
+  async runAgentLoop(
+    input: {
+      system: string;
+      messages: SDKInvocationInput['messages'];
+      tools: SDKToolDef[];
+      conversationId: string;
+      runId: string;
+      maxIterations: number;
+      endpointId?: string;
+      model?: string;
+      mode?: SDKInvocationInput['mode'];
+    },
+    executor: OrbitToolExecutor,
+    windows: () => BrowserWindow[]
+  ): Promise<AgentLoopResult> {
+    const resolved = await this.resolveInvocation({
+      endpointId: input.endpointId,
+      model: input.model,
+      messages: [],
+      mode: input.mode,
+      conversationId: input.conversationId
+    });
+    return runAgentLoop(
+      this.adapter,
+      executor,
+      {
+        invocation: resolved,
+        system: input.system,
+        messages: input.messages,
+        tools: input.tools,
+        conversationId: input.conversationId,
+        runId: input.runId,
+        maxIterations: input.maxIterations,
+        ...(input.mode ? { mode: input.mode } : {})
+      },
+      async (event) => {
+        for (const window of windows()) {
+          if (!window.isDestroyed()) window.webContents.send(IPC.chat.runtimeEvent, event);
+        }
+        if (event.kind === 'runtime.cost') {
+          const payload = event.payload as {
+            inputTokens?: number;
+            outputTokens?: number;
+            totalUsd?: number;
+          };
+          await publishTraceableEvent({
+            type: 'runtime.sdk.cost',
+            kind: 'runtime.sdk.cost',
+            source: 'runtime',
+            summary: `SDK agent turn cost (${resolved.endpoint.label})`,
+            conversationId: input.conversationId,
+            payload: {
+              endpoint_id: resolved.endpoint.id,
+              model: resolved.model,
+              input_tokens: payload.inputTokens ?? 0,
+              output_tokens: payload.outputTokens ?? 0,
+              ...(payload.totalUsd !== undefined ? { total_usd: payload.totalUsd } : {})
+            }
+          });
+        }
+      }
+    );
   }
 
   async testEndpoint(

@@ -21,11 +21,16 @@ import { ConversationOrchestrator } from '../conversation/orchestrator';
 import { getSettings } from '../settings';
 import { getHookRuntimeConfig } from '../agent/ipc';
 import { getSDKRuntime } from '../runtime/sdk/ipc';
+import { getInProcessCliRegistry } from '../cli_server';
+import { OrbitToolRegistry } from '../agent-tools/registry';
+import { OrbitToolExecutor } from '../agent-tools/executor';
+import { PHASE_A_TOOL_DEFS } from '../agent-tools/definitions';
 import { AskAnywhereOrchestrator } from './orchestrator';
 
 let orchestrator: AskAnywhereOrchestrator | null = null;
 let conversations: ConversationOrchestrator | null = null;
 let cachedVault: string | null = null;
+let agentTools: { registry: OrbitToolRegistry; executor: OrbitToolExecutor } | null = null;
 
 function getConversations(): ConversationOrchestrator {
   const sess = currentSession();
@@ -35,6 +40,16 @@ function getConversations(): ConversationOrchestrator {
     cachedVault = sess.vault;
   }
   return conversations;
+}
+
+function getAgentTools(): { registry: OrbitToolRegistry; executor: OrbitToolExecutor } {
+  if (!agentTools) {
+    const registry = new OrbitToolRegistry();
+    registry.registerMany(PHASE_A_TOOL_DEFS);
+    const executor = new OrbitToolExecutor(registry, getInProcessCliRegistry());
+    agentTools = { registry, executor };
+  }
+  return agentTools;
 }
 
 export function getAskAnywhereOrchestrator(): AskAnywhereOrchestrator {
@@ -66,7 +81,9 @@ export function getAskAnywhereOrchestrator(): AskAnywhereOrchestrator {
       getRuntimeRouter: () => {
         const vault = currentSession()?.vault;
         return vault ? getSDKRuntime(vault).router : null;
-      }
+      },
+      getAgentTools: () => getAgentTools(),
+      getAgentMaxIterations: () => 25
     });
   }
   return orchestrator;
@@ -76,6 +93,7 @@ export function resetAskAnywhereOrchestrator(): void {
   orchestrator = null;
   conversations = null;
   cachedVault = null;
+  agentTools = null;
 }
 
 let wired = false;

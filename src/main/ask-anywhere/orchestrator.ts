@@ -17,14 +17,21 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { BrowserWindow } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { Conversation, ConversationAnchor, ConversationMeta } from '@shared/conversation';
+import type { Conversation, ConversationAnchor, ConversationMeta, ConversationScope } from '@shared/conversation';
+import { conversationScopeKey } from '@shared/conversation';
 import type { RuntimeEvent } from '@shared/chat-protocol';
+import type { SpaceContextBundle } from '@shared/space';
+import type { SDKInvocationMessage, SDKToolDef } from '@shared/runtime';
 import type { ConversationOrchestrator } from '../conversation/orchestrator';
 import type { RunnerPool } from '../agent/pool';
 import type { AgentEvent } from '@shared/agent';
 import type { AgentRunner } from '../agent/runner';
 import type { RuntimeRouter } from '../runtime/router';
+import type { OrbitToolRegistry } from '../agent-tools/registry';
+import type { OrbitToolExecutor } from '../agent-tools/executor';
 import { createStageStore, extractArtifactFences } from './stage-store';
+import { assertInsideVault, toPosix, vaultRel } from '../pathGuard';
+import { buildSpaceContext } from '../space/context';
 
 export interface AskAnywhereDeps {
   conversations: ConversationOrchestrator;
@@ -48,6 +55,17 @@ export interface AskAnywhereDeps {
   getApiKey?: () => Promise<string | undefined>;
   /** Runtime B SDK router；无可用 SDK endpoint 时返回 null。 */
   getRuntimeRouter?: () => RuntimeRouter | null;
+  /**
+   * Phase A：注入 agent tool 子系统。
+   * 当 toolRegistry + toolExecutor 都提供且 router 可用时，send() 优先走 agent 主循环；
+   * 否则降级到旧 SDK completer / CLI 路径。
+   */
+  getAgentTools?: () => {
+    registry: OrbitToolRegistry;
+    executor: OrbitToolExecutor;
+  } | null;
+  /** 单次 agent turn 的循环上限，默认 25。 */
+  getAgentMaxIterations?: () => number;
 }
 
 const ASK_ANYWHERE_SYSTEM_PROMPT = `You are Orbit's planning copilot ("Ask Anywhere").
@@ -154,10 +172,13 @@ export class AskAnywhereOrchestrator {
     // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
     const history = renderHistory(conv.turns);
     const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
-    const prompt = buildPrompt({ systemPrompt, history, userText: trimmed });
+    const scopedContext = await buildConversationContext(vault, conv.scope ?? { kind: 'global' });
+    const prompt = buildPrompt({ systemPrompt, scopedContext, history, userText: trimmed });
     const router = this.deps.getRuntimeRouter?.() ?? null;
+    const agentTools = this.deps.getAgentTools?.() ?? null;
+    const agentReady = Boolean(router && agentTools);
     const decision = router
-      ? await router.decide({ mode: 'ask' })
+      ? await router.decide({ mode: 'ask', agentMode: agentReady })
       : { track: 'cli' as const, runtime: 'claude-cli', reason: 'SDK router unavailable' };
 
     // append user turn（必须在 spawn 前，让 UI 即便 reload 也能看到）
@@ -166,6 +187,38 @@ export class AskAnywhereOrchestrator {
       role: 'user',
       content: trimmed
     });
+
+    if (router && agentTools && decision.track === 'sdk_agent') {
+      const runId = `sdk-agent-${randomUUID()}`;
+      await this.deps.conversations.bindRuntime(conversationId, {
+        currentRunId: runId,
+        runtimeHint: decision.runtime
+      });
+      void this.runSdkAgentLoop({
+        router,
+        toolRegistry: agentTools.registry,
+        toolExecutor: agentTools.executor,
+        conversationId,
+        runId,
+        systemPrompt,
+        scopedContext,
+        turns: conv.turns,
+        userText: trimmed,
+        endpointId: decision.endpointId,
+        model: decision.model
+      });
+      return { runId };
+    }
+
+    // agent 模式被请求但 SDK 不可用：emit 友好错误并停止（不 fallback CLI，避免上下文割裂）。
+    if (agentReady && decision.runtime === 'sdk-agent-unavailable') {
+      this.emitSyntheticError(
+        conversationId,
+        'sdk_endpoint_missing',
+        'Agent mode requires a configured SDK endpoint with API key. Add one in Settings → AI Endpoints.'
+      );
+      throw new Error('sdk_endpoint_missing');
+    }
 
     if (router && decision.track === 'sdk') {
       const runId = `sdk-${randomUUID()}`;
@@ -178,6 +231,7 @@ export class AskAnywhereOrchestrator {
         conversationId,
         runId,
         systemPrompt,
+        scopedContext,
         turns: conv.turns,
         userText: trimmed,
         endpointId: decision.endpointId,
@@ -246,6 +300,14 @@ export class AskAnywhereOrchestrator {
   async stop(conversationId: string): Promise<void> {
     const conv = await this.deps.conversations.getConversation(conversationId);
     if (!conv?.currentRunId) return;
+    if (conv.currentRunId.startsWith('sdk-agent-')) {
+      this.emitSyntheticError(
+        conversationId,
+        'sdk_agent_stop_not_supported',
+        'Agent run cancellation is not yet implemented; please wait for it to finish.'
+      );
+      return;
+    }
     if (conv.currentRunId.startsWith('sdk-')) {
       this.emitSyntheticError(conversationId, 'sdk_stop_not_supported', 'SDK streaming cancellation is not available yet.');
       return;
@@ -253,11 +315,108 @@ export class AskAnywhereOrchestrator {
     await this.deps.pool.kill(conv.currentRunId, 'user_stop');
   }
 
+  private async runSdkAgentLoop(input: {
+    router: RuntimeRouter;
+    toolRegistry: OrbitToolRegistry;
+    toolExecutor: OrbitToolExecutor;
+    conversationId: string;
+    runId: string;
+    systemPrompt: string;
+    scopedContext: string;
+    turns: Conversation['turns'];
+    userText: string;
+    endpointId?: string;
+    model?: string;
+  }): Promise<void> {
+    const maxIterations = Math.max(
+      1,
+      Math.min(50, this.deps.getAgentMaxIterations?.() ?? 25)
+    );
+    const tools = input.toolRegistry.listAll().map<SDKToolDef>((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema
+    }));
+    const system = [
+      input.systemPrompt.trim(),
+      input.scopedContext,
+      'Tools execute sequentially; prefer to call one tool, observe the result, then decide the next step.'
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    // Phase A：跨 send() 不回放 toolTrace（Phase B 持久化后再启用）。
+    // 历史 turns 仅取纯 text 拼为 string content，逐轮喂给 LLM。
+    const messages: SDKInvocationMessage[] = [
+      ...input.turns
+        .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
+        .map<SDKInvocationMessage>((turn) => ({
+          role: turn.role as 'user' | 'assistant',
+          content: turn.content
+        })),
+      { role: 'user', content: input.userText }
+    ];
+
+    try {
+      const result = await input.router.runAgentLoop(
+        {
+          system,
+          messages,
+          tools,
+          conversationId: input.conversationId,
+          runId: input.runId,
+          maxIterations,
+          endpointId: input.endpointId,
+          model: input.model,
+          mode: 'ask'
+        },
+        input.toolExecutor,
+        () => BrowserWindow.getAllWindows()
+      );
+
+      if (result.stopReason === 'max_iterations') {
+        this.emitSyntheticError(
+          input.conversationId,
+          'agent_max_iterations',
+          `Agent reached the iteration limit (${maxIterations}). Please continue with a new message.`
+        );
+      }
+
+      const finalText = result.text.trim();
+      if (finalText) {
+        await this.deps.conversations.appendTurn({
+          conversationId: input.conversationId,
+          role: 'assistant',
+          content: finalText,
+          runtimeEventIds: result.eventIds
+        });
+        const vault = this.deps.getVaultPath();
+        if (vault) {
+          const stage = createStageStore(vault);
+          for (const artifact of extractArtifactFences(finalText)) {
+            await stage.add(input.conversationId, artifact);
+          }
+        }
+      }
+    } catch (error) {
+      this.emitSyntheticError(
+        input.conversationId,
+        error instanceof Error ? error.message.split(':')[0] || 'sdk_agent_failed' : 'sdk_agent_failed',
+        error instanceof Error ? error.message : String(error)
+      );
+    } finally {
+      await this.deps.conversations
+        .bindRuntime(input.conversationId, { currentRunId: null })
+        .catch(() => undefined);
+    }
+  }
+
   private async runSdk(input: {
     router: RuntimeRouter;
     conversationId: string;
     runId: string;
     systemPrompt: string;
+    scopedContext: string;
     turns: Conversation['turns'];
     userText: string;
     endpointId?: string;
@@ -268,7 +427,11 @@ export class AskAnywhereOrchestrator {
         {
           endpointId: input.endpointId,
           model: input.model,
-          system: `${input.systemPrompt.trim()}\n\nRuntime note: this SDK route cannot use local tools. Ask for confirmation before any action that would require modifying Orbit data.`,
+          system: [
+            input.systemPrompt.trim(),
+            input.scopedContext,
+            'Runtime note: this SDK route cannot use local tools. Ask for confirmation before any action that would require modifying Orbit data.'
+          ].filter(Boolean).join('\n\n'),
           messages: [
             ...input.turns
               .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
@@ -388,18 +551,82 @@ function renderHistory(turns: Conversation['turns']): string {
 
 function buildPrompt({
   systemPrompt,
+  scopedContext,
   history,
   userText
 }: {
   systemPrompt: string;
+  scopedContext: string;
   history: string;
   userText: string;
 }): string {
   const parts = [systemPrompt.trim()];
+  if (scopedContext) parts.push(scopedContext);
   if (history) parts.push(`<conversation_history>\n${history}\n</conversation_history>`);
   parts.push(`User: ${userText}`);
   parts.push('Assistant:');
   return parts.join('\n\n');
+}
+
+async function buildConversationContext(vaultPath: string, scope: ConversationScope): Promise<string> {
+  try {
+    switch (scope.kind) {
+      case 'project':
+        return renderSpaceContext(await buildSpaceContext(vaultPath, scope.project_id, { summary: true }));
+      case 'area':
+        return renderSpaceContext(await buildSpaceContext(vaultPath, scope.area_slug, { summary: true }));
+      case 'resource':
+        return renderSpaceContext(await buildSpaceContext(vaultPath, scope.resource_slug, { summary: true }));
+      case 'note':
+        return await renderNoteContext(vaultPath, scope.note_id);
+      case 'task':
+        return `<current_orbit_context>\nScope: task:${scope.task_id}\nProject: ${scope.project_id ?? 'unknown'}\nUse orbit task/project CLI commands if more details are needed.\n</current_orbit_context>`;
+      case 'library':
+        return `<current_orbit_context>\nScope: library:${scope.item_id}\nUse orbit CLI or vault search to inspect this Library item before acting.\n</current_orbit_context>`;
+      case 'external':
+        return `<current_orbit_context>\nScope: external:${scope.platform}:${scope.user_id}\nSession: ${scope.session_id ?? 'current'}\n</current_orbit_context>`;
+      case 'global':
+        return `<current_orbit_context>\nScope: global\nUse the user's Vision, active Projects, Areas, Resources, Inbox, and Timeline as the default Orbit context.\n</current_orbit_context>`;
+    }
+  } catch (error) {
+    return `<current_orbit_context>\nScope: ${conversationScopeKey(scope)}\nContext lookup failed: ${(error as Error).message}\nUse the Orbit CLI to inspect this scope if needed.\n</current_orbit_context>`;
+  }
+}
+
+function renderSpaceContext(bundle: SpaceContextBundle): string {
+  const tasks = [
+    ...bundle.tasks.doing.map((task) => `doing: ${task.title}`),
+    ...bundle.tasks.awaiting_user.map((task) => `blocked: ${task.title}`),
+    ...bundle.tasks.todo.slice(0, 8).map((task) => `todo: ${task.title}`)
+  ];
+  return `<current_orbit_context>
+Scope: ${bundle.space.type}:${bundle.space.slug}
+Name: ${bundle.space.name}
+Status: ${bundle.space.status}
+Tags: ${bundle.space.tags.join(', ') || 'none'}
+Description:
+${clip(bundle.info.description, 1800) || '(none)'}
+Tasks:
+${tasks.length ? tasks.map((task) => `- ${task}`).join('\n') : '- none'}
+Materials: ${bundle.materials.scopes.length} scope(s), ${bundle.materials.pins.length} pin(s)
+Outputs:
+${bundle.outputs.length ? bundle.outputs.slice(0, 8).map((output) => `- ${output.title} (${output.path})`).join('\n') : '- none'}
+</current_orbit_context>`;
+}
+
+async function renderNoteContext(vaultPath: string, noteId: string): Promise<string> {
+  const absPath = assertInsideVault(vaultPath, noteId);
+  const raw = await fs.readFile(absPath, 'utf8');
+  return `<current_orbit_context>
+Scope: note:${toPosix(vaultRel(vaultPath, absPath))}
+Note excerpt:
+${clip(raw, 4000)}
+</current_orbit_context>`;
+}
+
+function clip(value: string, limit: number): string {
+  const trimmed = value.trim();
+  return trimmed.length > limit ? `${trimmed.slice(0, limit)}\n…` : trimmed;
 }
 
 /**

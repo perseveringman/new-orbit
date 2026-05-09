@@ -19,6 +19,19 @@ function createDefaultRegistry(): CliHandlerRegistry {
   return registry;
 }
 
+let inProcessRegistry: CliHandlerRegistry | null = null;
+
+/**
+ * Phase A：in-process 复用的 CLI handler registry，供 OrbitToolExecutor 直连使用。
+ *
+ * 每个 handler 内部通过 currentSession() 取 vault，所以 registry 本身可全局唯一；
+ * 切换 vault 时 handler 自动落到新 session。
+ */
+export function getInProcessCliRegistry(): CliHandlerRegistry {
+  if (!inProcessRegistry) inProcessRegistry = createDefaultRegistry();
+  return inProcessRegistry;
+}
+
 export async function startCliServerForVault(vaultPath: string): Promise<string> {
   await stopCliServer();
   const socketPath = getCliSocketPath(vaultPath);
