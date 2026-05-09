@@ -29,6 +29,8 @@ import type { AgentRunner } from '../agent/runner';
 import type { RuntimeRouter } from '../runtime/router';
 import type { OrbitToolRegistry } from '../agent-tools/registry';
 import type { OrbitToolExecutor } from '../agent-tools/executor';
+import { rebuildMessages } from '../agent-tools/rebuild-messages';
+import { readVisionForSystemPrompt } from '../agent-tools/vision-reader';
 import { createStageStore, extractArtifactFences } from './stage-store';
 import { assertInsideVault, toPosix, vaultRel } from '../pathGuard';
 import { buildSpaceContext } from '../space/context';
@@ -337,7 +339,9 @@ export class AskAnywhereOrchestrator {
       description: t.description,
       input_schema: t.inputSchema
     }));
+    const visionSection = await readVisionForSystemPrompt(this.deps.getVaultPath());
     const system = [
+      visionSection,
       input.systemPrompt.trim(),
       input.scopedContext,
       'Tools execute sequentially; prefer to call one tool, observe the result, then decide the next step.'
@@ -345,17 +349,10 @@ export class AskAnywhereOrchestrator {
       .filter(Boolean)
       .join('\n\n');
 
-    // Phase A：跨 send() 不回放 toolTrace（Phase B 持久化后再启用）。
-    // 历史 turns 仅取纯 text 拼为 string content，逐轮喂给 LLM。
-    const messages: SDKInvocationMessage[] = [
-      ...input.turns
-        .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
-        .map<SDKInvocationMessage>((turn) => ({
-          role: turn.role as 'user' | 'assistant',
-          content: turn.content
-        })),
-      { role: 'user', content: input.userText }
-    ];
+    // Phase B：跨 send() 完整回放 assistant.toolTrace 为 Anthropic tool_use/tool_result blocks
+    const messages: SDKInvocationMessage[] = rebuildMessages(input.turns, {
+      appendUserText: input.userText
+    });
 
     try {
       const result = await input.router.runAgentLoop(
@@ -388,7 +385,8 @@ export class AskAnywhereOrchestrator {
           conversationId: input.conversationId,
           role: 'assistant',
           content: finalText,
-          runtimeEventIds: result.eventIds
+          runtimeEventIds: result.eventIds,
+          ...(result.toolTrace.length > 0 ? { toolTrace: result.toolTrace } : {})
         });
         const vault = this.deps.getVaultPath();
         if (vault) {

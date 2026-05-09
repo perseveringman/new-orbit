@@ -24,13 +24,16 @@ import { getSDKRuntime } from '../runtime/sdk/ipc';
 import { getInProcessCliRegistry } from '../cli_server';
 import { OrbitToolRegistry } from '../agent-tools/registry';
 import { OrbitToolExecutor } from '../agent-tools/executor';
-import { PHASE_A_TOOL_DEFS } from '../agent-tools/definitions';
+import { AgentJournal } from '../agent-tools/journal';
+import { PHASE_B_TOOL_DEFS } from '../agent-tools/definitions';
+import { emitActivity } from '../activity';
 import { AskAnywhereOrchestrator } from './orchestrator';
 
 let orchestrator: AskAnywhereOrchestrator | null = null;
 let conversations: ConversationOrchestrator | null = null;
 let cachedVault: string | null = null;
 let agentTools: { registry: OrbitToolRegistry; executor: OrbitToolExecutor } | null = null;
+let agentToolsVault: string | null = null;
 
 function getConversations(): ConversationOrchestrator {
   const sess = currentSession();
@@ -43,11 +46,19 @@ function getConversations(): ConversationOrchestrator {
 }
 
 function getAgentTools(): { registry: OrbitToolRegistry; executor: OrbitToolExecutor } {
-  if (!agentTools) {
+  const sess = currentSession();
+  const vault = sess?.vault ?? null;
+  if (!agentTools || agentToolsVault !== vault) {
     const registry = new OrbitToolRegistry();
-    registry.registerMany(PHASE_A_TOOL_DEFS);
-    const executor = new OrbitToolExecutor(registry, getInProcessCliRegistry());
+    registry.registerMany(PHASE_B_TOOL_DEFS);
+    const executor = new OrbitToolExecutor({
+      toolRegistry: registry,
+      cliRegistry: getInProcessCliRegistry(),
+      activity: { emit: (input) => emitActivity(input) },
+      journal: new AgentJournal({ vaultPath: vault })
+    });
     agentTools = { registry, executor };
+    agentToolsVault = vault;
   }
   return agentTools;
 }
@@ -94,6 +105,7 @@ export function resetAskAnywhereOrchestrator(): void {
   conversations = null;
   cachedVault = null;
   agentTools = null;
+  agentToolsVault = null;
 }
 
 let wired = false;
