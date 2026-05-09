@@ -81,18 +81,28 @@ class FakeCliRegistry implements Pick<CliHandlerRegistry, 'handle'> {
 interface ScriptedTurn {
   text?: string;
   toolUses?: Array<{ id: string; name: string; input: unknown }>;
+  /** 覆盖该轮的 input_tokens；默认 1。用于 budget_halt 测试。 */
+  inputTokens?: number;
 }
 
 class FakeLLMClient implements AgentLLMClient {
   public turnCount = 0;
   public observedMessages: SDKInvocationInput['messages'][] = [];
+  public observedSignals: Array<AbortSignal | undefined> = [];
   constructor(private readonly script: ScriptedTurn[]) {}
   async streamAgentTurn(
     _invocation: SDKResolvedInvocation,
     input: SDKInvocationInput,
-    emit: AgentRuntimeEventSink
+    emit: AgentRuntimeEventSink,
+    signal?: AbortSignal
   ): Promise<AgentTurnResult> {
     this.observedMessages.push(input.messages);
+    this.observedSignals.push(signal);
+    if (signal?.aborted) {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
     const idx = this.turnCount;
     this.turnCount += 1;
     const scripted = this.script[idx];
@@ -123,7 +133,12 @@ class FakeLLMClient implements AgentLLMClient {
       text,
       toolUses: (scripted.toolUses ?? []).map((t) => ({ id: t.id, name: t.name, input: t.input })),
       stopReason,
-      usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      usage: {
+        inputTokens: scripted.inputTokens ?? 1,
+        outputTokens: 1,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0
+      },
       eventIds: text ? [`fake-text-${idx}`] : []
     };
   }
@@ -373,5 +388,142 @@ describe('runAgentLoop', () => {
     expect(typeof result.toolTrace[0]?.result).toBe('string');
     expect(typeof result.toolTrace[0]?.at).toBe('string');
     expect(typeof result.toolTrace[0]?.durationMs).toBe('number');
+  });
+
+  it('aborts loop when AbortSignal is already aborted before entering', async () => {
+    const llm = new FakeLLMClient([{ text: 'never runs' }]);
+    const executor = buildExecutor(() => ({ id: 'x', ok: true, data: {} }));
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const result = await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5,
+        signal: ctrl.signal
+      },
+      sink
+    );
+    expect(result.stopReason).toBe('aborted');
+    expect(result.iterations).toBe(0);
+    expect(llm.turnCount).toBe(0);
+  });
+
+  it('aborts loop when LLM throws AbortError mid-turn', async () => {
+    const llm = new FakeLLMClient([{ text: 'never shows' }]);
+    const executor = buildExecutor(() => ({ id: 'x', ok: true, data: {} }));
+    const ctrl = new AbortController();
+    // Abort *during* the first turn by using a pre-aborted signal
+    ctrl.abort();
+    const result = await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5,
+        signal: ctrl.signal
+      },
+      sink
+    );
+    expect(result.stopReason).toBe('aborted');
+  });
+
+  it('propagates AbortSignal to AgentLLMClient', async () => {
+    const llm = new FakeLLMClient([{ text: 'quick' }]);
+    const executor = buildExecutor(() => ({ id: 'x', ok: true, data: {} }));
+    const ctrl = new AbortController();
+    await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5,
+        signal: ctrl.signal
+      },
+      sink
+    );
+    // FakeLLMClient recorded 1 call with the signal we passed
+    expect(llm.observedSignals).toHaveLength(1);
+    expect(llm.observedSignals[0]).toBe(ctrl.signal);
+  });
+
+  it('triggers budget_halt when cumulative input tokens exceed the budget', async () => {
+    const llm = new FakeLLMClient([
+      {
+        toolUses: [{ id: 'toolu_a', name: 'orbit_search', input: {} }],
+        inputTokens: 80_000
+      },
+      {
+        toolUses: [{ id: 'toolu_b', name: 'orbit_search', input: {} }],
+        inputTokens: 80_000
+      },
+      { text: 'never reached' }
+    ]);
+    const executor = buildExecutor(() => ({ id: 'x', ok: true, data: {} }));
+    const result = await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: 'spin' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5,
+        inputTokenBudget: 150_000
+      },
+      sink
+    );
+    // 第 1 轮 80k < 150k 继续；第 2 轮累计 160k 超出 → 触发 budget_halt
+    expect(result.iterations).toBe(2);
+    expect(result.stopReason).toBe('budget_halt');
+    expect(result.totalInputTokens).toBe(160_000);
+    // 第 2 轮的 tool_use 不应该被执行（budget_halt 后不再 execute）
+    expect(result.toolTrace.map((t) => t.toolUseId)).toEqual(['toolu_a']);
+  });
+
+  it('does not budget_halt when inputTokenBudget is 0 (disabled)', async () => {
+    const llm = new FakeLLMClient([
+      {
+        toolUses: [{ id: 'toolu_a', name: 'orbit_search', input: {} }],
+        inputTokens: 1_000_000
+      },
+      { text: 'done' }
+    ]);
+    const executor = buildExecutor(() => ({ id: 'x', ok: true, data: {} }));
+    const result = await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: 'q' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5,
+        inputTokenBudget: 0
+      },
+      sink
+    );
+    expect(result.stopReason).toBe('end_turn');
+    expect(result.iterations).toBe(2);
   });
 });
