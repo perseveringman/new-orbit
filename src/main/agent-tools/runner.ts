@@ -17,6 +17,7 @@ import type {
   SDKResolvedInvocation,
   SDKToolDef
 } from '@shared/runtime';
+import type { ToolTraceBlock } from '@shared/agent-tools';
 import type {
   AgentLLMClient,
   AgentRuntimeEventSink,
@@ -51,6 +52,11 @@ export interface AgentLoopResult {
   stopReason: 'end_turn' | 'max_iterations' | 'aborted' | 'tool_use_finalized' | 'other';
   /** 最后一轮 LLM 的 stop_reason 原值（便于诊断）。 */
   lastTurnStopReason?: AgentTurnResult['stopReason'];
+  /**
+   * Phase B：本次 send 累积的 tool_use/tool_result 轨迹（按时序）。
+   * orchestrator 把它持久化到 assistant turn.toolTrace，下次 send 由 rebuildMessages 回放。
+   */
+  toolTrace: ToolTraceBlock[];
 }
 
 /**
@@ -75,6 +81,7 @@ export async function runAgentLoop(
   let lastTurnStopReason: AgentTurnResult['stopReason'] | undefined;
   const messages: SDKInvocationMessage[] = input.messages.slice();
   const maxIter = Math.max(1, Math.min(50, input.maxIterations));
+  const toolTrace: ToolTraceBlock[] = [];
 
   let turnsRun = 0;
   let iter = 0;
@@ -113,6 +120,7 @@ export async function runAgentLoop(
     // 串行执行 tool_use
     const toolResultBlocks: SDKInvocationMessageContentBlock[] = [];
     for (const toolUse of turn.toolUses) {
+      const startedAt = new Date().toISOString();
       const result = await executor.execute(
         toolUse,
         { runId: input.runId, conversationId: input.conversationId },
@@ -123,6 +131,16 @@ export async function runAgentLoop(
         tool_use_id: result.toolUseId,
         content: result.content,
         ...(result.isError ? { is_error: true } : {})
+      });
+      toolTrace.push({
+        toolUseId: result.toolUseId,
+        toolName: result.toolName,
+        // 解析失败时 input 为 undefined，保留原 partial（adapter 已记 parseError）
+        input: toolUse.input ?? null,
+        result: result.content,
+        ...(result.isError ? { isError: true } : {}),
+        at: startedAt,
+        durationMs: result.durationMs
       });
     }
     messages.push({ role: 'user', content: toolResultBlocks });
@@ -138,6 +156,7 @@ export async function runAgentLoop(
     eventIds: aggregatedEventIds,
     iterations: turnsRun,
     stopReason,
+    toolTrace,
     ...(lastTurnStopReason ? { lastTurnStopReason } : {})
   };
 }
