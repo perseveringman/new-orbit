@@ -20,6 +20,7 @@ export const TRACEABLE_EVENT_KINDS = [
   'runtime.sdk.invocation.started',
   'runtime.sdk.cost',
   'runtime.sdk.invocation.completed',
+  'runtime.sdk.tool_use.completed',
   'synthesis.artifact.created',
   'synthesis.artifact.stale',
   'synthesis.artifact.superseded',

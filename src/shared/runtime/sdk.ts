@@ -58,10 +58,34 @@ export interface SDKEndpointRegistrySnapshot {
   defaults: SDKEndpointDefaults;
 }
 
+/**
+ * Anthropic 风格的结构化 message content。
+ * Phase A：保留 string 形态向后兼容（旧 runSdk 路径）；
+ * 新增 block 数组用于多轮 tool_use/tool_result 回灌。
+ */
+export type SDKInvocationMessageContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean };
+
+export type SDKInvocationMessageContent = string | SDKInvocationMessageContentBlock[];
+
 export interface SDKInvocationMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: SDKInvocationMessageContent;
 }
+
+/** Tool 定义透传到 Anthropic（仅取必要字段）。 */
+export interface SDKToolDef {
+  name: string;
+  description: string;
+  input_schema: unknown;
+}
+
+export type SDKToolChoice =
+  | 'auto'
+  | 'any'
+  | { type: 'tool'; name: string };
 
 export interface SDKInvocationInput {
   endpointId?: string;
@@ -73,6 +97,10 @@ export interface SDKInvocationInput {
   traceId?: string;
   conversationId?: string;
   mode?: 'ask' | 'synthesis' | 'background';
+  /** Phase A：传递给 Anthropic 的 tools 列表；为空则等价于无 tool_use 能力。 */
+  tools?: SDKToolDef[];
+  /** Phase A：可选的 tool_choice。 */
+  toolChoice?: SDKToolChoice;
 }
 
 export interface SDKResolvedInvocation {

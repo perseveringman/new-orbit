@@ -53,6 +53,28 @@ export interface RuntimeSdkCostPayload {
   total_usd?: number;
 }
 
+/**
+ * Agent 主循环里一次 tool_use 执行完成（成功或失败合并为一个事件，用 `ok` 区分）。
+ *
+ * Phase A：由 OrbitToolExecutor 在 CliHandlerRegistry 调用前后发布。
+ */
+export interface RuntimeSdkToolUseCompletedPayload {
+  ok: boolean;
+  tool_name: string;
+  /** Anthropic tool_use.id（toolu_xxx），与 RuntimeEvent.spanId 同源便于 join。 */
+  span_id: string;
+  conversation_id?: string;
+  run_id?: string;
+  duration_ms: number;
+  /** 失败时填错误码（如 'timeout' / 'invalid_params' / 'handler_error'）。 */
+  error_code?: string;
+  error_message?: string;
+  /** 结果字符串化后的字节大小（截断前），便于排查 LLM 看到的 result 长度。 */
+  result_size?: number;
+  /** 该 tool 是否为 destructive，便于 Activity 投影统计。 */
+  destructive?: boolean;
+}
+
 // ---------- Synthesis ----------
 
 export interface SynthesisArtifactEventPayload {
@@ -298,6 +320,7 @@ export interface TraceableEventPayloadMap {
   'runtime.sdk.invocation.started': RuntimeSdkInvocationPayload;
   'runtime.sdk.cost': RuntimeSdkCostPayload;
   'runtime.sdk.invocation.completed': RuntimeSdkInvocationPayload & { output_tokens?: number };
+  'runtime.sdk.tool_use.completed': RuntimeSdkToolUseCompletedPayload;
   'synthesis.artifact.created': SynthesisArtifactEventPayload;
   'synthesis.artifact.stale': SynthesisArtifactEventPayload;
   'synthesis.artifact.superseded': SynthesisArtifactEventPayload;
