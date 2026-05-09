@@ -36,6 +36,8 @@ export const ACTIVITY_ACTIONS = [
   'agent.run_started',
   'agent.run_completed',
   'agent.run_failed',
+  'agent.tool_invoked',
+  'agent.tool_failed',
   'agent.onboarding_checked',
   'agent.proposal_submitted',
   'agent.proposal_approved',

@@ -4,6 +4,8 @@
  * 参考：docs/thinking-trail/2026-04-29-chat-unification-decoupling/03-chat-runtime-protocol.md §6
  */
 
+import type { ToolTraceBlock } from '@shared/agent-tools/tool-trace';
+
 export const CONVERSATION_ANCHOR_KINDS = [
   'task',
   'inbox_item',
@@ -33,6 +35,12 @@ export interface ConversationTurn {
   content: string;
   runtimeEventIds?: string[];
   artifactRefs?: string[];
+  /**
+   * Phase B：assistant turn 持久化的 tool_use/tool_result 轨迹。
+   * 跨 send() 重建 messages 时按此回放。
+   * 仅在该轮触发了 agent tool_use 时存在。
+   */
+  toolTrace?: ToolTraceBlock[];
 }
 
 export interface ConversationMessage {
