@@ -129,5 +129,116 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
         limit: { type: 'integer', description: 'Maximum events to return.' }
       }
     }
+  },
+  {
+    name: 'orbit_task_get',
+    description:
+      'Get a single task with readiness and dependency state. ' +
+      'Use when the user references a specific task ("this task", "the auth bug") and you need the full record.',
+    cliMethod: 'task.get',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['uid'],
+      properties: {
+        uid: { type: 'string', description: 'Task uid (or slug).' }
+      }
+    }
+  },
+  {
+    name: 'orbit_task_related',
+    description:
+      'List tasks textually related to a given task (keyword overlap on title/tags). ' +
+      'Use to surface possible duplicates or follow-ups before recommending new work.',
+    cliMethod: 'task.related',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['uid'],
+      properties: {
+        uid: { type: 'string', description: 'Anchor task uid.' }
+      }
+    }
+  },
+  {
+    name: 'orbit_project_overview',
+    description:
+      "Aggregated overview of a single project (status, tags, current tasks, recent activity, materials). " +
+      'Use this when scoping advice to a specific project rather than running multiple smaller queries.',
+    cliMethod: 'project.overview',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Project uid or slug.' }
+      }
+    }
+  },
+  {
+    name: 'orbit_inbox_list',
+    description:
+      "List items in the user's Inbox (proposals awaiting review, agent messages, capture forwards). " +
+      'Use before recommending the user act on agent suggestions.',
+    cliMethod: 'inbox.list',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        status: { type: 'string', description: 'Optional inbox status filter.' },
+        limit: { type: 'integer' }
+      }
+    }
+  },
+  {
+    name: 'orbit_inbox_get',
+    description:
+      'Fetch a single Inbox item by id (full payload incl. proposal body if any). ' +
+      'Use after `orbit_inbox_list` when the user wants to know "what is item X about".',
+    cliMethod: 'inbox.get',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string' }
+      }
+    }
+  },
+  {
+    name: 'orbit_resource_list',
+    description:
+      "List Resources in the vault (long-lived knowledge containers). " +
+      'Use when the user wants an inventory of distillation targets or persistent reference material.',
+    cliMethod: 'resource.list',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        include_archived: { type: 'boolean' }
+      }
+    }
+  },
+  {
+    name: 'orbit_resource_get',
+    description:
+      'Fetch a single Resource by id/slug (frontmatter + body + section refs). ' +
+      'Use after `orbit_resource_list` for detailed work on a specific Resource.',
+    cliMethod: 'resource.get',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string' }
+      }
+    }
   }
 ];
