@@ -31,6 +31,8 @@ import type { OrbitToolRegistry } from '../agent-tools/registry';
 import type { OrbitToolExecutor } from '../agent-tools/executor';
 import { rebuildMessages } from '../agent-tools/rebuild-messages';
 import { readVisionForSystemPrompt } from '../agent-tools/vision-reader';
+import { SkillLoader } from '../agent-tools/skill-loader';
+import type { LoadedSkill } from '@shared/agent-tools';
 import { createStageStore, extractArtifactFences } from './stage-store';
 import { assertInsideVault, toPosix, vaultRel } from '../pathGuard';
 import { buildSpaceContext } from '../space/context';
@@ -204,6 +206,7 @@ export class AskAnywhereOrchestrator {
         runId,
         systemPrompt,
         scopedContext,
+        scope: conv.scope ?? { kind: 'global' },
         turns: conv.turns,
         userText: trimmed,
         endpointId: decision.endpointId,
@@ -325,6 +328,7 @@ export class AskAnywhereOrchestrator {
     runId: string;
     systemPrompt: string;
     scopedContext: string;
+    scope: ConversationScope;
     turns: Conversation['turns'];
     userText: string;
     endpointId?: string;
@@ -334,16 +338,51 @@ export class AskAnywhereOrchestrator {
       1,
       Math.min(50, this.deps.getAgentMaxIterations?.() ?? 25)
     );
-    const tools = input.toolRegistry.listAll().map<SDKToolDef>((t) => ({
+
+    // Phase C：加载 skill（应用级 / vault / space 三级合并 + requires detection）
+    const vaultPath = this.deps.getVaultPath();
+    const skillLoader = new SkillLoader({
+      vaultPath,
+      scope: input.scope
+    });
+    const allSkills = await skillLoader.load();
+    const activeSkills = allSkills.filter(
+      (skill) =>
+        !skill.disabledReason &&
+        (skill.scopes.length === 0 || skill.scopes.includes(input.scope.kind))
+    );
+
+    // 工具按 scope 过滤后，再按激活 skill 的 tools 子集做"显式声明的并集"
+    // 规则：若没有任何 active skill 显式声明 tools → 用全集（scope-filtered）
+    //       若至少一个 skill 显式声明 tools → 全集 ∩ (∪ skill.tools) ∪ (没声明 tools 的 skill 默认全集)
+    const scopedTools = input.toolRegistry.listForScope(input.scope);
+    const skillsWithTools = activeSkills.filter((s) => s.tools.length > 0);
+    const exposedTools =
+      skillsWithTools.length === 0
+        ? scopedTools
+        : (() => {
+            const allowed = new Set<string>();
+            for (const skill of skillsWithTools) {
+              for (const t of skill.tools) allowed.add(t);
+            }
+            // 没声明 tools 的 skill 视为不限制（保留全集）
+            const hasUnrestricted = activeSkills.some((s) => s.tools.length === 0);
+            return scopedTools.filter((t) => hasUnrestricted || allowed.has(t.name));
+          })();
+
+    const tools = exposedTools.map<SDKToolDef>((t) => ({
       name: t.name,
       description: t.description,
       input_schema: t.inputSchema
     }));
-    const visionSection = await readVisionForSystemPrompt(this.deps.getVaultPath());
+
+    const visionSection = await readVisionForSystemPrompt(vaultPath);
+    const skillsSection = renderSkillsSection(activeSkills);
     const system = [
       visionSection,
       input.systemPrompt.trim(),
       input.scopedContext,
+      skillsSection,
       'Tools execute sequentially; prefer to call one tool, observe the result, then decide the next step.'
     ]
       .filter(Boolean)
@@ -640,4 +679,18 @@ async function loadAskAnywhereSystemPrompt(vaultPath: string): Promise<string> {
     /* fallback to default */
   }
   return ASK_ANYWHERE_SYSTEM_PROMPT;
+}
+
+/**
+ * Phase C：把激活的 skill 渲染成 system prompt 段落。
+ * 仅 body 非空的 skill 才出现在段落里；description 作为可选小标题前缀。
+ */
+function renderSkillsSection(skills: LoadedSkill[]): string {
+  const usable = skills.filter((s) => s.body.length > 0);
+  if (usable.length === 0) return '';
+  const blocks = usable.map((s) => {
+    const header = `### Skill: ${s.name}${s.description ? ` — ${s.description}` : ''}`;
+    return `${header}\n\n${s.body}`;
+  });
+  return ['## Active Skills', ...blocks].join('\n\n');
 }

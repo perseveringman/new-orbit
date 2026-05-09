@@ -25,7 +25,7 @@ import { getInProcessCliRegistry } from '../cli_server';
 import { OrbitToolRegistry } from '../agent-tools/registry';
 import { OrbitToolExecutor } from '../agent-tools/executor';
 import { AgentJournal } from '../agent-tools/journal';
-import { PHASE_B_TOOL_DEFS } from '../agent-tools/definitions';
+import { PHASE_C_TOOL_DEFS } from '../agent-tools/definitions';
 import { emitActivity } from '../activity';
 import { AskAnywhereOrchestrator } from './orchestrator';
 
@@ -50,7 +50,7 @@ function getAgentTools(): { registry: OrbitToolRegistry; executor: OrbitToolExec
   const vault = sess?.vault ?? null;
   if (!agentTools || agentToolsVault !== vault) {
     const registry = new OrbitToolRegistry();
-    registry.registerMany(PHASE_B_TOOL_DEFS);
+    registry.registerMany(PHASE_C_TOOL_DEFS);
     const executor = new OrbitToolExecutor({
       toolRegistry: registry,
       cliRegistry: getInProcessCliRegistry(),
