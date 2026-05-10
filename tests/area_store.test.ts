@@ -27,6 +27,9 @@ describe('Area Phase 6.6 foundation', () => {
       name: 'Learning',
       tags: ['pkm']
     });
+    await expect(fs.stat(path.join(vaultPath, '02_Areas', 'learning', 'tasks'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '02_Areas', 'learning', 'assets', '_manifest.md'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '02_Areas', 'learning', 'outputs', '_manifest.md'))).resolves.toBeDefined();
     const areaRef = {
       area_slug: 'learning',
       primary: true,

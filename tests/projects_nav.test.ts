@@ -4,13 +4,60 @@ import { describe, expect, it } from 'vitest';
 import type { InboxEvent, InboxItem } from '../src/shared/inbox';
 import {
   applyInboxBadgeEvent,
+  isPrimaryWorkspaceDestination,
   pendingMessageIdsFromItems,
+  WorkspaceOverflowMenu,
   WorkspaceQuickItem,
   workspaceBadgeCount
 } from '../src/renderer/src/components/Sidebar/ProjectsNav';
-import type { WorkspaceDestination } from '../src/renderer/src/components/topbarModel';
+import { ResourcesNav } from '../src/renderer/src/components/Sidebar/ResourcesNav';
+import { WORKSPACE_DESTINATIONS, type WorkspaceDestination } from '../src/renderer/src/components/topbarModel';
 
 describe('ProjectsNav inbox badge', () => {
+  it('keeps only the requested high-level destinations in the primary sidebar list', () => {
+    const primaryLabels = ['dashboard', 'askAnywhere', 'inbox', 'timeline', 'review'].map(
+      (kind) => WORKSPACE_DESTINATIONS.find((destination) => destination.view.kind === kind)?.label
+    );
+
+    expect(primaryLabels).toEqual([
+      'Dashboard',
+      'Ask Anywhere',
+      'Inbox',
+      'Timeline',
+      'Review'
+    ]);
+  });
+
+  it('renders non-primary workspace destinations under the More menu', () => {
+    const overflow = WORKSPACE_DESTINATIONS.filter(
+      (destination) => !isPrimaryWorkspaceDestination(destination) && destination.view.kind !== 'resources'
+    );
+    const html = renderToStaticMarkup(
+      createElement(WorkspaceOverflowMenu, {
+        destinations: overflow,
+        view: { kind: 'vision' },
+        inboxPendingCount: 0,
+        defaultOpen: true,
+        onSelect: () => undefined
+      })
+    );
+
+    expect(html).toContain('More');
+    expect(html).toContain('Vision');
+    expect(html).toContain('Library');
+    expect(html).toContain('Agents');
+    expect(html).not.toContain('Dashboard');
+    expect(html).not.toContain('Resources');
+  });
+
+  it('renders Resources as its own sidebar list section', () => {
+    const html = renderToStaticMarkup(createElement(ResourcesNav));
+
+    expect(html).toContain('Resources');
+    expect(html).toContain('New resource');
+    expect(html).toContain('No resources yet');
+  });
+
   it('returns sidebar pending count only for the Inbox destination', () => {
     const inbox: WorkspaceDestination = { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' };
     const dashboard: WorkspaceDestination = {

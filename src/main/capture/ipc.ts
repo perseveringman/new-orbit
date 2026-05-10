@@ -2,6 +2,10 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type {
   AddFeedSubscriptionInput,
+  CaptureAttachmentInput,
+  CreateCaptureLinkInput,
+  CreateCaptureNoteInput,
+  CreateCaptureTaskInput,
   CreateThoughtInput,
   LibraryReadingUpdateInput,
   LinkThoughtInput,
@@ -14,6 +18,7 @@ import type {
 import type { InboxEvent, InboxStatus } from '@shared/inbox';
 import { createFeedService } from './feed/service';
 import { createLibraryService } from './library/service';
+import { createQuickCaptureService } from './quick/service';
 import { createThoughtService } from './thoughts/service';
 import { publishTraceableEvent } from '../events/bus';
 
@@ -140,6 +145,45 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
     const item = await createThoughtService(vaultPath()).dismiss(id, actor);
     broadcastInboxEvent({ type: 'dismissed', item });
     return item;
+  });
+
+  ipcMain.handle(IPC.capture.quick.saveAttachment, (_event, input: CaptureAttachmentInput) =>
+    createQuickCaptureService(vaultPath()).saveAttachment(input)
+  );
+  ipcMain.handle(IPC.capture.quick.createNote, async (_event, input: CreateCaptureNoteInput) => {
+    const result = await createQuickCaptureService(vaultPath()).createNote(input);
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'note.created',
+      summary: `Captured Note: ${result.note.frontmatter.title ?? result.note.path}`,
+      payload: {
+        note_id: result.note.frontmatter.id,
+        path: result.note.path,
+        attachment_count: result.attachments.length
+      }
+    });
+    broadcastInboxEvent({ type: 'created', item: result.inboxItem });
+    return result;
+  });
+  ipcMain.handle(IPC.capture.quick.createLink, async (_event, input: CreateCaptureLinkInput) => {
+    const result = await createQuickCaptureService(vaultPath()).createLink(input);
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'library.item.added',
+      summary: `Captured Link: ${result.item.frontmatter.title}`,
+      payload: {
+        item_id: result.item.frontmatter.id,
+        path: result.item.path,
+        kind: result.item.frontmatter.kind,
+        url: result.item.frontmatter.url
+      }
+    });
+    return result;
+  });
+  ipcMain.handle(IPC.capture.quick.createTask, async (_event, input: CreateCaptureTaskInput) => {
+    const result = await createQuickCaptureService(vaultPath()).createTask(input);
+    broadcastInboxEvent({ type: 'created', item: result.item });
+    return result;
   });
 }
 

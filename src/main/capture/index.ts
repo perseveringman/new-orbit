@@ -4,5 +4,6 @@ export { parseRss, type ParsedFeed, type ParsedFeedItem } from './feed/rss';
 export { FeedSubscriptionStore } from './feed/subscriptions';
 export { createLibraryService, LibraryService } from './library/service';
 export { createThoughtService, ThoughtService } from './thoughts/service';
+export { createQuickCaptureService, QuickCaptureService } from './quick/service';
 export { QUICK_CAPTURE_ACCELERATOR, isQuickCaptureAccelerator } from './shortcut';
 export { startMobileInboundWatcher, type MobileInboundWatcher } from './mobile_inbound';

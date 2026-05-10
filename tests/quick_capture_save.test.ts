@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { createThoughtService, isQuickCaptureAccelerator, QUICK_CAPTURE_ACCELERATOR } from '../src/main/capture';
+import { createQuickCaptureService, createThoughtService, isQuickCaptureAccelerator, QUICK_CAPTURE_ACCELERATOR } from '../src/main/capture';
 import type { ActivityEventInput } from '../src/main/activity';
 import type { ThoughtPayload } from '../src/shared/inbox';
+import { QuickCaptureModal } from '../src/renderer/src/components/quick-capture/QuickCaptureModal';
 
 let vaultPath: string;
 
@@ -18,7 +21,7 @@ afterEach(async () => {
 });
 
 describe('quick capture save', () => {
-  it('uses CmdOrCtrl+Shift+I and saves Thought-only captures into Inbox', async () => {
+  it('uses CmdOrCtrl+Shift+I and preserves quick thought capture compatibility', async () => {
     const activities: ActivityEventInput[] = [];
     const service = createThoughtService(vaultPath, {
       now: () => new Date('2026-04-26T10:00:00.000Z'),
@@ -33,5 +36,84 @@ describe('quick capture save', () => {
     expect(stored?.status).toBe('pending');
     expect((stored?.payload as ThoughtPayload).created_from).toBe('quick_capture');
     expect(activities.map((event) => event.action)).toEqual(['thought.created']);
+  });
+
+  it('saves memo-style notes with tags, uploaded files, and voice attachments', async () => {
+    const service = createQuickCaptureService(vaultPath);
+    const result = await service.createNote({
+      content: 'Remember this product insight.',
+      tags: ['capture', '#voice'],
+      attachments: [
+        {
+          name: 'diagram.PNG',
+          mimeType: 'image/png',
+          dataBase64: Buffer.from('image-data').toString('base64')
+        }
+      ],
+      audio: {
+        name: 'voice.webm',
+        mimeType: 'audio/webm',
+        dataBase64: Buffer.from('voice-data').toString('base64'),
+        durationSec: 7
+      }
+    });
+
+    expect(result.note.frontmatter.type).toBe('voice_log');
+    expect(result.note.frontmatter.tags).toEqual(['capture', 'voice']);
+    expect(result.note.frontmatter.audio?.duration_sec).toBe(7);
+    expect(result.note.body).toContain('## Attachments');
+    expect(result.attachments).toHaveLength(2);
+    await expect(fs.readFile(path.join(vaultPath, result.attachments[0].path), 'utf8')).resolves.toBe('image-data');
+    await expect(fs.readFile(path.join(vaultPath, result.attachments[1].path), 'utf8')).resolves.toBe('voice-data');
+    expect((result.inboxItem.payload as ThoughtPayload).created_from).toBe('voice');
+  });
+
+  it('captures bookmarks, read-later links, and tasks into the correct stores', async () => {
+    const service = createQuickCaptureService(vaultPath);
+    const bookmark = await service.createLink({
+      kind: 'bookmark',
+      url: 'example.com/tool',
+      title: 'Useful Tool',
+      notes: 'Use this for research.',
+      tags: ['tools']
+    });
+    const readLater = await service.createLink({
+      kind: 'read_later',
+      url: 'https://example.com/essay',
+      tags: ['reading']
+    });
+    const task = await service.createTask({
+      title: 'Turn capture into a project task',
+      details: 'Assign it after triage.',
+      tags: ['triage']
+    });
+
+    expect(bookmark.item.frontmatter.kind).toBe('bookmark');
+    expect(bookmark.item.path).toContain('library/bookmarks/');
+    expect(bookmark.item.frontmatter.source?.kind).toBe('quick_capture');
+    expect(readLater.item.frontmatter.kind).toBe('article');
+    expect(readLater.item.path).toContain('library/articles/');
+    expect(task.item.category).toBe('message');
+    expect(task.item.subtype).toBe('A2');
+    expect(task.item.status).toBe('pending');
+    expect((task.item.payload as { requested_action?: string }).requested_action).toBe('assign_to_project');
+  });
+
+  it('renders a complete multi-mode Capture modal instead of the thought-only MVP', () => {
+    const html = renderToStaticMarkup(
+      createElement(QuickCaptureModal, {
+        open: true,
+        onSave: () => undefined,
+        onClose: () => undefined
+      })
+    );
+
+    expect(html).toContain('Capture notes, links, tasks, files, and voice');
+    expect(html).toContain('Note');
+    expect(html).toContain('Link');
+    expect(html).toContain('Task');
+    expect(html).toContain('Upload files');
+    expect(html).toContain('Record voice');
+    expect(html).not.toContain('Thought-only MVP');
   });
 });

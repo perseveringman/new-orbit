@@ -5,6 +5,7 @@
  */
 
 import type { ToolTraceBlock } from '@shared/agent-tools/tool-trace';
+import type { SDKInvocationMessage } from '@shared/runtime';
 
 export const CONVERSATION_ANCHOR_KINDS = [
   'task',
@@ -41,6 +42,11 @@ export interface ConversationTurn {
    * 仅在该轮触发了 agent tool_use 时存在。
    */
   toolTrace?: ToolTraceBlock[];
+  /**
+   * 精确回放给 SDK 的内部消息片段。
+   * 用于保留 thinking/tool_use/tool_result 的原始顺序，避免多轮续写时丢失 provider 要求的块。
+   */
+  replayMessages?: SDKInvocationMessage[];
 }
 
 export interface ConversationMessage {

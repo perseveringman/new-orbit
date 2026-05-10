@@ -29,8 +29,11 @@ import {
   generateLibraryHelp,
   generateMemoryHelp,
   generateProjectHelp,
+  generateResourceHelp,
   generateRunHelp,
   generateSearchHelp,
+  generateSpaceHelp,
+  generateAssetsHelp,
   generateTaskHelp,
   generateThoughtHelp,
   generateTopLevelHelp
@@ -287,6 +290,51 @@ function formatProjectOverview(data: unknown): string {
   ].filter(Boolean).join('\n') + '\n';
 }
 
+function formatSpaceContext(data: unknown): string {
+  const payload = data as {
+    space?: { type?: string; slug?: string; name?: string; status?: string };
+    info?: { description?: string };
+    tasks?: Record<string, unknown[]>;
+    materials?: { scopes?: unknown[]; pins?: unknown[] };
+    outputs?: unknown[];
+  };
+  const space = payload.space;
+  if (!space) return 'Space not found\n';
+  const taskCounts = Object.entries(payload.tasks ?? {})
+    .map(([status, items]) => `${status}:${Array.isArray(items) ? items.length : 0}`)
+    .join(' ');
+  return (
+    [
+      `${space.type}\t${space.slug}\t${space.name}\t${space.status}`,
+      `tasks\t${taskCounts || '-'}`,
+      `materials\t${payload.materials?.scopes?.length ?? 0} scopes, ${payload.materials?.pins?.length ?? 0} pins`,
+      `outputs\t${payload.outputs?.length ?? 0}`,
+      payload.info?.description ? `\n${payload.info.description}` : ''
+    ]
+      .filter(Boolean)
+      .join('\n') + '\n'
+  );
+}
+
+function formatAssetsManifest(data: unknown): string {
+  const manifest = data as { scopes?: Array<{ id: string; title: string; kind: string; source: string; mode: string }>; pins?: Array<{ scope_id: string; title: string; source: string }> };
+  const lines: string[] = [];
+  for (const scope of manifest.scopes ?? []) {
+    lines.push(`scope\t${scope.id}\t${scope.kind}\t${scope.mode}\t${scope.title}\t${scope.source}`);
+  }
+  for (const pin of manifest.pins ?? []) {
+    lines.push(`pin\t${pin.scope_id}\t${pin.title}\t${pin.source}`);
+  }
+  return `${lines.join('\n') || 'No assets'}\n`;
+}
+
+function formatAssetScan(data: unknown): string {
+  const result = data as { stats?: { file_count?: number; total_bytes?: number }; files?: Array<{ relativePath: string; bytes: number; kind: string }> };
+  const lines = [`files\t${result.stats?.file_count ?? 0}`, `bytes\t${result.stats?.total_bytes ?? 0}`];
+  for (const file of result.files ?? []) lines.push(`${file.kind}\t${file.bytes}\t${file.relativePath}`);
+  return `${lines.join('\n')}\n`;
+}
+
 function formatInbox(data: unknown): string {
   const result = data as InboxListResult;
   if (Array.isArray(result.items)) {
@@ -395,6 +443,7 @@ function parseTaskList(args: string[]): Record<string, unknown> {
       filter['status'] = status;
     } else if (arg === '--project') filter['project_uid'] = argvValue(args, ++i, '--project');
     else if (arg === '--area') filter['area_uid'] = argvValue(args, ++i, '--area');
+    else if (arg === '--resource') filter['resource_uid'] = argvValue(args, ++i, '--resource');
     else if (arg === '--tag') filter['tag'] = argvValue(args, ++i, '--tag');
     else throw usageError(`Unknown task list option: ${arg}`);
   }
@@ -444,6 +493,7 @@ async function parseTaskPropose(
     if (arg === '--title') params['title'] = argvValue(rest, ++i, '--title');
     else if (arg === '--project') params['project_uid'] = argvValue(rest, ++i, '--project');
     else if (arg === '--area') params['area_uid'] = argvValue(rest, ++i, '--area');
+    else if (arg === '--resource') params['resource_uid'] = argvValue(rest, ++i, '--resource');
     else if (arg === '--run') params['run_id'] = argvValue(rest, ++i, '--run');
     else if (arg === '--during-task')
       params['during_task_uid'] = argvValue(rest, ++i, '--during-task');
@@ -456,8 +506,8 @@ async function parseTaskPropose(
   }
   if (text !== undefined) params['description'] = text.trimEnd();
   if (typeof params['title'] !== 'string') throw usageError('task propose requires --title');
-  if (!params['project_uid'] && !params['area_uid'])
-    throw usageError('task propose requires --project or --area');
+  if (!params['project_uid'] && !params['area_uid'] && !params['resource_uid'])
+    throw usageError('task propose requires --project, --area, or --resource');
   return params;
 }
 
@@ -601,6 +651,177 @@ async function runProject(flags: ParsedGlobalFlags, options: CliRunOptions): Pro
     return bridgeOutput(flags, options, 'project.graph', params, formatGeneric);
   }
   throw usageError(`Unknown project subcommand: ${subcommand}`);
+}
+
+async function runSpace(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
+  if (flags.help || !flags.args[1]) return generateSpaceHelp();
+  const subcommand = flags.args[1];
+  if (subcommand === 'list') {
+    const params: Record<string, unknown> = {};
+    const args = flags.args.slice(2);
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--type') params['type'] = argvValue(args, ++i, '--type');
+      else throw usageError(`Unknown space list option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'space.list', params, formatGeneric);
+  }
+  if (subcommand === 'show') {
+    const id = flags.args[2];
+    if (!id) throw usageError('Usage: orbit space show <space-id>');
+    return bridgeOutput(flags, options, 'space.get', { id }, formatGeneric);
+  }
+  if (subcommand === 'context') {
+    const id = flags.args[2];
+    if (!id) throw usageError('Usage: orbit space context <space-id> [--summary] [--section a,b]');
+    const params: Record<string, unknown> = { id };
+    const args = flags.args.slice(3);
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--summary') params['summary'] = true;
+      else if (arg === '--section' || arg === '--sections') params['sections'] = splitCsv(argvValue(args, ++i, arg));
+      else throw usageError(`Unknown space context option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'space.context', params, formatSpaceContext);
+  }
+  throw usageError(`Unknown space subcommand: ${subcommand}`);
+}
+
+async function runResource(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
+  if (flags.help || !flags.args[1]) return generateResourceHelp();
+  const subcommand = flags.args[1];
+  if (subcommand === 'list') {
+    const params: Record<string, unknown> = {};
+    for (const arg of flags.args.slice(2)) {
+      if (arg === '--include-archived') params['include_archived'] = true;
+      else throw usageError(`Unknown resource list option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'resource.list', params, formatGeneric);
+  }
+  if (subcommand === 'get') {
+    const id = flags.args[2];
+    if (!id) throw usageError('Usage: orbit resource get <id-or-slug>');
+    return bridgeOutput(flags, options, 'resource.get', { id }, formatGeneric);
+  }
+  if (subcommand === 'create') {
+    const params: Record<string, unknown> = { tags: [] };
+    const args = flags.args.slice(2);
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--title') params['title'] = argvValue(args, ++i, '--title');
+      else if (arg === '--slug') params['slug'] = argvValue(args, ++i, '--slug');
+      else if (arg === '--tag') (params['tags'] as string[]).push(argvValue(args, ++i, '--tag'));
+      else throw usageError(`Unknown resource create option: ${arg}`);
+    }
+    if (typeof params['title'] !== 'string') throw usageError('resource create requires --title');
+    return bridgeOutput(flags, options, 'resource.create', params, formatGeneric);
+  }
+  if (subcommand === 'archive') {
+    const id = flags.args[2];
+    if (!id) throw usageError('Usage: orbit resource archive <id-or-slug>');
+    return bridgeOutput(flags, options, 'resource.archive', { id }, formatGeneric);
+  }
+  throw usageError(`Unknown resource subcommand: ${subcommand}`);
+}
+
+function parseProjectScopedArgs(args: string[], options: CliRunOptions): { project: string; rest: string[] } {
+  const rest: string[] = [];
+  let project =
+    options.env?.['ORBIT_PROJECT_UID'] ??
+    process.env['ORBIT_PROJECT_UID'] ??
+    options.env?.['ORBIT_PROJECT_SLUG'] ??
+    process.env['ORBIT_PROJECT_SLUG'] ??
+    options.env?.['ORBIT_AREA_UID'] ??
+    process.env['ORBIT_AREA_UID'] ??
+    options.env?.['ORBIT_AREA_SLUG'] ??
+    process.env['ORBIT_AREA_SLUG'] ??
+    options.env?.['ORBIT_RESOURCE_UID'] ??
+    process.env['ORBIT_RESOURCE_UID'] ??
+    options.env?.['ORBIT_RESOURCE_SLUG'] ??
+    process.env['ORBIT_RESOURCE_SLUG'];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? '';
+    if (arg === '--project') project = argvValue(args, ++i, '--project');
+    else rest.push(arg);
+  }
+  if (!project) throw usageError('assets command requires --project or a Space terminal environment id');
+  return { project, rest };
+}
+
+async function runAssets(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
+  if (flags.help || !flags.args[1]) return generateAssetsHelp();
+  const subcommand = flags.args[1];
+  const { project, rest } = parseProjectScopedArgs(flags.args.slice(2), options);
+  if (subcommand === 'list') {
+    return bridgeOutput(flags, options, 'assets.manifest.get', { project }, formatAssetsManifest);
+  }
+  if (subcommand === 'show') {
+    const scopeId = rest[0];
+    if (!scopeId) throw usageError('Usage: orbit assets show <scope-id> [--project P]');
+    const data = await createBridge(flags, options).request('assets.manifest.get', { project }) as { scopes?: Array<{ id: string }> };
+    const scope = data.scopes?.find((item) => item.id === scopeId);
+    return flags.json ? formatJsonSuccess(scope ?? null) : formatGeneric(scope ?? null);
+  }
+  if (subcommand === 'add-scope') {
+    const source = rest[0];
+    if (!source) throw usageError('Usage: orbit assets add-scope <path-or-url> --kind K --confirm');
+    const params: Record<string, unknown> = { project, source, tags: [] };
+    let confirmed = false;
+    for (let i = 1; i < rest.length; i += 1) {
+      const arg = rest[i] ?? '';
+      if (arg === '--kind') params['kind'] = argvValue(rest, ++i, '--kind');
+      else if (arg === '--title') params['title'] = argvValue(rest, ++i, '--title');
+      else if (arg === '--note') params['note'] = argvValue(rest, ++i, '--note');
+      else if (arg === '--tag') (params['tags'] as string[]).push(argvValue(rest, ++i, '--tag'));
+      else if (arg === '--confirm') confirmed = true;
+      else throw usageError(`Unknown assets add-scope option: ${arg}`);
+    }
+    if (!confirmed) throw usageError('assets add-scope requires --confirm');
+    if (typeof params['kind'] !== 'string') params['kind'] = source.startsWith('http') ? 'url' : 'folder';
+    return bridgeOutput(flags, options, 'assets.scope.add', params, formatGeneric);
+  }
+  if (subcommand === 'scan') {
+    const scopeId = rest[0];
+    if (!scopeId) throw usageError('Usage: orbit assets scan <scope-id> [--filter F] [--limit N]');
+    const params: Record<string, unknown> = { project, scope_id: scopeId };
+    for (let i = 1; i < rest.length; i += 1) {
+      const arg = rest[i] ?? '';
+      if (arg === '--filter') params['filter'] = argvValue(rest, ++i, '--filter');
+      else if (arg === '--limit') params['limit'] = Number(argvValue(rest, ++i, '--limit'));
+      else throw usageError(`Unknown assets scan option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'assets.scope.scan', params, formatAssetScan);
+  }
+  if (subcommand === 'stat') {
+    const scopeId = rest[0];
+    if (!scopeId) throw usageError('Usage: orbit assets stat <scope-id>');
+    return bridgeOutput(flags, options, 'assets.scope.stat', { project, scope_id: scopeId }, formatGeneric);
+  }
+  if (subcommand === 'read') {
+    const targetPath = rest[0];
+    if (!targetPath) throw usageError('Usage: orbit assets read <path>');
+    return bridgeOutput(flags, options, 'assets.read', { project, path: targetPath }, formatCat);
+  }
+  if (subcommand === 'pin') {
+    const source = rest[0];
+    if (!source) throw usageError('Usage: orbit assets pin <path> [--parent S]');
+    const params: Record<string, unknown> = { project, source, tags: [] };
+    for (let i = 1; i < rest.length; i += 1) {
+      const arg = rest[i] ?? '';
+      if (arg === '--parent') params['parent_scope'] = argvValue(rest, ++i, '--parent');
+      else if (arg === '--title') params['title'] = argvValue(rest, ++i, '--title');
+      else if (arg === '--note') params['note'] = argvValue(rest, ++i, '--note');
+      else if (arg === '--tag') (params['tags'] as string[]).push(argvValue(rest, ++i, '--tag'));
+      else throw usageError(`Unknown assets pin option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'assets.pin.add', params, formatGeneric);
+  }
+  if (subcommand === 'unpin') {
+    const pinId = rest[0];
+    if (!pinId) throw usageError('Usage: orbit assets unpin <pin-id>');
+    return bridgeOutput(flags, options, 'assets.pin.remove', { project, pin_id: pinId }, formatAssetsManifest);
+  }
+  throw usageError(`Unknown assets subcommand: ${subcommand}`);
 }
 
 async function runKanban(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
@@ -992,6 +1213,9 @@ export async function runCli(argv: string[], options: CliRunOptions = {}): Promi
     else if (command === 'memory')
       output = await runUnavailableDomain(flags, command, generateMemoryHelp);
     else if (command === 'project') output = await runProject(flags, options);
+    else if (command === 'space') output = await runSpace(flags, options);
+    else if (command === 'resource') output = await runResource(flags, options);
+    else if (command === 'assets') output = await runAssets(flags, options);
     else if (command === 'kanban') output = await runKanban(flags, options);
     else if (command === 'task') output = await runTask(flags, options);
     else if (command === 'inbox') output = await runInbox(flags, options);

@@ -623,6 +623,7 @@ export function registerFsIpc(): void {
       if (filter?.status) list = list.filter((t) => t.status === filter.status);
       if (filter?.project_uid) list = list.filter((t) => t.project_uid === filter.project_uid);
       if (filter?.area_uid) list = list.filter((t) => t.area_uid === filter.area_uid);
+      if (filter?.resource_uid) list = list.filter((t) => t.resource_uid === filter.resource_uid);
       if (filter?.tag) list = list.filter((t) => (t.tags ?? []).includes(filter.tag!));
       if (filter?.due_before) {
         list = list.filter((t) => typeof t.due === 'string' && t.due <= filter.due_before!);

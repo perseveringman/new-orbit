@@ -8,6 +8,7 @@ describe('top bar model', () => {
   it('keeps workspace destinations in the sidebar navigation model', () => {
     expect(WORKSPACE_DESTINATIONS.map((item) => item.label)).toEqual([
       'Dashboard',
+      'Ask Anywhere',
       'Vision',
       'Runtimes',
       'Agents',
@@ -44,6 +45,23 @@ describe('top bar model', () => {
       eyebrow: 'Workspace',
       title: 'Dashboard',
       detail: 'Orbit Vault · Vision, PARA health, and project activity.',
+      stateLabel: null
+    });
+  });
+
+  it('describes Ask Anywhere as a first-class workspace surface', () => {
+    expect(
+      deriveTopBarContext({
+        view: { kind: 'askAnywhere' },
+        projects: [],
+        activeProjectUid: null,
+        activeFile: null,
+        vaultPath: '/Users/ryan/Orbit Vault'
+      })
+    ).toEqual({
+      eyebrow: 'Workspace',
+      title: 'Ask Anywhere',
+      detail: 'Orbit Vault · Persistent AI conversations across your vault context.',
       stateLabel: null
     });
   });

@@ -87,6 +87,10 @@ import type {
 } from '@shared/inbox';
 import type {
   AddFeedSubscriptionInput,
+  CaptureAttachmentInput,
+  CreateCaptureLinkInput,
+  CreateCaptureNoteInput,
+  CreateCaptureTaskInput,
   CreateThoughtInput,
   LibraryReadingUpdateInput,
   LinkThoughtInput,
@@ -191,6 +195,19 @@ import type {
   TailQuery
 } from '@shared/agent';
 import type { BudgetSettings } from '@shared/schemas';
+import type {
+  AddAssetPinInput,
+  AddAssetScopeInput,
+  AssetHealthResult,
+  AssetManifest,
+  AssetPin,
+  AssetScanOptions,
+  AssetScanResult,
+  AssetScope,
+  AssetScopeStats,
+  UpdateAssetScopeInput
+} from '@shared/assets';
+import type { SpaceContextBundle, SpaceContextOptions, SpaceSummary, SpaceType } from '@shared/space';
 
 const api: OrbitApi = {
   workspace: {
@@ -258,6 +275,43 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.project.getTasks, uid),
     listTemplates: (): Promise<TemplateMetaDTO[]> =>
       ipcRenderer.invoke(IPC.project.listTemplates)
+  },
+  assets: {
+    getManifest: (projectUid: string): Promise<AssetManifest> =>
+      ipcRenderer.invoke(IPC.assets.manifestGet, projectUid),
+    addScope: (projectUid: string, input: AddAssetScopeInput): Promise<AssetScope> =>
+      ipcRenderer.invoke(IPC.assets.scopeAdd, projectUid, input),
+    updateScope: (
+      projectUid: string,
+      scopeId: string,
+      patch: UpdateAssetScopeInput
+    ): Promise<AssetScope> => ipcRenderer.invoke(IPC.assets.scopeUpdate, projectUid, scopeId, patch),
+    removeScope: (projectUid: string, scopeId: string): Promise<AssetManifest> =>
+      ipcRenderer.invoke(IPC.assets.scopeRemove, projectUid, scopeId),
+    scanScope: (
+      projectUid: string,
+      scopeId: string,
+      options?: AssetScanOptions
+    ): Promise<AssetScanResult> =>
+      ipcRenderer.invoke(IPC.assets.scopeScan, projectUid, scopeId, options),
+    statScope: (projectUid: string, scopeId: string): Promise<AssetScopeStats> =>
+      ipcRenderer.invoke(IPC.assets.scopeStat, projectUid, scopeId),
+    addPin: (projectUid: string, input: AddAssetPinInput): Promise<AssetPin> =>
+      ipcRenderer.invoke(IPC.assets.pinAdd, projectUid, input),
+    removePin: (projectUid: string, pinId: string): Promise<AssetManifest> =>
+      ipcRenderer.invoke(IPC.assets.pinRemove, projectUid, pinId),
+    read: (projectUid: string, targetPath: string): Promise<{ path: string; content: string }> =>
+      ipcRenderer.invoke(IPC.assets.read, projectUid, targetPath),
+    healthCheck: (projectUid: string): Promise<AssetHealthResult> =>
+      ipcRenderer.invoke(IPC.assets.healthCheck, projectUid)
+  },
+  space: {
+    list: (filter?: { type?: SpaceType }): Promise<SpaceSummary[]> =>
+      ipcRenderer.invoke(IPC.space.list, filter),
+    get: (spaceId: string): Promise<SpaceSummary | null> =>
+      ipcRenderer.invoke(IPC.space.get, spaceId),
+    context: (spaceId: string, options?: SpaceContextOptions): Promise<SpaceContextBundle> =>
+      ipcRenderer.invoke(IPC.space.context, spaceId, options)
   },
   runtime: {
     list: (): Promise<RuntimeDescriptor[]> => ipcRenderer.invoke(IPC.runtime.list),
@@ -604,6 +658,16 @@ const api: OrbitApi = {
         ipcRenderer.invoke(IPC.capture.thought.link, id, input),
       dismiss: (id: string, actor?: 'user' | 'agent') =>
         ipcRenderer.invoke(IPC.capture.thought.dismiss, id, actor)
+    },
+    quick: {
+      saveAttachment: (input: CaptureAttachmentInput) =>
+        ipcRenderer.invoke(IPC.capture.quick.saveAttachment, input),
+      createNote: (input: CreateCaptureNoteInput) =>
+        ipcRenderer.invoke(IPC.capture.quick.createNote, input),
+      createLink: (input: CreateCaptureLinkInput) =>
+        ipcRenderer.invoke(IPC.capture.quick.createLink, input),
+      createTask: (input: CreateCaptureTaskInput) =>
+        ipcRenderer.invoke(IPC.capture.quick.createTask, input)
     }
   },
   notes: {

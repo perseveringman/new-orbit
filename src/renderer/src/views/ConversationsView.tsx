@@ -11,14 +11,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Conversation, ConversationMeta, ConversationAnchor, ConversationTurn } from '@shared/conversation';
+import type { Conversation, ConversationMeta, ConversationAnchor } from '@shared/conversation';
 import type {
   ChatAction,
   ChatHostCapabilities,
   RuntimeEvent
 } from '@shared/chat-protocol';
-import { toolTraceToRuntimeEvents } from '@shared/agent-tools';
 import { ChatView } from '../components/chat/ChatView';
+import { conversationTurnsToRuntimeEvents } from '../components/chat/historyEvents';
 
 function describeAnchor(a: ConversationAnchor): string {
   switch (a.kind) {
@@ -39,41 +39,8 @@ function describeAnchor(a: ConversationAnchor): string {
   }
 }
 
-/**
- * 构造历史 RuntimeEvent 序列：先展开 assistant turn 的 toolTrace 为 tool_use/tool_result（Phase E.2.2），
- * 再追加 runtime.message。与 AskAnywhereHost.turnsToEvents 保持一致，让三个入口的历史渲染一致。
- */
 function buildHistoryEvents(conv: Conversation): RuntimeEvent[] {
-  const out: RuntimeEvent[] = [];
-  conv.turns.forEach((t) => {
-    if (t.role === 'assistant' && t.toolTrace && t.toolTrace.length > 0) {
-      out.push(
-        ...toolTraceToRuntimeEvents(t.toolTrace, {
-          conversationId: conv.id,
-          runId: `hist-${conv.id}`,
-          idPrefix: `hist-${t.id}`
-        })
-      );
-    }
-    out.push(buildMessageEvent(conv.id, t));
-  });
-  return out;
-}
-
-function buildMessageEvent(conversationId: string, t: ConversationTurn): RuntimeEvent {
-  return {
-    id: t.id,
-    at: t.at,
-    kind: 'runtime.message',
-    conversationId,
-    runId: 'history',
-    spanId: t.id,
-    payload: {
-      text: t.content,
-      role: t.role === 'user' ? 'user' : 'assistant',
-      isFinal: true
-    }
-  };
+  return conversationTurnsToRuntimeEvents(conv);
 }
 
 /**

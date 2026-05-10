@@ -80,6 +80,7 @@ export function renderTaskMarkdown(vars: {
   title: string;
   project_uid?: string;
   area_uid?: string;
+  resource_uid?: string;
   created_at: string;
   description?: string;
 }): string {
@@ -91,6 +92,7 @@ export function renderTaskMarkdown(vars: {
     'status: backlog',
     ...(vars.project_uid ? [`project_uid: ${vars.project_uid}`] : []),
     ...(vars.area_uid ? [`area_uid: ${vars.area_uid}`] : []),
+    ...(vars.resource_uid ? [`resource_uid: ${vars.resource_uid}`] : []),
     `created_at: ${vars.created_at}`,
     '---',
     ''

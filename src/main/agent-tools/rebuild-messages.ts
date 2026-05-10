@@ -7,7 +7,8 @@
  *   - 不能孤立出现 tool_use（必须配对 tool_result），也不能孤立出现 tool_result
  *
  * 设计：
- *   - 遍历 turns；带 toolTrace 的 assistant turn 拆成两部分：
+ *   - 若 assistant turn 带 replayMessages，则直接按原始 SDK 顺序回放；
+ *   - 否则，带 toolTrace 的 assistant turn 拆成两部分：
  *     a) assistant message 的 content blocks（含 tool_use）
  *     b) "tool_result blocks 列表"作为 pendingToolResults，等下一个 user turn 出现时前置
  *   - 如果带 toolTrace 的 assistant turn 是最后一条（理论上不会，但兜底），把 tool_result
@@ -68,7 +69,7 @@ export function rebuildMessages(
 
   let droppedToolTurnCount = 0;
 
-  for (const turn of turns) {
+  for (const [turnIdx, turn] of turns.entries()) {
     if (turn.role === 'system') continue;
 
     if (turn.role === 'user') {
@@ -90,8 +91,16 @@ export function rebuildMessages(
     }
 
     // assistant
+    if (turn.replayMessages && turn.replayMessages.length > 0) {
+      if (compressedSet.has(turnIdx)) {
+        droppedToolTurnCount += 1;
+        continue;
+      }
+      out.push(...turn.replayMessages);
+      continue;
+    }
+
     if (turn.toolTrace && turn.toolTrace.length > 0) {
-      const turnIdx = turns.indexOf(turn);
       if (compressedSet.has(turnIdx)) {
         // 压缩：把这一轮的 tool_use/tool_result 完全丢弃（不能漏一个 tool_use 不带 result，否则 Anthropic 拒绝）
         droppedToolTurnCount += 1;

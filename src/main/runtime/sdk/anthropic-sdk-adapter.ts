@@ -26,6 +26,7 @@ export type SDKRuntimeEventSink = AgentRuntimeEventSink;
 export interface SDKInvocationResult {
   text: string;
   eventIds: string[];
+  replayMessages?: SDKInvocationMessage[];
   inputTokens: number;
   outputTokens: number;
   totalUsd?: number;
@@ -60,6 +61,9 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
     return {
       text: turn.text,
       eventIds: turn.eventIds,
+      ...(turn.assistantBlocks.length > 0
+        ? { replayMessages: [{ role: 'assistant', content: turn.assistantBlocks.map(toSdkContentBlock) }] }
+        : {}),
       inputTokens: turn.usage.inputTokens,
       outputTokens: turn.usage.outputTokens,
       ...(turn.totalUsd !== undefined ? { totalUsd: turn.totalUsd } : {})
@@ -81,13 +85,16 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
   ): Promise<AgentTurnResult> {
     const runId = input.traceId ?? `sdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const conversationId = input.conversationId ?? runId;
+    const turnSpanSeed = `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const usage: StreamUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
     const eventIds: string[] = [];
 
     /** 按 content_block.index 累积块状态。 */
     interface BlockSlot {
-      type: 'text' | 'tool_use' | 'thinking' | 'unknown';
+      type: 'text' | 'tool_use' | 'thinking' | 'redacted_thinking' | 'unknown';
       text: string;
+      signature?: string;
+      redactedData?: string;
       tool?: { id: string; name: string; jsonAcc: string };
     }
     const slots = new Map<number, BlockSlot>();
@@ -128,6 +135,13 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
             if (blockUpdate.blockType === 'tool_use' && blockUpdate.toolUse) {
               slot.tool = { id: blockUpdate.toolUse.id, name: blockUpdate.toolUse.name, jsonAcc: '' };
             }
+            if (blockUpdate.blockType === 'thinking') {
+              slot.text = blockUpdate.thinking ?? slot.text;
+              slot.signature = blockUpdate.signature ?? slot.signature;
+            }
+            if (blockUpdate.blockType === 'redacted_thinking') {
+              slot.redactedData = blockUpdate.redactedData ?? slot.redactedData;
+            }
           } else if (blockUpdate.kind === 'text_delta' && typeof blockUpdate.text === 'string') {
             slot.text += blockUpdate.text;
             assistantText += blockUpdate.text;
@@ -153,11 +167,23 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
                   toolInput: toolUse.parseError ? slot.tool.jsonAcc : toolUse.input,
                   spanId: toolUse.id
                 },
-                vendorEvent
+                vendorEvent,
+                { spanId: toolUse.id }
               );
               eventIds.push(ev.id);
               await emit(ev);
             }
+          } else if (blockUpdate.kind === 'thinking_delta' && typeof blockUpdate.thinking === 'string') {
+            slot.text += blockUpdate.thinking;
+            const event = runtimeEvent('runtime.thinking', conversationId, runId, {
+              text: blockUpdate.thinking
+            }, vendorEvent, {
+              spanId: `${turnSpanSeed}:thinking:${blockUpdate.index}`
+            });
+            eventIds.push(event.id);
+            await emit(event);
+          } else if (blockUpdate.kind === 'signature_delta' && typeof blockUpdate.signature === 'string') {
+            slot.signature = blockUpdate.signature;
           } else if (blockUpdate.kind === 'message_delta_stop' && blockUpdate.stopReason) {
             stopReason = normalizeStopReason(blockUpdate.stopReason);
           }
@@ -194,8 +220,18 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
             input: finalized.parseError ? {} : finalized.input
           });
           toolUses.push(finalized);
+        } else if (slot.type === 'thinking' && (slot.text || slot.signature)) {
+          assistantBlocks.push({
+            type: 'thinking',
+            thinking: slot.text,
+            signature: slot.signature ?? ''
+          });
+        } else if (slot.type === 'redacted_thinking' && slot.redactedData) {
+          assistantBlocks.push({
+            type: 'redacted_thinking',
+            data: slot.redactedData
+          });
         }
-        // thinking / unknown 暂不持久化
       }
 
       const estimate = estimateSdkCost({
@@ -289,11 +325,16 @@ interface AgentBlockUpdate {
   kind:
     | 'block_start'
     | 'text_delta'
+    | 'thinking_delta'
+    | 'signature_delta'
     | 'input_json_delta'
     | 'block_stop'
     | 'message_delta_stop';
-  blockType: 'text' | 'tool_use' | 'thinking' | 'unknown';
+  blockType: 'text' | 'tool_use' | 'thinking' | 'redacted_thinking' | 'unknown';
   text?: string;
+  thinking?: string;
+  signature?: string;
+  redactedData?: string;
   partialJson?: string;
   toolUse?: { id: string; name: string };
   stopReason?: string;
@@ -325,7 +366,23 @@ export function mapAgentStreamEvent(event: unknown): AgentBlockUpdate | null {
       };
     }
     if (bt === 'text') return { index, kind: 'block_start', blockType: 'text' };
-    if (bt === 'thinking') return { index, kind: 'block_start', blockType: 'thinking' };
+    if (bt === 'thinking') {
+      return {
+        index,
+        kind: 'block_start',
+        blockType: 'thinking',
+        ...(typeof block['thinking'] === 'string' ? { thinking: block['thinking'] as string } : {}),
+        ...(typeof block['signature'] === 'string' ? { signature: block['signature'] as string } : {})
+      };
+    }
+    if (bt === 'redacted_thinking') {
+      return {
+        index,
+        kind: 'block_start',
+        blockType: 'redacted_thinking',
+        ...(typeof block['data'] === 'string' ? { redactedData: block['data'] as string } : {})
+      };
+    }
     return { index, kind: 'block_start', blockType: 'unknown' };
   }
   if (type === 'content_block_delta') {
@@ -334,6 +391,12 @@ export function mapAgentStreamEvent(event: unknown): AgentBlockUpdate | null {
     const delta = (record['delta'] ?? {}) as Record<string, unknown>;
     if (delta['type'] === 'text_delta' && typeof delta['text'] === 'string') {
       return { index, kind: 'text_delta', blockType: 'text', text: delta['text'] };
+    }
+    if (delta['type'] === 'thinking_delta' && typeof delta['thinking'] === 'string') {
+      return { index, kind: 'thinking_delta', blockType: 'thinking', thinking: delta['thinking'] };
+    }
+    if (delta['type'] === 'signature_delta' && typeof delta['signature'] === 'string') {
+      return { index, kind: 'signature_delta', blockType: 'thinking', signature: delta['signature'] };
     }
     if (delta['type'] === 'input_json_delta' && typeof delta['partial_json'] === 'string') {
       return {
@@ -399,6 +462,12 @@ function toAnthropicContent(content: SDKInvocationMessageContent): Anthropic.Mes
 
 function toAnthropicContentBlock(block: SDKInvocationMessageContentBlock): Anthropic.Messages.ContentBlockParam {
   if (block.type === 'text') return { type: 'text', text: block.text };
+  if (block.type === 'thinking') {
+    return { type: 'thinking', thinking: block.thinking, signature: block.signature };
+  }
+  if (block.type === 'redacted_thinking') {
+    return { type: 'redacted_thinking', data: block.data };
+  }
   if (block.type === 'tool_use') {
     return {
       type: 'tool_use',
@@ -413,6 +482,22 @@ function toAnthropicContentBlock(block: SDKInvocationMessageContentBlock): Anthr
     tool_use_id: block.tool_use_id,
     content: block.content,
     ...(block.is_error ? { is_error: true } : {})
+  };
+}
+
+function toSdkContentBlock(block: AgentTurnAssistantBlock): SDKInvocationMessageContentBlock {
+  if (block.type === 'text') return { type: 'text', text: block.text };
+  if (block.type === 'thinking') {
+    return { type: 'thinking', thinking: block.thinking, signature: block.signature };
+  }
+  if (block.type === 'redacted_thinking') {
+    return { type: 'redacted_thinking', data: block.data };
+  }
+  return {
+    type: 'tool_use',
+    id: block.id,
+    name: block.name,
+    input: block.input ?? {}
   };
 }
 
@@ -468,17 +553,20 @@ function runtimeEvent<K extends RuntimeEventKind>(
   conversationId: string,
   runId: string,
   payload: RuntimeEventPayloadMap[K],
-  vendorEvent?: unknown
+  vendorEvent?: unknown,
+  options?: { spanId?: string; parentSpanId?: string }
 ): RuntimeEvent<K> {
-  const spanId = `span-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const spanId = options?.spanId ?? `span-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const eventId = `${runId}:${spanId}:${Math.random().toString(36).slice(2, 8)}`;
   return {
-    id: `${runId}:${spanId}`,
+    id: eventId,
     at: new Date().toISOString(),
     kind,
     conversationId,
     runId,
     spanId,
     payload,
+    ...(options?.parentSpanId ? { parentSpanId: options.parentSpanId } : {}),
     ...(vendorEvent ? { vendorEvent } : {})
   };
 }

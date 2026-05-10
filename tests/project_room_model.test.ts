@@ -32,6 +32,7 @@ describe('project room model', () => {
   });
 
   it('resolves planner and roles deep links to the matching outer tabs', () => {
+    expect(resolveProjectRoomPaneHint('materials')).toBe('materials');
     expect(resolveProjectRoomPaneHint('planner')).toBe('planner');
     expect(resolveProjectRoomPaneHint('roles')).toBe('roles');
   });

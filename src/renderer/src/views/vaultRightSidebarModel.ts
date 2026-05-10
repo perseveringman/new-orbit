@@ -11,6 +11,7 @@ export type VaultViewKind =
   | 'review'
   | 'feeds'
   | 'resources'
+  | 'resource'
   | 'knowledgeBase'
   | 'scheduled'
   | 'timeline'
@@ -75,7 +76,8 @@ export type SidebarPanelId =
   | 'review'
   | 'runlog'
   | 'diff'
-  | 'sessions';
+  | 'sessions'
+  | 'ask';
 
 export interface SidebarIntentTab {
   id: SidebarIntentId;
@@ -107,7 +109,8 @@ const PANEL_TITLES: Record<SidebarPanelId, string> = {
   review: 'Review',
   runlog: 'Run Log',
   diff: 'Diff',
-  sessions: 'Sessions'
+  sessions: 'Sessions',
+  ask: 'Ask'
 };
 
 const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
@@ -251,6 +254,8 @@ export function resolveSidebarSurface(
     return 'project.kanban';
   }
 
+  if (view.kind === 'resource') return 'resources';
+
   return view.kind;
 }
 
@@ -276,13 +281,16 @@ export function getSidebarPanelTabs(
 ): SidebarPanelTab[] {
   const resolvedIntent = resolveSidebarIntentTab(surface, intentId);
   const intent = SURFACE_PROFILES[surface].intents.find((entry) => entry.id === resolvedIntent);
-  return (intent?.panels ?? []).map((id) => ({ id, title: PANEL_TITLES[id] }));
+  const panels = [...(intent?.panels ?? [])];
+  if (!panels.includes('ask')) panels.push('ask');
+  return panels.map((id) => ({ id, title: PANEL_TITLES[id] }));
 }
 
 export function findSidebarIntentForPanel(
   surface: SidebarSurfaceId,
   panelId: SidebarPanelId
 ): SidebarIntentId | null {
+  if (panelId === 'ask') return SURFACE_PROFILES[surface].intents[0]?.id ?? null;
   const match = SURFACE_PROFILES[surface].intents.find((intent) => intent.panels.includes(panelId));
   return match?.id ?? null;
 }

@@ -86,23 +86,16 @@ export function ChatView(props: ChatProps): JSX.Element {
 
 function buildRenderItems(
   events: RuntimeEvent[],
-  capabilities: { supportsThinking: boolean },
+  capabilities: { supportsThinking: boolean; canApproveTool: boolean },
   onApproveTool?: (spanId: string) => void,
   onRejectTool?: (spanId: string) => void
 ): RenderItem[] {
   // 把 tool_use 与对应 tool_result 配对，其余事件按序渲染
   const items: RenderItem[] = [];
-  const toolUseBySpan = new Map<string, RuntimeEvent<'runtime.tool_use'>>();
+  const normalizedEvents = normalizeRuntimeEvents(events);
   const consumed = new Set<string>();
 
-  for (const ev of events) {
-    if (ev.kind === 'runtime.tool_use') {
-      const tu = ev as RuntimeEvent<'runtime.tool_use'>;
-      toolUseBySpan.set(tu.spanId, tu);
-    }
-  }
-
-  for (const ev of events) {
+  for (const ev of normalizedEvents) {
     if (consumed.has(ev.id)) continue;
     switch (ev.kind) {
       case 'runtime.message': {
@@ -120,10 +113,11 @@ function buildRenderItems(
       }
       case 'runtime.tool_use': {
         const tu = ev as RuntimeEvent<'runtime.tool_use'>;
-        const result = events.find(
+        const spanId = resolveToolUseSpanId(tu);
+        const result = normalizedEvents.find(
           (e) =>
             e.kind === 'runtime.tool_result' &&
-            (e as RuntimeEvent<'runtime.tool_result'>).payload.parentSpanId === tu.spanId
+            resolveToolResultParentSpanId(e as RuntimeEvent<'runtime.tool_result'>) === spanId
         ) as RuntimeEvent<'runtime.tool_result'> | undefined;
         if (result) consumed.add(result.id);
         items.push({
@@ -132,8 +126,8 @@ function buildRenderItems(
             <ToolCard
               toolUse={tu}
               toolResult={result}
-              onApprove={onApproveTool}
-              onReject={onRejectTool}
+              onApprove={capabilities.canApproveTool ? onApproveTool : undefined}
+              onReject={capabilities.canApproveTool ? onRejectTool : undefined}
             />
           )
         });
@@ -239,4 +233,111 @@ function buildRenderItems(
   }
 
   return items;
+}
+
+function normalizeRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
+  return mergeStreamingThinking(mergeStreamingMessages(events));
+}
+
+function mergeStreamingMessages(events: RuntimeEvent[]): RuntimeEvent[] {
+  const merged: RuntimeEvent[] = [];
+  let index = 0;
+  while (index < events.length) {
+    const event = events[index];
+    if (event?.kind !== 'runtime.message') {
+      if (event) merged.push(event);
+      index += 1;
+      continue;
+    }
+
+    const message = event as RuntimeEvent<'runtime.message'>;
+    if (!message.payload.isStreaming) {
+      merged.push(message);
+      index += 1;
+      continue;
+    }
+
+    const role = message.payload.role ?? 'assistant';
+    const chunks: RuntimeEvent<'runtime.message'>[] = [message];
+    let nextIndex = index + 1;
+    while (nextIndex < events.length) {
+      const next = events[nextIndex];
+      if (next?.kind !== 'runtime.message') break;
+      const nextMessage = next as RuntimeEvent<'runtime.message'>;
+      if (
+        nextMessage.runId !== message.runId ||
+        (nextMessage.payload.role ?? 'assistant') !== role ||
+        !nextMessage.payload.isStreaming
+      ) {
+        break;
+      }
+      chunks.push(nextMessage);
+      nextIndex += 1;
+    }
+
+    const runFinished = events
+      .slice(nextIndex)
+      .some((candidate) =>
+        candidate.runId === message.runId &&
+        (candidate.kind === 'runtime.done' || candidate.kind === 'runtime.error')
+      );
+    merged.push({
+      ...message,
+      id: message.id,
+      spanId: message.spanId,
+      payload: {
+        ...message.payload,
+        text: chunks.map((chunk) => chunk.payload.text).join(''),
+        role,
+        isStreaming: !runFinished,
+        isFinal: runFinished || message.payload.isFinal
+      }
+    });
+    index = nextIndex;
+  }
+  return merged;
+}
+
+function mergeStreamingThinking(events: RuntimeEvent[]): RuntimeEvent[] {
+  const merged: RuntimeEvent[] = [];
+  let index = 0;
+  while (index < events.length) {
+    const event = events[index];
+    if (event?.kind !== 'runtime.thinking') {
+      if (event) merged.push(event);
+      index += 1;
+      continue;
+    }
+
+    const thinking = event as RuntimeEvent<'runtime.thinking'>;
+    const chunks: RuntimeEvent<'runtime.thinking'>[] = [thinking];
+    let nextIndex = index + 1;
+    while (nextIndex < events.length) {
+      const next = events[nextIndex];
+      if (next?.kind !== 'runtime.thinking') break;
+      const nextThinking = next as RuntimeEvent<'runtime.thinking'>;
+      if (nextThinking.runId !== thinking.runId || nextThinking.spanId !== thinking.spanId) break;
+      chunks.push(nextThinking);
+      nextIndex += 1;
+    }
+
+    merged.push({
+      ...thinking,
+      payload: {
+        text: chunks.map((chunk) => chunk.payload.text).join('')
+      }
+    });
+    index = nextIndex;
+  }
+  return merged;
+}
+
+function resolveToolUseSpanId(event: RuntimeEvent<'runtime.tool_use'>): string {
+  return typeof event.payload.spanId === 'string' && event.payload.spanId.trim()
+    ? event.payload.spanId
+    : event.spanId;
+}
+
+function resolveToolResultParentSpanId(event: RuntimeEvent<'runtime.tool_result'>): string {
+  return event.parentSpanId ?? event.payload.parentSpanId;
 }

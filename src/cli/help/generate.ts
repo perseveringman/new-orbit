@@ -12,6 +12,9 @@ Available commands:
   cat          Read a vault file or UID
   memory      Memory search/save (${MEMORY_UNAVAILABLE})
   project     Project commands: overview, graph, list, get, archive
+  space       Space commands: list, show, context
+  resource    Resource commands: list, get, create, archive
+  assets      Project materials commands: list, show, scan, stat, read, add-scope, pin, unpin
   kanban      Kanban commands: list
   task        Task commands: list, get, update, propose, related, transcript, switch-runtime, propose-scope, propose-split, deps, delete
   inbox       Inbox commands: list, get, resolve, dismiss, archive, emit-message
@@ -86,17 +89,72 @@ Examples:
 `;
 }
 
+export function generateSpaceHelp(): string {
+  return `Usage: orbit space <subcommand> [args]
+
+Available subcommands:
+  list [--type project|area|resource]                 List unified Spaces
+  show <space-id>                                     Show one Space summary
+  context <space-id> [--summary] [--section a,b]   Export a unified Space context bundle
+
+Examples:
+  orbit space list --type resource --json
+  orbit space show my-resource
+  orbit space context my-project --json
+  orbit space context area_uid --summary --section tasks,materials
+`;
+}
+
+export function generateResourceHelp(): string {
+  return `Usage: orbit resource <subcommand> [args]
+
+Available subcommands:
+  list [--include-archived]       List Resources
+  get <id-or-slug>                Show one Resource
+  create --title T [--slug S]     Create a Resource
+  archive <id-or-slug>            Archive a Resource
+
+Examples:
+  orbit resource list --json
+  orbit resource create --title "Egypt history"
+  orbit resource archive egypt-history
+`;
+}
+
+export function generateAssetsHelp(): string {
+  return `Usage: orbit assets <subcommand> [args]
+
+Project selection:
+  Pass --project <uid-or-slug>, or run inside a Space terminal where ORBIT_PROJECT_UID / ORBIT_AREA_UID / ORBIT_RESOURCE_UID is set.
+
+Available subcommands:
+  list [--project P]                         List scopes and pins
+  show <scope-id> [--project P]              Show one scope
+  scan <scope-id> [--project P] [--filter F] [--limit N]
+  stat <scope-id> [--project P]
+  read <path> [--project P]                  Read a file only if it is inside an authorized scope
+  add-scope <path-or-url> --kind K --confirm [--project P] [--title T] [--tag T]
+  pin <path> [--project P] [--parent S] [--title T] [--tag T]
+  unpin <pin-id> [--project P]
+
+Examples:
+  orbit assets list --project demo
+  orbit assets add-scope ~/Movies/Egypt --kind folder --title "Egypt footage" --confirm
+  orbit assets scan egypt-footage --filter .mp4 --limit 20
+`;
+}
+
 export function generateTaskHelp(): string {
   return `Usage: orbit task <subcommand> [args]
 
 Available subcommands:
-  list [--status S] [--project UID] [--area UID] [--tag TAG]
+  list [--status S] [--project UID] [--area UID] [--resource UID] [--tag TAG]
   get <uid>
   update <uid> [--status S] [--depends-on a,b]
   related <uid>
   transcript <uid>
   switch-runtime <uid> --to <runtime-id>
-  propose --title T (--project UID | --area UID) [--run RUN] [--description TEXT|--file F]
+  propose --title T (--project UID | --area UID | --resource UID) [--run RUN] [--description TEXT|--file F]
   propose-scope <current-uid> [--run RUN] [--summary TEXT|--file F]
   propose-split <current-uid> [--run RUN] [--summary TEXT|--file F]
   deps <uid>

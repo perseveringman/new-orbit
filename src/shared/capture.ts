@@ -1,4 +1,6 @@
 import type { InboxItem } from './inbox';
+import type { LibraryItem } from './library';
+import type { Note } from './note';
 
 export interface FeedSubscription {
   id: string;
@@ -70,7 +72,7 @@ export interface PromoteResult {
 export interface CreateThoughtInput {
   content: string;
   tags?: string[];
-  createdFrom?: 'quick_capture' | 'manual' | 'agent';
+  createdFrom?: 'quick_capture' | 'manual' | 'voice' | 'agent';
   actor?: 'user' | 'agent';
   actorId?: string;
 }
@@ -90,4 +92,60 @@ export interface LinkThoughtInput {
   projectUid: string;
   projectReadmePath: string;
   actor?: 'user' | 'agent';
+}
+
+export type CaptureAttachmentKind = 'file' | 'audio';
+
+export interface CaptureAttachmentInput {
+  name: string;
+  dataBase64: string;
+  mimeType?: string;
+  kind?: CaptureAttachmentKind;
+}
+
+export interface CaptureAttachment {
+  id: string;
+  name: string;
+  path: string;
+  mimeType?: string;
+  kind: CaptureAttachmentKind;
+  size: number;
+}
+
+export interface CreateCaptureNoteInput {
+  content: string;
+  tags?: string[];
+  specialKind?: string | null;
+  attachments?: CaptureAttachmentInput[];
+  audio?: CaptureAttachmentInput & { durationSec?: number };
+}
+
+export interface CreateCaptureNoteResult {
+  note: Note;
+  inboxItem: InboxItem;
+  attachments: CaptureAttachment[];
+}
+
+export type CaptureLinkKind = 'bookmark' | 'read_later';
+
+export interface CreateCaptureLinkInput {
+  url: string;
+  kind: CaptureLinkKind;
+  title?: string;
+  notes?: string;
+  tags?: string[];
+}
+
+export interface CreateCaptureLinkResult {
+  item: LibraryItem;
+}
+
+export interface CreateCaptureTaskInput {
+  title: string;
+  details?: string;
+  tags?: string[];
+}
+
+export interface CreateCaptureTaskResult {
+  item: InboxItem;
 }

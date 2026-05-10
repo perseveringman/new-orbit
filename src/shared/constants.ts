@@ -41,6 +41,18 @@ export const PROJECT_BRIDGE_MANIFEST = 'manifest.json';
 export const PROJECTS_DIR = '01_Projects';
 export const ARCHIVES_DIR = '04_Archives';
 
+// --- Space shared layout constants ---
+export const SPACE_TASKS_DIR = 'tasks';
+export const SPACE_ASSETS_DIR = 'assets';
+export const SPACE_OUTPUTS_DIR = 'outputs';
+export const SPACE_ORBIT_DIR = '.orbit';
+
+// --- Materials / assets constants ---
+export const ASSETS_MANIFEST = '_manifest.md';
+export const ASSETS_IMPORTED_DIR = 'imported';
+export const ASSETS_REFERENCES_DIR = 'references';
+export const ASSETS_CACHE_DIR = 'assets-cache';
+
 // --- Area-as-folder constants ---
 export const AREAS_DIR = '02_Areas';
 export const AREA_ORBIT_DIR = '.orbit';

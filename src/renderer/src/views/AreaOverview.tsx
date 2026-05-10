@@ -92,19 +92,24 @@ export function AreaOverview({ areaUid }: Props): JSX.Element {
 
   async function openScopedChat(): Promise<void> {
     if (!dashboard) return;
+    const scope = { kind: 'area' as const, area_slug: dashboard.area.slug };
+    // Phase E.3：先复用该 area 的最近活跃会话；没有才新建。与 AreaRoomView.openChat 一致。
+    const existing = await window.orbit.chat.getLastActiveConversation(scope).catch(() => null);
+    if (existing) {
+      setScopedChatMessage(`Resuming area-scoped chat: ${existing.title ?? existing.id}`);
+      setView({ kind: 'askAnywhere', activeId: existing.id });
+      return;
+    }
     const conversation = await window.orbit.chat.createConversation({
       anchor: {
         kind: 'ask_anywhere_session',
         refId: `area:${dashboard.area.slug}`,
         addedAt: new Date().toISOString()
       },
-      scope: { kind: 'area', area_slug: dashboard.area.slug },
+      scope,
       title: `Area: ${dashboard.area.name}`
     });
-    await window.orbit.chat.setLastActiveConversation(
-      { kind: 'area', area_slug: dashboard.area.slug },
-      conversation.id
-    );
+    await window.orbit.chat.setLastActiveConversation(scope, conversation.id);
     setScopedChatMessage(`Area-scoped chat ready: ${conversation.title ?? conversation.id}`);
     setView({ kind: 'askAnywhere', activeId: conversation.id });
   }

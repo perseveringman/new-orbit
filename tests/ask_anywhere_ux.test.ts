@@ -7,6 +7,7 @@ import { ContextBar } from '../src/renderer/src/views/ask-anywhere/ContextBar';
 import { StageDrawer } from '../src/renderer/src/views/ask-anywhere/StageDrawer';
 import { FloatingBall } from '../src/renderer/src/components/ask-anywhere/FloatingBall';
 import { ConversationShell } from '../src/renderer/src/components/conversation';
+import { deriveSidebarAskContext } from '../src/renderer/src/components/Sidebar/SidebarAskPanel';
 
 const conversation: Conversation = {
   id: 'ask-1',
@@ -114,5 +115,35 @@ describe('Ask Anywhere UX revamp components', () => {
     expect(html).toContain('Hello from Orbit');
     expect(html).toContain('Artifact Stage');
     expect(html).toContain('UX direction summary');
+  });
+
+  it('derives scoped sidebar Ask context from the active workspace view', () => {
+    const projectContext = deriveSidebarAskContext({
+      view: { kind: 'project', projectUid: 'project-1' },
+      activeFile: null,
+      activeProjectUid: 'project-1',
+      projects: [{ uid: 'project-1', slug: 'ship-orbit', name: 'Ship Orbit' }],
+      areas: []
+    });
+    expect(projectContext.scope).toEqual({ kind: 'project', project_id: 'project-1' });
+    expect(projectContext.title).toBe('Ask · Ship Orbit');
+
+    const resourceContext = deriveSidebarAskContext({
+      view: { kind: 'resource', resourceSlug: 'llm-agents' },
+      activeFile: null,
+      activeProjectUid: null,
+      projects: [],
+      areas: []
+    });
+    expect(resourceContext.scope).toEqual({ kind: 'resource', resource_slug: 'llm-agents' });
+
+    const noteContext = deriveSidebarAskContext({
+      view: { kind: 'editor' },
+      activeFile: { relPath: '02_Areas/vision/README.md' },
+      activeProjectUid: null,
+      projects: [],
+      areas: []
+    });
+    expect(noteContext.scope).toEqual({ kind: 'note', note_id: '02_Areas/vision/README.md' });
   });
 });

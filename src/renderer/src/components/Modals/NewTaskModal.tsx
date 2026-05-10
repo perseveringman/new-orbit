@@ -13,6 +13,7 @@ interface Props {
   open: boolean;
   projectUid?: string;
   areaUid?: string;
+  resourceUid?: string;
   siblings?: TaskRecord[];
   onClose(): void;
   onCreated?(res: CreateTaskResultDTO): void;
@@ -35,6 +36,7 @@ export function NewTaskModal({
   open,
   projectUid,
   areaUid,
+  resourceUid,
   siblings = [],
   onClose,
   onCreated
@@ -72,7 +74,7 @@ export function NewTaskModal({
     setBusy(true);
     setErr(null);
     try {
-      if (!projectUid && !areaUid) throw new Error('Task owner is missing.');
+      if (!projectUid && !areaUid && !resourceUid) throw new Error('Task owner is missing.');
       const fm: Record<string, unknown> = {};
       if (priority) fm['priority'] = priority;
       if (due) fm['due'] = due;
@@ -81,6 +83,7 @@ export function NewTaskModal({
       const res = await window.orbit.task.create({
         ...(projectUid ? { project_uid: projectUid } : {}),
         ...(areaUid ? { area_uid: areaUid } : {}),
+        ...(resourceUid ? { resource_uid: resourceUid } : {}),
         title: titleTrimmed,
         description: description || undefined,
         frontmatter: Object.keys(fm).length ? fm : undefined
@@ -115,7 +118,7 @@ export function NewTaskModal({
         aria-modal="true"
       >
         <div className="border-b border-neutral-200 px-4 py-2 text-sm font-semibold dark:border-neutral-800">
-          {areaUid ? 'New Area Task' : 'New Task'}
+          {resourceUid ? 'New Resource Task' : areaUid ? 'New Area Task' : 'New Task'}
         </div>
         <div className="space-y-3 p-4 text-xs">
           <label className="block">

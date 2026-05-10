@@ -430,7 +430,7 @@ Deliverables:
 Implemented notes:
 
 - Resource contracts now include area assignment, engagement/depth/status metadata, sectioned refs, canonical promotion, suggestions, and scoped events.
-- `resources/<slug>/` workstations contain `index.md`, six section directories, `_timeline`, and `.orbit-resource.json`.
+- `03_Resources/<slug>/` workstations contain `index.md`, six section directories, `_timeline`, and `.orbit-resource.json`; legacy `resources/<slug>/` workstations are migrated on access.
 - Resource refs reject legacy `feed_source` Layer 0 links; Feed material must be saved to Library before linking to a Resource.
 - Store/IPC support create/list/get/update/archive/link/unlink/promote/engage/suggest/createFromSuggestion and emit Resource TraceableEvents.
 - Note-tag emergence creates `emerge.resource` SynthesisArtifacts first; users explicitly create Resources from suggestions.

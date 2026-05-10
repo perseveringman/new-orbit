@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from '@shared/chat-protocol';
+import { StreamingMarkdown } from '../Timeline/StreamingMarkdown';
 
 interface MessageBubbleProps {
   event: RuntimeEvent<'runtime.message'>;
@@ -30,8 +31,8 @@ export function MessageBubble({ event }: MessageBubbleProps): JSX.Element {
                 {part.refs.length > 0 ? <div className="mt-2 opacity-70">{part.refs.join(' · ')}</div> : null}
               </div>
             ) : (
-              <div key={index} className="whitespace-pre-wrap break-words">
-                {part.text}
+              <div key={index}>
+                <StreamingMarkdown content={part.text} />
               </div>
             )
           )}

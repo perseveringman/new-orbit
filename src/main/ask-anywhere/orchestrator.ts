@@ -491,6 +491,7 @@ export class AskAnywhereOrchestrator {
           role: 'assistant',
           content: finalText,
           runtimeEventIds: result.eventIds,
+          replayMessages: result.replayMessages,
           ...(result.toolTrace.length > 0 ? { toolTrace: result.toolTrace } : {})
         });
         const vault = this.deps.getVaultPath();
@@ -536,12 +537,9 @@ export class AskAnywhereOrchestrator {
             input.scopedContext,
             'Runtime note: this SDK route cannot use local tools. Ask for confirmation before any action that would require modifying Orbit data.'
           ].filter(Boolean).join('\n\n'),
-          messages: [
-            ...input.turns
-              .filter((turn) => turn.role === 'user' || turn.role === 'assistant')
-              .map((turn) => ({ role: turn.role as 'user' | 'assistant', content: turn.content })),
-            { role: 'user', content: input.userText }
-          ],
+          messages: rebuildMessages(input.turns, {
+            appendUserText: input.userText
+          }),
           traceId: input.runId,
           conversationId: input.conversationId,
           mode: 'ask'
@@ -554,7 +552,8 @@ export class AskAnywhereOrchestrator {
           conversationId: input.conversationId,
           role: 'assistant',
           content: finalText,
-          runtimeEventIds: result.eventIds
+          runtimeEventIds: result.eventIds,
+          replayMessages: result.replayMessages
         });
         const vault = this.deps.getVaultPath();
         if (vault) {

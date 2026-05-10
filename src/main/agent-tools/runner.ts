@@ -72,6 +72,8 @@ export interface AgentLoopResult {
   toolTrace: ToolTraceBlock[];
   /** Phase D：累计 input_tokens（便于 orchestrator 展示预算使用）。 */
   totalInputTokens: number;
+  /** 本次 send 追加到 provider 上下文的精确消息片段。 */
+  replayMessages: SDKInvocationMessage[];
 }
 
 /**
@@ -97,6 +99,7 @@ export async function runAgentLoop(
   const messages: SDKInvocationMessage[] = input.messages.slice();
   const maxIter = Math.max(1, Math.min(50, input.maxIterations));
   const toolTrace: ToolTraceBlock[] = [];
+  const replayMessages: SDKInvocationMessage[] = [];
   const budget = input.inputTokenBudget ?? 150_000;
   let totalInputTokens = 0;
 
@@ -138,7 +141,16 @@ export async function runAgentLoop(
     totalInputTokens += turn.usage.inputTokens;
     if (turn.text) lastText = turn.text;
 
+    const assistantContentBlocks: SDKInvocationMessageContentBlock[] = turn.assistantBlocks.map((block) =>
+      toInvocationContentBlock(block)
+    );
+    const assistantMessage: SDKInvocationMessage | null =
+      assistantContentBlocks.length > 0
+        ? { role: 'assistant', content: assistantContentBlocks }
+        : null;
+
     if (turn.stopReason !== 'tool_use' || turn.toolUses.length === 0) {
+      if (assistantMessage) replayMessages.push(assistantMessage);
       stopReason = turn.stopReason === 'end_turn' ? 'end_turn' : 'tool_use_finalized';
       break;
     }
@@ -150,12 +162,10 @@ export async function runAgentLoop(
     }
 
     // 把 assistant blocks（含 tool_use）写入 messages
-    const assistantBlocks: SDKInvocationMessageContentBlock[] = turn.assistantBlocks.map((block) =>
-      block.type === 'text'
-        ? { type: 'text', text: block.text }
-        : { type: 'tool_use', id: block.id, name: block.name, input: block.input ?? {} }
-    );
-    messages.push({ role: 'assistant', content: assistantBlocks });
+    if (assistantMessage) {
+      messages.push(assistantMessage);
+      replayMessages.push(assistantMessage);
+    }
 
     // 串行执行 tool_use（已 started 的 tool 不受 abort 中断，跑完）
     const toolResultBlocks: SDKInvocationMessageContentBlock[] = [];
@@ -183,7 +193,9 @@ export async function runAgentLoop(
         durationMs: result.durationMs
       });
     }
-    messages.push({ role: 'user', content: toolResultBlocks });
+    const toolResultMessage: SDKInvocationMessage = { role: 'user', content: toolResultBlocks };
+    messages.push(toolResultMessage);
+    replayMessages.push(toolResultMessage);
   }
 
   if (stopReason === 'other') {
@@ -198,8 +210,22 @@ export async function runAgentLoop(
     stopReason,
     toolTrace,
     totalInputTokens,
+    replayMessages,
     ...(lastTurnStopReason ? { lastTurnStopReason } : {})
   };
+}
+
+function toInvocationContentBlock(
+  block: AgentTurnResult['assistantBlocks'][number]
+): SDKInvocationMessageContentBlock {
+  if (block.type === 'text') return { type: 'text', text: block.text };
+  if (block.type === 'thinking') {
+    return { type: 'thinking', thinking: block.thinking, signature: block.signature };
+  }
+  if (block.type === 'redacted_thinking') {
+    return { type: 'redacted_thinking', data: block.data };
+  }
+  return { type: 'tool_use', id: block.id, name: block.name, input: block.input ?? {} };
 }
 
 function isAbortError(err: unknown, signal?: AbortSignal): boolean {

@@ -29,6 +29,8 @@ import {
   type ProjectExecutionContext
 } from './project_config';
 import { findAreaByUid } from './area';
+import { ensureSpaceLayout } from './space/layout';
+import { createResourceStore } from './resource/store';
 
 export interface ProjectSummary {
   uid: string;
@@ -155,6 +157,7 @@ export async function createProject(
     execution_context: executionContext
   };
   await scaffoldProject(dir, args.template, vars);
+  await ensureSpaceLayout(dir);
   await writeProjectConfig(dir, {
     uid,
     slug: args.slug,
@@ -419,6 +422,7 @@ export async function listProjectTaskPaths(projectDir: string): Promise<string[]
 export interface CreateTaskArgs {
   project_uid?: string;
   area_uid?: string;
+  resource_uid?: string;
   title: string;
   description?: string;
   uid?: string;
@@ -452,11 +456,12 @@ export async function createTask(
   vault: string,
   args: CreateTaskArgs
 ): Promise<CreateTaskResult> {
-  if (!args.project_uid && !args.area_uid) {
-    throw new Error('task owner missing: provide project_uid or area_uid');
+  const ownerCount = [args.project_uid, args.area_uid, args.resource_uid].filter(Boolean).length;
+  if (ownerCount === 0) {
+    throw new Error('task owner missing: provide project_uid, area_uid, or resource_uid');
   }
-  if (args.project_uid && args.area_uid) {
-    throw new Error('task owner ambiguous: provide only one of project_uid or area_uid');
+  if (ownerCount > 1) {
+    throw new Error('task owner ambiguous: provide only one of project_uid, area_uid, or resource_uid');
   }
 
   let tasksDir = '';
@@ -475,10 +480,14 @@ export async function createTask(
       PROJECT_ORBIT_AGENT_DIR,
       PROJECT_ORBIT_TASKS_DIR
     );
-  } else {
+  } else if (args.area_uid) {
     const target = await findAreaByUid(vault, args.area_uid!);
     if (!target) throw new Error(`area_uid not found: ${args.area_uid}`);
     tasksDir = path.join(target.path, '.orbit', 'agent', 'tasks');
+  } else {
+    const target = await createResourceStore(vault).get(args.resource_uid!);
+    if (!target) throw new Error(`resource_uid not found: ${args.resource_uid}`);
+    tasksDir = path.join(vault, path.dirname(target.path), 'tasks');
   }
   await fs.mkdir(tasksDir, { recursive: true });
   const now = new Date();
@@ -499,6 +508,7 @@ export async function createTask(
     title: args.title,
     ...(args.project_uid ? { project_uid: args.project_uid } : {}),
     ...(args.area_uid ? { area_uid: args.area_uid } : {}),
+    ...(args.resource_uid ? { resource_uid: args.resource_uid } : {}),
     created_at: now.toISOString(),
     ...(args.description !== undefined ? { description: args.description } : {})
   });

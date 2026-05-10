@@ -27,7 +27,8 @@ describe('vault right sidebar model', () => {
     expect(getSidebarPanelTabs('editor', 'overview').map((tab) => tab.id)).toEqual([
       'files',
       'backlinks',
-      'inspector'
+      'inspector',
+      'ask'
     ]);
 
     expect(getSidebarIntentTabs('project.kanban').map((tab) => tab.id)).toEqual([
@@ -36,23 +37,34 @@ describe('vault right sidebar model', () => {
       'execution'
     ]);
     expect(getSidebarPanelTabs('project.kanban', 'focus').map((tab) => tab.id)).toEqual([
-      'task-detail'
+      'task-detail',
+      'ask'
     ]);
 
     expect(getSidebarPanelTabs('project.terminal', 'overview').map((tab) => tab.id)).toEqual([
       'task-tree',
-      'inspector'
+      'inspector',
+      'ask'
     ]);
     expect(getSidebarPanelTabs('project.terminal', 'execution').map((tab) => tab.id)).toEqual([
       'sessions',
       'runlog',
-      'diff'
+      'diff',
+      'ask'
     ]);
     expect(getSidebarPanelTabs('project.github', 'overview').map((tab) => tab.id)).toEqual([
       'task-tree',
       'worktrees',
-      'inspector'
+      'inspector',
+      'ask'
     ]);
+  });
+
+  it('exposes Ask as a right sidebar panel on every intent', () => {
+    expect(getSidebarPanelTabs('editor', 'overview').map((tab) => tab.id)).toContain('ask');
+    expect(getSidebarPanelTabs('areaRoom', 'overview').map((tab) => tab.id)).toContain('ask');
+    expect(getSidebarPanelTabs('resources', 'overview').map((tab) => tab.id)).toContain('ask');
+    expect(getSidebarPanelTabs('project.kanban', 'execution').map((tab) => tab.id)).toContain('ask');
   });
 
   it('exposes inspector panel on editor, areaRoom, and every project surface', () => {
@@ -71,5 +83,6 @@ describe('vault right sidebar model', () => {
       'task-detail'
     );
     expect(resolveSidebarPanelTab('dashboard', 'execution', 'sessions')).toBe('agent');
+    expect(resolveSidebarPanelTab('dashboard', 'execution', 'ask')).toBe('ask');
   });
 });

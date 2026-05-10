@@ -80,6 +80,7 @@ class FakeCliRegistry implements Pick<CliHandlerRegistry, 'handle'> {
 
 interface ScriptedTurn {
   text?: string;
+  thinkingBlocks?: Array<{ thinking: string; signature: string }>;
   toolUses?: Array<{ id: string; name: string; input: unknown }>;
   /** 覆盖该轮的 input_tokens；默认 1。用于 budget_halt 测试。 */
   inputTokens?: number;
@@ -112,6 +113,9 @@ class FakeLLMClient implements AgentLLMClient {
       : 'end_turn';
     const text = scripted.text ?? '';
     const assistantBlocks: AgentTurnResult['assistantBlocks'] = [];
+    for (const block of scripted.thinkingBlocks ?? []) {
+      assistantBlocks.push({ type: 'thinking', thinking: block.thinking, signature: block.signature });
+    }
     if (text) assistantBlocks.push({ type: 'text', text });
     for (const t of scripted.toolUses ?? []) {
       assistantBlocks.push({ type: 'tool_use', id: t.id, name: t.name, input: t.input });
@@ -388,6 +392,69 @@ describe('runAgentLoop', () => {
     expect(typeof result.toolTrace[0]?.result).toBe('string');
     expect(typeof result.toolTrace[0]?.at).toBe('string');
     expect(typeof result.toolTrace[0]?.durationMs).toBe('number');
+  });
+
+  it('preserves thinking blocks across tool iterations and replay history', async () => {
+    const llm = new FakeLLMClient([
+      {
+        thinkingBlocks: [{ thinking: '先搜索项目。', signature: 'sig-tool' }],
+        toolUses: [{ id: 'toolu_a', name: 'orbit_search', input: { query: 'project' } }]
+      },
+      {
+        thinkingBlocks: [{ thinking: '整理结果。', signature: 'sig-final' }],
+        text: 'done'
+      }
+    ]);
+    const executor = buildExecutor((req) => ({ id: req.id, ok: true, data: { hits: [req.params] } }));
+    const result = await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: '查一下项目' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5
+      },
+      sink
+    );
+
+    const second = llm.observedMessages[1] ?? [];
+    const assistant = second[second.length - 2];
+    expect(assistant?.role).toBe('assistant');
+    expect(assistant?.content).toEqual([
+      { type: 'thinking', thinking: '先搜索项目。', signature: 'sig-tool' },
+      { type: 'tool_use', id: 'toolu_a', name: 'orbit_search', input: { query: 'project' } }
+    ]);
+
+    expect(result.replayMessages).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '先搜索项目。', signature: 'sig-tool' },
+          { type: 'tool_use', id: 'toolu_a', name: 'orbit_search', input: { query: 'project' } }
+        ]
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu_a',
+            content: '{\n  "hits": [\n    {\n      "query": "project"\n    }\n  ]\n}'
+          }
+        ]
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '整理结果。', signature: 'sig-final' },
+          { type: 'text', text: 'done' }
+        ]
+      }
+    ]);
   });
 
   it('aborts loop when AbortSignal is already aborted before entering', async () => {

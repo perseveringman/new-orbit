@@ -58,6 +58,38 @@ describe('ChatView', () => {
     expect(html).toContain('Agent');
   });
 
+  it('renders assistant markdown instead of raw syntax', () => {
+    const html = render([
+      ev(
+        'runtime.message',
+        {
+          text: '# Plan\n- **Ship** the fix\n1. Verify the flow\n```ts\nconst ok = true;\n```',
+          role: 'assistant'
+        },
+        { id: 'md1' }
+      )
+    ]);
+
+    expect(html).toContain('<h1');
+    expect(html).toContain('<strong><span>Ship</span></strong>');
+    expect(html).toContain('<ol');
+    expect(html).toContain('<pre');
+    expect(html).not.toContain('```ts');
+  });
+
+  it('merges one streaming assistant response into one bubble', () => {
+    const html = render([
+      ev('runtime.message', { text: '灯光', role: 'assistant', isStreaming: true }, { id: 's1', runId: 'run-stream', spanId: 's1' }),
+      ev('runtime.message', { text: '、背景', role: 'assistant', isStreaming: true }, { id: 's2', runId: 'run-stream', spanId: 's2' }),
+      ev('runtime.message', { text: '墙', role: 'assistant', isStreaming: true }, { id: 's3', runId: 'run-stream', spanId: 's3' }),
+      ev('runtime.done', { exitCode: 0 }, { id: 'done', runId: 'run-stream', spanId: 'done' })
+    ]);
+
+    expect(html).toContain('灯光、背景墙');
+    expect(html.match(/>Agent</g)?.length).toBe(1);
+    expect(html).not.toContain('▍');
+  });
+
   it('pairs tool_use with matching tool_result', () => {
     const html = render([
       ev(
@@ -71,11 +103,48 @@ describe('ChatView', () => {
         { id: 'tr1' }
       )
     ]);
-    expect(html).toContain('Read');
+    expect(html).toContain('Reading a.md');
     expect(html).toContain('done');
-    // ToolCard renders the toolName once when paired (no orphan tool_result block)
-    const matches = html.match(/font-mono font-semibold[^>]*>Read</g);
-    expect(matches?.length).toBe(1);
+    expect(html.match(/>Result</g)?.length).toBe(1);
+  });
+
+  it('merges one thinking span into one block', () => {
+    const html = render([
+      ev('runtime.thinking', { text: '查看' }, { id: 't1', runId: 'run-think', spanId: 'think-1' }),
+      ev('runtime.thinking', { text: '有哪些' }, { id: 't2', runId: 'run-think', spanId: 'think-1' }),
+      ev('runtime.thinking', { text: '项目' }, { id: 't3', runId: 'run-think', spanId: 'think-1' })
+    ]);
+
+    expect(html).toContain('查看有哪些项目');
+    expect(html.match(/>Thinking</g)?.length).toBe(1);
+  });
+
+  it('renders semantic thinking and tool summaries', () => {
+    const html = render([
+      ev('runtime.thinking', { text: '查看有哪些项目需要更新，并准备下一步。' }, { id: 'think-summary', spanId: 'think-summary' }),
+      ev(
+        'runtime.tool_use',
+        { toolName: 'orbit_search', toolInput: { query: 'roadmap' }, spanId: 'tool-summary' },
+        { id: 'tool-summary', spanId: 'tool-summary' }
+      )
+    ]);
+
+    expect(html).toContain('查看有哪些项目需要更新，并准备下一步');
+    expect(html).toContain('Searching &quot;roadmap&quot;');
+    expect(html).toContain('Input');
+  });
+
+  it('does not render approval controls when tool approval is unsupported', () => {
+    const html = render([
+      ev(
+        'runtime.tool_use',
+        { toolName: 'orbit_search', toolInput: { query: 'project' }, spanId: 'toolu_1' },
+        { id: 'tu1', spanId: 'toolu_1' }
+      )
+    ]);
+
+    expect(html).not.toContain('Approve');
+    expect(html).not.toContain('Reject');
   });
 
   it('hides thinking blocks when capability disabled', () => {

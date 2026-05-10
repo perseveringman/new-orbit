@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import { groupByStatus, moveTask } from '@shared/kanban';
 import type { AreaSummaryDTO, TerminalAgentLaunchDTO } from '@shared/ipc';
+import type { TimelineEntry } from '@shared/timeline';
 import { usePara } from '../store/para';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
@@ -17,10 +18,35 @@ import {
 import { VisionRoomContent } from './VisionRoomContent';
 import { AreaSessionsView } from './AreaSessionsView';
 import { AreaOverview } from './AreaOverview';
+import { SpaceMaterialsView } from './ProjectMaterialsView';
+import { SpaceOutputsView } from './SpaceOutputsView';
 
 const KanbanBoard = lazy(() => import('../components/KanbanBoard'));
 
-type AreaRoomOuterTab = 'dashboard' | 'kanban' | 'terminal' | 'sessions';
+export type AreaRoomOuterTab =
+  | 'dashboard'
+  | 'kanban'
+  | 'materials'
+  | 'outputs'
+  | 'chat'
+  | 'timeline'
+  | 'terminal'
+  | 'sessions';
+
+export const AREA_ROOM_TABS: Array<{ id: AreaRoomOuterTab; label: string }> = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'kanban', label: 'Kanban' },
+  { id: 'materials', label: 'Materials' },
+  { id: 'outputs', label: 'Outputs' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'terminal', label: 'Terminal' },
+  { id: 'sessions', label: 'Sessions' }
+];
+
+export function isAreaRoomOuterTab(value: string | null): value is AreaRoomOuterTab {
+  return AREA_ROOM_TABS.some((tab) => tab.id === value);
+}
 
 function OuterTabButton({
   active,
@@ -53,6 +79,7 @@ const REVIEW_VISION_COMMAND =
 
 export function AreaRoomView(): JSX.Element {
   const view = usePara((s) => s.view);
+  const setView = usePara((s) => s.setView);
   const areas = useWorkspace((s) => s.areas);
   const dark = useWorkspace((s) => s.resolvedTheme === 'dark');
   const vault = useWorkspace((s) => s.vault);
@@ -72,7 +99,7 @@ export function AreaRoomView(): JSX.Element {
   const [outerTab, setOuterTabRaw] = useState<AreaRoomOuterTab>(() => {
     try {
       const value = localStorage.getItem(outerTabKey);
-      return value === 'kanban' || value === 'terminal' || value === 'sessions' ? value : 'dashboard';
+      return isAreaRoomOuterTab(value) ? value : 'dashboard';
     } catch {
       return 'dashboard';
     }
@@ -120,7 +147,7 @@ export function AreaRoomView(): JSX.Element {
     try {
       const key = `orbit.areaRoom.outerTab.${areaUid}`;
       const value = localStorage.getItem(key);
-      setOuterTabRaw(value === 'kanban' || value === 'terminal' || value === 'sessions' ? value : 'dashboard');
+      setOuterTabRaw(isAreaRoomOuterTab(value) ? value : 'dashboard');
     } catch {
       setOuterTabRaw('dashboard');
     }
@@ -281,18 +308,15 @@ export function AreaRoomView(): JSX.Element {
       </header>
 
       <div className="flex shrink-0 border-b border-neutral-200 px-4 text-sm dark:border-neutral-800">
-        <OuterTabButton active={outerTab === 'dashboard'} onClick={() => setOuterTab('dashboard')}>
-          Dashboard
-        </OuterTabButton>
-        <OuterTabButton active={outerTab === 'kanban'} onClick={() => setOuterTab('kanban')}>
-          Kanban
-        </OuterTabButton>
-        <OuterTabButton active={outerTab === 'terminal'} onClick={() => setOuterTab('terminal')}>
-          Terminal
-        </OuterTabButton>
-        <OuterTabButton active={outerTab === 'sessions'} onClick={() => setOuterTab('sessions')}>
-          Sessions
-        </OuterTabButton>
+        {AREA_ROOM_TABS.map((tab) => (
+          <OuterTabButton
+            key={tab.id}
+            active={outerTab === tab.id}
+            onClick={() => setOuterTab(tab.id)}
+          >
+            {tab.label}
+          </OuterTabButton>
+        ))}
       </div>
 
       <div className={`min-h-0 flex-1 ${outerTab === 'dashboard' ? 'flex' : 'hidden'}`}>
@@ -326,6 +350,25 @@ export function AreaRoomView(): JSX.Element {
         )}
       </div>
 
+      <div className={`min-h-0 flex-1 ${outerTab === 'materials' ? 'flex' : 'hidden'}`}>
+        <SpaceMaterialsView spaceId={area.uid} spaceName={area.name} spaceLabel="area" />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'outputs' ? 'flex' : 'hidden'}`}>
+        <SpaceOutputsView spaceId={area.uid} spaceLabel="Area" />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'chat' ? 'flex' : 'hidden'}`}>
+        <AreaChatTab
+          area={area}
+          onOpenConversation={(conversationId) => setView({ kind: 'askAnywhere', activeId: conversationId })}
+        />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'timeline' ? 'flex' : 'hidden'}`}>
+        <AreaTimelineTab area={area} />
+      </div>
+
       <div className={`min-h-0 flex-1 ${outerTab === 'terminal' ? 'flex' : 'hidden'}`}>
         <TerminalManager
           ref={managerRef}
@@ -357,6 +400,138 @@ export function AreaRoomView(): JSX.Element {
           onCreated={() => void refreshTasks()}
         />
       )}
+    </div>
+  );
+}
+
+function AreaChatTab({
+  area,
+  onOpenConversation
+}: {
+  area: AreaSummaryDTO;
+  onOpenConversation(conversationId: string): void;
+}): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function openChat(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const scope = { kind: 'area' as const, area_slug: area.slug };
+      // Phase E.3：先复用该 area 的最近活跃会话；没有才新建，避免"点 Area Room 按钮 / 点 Overview 按钮"开出两个不同会话。
+      const existing = await window.orbit.chat
+        .getLastActiveConversation(scope)
+        .catch(() => null);
+      if (existing) {
+        onOpenConversation(existing.id);
+        return;
+      }
+      const conversation = await window.orbit.chat.createConversation({
+        anchor: {
+          kind: 'ask_anywhere_session',
+          refId: `area:${area.slug}`,
+          addedAt: new Date().toISOString()
+        },
+        scope,
+        title: `Area: ${area.name}`
+      });
+      await window.orbit.chat.setLastActiveConversation(scope, conversation.id);
+      onOpenConversation(conversation.id);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="flex min-h-0 flex-1 items-center justify-center p-6">
+      <div className="max-w-md rounded-xl border border-neutral-200 bg-white p-6 text-center dark:border-neutral-800 dark:bg-neutral-950">
+        <h2 className="text-base font-semibold">Area-scoped Chat</h2>
+        <p className="mt-2 text-sm text-neutral-500">
+          Start a conversation scoped to {area.name}; Orbit will use this Area as the working context.
+        </p>
+        {error ? <p className="mt-3 text-xs text-red-500">{error}</p> : null}
+        <button
+          onClick={() => void openChat()}
+          disabled={busy}
+          className="mt-4 rounded bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500 disabled:opacity-50"
+        >
+          {busy ? 'Opening...' : 'Open Area Chat'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function AreaTimelineTab({ area }: { area: AreaSummaryDTO }): JSX.Element {
+  const [entries, setEntries] = useState<TimelineEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const date = new Date().toISOString().slice(0, 10);
+    void window.orbit.timeline
+      .getDay(date)
+      .then((timeline) => {
+        if (cancelled) return;
+        setEntries(
+          timeline.entries.filter((entry) =>
+            (entry.refs ?? []).some(
+              (ref) => ref.kind === 'area' && (ref.ref === area.uid || ref.ref === area.slug)
+            )
+          )
+        );
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setError((err as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [area.slug, area.uid]);
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col">
+      <header className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+        <h2 className="text-sm font-semibold">Timeline</h2>
+        <p className="text-xs text-neutral-500">Today&apos;s visible events linked to this Area.</p>
+      </header>
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        {error ? <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{error}</div> : null}
+        {!entries ? (
+          <div className="text-sm text-neutral-500">Loading timeline...</div>
+        ) : entries.length === 0 ? (
+          <EmptyAreaTab title="No Area events today" description="Timeline events with an area ref will appear here." />
+        ) : (
+          <div className="space-y-2">
+            {entries.map((entry) => (
+              <article key={entry.event_id} className="rounded border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-950">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium">{entry.icon} {entry.title}</h3>
+                    {entry.summary ? <p className="mt-1 text-xs text-neutral-500">{entry.summary}</p> : null}
+                  </div>
+                  <span className="shrink-0 text-xs text-neutral-500">{entry.occurred_at.slice(11, 16)}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function EmptyAreaTab({ title, description }: { title: string; description: string }): JSX.Element {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="rounded border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-800">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <p className="mt-2 max-w-sm text-xs text-neutral-500">{description}</p>
+      </div>
     </div>
   );
 }

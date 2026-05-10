@@ -80,4 +80,6 @@ export interface AgentTurnToolUse {
 /** LLM 在一轮里产生的 assistant content blocks（供下一轮 messages 回灌使用）。 */
 export type AgentTurnAssistantBlock =
   | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string; signature: string }
+  | { type: 'redacted_thinking'; data: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown };

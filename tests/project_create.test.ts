@@ -73,6 +73,11 @@ describe('project.create (R1)', () => {
     expect((await fs.stat(skillsDir)).isDirectory()).toBe(true);
     const logsDir = path.join(res.projectPath, '.orbit', 'agent', 'logs');
     expect((await fs.stat(logsDir)).isDirectory()).toBe(true);
+    await expect(fs.stat(path.join(res.projectPath, 'tasks'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(res.projectPath, 'assets', '_manifest.md'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(res.projectPath, 'assets', 'imported'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(res.projectPath, 'assets', 'references'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(res.projectPath, 'outputs', '_manifest.md'))).resolves.toBeDefined();
 
     const skillFiles = [
       '_index.md',

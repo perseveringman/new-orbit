@@ -94,6 +94,14 @@ import type {
 } from './inbox';
 import type {
   AddFeedSubscriptionInput,
+  CaptureAttachmentInput,
+  CaptureAttachment,
+  CreateCaptureLinkInput,
+  CreateCaptureLinkResult,
+  CreateCaptureNoteInput,
+  CreateCaptureNoteResult,
+  CreateCaptureTaskInput,
+  CreateCaptureTaskResult,
   CreateThoughtInput,
   FeedRefreshResult,
   FeedSubscription,
@@ -249,6 +257,19 @@ import type {
   SynthesisFilter
 } from './synthesis';
 import type {
+  AddAssetPinInput,
+  AddAssetScopeInput,
+  AssetHealthResult,
+  AssetManifest,
+  AssetPin,
+  AssetScanOptions,
+  AssetScanResult,
+  AssetScope,
+  AssetScopeStats,
+  UpdateAssetScopeInput
+} from './assets';
+import type { SpaceContextBundle, SpaceContextOptions, SpaceSummary, SpaceType } from './space';
+import type {
   SearchAnswerResponse,
   SearchQuery,
   SearchResponse,
@@ -342,6 +363,23 @@ export const IPC = {
     archive: 'project:archive',
     getTasks: 'project:getTasks',
     listTemplates: 'project:listTemplates'
+  },
+  assets: {
+    manifestGet: 'assets:manifest:get',
+    scopeAdd: 'assets:scope:add',
+    scopeUpdate: 'assets:scope:update',
+    scopeRemove: 'assets:scope:remove',
+    scopeScan: 'assets:scope:scan',
+    scopeStat: 'assets:scope:stat',
+    pinAdd: 'assets:pin:add',
+    pinRemove: 'assets:pin:remove',
+    read: 'assets:read',
+    healthCheck: 'assets:health:check'
+  },
+  space: {
+    context: 'space:context',
+    list: 'space:list',
+    get: 'space:get'
   },
   runtime: {
     list: 'runtime:list',
@@ -533,6 +571,12 @@ export const IPC = {
       promote: 'capture:thought:promote',
       link: 'capture:thought:link',
       dismiss: 'capture:thought:dismiss'
+    },
+    quick: {
+      saveAttachment: 'capture:quick:attachment:save',
+      createNote: 'capture:quick:note:create',
+      createLink: 'capture:quick:link:create',
+      createTask: 'capture:quick:task:create'
     }
   },
   feeds: {
@@ -986,6 +1030,7 @@ export interface GitHubTaskIssueBindingArgsDTO {
 export interface CreateTaskArgsDTO {
   project_uid?: string;
   area_uid?: string;
+  resource_uid?: string;
   title: string;
   description?: string;
   uid?: string;
@@ -1227,6 +1272,23 @@ export interface OrbitApi {
     archive(uid: string): Promise<ArchiveProjectResultDTO>;
     getTasks(uid: string): Promise<TaskRecord[]>;
     listTemplates(): Promise<TemplateMetaDTO[]>;
+  };
+  assets: {
+    getManifest(projectUid: string): Promise<AssetManifest>;
+    addScope(projectUid: string, input: AddAssetScopeInput): Promise<AssetScope>;
+    updateScope(projectUid: string, scopeId: string, patch: UpdateAssetScopeInput): Promise<AssetScope>;
+    removeScope(projectUid: string, scopeId: string): Promise<AssetManifest>;
+    scanScope(projectUid: string, scopeId: string, options?: AssetScanOptions): Promise<AssetScanResult>;
+    statScope(projectUid: string, scopeId: string): Promise<AssetScopeStats>;
+    addPin(projectUid: string, input: AddAssetPinInput): Promise<AssetPin>;
+    removePin(projectUid: string, pinId: string): Promise<AssetManifest>;
+    read(projectUid: string, targetPath: string): Promise<{ path: string; content: string }>;
+    healthCheck(projectUid: string): Promise<AssetHealthResult>;
+  };
+  space: {
+    list(filter?: { type?: SpaceType }): Promise<SpaceSummary[]>;
+    get(spaceId: string): Promise<SpaceSummary | null>;
+    context(spaceId: string, options?: SpaceContextOptions): Promise<SpaceContextBundle>;
   };
   runtime: {
     list(): Promise<RuntimeDescriptor[]>;
@@ -1476,6 +1538,12 @@ export interface OrbitApi {
       promote(id: string, input?: PromoteThoughtInput): Promise<PromoteResult>;
       link(id: string, input: LinkThoughtInput): Promise<InboxItem>;
       dismiss(id: string, actor?: 'user' | 'agent'): Promise<InboxItem>;
+    };
+    quick: {
+      saveAttachment(input: CaptureAttachmentInput): Promise<CaptureAttachment>;
+      createNote(input: CreateCaptureNoteInput): Promise<CreateCaptureNoteResult>;
+      createLink(input: CreateCaptureLinkInput): Promise<CreateCaptureLinkResult>;
+      createTask(input: CreateCaptureTaskInput): Promise<CreateCaptureTaskResult>;
     };
   };
   notes: {

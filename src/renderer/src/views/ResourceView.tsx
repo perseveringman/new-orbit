@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import type { TaskRecord, TaskStatus } from '@shared/schemas';
+import { groupByStatus, moveTask } from '@shared/kanban';
 import type {
   CreateResourceInput,
   LinkResourceRefInput,
@@ -12,44 +14,104 @@ import type {
 } from '@shared/resource';
 import type { SynthesisArtifact } from '@shared/synthesis';
 import { SynthesisActionCard } from '../components/synthesis';
+import { NewTaskModal } from '../components/Modals/NewTaskModal';
+import { useFiles } from '../store/files';
+import { usePara } from '../store/para';
+import { SpaceMaterialsView } from './ProjectMaterialsView';
+import { SpaceOutputsView } from './SpaceOutputsView';
+
+const KanbanBoard = lazy(() => import('../components/KanbanBoard'));
 
 const RESOURCE_SECTIONS: ResourceSection[] = ['canonical', 'distilled', 'related', 'people', 'projects_touched'];
 const REF_KINDS: ResourceRefKind[] = ['note', 'library_item', 'kb_item', 'project', 'area', 'person', 'url'];
 const RESOURCE_STATUSES: ResourceStatus[] = ['active', 'dormant', 'evolved', 'archived'];
 
-export function ResourceView(): JSX.Element {
+export type ResourceRoomTab = 'overview' | 'kanban' | 'materials' | 'outputs' | 'chat' | 'timeline';
+
+export const RESOURCE_ROOM_TABS: Array<{ id: ResourceRoomTab; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'kanban', label: 'Kanban' },
+  { id: 'materials', label: 'Materials' },
+  { id: 'outputs', label: 'Outputs' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'timeline', label: 'Timeline' }
+];
+
+function isResourceRoomTab(value: string | null): value is ResourceRoomTab {
+  return RESOURCE_ROOM_TABS.some((tab) => tab.id === value);
+}
+
+export interface ResourceViewProps {
+  resourceSlug?: string | null;
+  showResourceList?: boolean;
+}
+
+export function ResourceView({
+  resourceSlug = null,
+  showResourceList = true
+}: ResourceViewProps = {}): JSX.Element {
+  const toast = useFiles((s) => s.toast);
+  const setView = usePara((s) => s.setView);
   const [resources, setResources] = useState<ResourceSummary[]>([]);
-  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const [activeSlug, setActiveSlug] = useState<string | null>(resourceSlug);
   const [active, setActive] = useState<Resource | null>(null);
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [tags, setTags] = useState('');
-  const [areas, setAreas] = useState('');
-  const [evolvedTo, setEvolvedTo] = useState('');
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
-  const [linkRef, setLinkRef] = useState('');
-  const [linkTitle, setLinkTitle] = useState('');
-  const [linkKind, setLinkKind] = useState<ResourceRefKind>('note');
-  const [linkSection, setLinkSection] = useState<ResourceSection>('distilled');
-  const [engagementTitle, setEngagementTitle] = useState('');
-  const [engagementSummary, setEngagementSummary] = useState('');
   const [suggestions, setSuggestions] = useState<ResourceSuggestion[]>([]);
   const [suggestionArtifacts, setSuggestionArtifacts] = useState<Record<string, SynthesisArtifact | null>>({});
   const [scopedChatMessage, setScopedChatMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const tabKey = `orbit.resourceRoom.tab.${activeSlug ?? '__none__'}`;
+  const [tab, setTabRaw] = useState<ResourceRoomTab>(() => {
+    try {
+      return isResourceRoomTab(localStorage.getItem(tabKey)) ? (localStorage.getItem(tabKey) as ResourceRoomTab) : 'overview';
+    } catch {
+      return 'overview';
+    }
+  });
 
-  async function reload(nextSlug = activeSlug): Promise<void> {
-    const list = await window.orbit.resources.list();
-    setResources(list);
-    const slug = nextSlug ?? list[0]?.frontmatter.slug ?? null;
-    setActiveSlug(slug);
-    if (!slug) {
-      setActive(null);
+  const setTab = useCallback(
+    (next: ResourceRoomTab) => {
+      setTabRaw(next);
+      try {
+        localStorage.setItem(tabKey, next);
+      } catch {
+        /* ignore */
+      }
+    },
+    [tabKey]
+  );
+
+  const reload = useCallback(
+    async (nextSlug: string | null | undefined = activeSlug): Promise<void> => {
+      const list = await window.orbit.resources.list();
+      setResources(list);
+      const slug = nextSlug === undefined
+        ? resourceSlug ?? (showResourceList ? (list[0]?.frontmatter.slug ?? null) : null)
+        : nextSlug;
+      setActiveSlug(slug);
+      if (!slug) {
+        setActive(null);
+        return;
+      }
+      setActive(await window.orbit.resources.get(slug));
+    },
+    [activeSlug, resourceSlug, showResourceList]
+  );
+
+  const refreshTasks = useCallback(async () => {
+    if (!active) {
+      setTasks([]);
       return;
     }
-    setActive(await window.orbit.resources.get(slug));
-  }
+    try {
+      setTasks(await window.orbit.para.listTasks({ resource_uid: active.frontmatter.id }));
+    } catch (err) {
+      toast(`Load resource tasks failed: ${(err as Error).message}`);
+    }
+  }, [active, toast]);
 
   useEffect(() => {
     void reload();
@@ -58,20 +120,22 @@ export function ResourceView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!active) return;
-    setTitle(active.frontmatter.title);
-    setBody(active.body);
-    setTags(active.frontmatter.tags.join(', '));
-    setAreas((active.frontmatter.areas ?? []).map((area) => area.area_slug).join(', '));
-    setEvolvedTo(active.frontmatter.evolved_to ?? '');
-  }, [active?.frontmatter.id, active?.frontmatter.updated]);
+    if (resourceSlug) void reload(resourceSlug);
+  }, [resourceSlug]);
 
-  const refsBySection = useMemo(() => {
-    const map = new Map<ResourceSection, ResourceRef[]>();
-    for (const section of RESOURCE_SECTIONS) map.set(section, []);
-    for (const ref of active?.refs ?? []) map.get(ref.section)?.push(ref);
-    return map;
-  }, [active?.refs]);
+  useEffect(() => {
+    void refreshTasks();
+  }, [refreshTasks]);
+
+  useEffect(() => {
+    try {
+      const key = `orbit.resourceRoom.tab.${activeSlug ?? '__none__'}`;
+      const value = localStorage.getItem(key);
+      setTabRaw(isResourceRoomTab(value) ? value : 'overview');
+    } catch {
+      setTabRaw('overview');
+    }
+  }, [activeSlug]);
 
   async function selectResource(slug: string): Promise<void> {
     setActiveSlug(slug);
@@ -87,93 +151,12 @@ export function ResourceView(): JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      const input: CreateResourceInput = {
+      const created = await window.orbit.resources.create({
         title: trimmed,
-        tags: splitTags(tags),
-        areas: splitAreas(areas),
         body: `# ${trimmed}\n\n## Why this matters\n\n\n## Current understanding\n\n`
-      };
-      const created = await window.orbit.resources.create(input);
+      });
       setCreateTitle('');
-      setActiveSlug(created.frontmatter.slug);
       await reload(created.frontmatter.slug);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveResource(): Promise<void> {
-    if (!active) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await window.orbit.resources.update(active.frontmatter.slug, {
-        title,
-        body,
-        tags: splitTags(tags),
-        areas: splitAreas(areas),
-        evolved_to: evolvedTo.trim() || undefined
-      });
-      await reload(active.frontmatter.slug);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function archiveResource(): Promise<void> {
-    if (!active) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await window.orbit.resources.archive(active.frontmatter.slug);
-      setActiveSlug(null);
-      await reload(null);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function addRef(): Promise<void> {
-    if (!active || !linkRef.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const input: LinkResourceRefInput = {
-        kind: linkKind,
-        ref: linkRef.trim(),
-        section: linkSection,
-        source: 'manual'
-      };
-      if (linkTitle.trim()) input.title = linkTitle.trim();
-      await window.orbit.resources.linkRef(active.frontmatter.slug, input);
-      setLinkRef('');
-      setLinkTitle('');
-      await reload(active.frontmatter.slug);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function recordEngagement(): Promise<void> {
-    if (!active) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await window.orbit.resources.engage(active.frontmatter.slug, {
-        title: engagementTitle.trim() || 'Resource engagement',
-        summary: engagementSummary.trim() || undefined
-      });
-      setEngagementTitle('');
-      setEngagementSummary('');
-      await reload(active.frontmatter.slug);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -210,13 +193,48 @@ export function ResourceView(): JSX.Element {
     }
   }
 
-  async function promoteRef(refId: string, section: ResourceSection = 'canonical'): Promise<void> {
+  async function onDropTask(taskId: string, target: TaskStatus): Promise<void> {
+    const { next, moved } = moveTask(tasks, taskId, target);
+    if (!moved) return;
+    setTasks(next);
+    try {
+      const task = tasks.find((item) => item.id === taskId);
+      if (!task) return;
+      if (task.source === 'file') await window.orbit.task.updateFrontmatter(task.filePath, { status: target });
+      else await window.orbit.para.updateTaskStatus(task.id, target);
+    } catch (err) {
+      toast(`Status update failed: ${(err as Error).message}`);
+      await refreshTasks();
+    }
+  }
+
+  async function openScopedChat(): Promise<void> {
     if (!active) return;
     setBusy(true);
     setError(null);
     try {
-      await window.orbit.resources.promoteRef(active.frontmatter.slug, { ref_id: refId, section });
-      await reload(active.frontmatter.slug);
+      const scope = { kind: 'resource' as const, resource_slug: active.frontmatter.slug };
+      // Phase E.3：先复用该 resource 的最近活跃会话；没有才新建。
+      const existing = await window.orbit.chat
+        .getLastActiveConversation(scope)
+        .catch(() => null);
+      if (existing) {
+        setScopedChatMessage(`Resuming scoped chat: ${existing.title ?? existing.id}`);
+        setView({ kind: 'askAnywhere', activeId: existing.id });
+        return;
+      }
+      const conversation = await window.orbit.chat.createConversation({
+        anchor: {
+          kind: 'ask_anywhere_session',
+          refId: `resource:${active.frontmatter.slug}`,
+          addedAt: new Date().toISOString()
+        },
+        scope,
+        title: `Resource: ${active.frontmatter.title}`
+      });
+      await window.orbit.chat.setLastActiveConversation(scope, conversation.id);
+      setScopedChatMessage(`Scoped chat ready: ${conversation.title ?? conversation.id}`);
+      setView({ kind: 'askAnywhere', activeId: conversation.id });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -224,207 +242,485 @@ export function ResourceView(): JSX.Element {
     }
   }
 
-  async function openScopedChat(): Promise<void> {
-    if (!active) return;
-    const conversation = await window.orbit.chat.createConversation({
-      anchor: { kind: 'ask_anywhere_session', refId: `resource:${active.frontmatter.slug}`, addedAt: new Date().toISOString() },
-      scope: { kind: 'resource', resource_slug: active.frontmatter.slug },
-      title: `Resource: ${active.frontmatter.title}`
-    });
-    await window.orbit.chat.setLastActiveConversation({ kind: 'resource', resource_slug: active.frontmatter.slug }, conversation.id);
-    setScopedChatMessage(`Scoped chat ready: ${conversation.title ?? conversation.id}`);
-  }
+  const columns = useMemo(() => groupByStatus(tasks), [tasks]);
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="w-80 shrink-0 border-r border-neutral-200 bg-white/60 dark:border-neutral-800 dark:bg-neutral-950/40">
-        <div className="space-y-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
-          <div>
-            <h1 className="text-lg font-semibold">Resources</h1>
-            <p className="text-xs text-neutral-500">Topic workstations for long-lived interests.</p>
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={createTitle}
-              onChange={(event) => setCreateTitle(event.target.value)}
-              placeholder="New resource title"
-              className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900"
-            />
-            <button onClick={() => void createResource()} className="rounded bg-sky-600 px-3 py-2 text-xs text-white">
-              Create
-            </button>
-          </div>
-          <button onClick={() => void loadSuggestions()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
-            Suggest from Notes
-          </button>
-          {error ? <div className="rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div> : null}
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {resources.map((resource) => (
-            <button
-              key={resource.frontmatter.id}
-              onClick={() => void selectResource(resource.frontmatter.slug)}
-              className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${
-                activeSlug === resource.frontmatter.slug ? 'bg-sky-50 dark:bg-sky-950/40' : 'hover:bg-neutral-100 dark:hover:bg-neutral-900'
-              }`}
-            >
-              <div className="truncate font-medium">{resource.frontmatter.title}</div>
-              <div className="mt-1 text-[11px] text-neutral-500">
-                {resource.frontmatter.depth} · {resource.frontmatter.engagement_count} engagements · {resource.counts.distilled} notes
-              </div>
-            </button>
-          ))}
-          {suggestions.length > 0 ? (
-            <div className="mt-3 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-              <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Emerging topics</div>
-              {suggestions.map((suggestion) => (
-                <SynthesisActionCard
-                  key={suggestion.tag}
-                  artifact={suggestion.synthesis_ref ? suggestionArtifacts[suggestion.synthesis_ref] : null}
-                  title={suggestion.topic}
-                  description={`${suggestion.note_count} notes · ${Math.round(suggestion.confidence * 100)}% confidence`}
-                  primaryLabel="Create"
-                  onPrimary={() => void createFromSuggestion(suggestion)}
-                  onRefresh={() => void loadSuggestions()}
-                />
-              ))}
+      {showResourceList ? (
+        <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-200 bg-white/60 dark:border-neutral-800 dark:bg-neutral-950/40">
+          <div className="space-y-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
+            <div>
+              <h1 className="text-lg font-semibold">Resources</h1>
+              <p className="text-xs text-neutral-500">Knowledge Spaces for long-lived interests.</p>
             </div>
-          ) : null}
-        </div>
-      </aside>
+            <div className="flex gap-2">
+              <input
+                value={createTitle}
+                onChange={(event) => setCreateTitle(event.target.value)}
+                placeholder="New resource title"
+                className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+              />
+              <button onClick={() => void createResource()} className="rounded bg-sky-600 px-3 py-2 text-xs text-white">
+                Create
+              </button>
+            </div>
+            <button onClick={() => void loadSuggestions()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
+              Suggest from Notes
+            </button>
+            {error ? <div className="rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div> : null}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {resources.map((resource) => (
+              <button
+                key={resource.frontmatter.id}
+                onClick={() => void selectResource(resource.frontmatter.slug)}
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${
+                  activeSlug === resource.frontmatter.slug ? 'bg-sky-50 dark:bg-sky-950/40' : 'hover:bg-neutral-100 dark:hover:bg-neutral-900'
+                }`}
+              >
+                <div className="truncate font-medium">{resource.frontmatter.title}</div>
+                <div className="mt-1 text-[11px] text-neutral-500">
+                  {resource.frontmatter.depth} · {resource.frontmatter.engagement_count} engagements · {resource.counts.distilled} distilled
+                </div>
+              </button>
+            ))}
+            {suggestions.length > 0 ? (
+              <div className="mt-3 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+                <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Emerging topics</div>
+                {suggestions.map((suggestion) => (
+                  <SynthesisActionCard
+                    key={suggestion.tag}
+                    artifact={suggestion.synthesis_ref ? suggestionArtifacts[suggestion.synthesis_ref] : null}
+                    title={suggestion.topic}
+                    description={`${suggestion.note_count} notes · ${Math.round(suggestion.confidence * 100)}% confidence`}
+                    primaryLabel="Create"
+                    onPrimary={() => void createFromSuggestion(suggestion)}
+                    onRefresh={() => void loadSuggestions()}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </aside>
+      ) : null}
 
       <section className="flex min-w-0 flex-1 flex-col">
         {active ? (
           <>
-            <div className="flex items-center gap-2 border-b border-neutral-200 p-3 dark:border-neutral-800">
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                className="min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+            <ResourceHeader
+              resource={active}
+              busy={busy}
+              onArchive={async () => {
+                await window.orbit.resources.archive(active.frontmatter.slug);
+                setActiveSlug(null);
+                if (!showResourceList) setView({ kind: 'resources' });
+                await reload(null);
+              }}
+              onStatus={(status) => window.orbit.resources.update(active.frontmatter.slug, { status }).then(() => reload(active.frontmatter.slug))}
+              onDepth={(depth) => window.orbit.resources.update(active.frontmatter.slug, { depth }).then(() => reload(active.frontmatter.slug))}
+            />
+            <div className="flex shrink-0 border-b border-neutral-200 px-4 text-sm dark:border-neutral-800">
+              {RESOURCE_ROOM_TABS.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setTab(item.id)}
+                  className={`border-b-2 px-4 py-2 text-sm transition-colors ${
+                    tab === item.id
+                      ? 'border-sky-500 text-sky-600 dark:text-sky-400'
+                      : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className={`min-h-0 flex-1 ${tab === 'overview' ? 'flex' : 'hidden'}`}>
+              <ResourceOverview
+                resource={active}
+                scopedChatMessage={scopedChatMessage}
+                onReload={() => reload(active.frontmatter.slug)}
               />
-              <select
-                value={active.frontmatter.status}
-                onChange={(event) => void window.orbit.resources.update(active.frontmatter.slug, { status: event.target.value as ResourceStatus }).then(() => reload(active.frontmatter.slug))}
-                className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
-              >
-                {RESOURCE_STATUSES.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-              <select
-                value={active.frontmatter.depth}
-                onChange={(event) => void window.orbit.resources.update(active.frontmatter.slug, { depth: event.target.value as Resource['frontmatter']['depth'] }).then(() => reload(active.frontmatter.slug))}
-                className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
-              >
-                {['exploring', 'practicing', 'mastered', 'teaching'].map((depth) => (
-                  <option key={depth} value={depth}>{depth}</option>
-                ))}
-              </select>
-              <button onClick={() => void archiveResource()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
-                Archive
-              </button>
-              <button onClick={() => void openScopedChat()} className="rounded border border-sky-300 px-3 py-1.5 text-xs text-sky-700 dark:border-sky-800 dark:text-sky-200">
-                Scoped Chat
-              </button>
-              <button onClick={() => void saveResource()} className="rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
-                {busy ? 'Working…' : 'Save'}
-              </button>
             </div>
-
-            <div className="grid min-h-0 flex-1 grid-cols-[1fr_360px] overflow-hidden">
-              <main className="flex min-h-0 flex-col">
-                <div className="border-b border-neutral-200 p-3 dark:border-neutral-800">
-                  <input
-                    value={tags}
-                    onChange={(event) => setTags(event.target.value)}
-                    placeholder="tags, comma separated"
-                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
-                  />
-                  <div className="mt-2 grid gap-2 md:grid-cols-2">
-                    <input
-                      value={areas}
-                      onChange={(event) => setAreas(event.target.value)}
-                      placeholder="areas, comma separated"
-                      className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
-                    />
-                    <input
-                      value={evolvedTo}
-                      onChange={(event) => setEvolvedTo(event.target.value)}
-                      placeholder="evolved to resource slug"
-                      className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
-                    />
-                  </div>
-                  {scopedChatMessage ? <div className="mt-2 rounded bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:bg-sky-950/30 dark:text-sky-200">{scopedChatMessage}</div> : null}
-                </div>
-                <textarea
-                  value={body}
-                  onChange={(event) => setBody(event.target.value)}
-                  className="min-h-0 flex-1 resize-none bg-white p-5 font-mono text-sm leading-6 outline-none dark:bg-neutral-950"
-                />
-              </main>
-
-              <aside className="min-h-0 overflow-y-auto border-l border-neutral-200 p-4 dark:border-neutral-800">
-                <section className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-                  <h2 className="text-sm font-semibold">Link material</h2>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <select value={linkKind} onChange={(event) => setLinkKind(event.target.value as ResourceRefKind)} className="rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900">
-                      {REF_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
-                    </select>
-                    <select value={linkSection} onChange={(event) => setLinkSection(event.target.value as ResourceSection)} className="rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900">
-                      {RESOURCE_SECTIONS.map((section) => <option key={section} value={section}>{labelForSection(section)}</option>)}
-                    </select>
-                  </div>
-                  <input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} placeholder="Optional title" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-                  <input value={linkRef} onChange={(event) => setLinkRef(event.target.value)} placeholder="Path, URL, or id" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-                  <button onClick={() => void addRef()} className="mt-2 rounded bg-sky-600 px-3 py-1.5 text-xs text-white">Link</button>
-                </section>
-
-                <section className="mt-4 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-                  <h2 className="text-sm font-semibold">Record engagement</h2>
-                  <input value={engagementTitle} onChange={(event) => setEngagementTitle(event.target.value)} placeholder="What changed?" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-                  <textarea value={engagementSummary} onChange={(event) => setEngagementSummary(event.target.value)} placeholder="Short note" className="mt-2 h-20 w-full resize-none rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-                  <button onClick={() => void recordEngagement()} className="mt-2 rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">Record</button>
-                </section>
-
-                <section className="mt-4 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">timeline</div>
-                  <div className="mt-2 space-y-2">
-                    {active.timeline.slice().reverse().map((entry) => (
-                      <div key={entry.id} className="rounded-lg bg-neutral-50 p-2 text-xs dark:bg-neutral-900">
-                        <div className="font-medium">{entry.title}</div>
-                        <div className="text-[11px] text-neutral-500">{entry.at}</div>
-                        {entry.summary ? <div className="mt-1 text-neutral-600 dark:text-neutral-300">{entry.summary}</div> : null}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="mt-4 space-y-3">
-                  {RESOURCE_SECTIONS.map((section) => (
-                    <div key={section} className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{labelForSection(section)}</div>
-                      <div className="mt-2 space-y-2">
-                        {(refsBySection.get(section) ?? []).map((ref) => (
-                          <div key={ref.id} className="rounded-lg bg-neutral-50 p-2 text-xs dark:bg-neutral-900">
-                             <div className="font-medium">{ref.title ?? ref.ref}</div>
-                             <div className="truncate text-neutral-500">{ref.kind} · {ref.ref}</div>
-                             {ref.section !== 'canonical' ? <button onClick={() => void promoteRef(ref.id)} className="mt-1 mr-2 text-[11px] text-sky-600">Promote canonical</button> : null}
-                             <button onClick={() => void window.orbit.resources.unlinkRef(active.frontmatter.slug, ref.id).then(() => reload(active.frontmatter.slug))} className="mt-1 text-[11px] text-red-500">Unlink</button>
-                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </section>
-              </aside>
+            <div className={`min-h-0 flex-1 flex-col overflow-hidden p-4 ${tab === 'kanban' ? 'flex' : 'hidden'}`}>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm text-neutral-500">{tasks.length} resource task(s)</div>
+                <button
+                  onClick={() => setNewTaskOpen(true)}
+                  className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                >
+                  Create task
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto">
+                <Suspense fallback={<p className="text-sm text-neutral-500">Loading board...</p>}>
+                  <KanbanBoard columns={columns} onDrop={onDropTask} onStatus={onDropTask} />
+                </Suspense>
+              </div>
             </div>
+            <div className={`min-h-0 flex-1 ${tab === 'materials' ? 'flex' : 'hidden'}`}>
+              <SpaceMaterialsView spaceId={active.frontmatter.id} spaceName={active.frontmatter.title} spaceLabel="resource" />
+            </div>
+            <div className={`min-h-0 flex-1 ${tab === 'outputs' ? 'flex' : 'hidden'}`}>
+              <SpaceOutputsView spaceId={active.frontmatter.id} spaceLabel="resource" />
+            </div>
+            <div className={`min-h-0 flex-1 ${tab === 'chat' ? 'flex' : 'hidden'}`}>
+              <ResourceChatTab resource={active} busy={busy} error={error} onOpen={() => void openScopedChat()} />
+            </div>
+            <div className={`min-h-0 flex-1 ${tab === 'timeline' ? 'flex' : 'hidden'}`}>
+              <ResourceTimeline resource={active} />
+            </div>
+            <NewTaskModal
+              open={newTaskOpen}
+              resourceUid={active.frontmatter.id}
+              siblings={tasks.filter((task) => task.source === 'file')}
+              onClose={() => setNewTaskOpen(false)}
+              onCreated={() => void refreshTasks()}
+            />
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">Create or select a Resource.</div>
+          <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">Select a Resource from the sidebar.</div>
         )}
       </section>
     </div>
   );
+}
+
+function ResourceHeader({
+  resource,
+  busy,
+  onArchive,
+  onStatus,
+  onDepth
+}: {
+  resource: Resource;
+  busy: boolean;
+  onArchive(): Promise<void>;
+  onStatus(status: ResourceStatus): Promise<unknown>;
+  onDepth(depth: Resource['frontmatter']['depth']): Promise<unknown>;
+}): JSX.Element {
+  return (
+    <header className="flex items-center gap-2 border-b border-neutral-200 bg-white/80 p-3 dark:border-neutral-800 dark:bg-neutral-950/80">
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Resource Room</div>
+        <h2 className="truncate text-lg font-semibold">{resource.frontmatter.title}</h2>
+        <p className="text-xs text-neutral-500">{resource.frontmatter.slug}</p>
+      </div>
+      <select
+        value={resource.frontmatter.status}
+        onChange={(event) => void onStatus(event.target.value as ResourceStatus)}
+        className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
+      >
+        {RESOURCE_STATUSES.map((status) => (
+          <option key={status} value={status}>{status}</option>
+        ))}
+      </select>
+      <select
+        value={resource.frontmatter.depth}
+        onChange={(event) => void onDepth(event.target.value as Resource['frontmatter']['depth'])}
+        className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
+      >
+        {['exploring', 'practicing', 'mastered', 'teaching'].map((depth) => (
+          <option key={depth} value={depth}>{depth}</option>
+        ))}
+      </select>
+      <button onClick={() => void onArchive()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
+        Archive
+      </button>
+      {busy ? <span className="text-xs text-neutral-500">Working...</span> : null}
+    </header>
+  );
+}
+
+export function ResourceOverview({
+  resource,
+  scopedChatMessage,
+  onReload
+}: {
+  resource: Resource;
+  scopedChatMessage: string | null;
+  onReload(): void | Promise<void>;
+}): JSX.Element {
+  const [title, setTitle] = useState(resource.frontmatter.title);
+  const [body, setBody] = useState(resource.body);
+  const [tags, setTags] = useState(resource.frontmatter.tags.join(', '));
+  const [areas, setAreas] = useState((resource.frontmatter.areas ?? []).map((area) => area.area_slug).join(', '));
+  const [evolvedTo, setEvolvedTo] = useState(resource.frontmatter.evolved_to ?? '');
+  const [linkRef, setLinkRef] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
+  const [linkKind, setLinkKind] = useState<ResourceRefKind>('note');
+  const [linkSection, setLinkSection] = useState<ResourceSection>('distilled');
+  const [engagementTitle, setEngagementTitle] = useState('');
+  const [engagementSummary, setEngagementSummary] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const refsBySection = useMemo(() => groupRefs(resource.refs), [resource.refs]);
+
+  useEffect(() => {
+    setTitle(resource.frontmatter.title);
+    setBody(resource.body);
+    setTags(resource.frontmatter.tags.join(', '));
+    setAreas((resource.frontmatter.areas ?? []).map((area) => area.area_slug).join(', '));
+    setEvolvedTo(resource.frontmatter.evolved_to ?? '');
+  }, [resource.frontmatter.id, resource.frontmatter.updated, resource.body]);
+
+  async function saveResource(): Promise<void> {
+    try {
+      setError(null);
+      await window.orbit.resources.update(resource.frontmatter.slug, {
+        title,
+        body,
+        tags: splitTags(tags),
+        areas: splitAreas(areas),
+        evolved_to: evolvedTo.trim() || undefined
+      });
+      await onReload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function addRef(): Promise<void> {
+    if (!linkRef.trim()) return;
+    try {
+      const input: LinkResourceRefInput = {
+        kind: linkKind,
+        ref: linkRef.trim(),
+        section: linkSection,
+        source: 'manual'
+      };
+      if (linkTitle.trim()) input.title = linkTitle.trim();
+      await window.orbit.resources.linkRef(resource.frontmatter.slug, input);
+      setLinkRef('');
+      setLinkTitle('');
+      await onReload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function recordEngagement(): Promise<void> {
+    try {
+      await window.orbit.resources.engage(resource.frontmatter.slug, {
+        title: engagementTitle.trim() || 'Resource engagement',
+        summary: engagementSummary.trim() || undefined
+      });
+      setEngagementTitle('');
+      setEngagementSummary('');
+      await onReload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  const primaryArea = resource.frontmatter.areas?.find((area) => area.primary) ?? resource.frontmatter.areas?.[0];
+  const latestTimeline = resource.timeline.at(-1);
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto bg-neutral-50 p-5 dark:bg-neutral-950/40">
+      <div className="mx-auto grid max-w-7xl gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <main className="space-y-5">
+          <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+            {error ? <div className="mb-3 rounded bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div> : null}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-400">Resource Space</div>
+                <h2 className="mt-1 truncate text-2xl font-semibold">{resource.frontmatter.title}</h2>
+                <p className="mt-1 font-mono text-xs text-neutral-500">03_Resources/{resource.frontmatter.slug}</p>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {resource.frontmatter.tags.length === 0 ? (
+                  <span className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-500 dark:bg-neutral-900">untagged</span>
+                ) : (
+                  resource.frontmatter.tags.map((tag) => (
+                    <span key={tag} className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">#{tag}</span>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <ResourceStat label="Depth" value={resource.frontmatter.depth} />
+              <ResourceStat label="Engagements" value={String(resource.frontmatter.engagement_count)} />
+              <ResourceStat label="References" value={String(resource.refs.length)} />
+              <ResourceStat label="Primary Area" value={primaryArea?.area_slug ?? 'none'} />
+            </div>
+            {scopedChatMessage ? <div className="mt-4 rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:bg-sky-950/30 dark:text-sky-200">{scopedChatMessage}</div> : null}
+          </section>
+
+          <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Current understanding</h3>
+                <p className="text-xs text-neutral-500">The durable Info layer for this Resource.</p>
+              </div>
+              <button onClick={() => void saveResource()} className="rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">Save</button>
+            </div>
+            <textarea value={body} onChange={(event) => setBody(event.target.value)} className="h-72 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 font-mono text-sm leading-6 outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900/60" />
+            <details className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+              <summary className="cursor-pointer text-xs font-medium text-neutral-600 dark:text-neutral-300">Edit metadata</summary>
+              <div className="mt-3 space-y-2">
+                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900" />
+                <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="tags, comma separated" className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input value={areas} onChange={(event) => setAreas(event.target.value)} placeholder="areas, comma separated" className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+                  <input value={evolvedTo} onChange={(event) => setEvolvedTo(event.target.value)} placeholder="evolved to resource slug" className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+                </div>
+              </div>
+            </details>
+          </section>
+
+          <section className="grid gap-4 lg:grid-cols-2">
+            {RESOURCE_SECTIONS.map((section) => (
+              <ResourceRefsSection key={section} section={section} refs={refsBySection.get(section) ?? []} resource={resource} onReload={onReload} />
+            ))}
+          </section>
+        </main>
+
+        <aside className="space-y-4">
+          <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+            <h2 className="text-sm font-semibold">Link material</h2>
+            <p className="mt-1 text-xs text-neutral-500">Attach Layer 1 notes, library items, projects, areas, people, or URLs.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <select value={linkKind} onChange={(event) => setLinkKind(event.target.value as ResourceRefKind)} className="rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+                {REF_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+              </select>
+              <select value={linkSection} onChange={(event) => setLinkSection(event.target.value as ResourceSection)} className="rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+                {RESOURCE_SECTIONS.map((section) => <option key={section} value={section}>{labelForSection(section)}</option>)}
+              </select>
+            </div>
+            <input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} placeholder="Optional title" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+            <input value={linkRef} onChange={(event) => setLinkRef(event.target.value)} placeholder="Path, URL, or id" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+            <button onClick={() => void addRef()} className="mt-3 rounded bg-sky-600 px-3 py-1.5 text-xs text-white">Link</button>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+            <h2 className="text-sm font-semibold">Record engagement</h2>
+            <p className="mt-1 text-xs text-neutral-500">Capture a meaningful touch so this Resource keeps a trail.</p>
+            <input value={engagementTitle} onChange={(event) => setEngagementTitle(event.target.value)} placeholder="What changed?" className="mt-3 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+            <textarea value={engagementSummary} onChange={(event) => setEngagementSummary(event.target.value)} placeholder="Short note" className="mt-2 h-20 w-full resize-none rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+            <button onClick={() => void recordEngagement()} className="mt-3 rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">Record</button>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+            <h2 className="text-sm font-semibold">Latest movement</h2>
+            {latestTimeline ? (
+              <div className="mt-3 rounded-xl bg-neutral-50 p-3 text-xs dark:bg-neutral-900">
+                <div className="font-medium">{latestTimeline.title}</div>
+                <div className="mt-1 text-[11px] text-neutral-500">{latestTimeline.at}</div>
+                {latestTimeline.summary ? <p className="mt-2 text-neutral-600 dark:text-neutral-300">{latestTimeline.summary}</p> : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-neutral-500">No movement yet.</p>
+            )}
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function ResourceStat({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900/60">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
+      <div className="mt-1 truncate text-sm font-medium">{value}</div>
+    </div>
+  );
+}
+
+function ResourceRefsSection({
+  section,
+  refs,
+  resource,
+  onReload
+}: {
+  section: ResourceSection;
+  refs: ResourceRef[];
+  resource: Resource;
+  onReload(): void | Promise<void>;
+}): JSX.Element {
+  return (
+    <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{labelForSection(section)}</div>
+      <div className="mt-2 space-y-2">
+        {refs.length === 0 ? <p className="text-xs text-neutral-500">No references yet.</p> : null}
+        {refs.map((ref) => (
+          <div key={ref.id} className="rounded-lg bg-neutral-50 p-2 text-xs dark:bg-neutral-900">
+            <div className="font-medium">{ref.title ?? ref.ref}</div>
+            <div className="truncate text-neutral-500">{ref.kind} · {ref.ref}</div>
+            {ref.section !== 'canonical' ? (
+              <button
+                onClick={() => void window.orbit.resources.promoteRef(resource.frontmatter.slug, { ref_id: ref.id }).then(() => onReload())}
+                className="mt-1 mr-2 text-[11px] text-sky-600"
+              >
+                Promote canonical
+              </button>
+            ) : null}
+            <button
+              onClick={() => void window.orbit.resources.unlinkRef(resource.frontmatter.slug, ref.id).then(() => onReload())}
+              className="mt-1 text-[11px] text-red-500"
+            >
+              Unlink
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResourceChatTab({
+  resource,
+  busy,
+  error,
+  onOpen
+}: {
+  resource: Resource;
+  busy: boolean;
+  error: string | null;
+  onOpen(): void;
+}): JSX.Element {
+  return (
+    <section className="flex min-h-0 flex-1 items-center justify-center p-6">
+      <div className="max-w-md rounded-xl border border-neutral-200 bg-white p-6 text-center dark:border-neutral-800 dark:bg-neutral-950">
+        <h2 className="text-base font-semibold">Resource-scoped Chat</h2>
+        <p className="mt-2 text-sm text-neutral-500">
+          Start a conversation scoped to {resource.frontmatter.title}; Orbit will use this Resource as context.
+        </p>
+        {error ? <p className="mt-3 text-xs text-red-500">{error}</p> : null}
+        <button onClick={onOpen} disabled={busy} className="mt-4 rounded bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500 disabled:opacity-50">
+          {busy ? 'Opening...' : 'Open Resource Chat'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ResourceTimeline({ resource }: { resource: Resource }): JSX.Element {
+  return (
+    <section className="flex min-h-0 flex-1 flex-col">
+      <header className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+        <h2 className="text-sm font-semibold">Timeline</h2>
+        <p className="text-xs text-neutral-500">Engagement and curation history for this Resource.</p>
+      </header>
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div className="space-y-2">
+          {resource.timeline.slice().reverse().map((entry) => (
+            <article key={entry.id} className="rounded border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="font-medium">{entry.title}</div>
+              <div className="text-[11px] text-neutral-500">{entry.at}</div>
+              {entry.summary ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">{entry.summary}</div> : null}
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function groupRefs(refs: ResourceRef[]): Map<ResourceSection, ResourceRef[]> {
+  const map = new Map<ResourceSection, ResourceRef[]>();
+  for (const section of RESOURCE_SECTIONS) map.set(section, []);
+  for (const ref of refs) map.get(ref.section)?.push(ref);
+  return map;
 }
 
 function splitTags(value: string): string[] {

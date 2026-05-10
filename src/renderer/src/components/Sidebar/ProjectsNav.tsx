@@ -7,6 +7,21 @@ import type { InboxEvent, InboxItem } from '@shared/inbox';
 import { WORKSPACE_DESTINATIONS, type WorkspaceDestination } from '../topbarModel';
 import { AreasNav } from './AreasNav';
 import { useInbox } from '../../store/inbox';
+import { ResourcesNav } from './ResourcesNav';
+
+export const PRIMARY_WORKSPACE_KINDS: WorkspaceView['kind'][] = [
+  'dashboard',
+  'askAnywhere',
+  'inbox',
+  'timeline',
+  'review'
+];
+
+const SECTION_WORKSPACE_KINDS: WorkspaceView['kind'][] = ['resources'];
+
+export function isPrimaryWorkspaceDestination(destination: WorkspaceDestination): boolean {
+  return PRIMARY_WORKSPACE_KINDS.includes(destination.view.kind);
+}
 
 function isQuickItemActive(view: WorkspaceView, it: WorkspaceDestination): boolean {
   if (view.kind !== it.view.kind) return false;
@@ -31,6 +46,13 @@ export function ProjectsNav(): JSX.Element {
   const inboxPendingCount = useInbox((state) => state.counts.sidebarMessagesPending);
   const [countsByUid, setCountsByUid] = useState<Record<string, number>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const primaryDestinations = PRIMARY_WORKSPACE_KINDS.map((kind) =>
+    WORKSPACE_DESTINATIONS.find((destination) => destination.view.kind === kind)
+  ).filter((destination): destination is WorkspaceDestination => Boolean(destination));
+  const overflowDestinations = WORKSPACE_DESTINATIONS.filter(
+    (destination) => !isPrimaryWorkspaceDestination(destination) && !SECTION_WORKSPACE_KINDS.includes(destination.view.kind)
+  );
+  const overflowActive = overflowDestinations.some((destination) => isQuickItemActive(view, destination));
 
   function openNewProject(): void {
     window.dispatchEvent(new CustomEvent('orbit:open-new-project'));
@@ -87,7 +109,7 @@ export function ProjectsNav(): JSX.Element {
         Workspace
       </h2>
       <ul className="space-y-0.5 text-sm">
-        {WORKSPACE_DESTINATIONS.map((it) => {
+        {primaryDestinations.map((it) => {
           const active = isQuickItemActive(view, it);
           return (
             <li key={it.label}>
@@ -101,6 +123,13 @@ export function ProjectsNav(): JSX.Element {
           );
         })}
       </ul>
+      <WorkspaceOverflowMenu
+        destinations={overflowDestinations}
+        view={view}
+        inboxPendingCount={inboxPendingCount}
+        defaultOpen={overflowActive}
+        onSelect={(destination) => setView(destination.view)}
+      />
 
       <hr className="my-2 border-neutral-200 dark:border-neutral-800" />
 
@@ -160,7 +189,54 @@ export function ProjectsNav(): JSX.Element {
           })}
         </ul>
       )}
+
+      <hr className="my-2 border-neutral-200 dark:border-neutral-800" />
+
+      <ResourcesNav />
     </div>
+  );
+}
+
+export function WorkspaceOverflowMenu({
+  destinations,
+  view,
+  inboxPendingCount,
+  defaultOpen,
+  onSelect
+}: {
+  destinations: WorkspaceDestination[];
+  view: WorkspaceView;
+  inboxPendingCount: number;
+  defaultOpen: boolean;
+  onSelect(destination: WorkspaceDestination): void;
+}): JSX.Element | null {
+  if (destinations.length === 0) return null;
+  const active = destinations.some((destination) => isQuickItemActive(view, destination));
+
+  return (
+    <details className="mt-1 text-sm" open={defaultOpen}>
+      <summary
+        className={
+          'flex cursor-pointer select-none items-center gap-2 rounded px-2 py-1 text-neutral-700 hover:bg-neutral-200/60 dark:text-neutral-300 dark:hover:bg-neutral-800/60 ' +
+          (active ? 'bg-neutral-200/80 dark:bg-neutral-800/80' : '')
+        }
+      >
+        <span className="w-4 shrink-0 text-neutral-500">⋯</span>
+        <span className="min-w-0 flex-1 truncate">More</span>
+      </summary>
+      <ul className="mt-1 space-y-0.5 pl-3">
+        {destinations.map((destination) => (
+          <li key={destination.label}>
+            <WorkspaceQuickItem
+              destination={destination}
+              active={isQuickItemActive(view, destination)}
+              badgeCount={workspaceBadgeCount(destination, inboxPendingCount)}
+              onClick={() => onSelect(destination)}
+            />
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

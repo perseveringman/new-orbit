@@ -28,15 +28,35 @@ describe('ResourceStore', () => {
 
     expect(resource.frontmatter.slug).toBe('personal-knowledge-management');
     expect(resource.frontmatter.type).toBe('resource');
-    expect(resource.path).toBe('resources/personal-knowledge-management/index.md');
+    expect(resource.path).toBe('03_Resources/personal-knowledge-management/index.md');
     expect(resource.frontmatter.areas?.[0]?.area_slug).toBe('learning');
     expect(await store.list({ area_ref: 'learning' })).toHaveLength(1);
-    await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_canonical'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_distilled'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_related'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_people'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_projects-touched'))).resolves.toBeDefined();
-    await expect(fs.stat(path.join(vaultPath, 'resources', resource.frontmatter.slug, '_timeline'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, '_canonical'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, '_distilled'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, '_related'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, '_people'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, '_projects-touched'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, '_timeline'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, 'tasks'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, 'assets', '_manifest.md'))).resolves.toBeDefined();
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', resource.frontmatter.slug, 'outputs', '_manifest.md'))).resolves.toBeDefined();
+  });
+
+  it('migrates legacy resources/ workstations into 03_Resources', async () => {
+    const legacyDir = path.join(vaultPath, 'resources', 'legacy-topic');
+    await fs.mkdir(legacyDir, { recursive: true });
+    await fs.writeFile(
+      path.join(legacyDir, 'index.md'),
+      '---\nid: resource-legacy\ntype: resource\ntitle: Legacy Topic\nslug: legacy-topic\nstatus: active\ndepth: exploring\ncreated: 2026-05-09T00:00:00.000Z\nupdated: 2026-05-09T00:00:00.000Z\nengagement_count: 0\ntags: []\n---\n# Legacy\n',
+      'utf8'
+    );
+    await fs.writeFile(path.join(legacyDir, '.orbit-resource.json'), '{"version":1,"refs":[],"timeline":[]}\n', 'utf8');
+
+    const store = createResourceStore(vaultPath);
+    const migrated = await store.get('legacy-topic');
+
+    expect(migrated?.path).toBe('03_Resources/legacy-topic/index.md');
+    await expect(fs.stat(path.join(vaultPath, '03_Resources', 'legacy-topic', 'index.md'))).resolves.toBeDefined();
   });
 
   it('links references and records engagement timeline entries', async () => {

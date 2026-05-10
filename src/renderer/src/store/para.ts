@@ -16,6 +16,7 @@ export type WorkspaceView =
   | { kind: 'memory' }
   | { kind: 'review' }
   | { kind: 'resources' }
+  | { kind: 'resource'; resourceSlug: string }
   | { kind: 'knowledgeBase' }
   | { kind: 'scheduled' }
   | { kind: 'timeline' }

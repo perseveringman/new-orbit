@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ConversationTurn } from '@shared/conversation';
 import type { ToolTraceBlock } from '@shared/agent-tools';
+import type { SDKInvocationMessage } from '@shared/runtime';
 import { rebuildMessages } from '../src/main/agent-tools/rebuild-messages';
 
 function userTurn(id: string, content: string): ConversationTurn {
@@ -10,14 +11,16 @@ function userTurn(id: string, content: string): ConversationTurn {
 function assistantTurn(
   id: string,
   content: string,
-  toolTrace?: ToolTraceBlock[]
+  toolTrace?: ToolTraceBlock[],
+  replayMessages?: SDKInvocationMessage[]
 ): ConversationTurn {
   return {
     id,
     at: '2026-05-09T00:00:00Z',
     role: 'assistant',
     content,
-    ...(toolTrace ? { toolTrace } : {})
+    ...(toolTrace ? { toolTrace } : {}),
+    ...(replayMessages ? { replayMessages } : {})
   };
 }
 
@@ -79,6 +82,36 @@ describe('rebuildMessages', () => {
       content: 'hits=[a,b]'
     });
     expect(ublocks[1]).toEqual({ type: 'text', text: 'next?' });
+  });
+
+  it('replays persisted SDK messages exactly when available', () => {
+    const replayMessages: SDKInvocationMessage[] = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '先搜索项目。', signature: 'sig-1' },
+          { type: 'tool_use', id: 'toolu_1', name: 'orbit_search', input: { q: 'project' } }
+        ]
+      },
+      {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'hits=[]' }]
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: '没有找到项目。' }]
+      }
+    ];
+    const turns = [
+      userTurn('u1', '查项目'),
+      assistantTurn('a1', '没有找到项目。', [trace('toolu_1', 'orbit_search', 'hits=[]')], replayMessages)
+    ];
+    const out = rebuildMessages(turns, { appendUserText: '继续' });
+    expect(out).toEqual([
+      { role: 'user', content: '查项目' },
+      ...replayMessages,
+      { role: 'user', content: '继续' }
+    ]);
   });
 
   it('marks isError on tool_result when trace.isError is true', () => {

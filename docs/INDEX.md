@@ -113,6 +113,7 @@ Important current ADR anchors:
 - `ADR-015-task-session-state-decoupling.md`
 - `ADR-016-agent-onboarding-protocol.md`
 - `ADR-017-external-gateway-via-cc-connect.md`
+- `ADR-018-space-as-unified-data-primitive.md`
 
 New ADRs should be created for:
 
@@ -144,10 +145,6 @@ Use this sequence:
 - Resource is an ongoing topic workspace, not a bookmark folder.
 - Area is a long-term responsibility coordinate, not a moving item.
 - Conversation is first-class; overlay and full page are the same conversation.
-- SDK runtime is for short programmable AI; external CLI runtime is for long execution.
-- Timeline is a projection, not the event store.
-- Everything AI-generated must carry provenance.
-st-class; overlay and full page are the same conversation.
 - SDK runtime is for short programmable AI; external CLI runtime is for long execution.
 - Timeline is a projection, not the event store.
 - Everything AI-generated must carry provenance.

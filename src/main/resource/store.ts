@@ -27,6 +27,7 @@ import { createNoteStore } from '../note/store';
 import type { ResourceEmergencePayload } from '@shared/synthesis';
 import { createSynthesisJob, SynthesisRunner } from '../synthesis/runner';
 import { createSynthesisStore } from '../synthesis/store';
+import { ensureSpaceLayout } from '../space/layout';
 
 interface ResourceIndexFile {
   version: 1;
@@ -34,8 +35,10 @@ interface ResourceIndexFile {
   timeline: ResourceTimelineEntry[];
 }
 
-const RESOURCE_ROOT = 'resources';
-const ARCHIVE_ROOT = path.posix.join('archives', 'resources');
+export const RESOURCE_ROOT = '03_Resources';
+export const LEGACY_RESOURCE_ROOT = 'resources';
+export const RESOURCE_ARCHIVE_ROOT = path.posix.join('04_Archives', 'resources');
+export const LEGACY_RESOURCE_ARCHIVE_ROOT = path.posix.join('archives', 'resources');
 
 const SECTION_DIRS: Record<ResourceSection, string> = {
   canonical: '_canonical',
@@ -89,6 +92,7 @@ export class ResourceStore {
     };
     const dir = path.join(this.vaultPath, RESOURCE_ROOT, slug);
     await fs.mkdir(dir, { recursive: true });
+    await ensureSpaceLayout(dir);
     await Promise.all(Object.values(SECTION_DIRS).map((sectionDir) => this.writeSectionReadme(dir, sectionDir)));
     await this.writeSectionReadme(dir, '_timeline');
     await this.writeIndex(dir, fm, input.body ?? defaultResourceBody(title));
@@ -151,11 +155,41 @@ export class ResourceStore {
       title: 'Resource archived',
       summary: resource.frontmatter.title
     });
-    const target = path.join(this.vaultPath, ARCHIVE_ROOT, resource.frontmatter.slug);
+    const target = path.join(this.vaultPath, RESOURCE_ARCHIVE_ROOT, resource.frontmatter.slug);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.rm(target, { recursive: true, force: true });
     await fs.rename(dir, target);
     return this.readResourceFromDir(target);
+  }
+
+  async migrateLegacyResources(): Promise<{ moved: Array<{ from: string; to: string }> }> {
+    const legacyRoot = path.join(this.vaultPath, LEGACY_RESOURCE_ROOT);
+    const targetRoot = path.join(this.vaultPath, RESOURCE_ROOT);
+    const entries = await fs.readdir(legacyRoot, { withFileTypes: true }).catch((error: unknown) => {
+      if (isNotFound(error)) return [];
+      throw error;
+    });
+    const moved: Array<{ from: string; to: string }> = [];
+    await fs.mkdir(targetRoot, { recursive: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const source = path.join(legacyRoot, entry.name);
+      if (!(await exists(path.join(source, 'index.md')))) continue;
+      const target = path.join(targetRoot, entry.name);
+      if (await exists(target)) {
+        throw new Error(`cannot migrate legacy resource "${entry.name}": ${RESOURCE_ROOT}/${entry.name} already exists`);
+      }
+      await fs.rename(source, target);
+      moved.push({
+        from: toPosix(path.relative(this.vaultPath, source)),
+        to: toPosix(path.relative(this.vaultPath, target))
+      });
+    }
+    await fs.rmdir(legacyRoot).catch((error: unknown) => {
+      if (isNotFound(error) || isDirectoryNotEmpty(error)) return;
+      throw error;
+    });
+    return { moved };
   }
 
   async linkRef(resourceIdOrSlug: string, input: LinkResourceRefInput): Promise<Resource> {
@@ -329,11 +363,17 @@ export class ResourceStore {
 
   private async ensureRoot(): Promise<void> {
     await fs.mkdir(path.join(this.vaultPath, RESOURCE_ROOT), { recursive: true });
+    await this.migrateLegacyResources();
   }
 
   private async resourceIndexPaths(includeArchived = false): Promise<string[]> {
-    const roots = [path.join(this.vaultPath, RESOURCE_ROOT)];
-    if (includeArchived) roots.push(path.join(this.vaultPath, ARCHIVE_ROOT));
+    const roots = [path.join(this.vaultPath, RESOURCE_ROOT), path.join(this.vaultPath, LEGACY_RESOURCE_ROOT)];
+    if (includeArchived) {
+      roots.push(
+        path.join(this.vaultPath, RESOURCE_ARCHIVE_ROOT),
+        path.join(this.vaultPath, LEGACY_RESOURCE_ARCHIVE_ROOT)
+      );
+    }
     const files: string[] = [];
     for (const root of roots) files.push(...(await findIndexFiles(root)));
     return files;
@@ -389,7 +429,10 @@ export class ResourceStore {
     const base = slugify(value) || `resource-${randomUUID().slice(0, 8)}`;
     let candidate = base;
     let index = 1;
-    while (await exists(path.join(this.vaultPath, RESOURCE_ROOT, candidate))) {
+    while (
+      (await exists(path.join(this.vaultPath, RESOURCE_ROOT, candidate))) ||
+      (await exists(path.join(this.vaultPath, LEGACY_RESOURCE_ROOT, candidate)))
+    ) {
       index += 1;
       candidate = `${base}-${index}`;
     }
@@ -600,4 +643,8 @@ async function exists(filePath: string): Promise<boolean> {
 
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+}
+
+function isDirectoryNotEmpty(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOTEMPTY';
 }

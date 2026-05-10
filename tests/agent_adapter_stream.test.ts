@@ -53,6 +53,42 @@ describe('mapAgentStreamEvent', () => {
     });
   });
 
+  it('extracts thinking and signature deltas', () => {
+    expect(
+      mapAgentStreamEvent({
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'thinking' }
+      })
+    ).toEqual({ index: 0, kind: 'block_start', blockType: 'thinking' });
+
+    expect(
+      mapAgentStreamEvent({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: '先查项目' }
+      })
+    ).toEqual({
+      index: 0,
+      kind: 'thinking_delta',
+      blockType: 'thinking',
+      thinking: '先查项目'
+    });
+
+    expect(
+      mapAgentStreamEvent({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'signature_delta', signature: 'sig_1' }
+      })
+    ).toEqual({
+      index: 0,
+      kind: 'signature_delta',
+      blockType: 'thinking',
+      signature: 'sig_1'
+    });
+  });
+
   it('catches content_block_stop', () => {
     const out = mapAgentStreamEvent({ type: 'content_block_stop', index: 1 });
     expect(out).toEqual({ index: 1, kind: 'block_stop', blockType: 'unknown' });

@@ -57,6 +57,7 @@ import { getSemanticRuntime, registerSemanticIpc } from './semantic/ipc';
 import { registerMemoryIpc } from './memory/ipc';
 import { registerReviewSystemIpc } from './review/ipc';
 import { registerVisionSystemIpc } from './vision/ipc';
+import { registerAssetsIpc } from './assets/ipc';
 import { getAutoRunnerDispatcher } from './auto_runner';
 import { registerAutoRunnerIpc } from './auto_runner/ipc';
 import * as terminal from './terminal/pty_manager';
@@ -413,6 +414,7 @@ function registerIpc(): void {
   registerMemoryIpc(() => currentVault?.path ?? null);
   registerReviewSystemIpc(() => currentVault?.path ?? null);
   registerVisionSystemIpc(() => currentVault?.path ?? null);
+  registerAssetsIpc(() => currentVault?.path ?? null);
   registerAutoRunnerIpc();
   startDailyReviewScheduler();
   startWorktreeGcScheduler(() => currentVault?.path ?? null);

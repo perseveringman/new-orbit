@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { AreaDashboardData } from '../src/shared/area';
 import { AreaDashboardContent } from '../src/renderer/src/views/AreaOverview';
+import { AREA_ROOM_TABS, isAreaRoomOuterTab } from '../src/renderer/src/views/AreaRoomView';
 
 describe('AreaDashboardContent', () => {
   it('renders dashboard cards, radar, reviews, and unassigned queue actions', () => {
@@ -39,6 +40,26 @@ describe('AreaDashboardContent', () => {
     expect(html).toContain('Unassigned queue (1)');
     expect(html).toContain('Assign to systems');
     expect(html).toContain('Area-scoped chat ready');
+  });
+});
+
+describe('AreaRoom tabs', () => {
+  it('exposes the Space-style Area layout tabs', () => {
+    expect(AREA_ROOM_TABS.map((tab) => tab.id)).toEqual([
+      'dashboard',
+      'kanban',
+      'materials',
+      'outputs',
+      'chat',
+      'timeline',
+      'terminal',
+      'sessions'
+    ]);
+    expect(isAreaRoomOuterTab('materials')).toBe(true);
+    expect(isAreaRoomOuterTab('outputs')).toBe(true);
+    expect(isAreaRoomOuterTab('chat')).toBe(true);
+    expect(isAreaRoomOuterTab('timeline')).toBe(true);
+    expect(isAreaRoomOuterTab('unknown')).toBe(false);
   });
 });
 

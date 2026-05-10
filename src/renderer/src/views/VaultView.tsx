@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
-import { usePara } from '../store/para';
+import { usePara, type WorkspaceView } from '../store/para';
 import { useAgent } from '../store/agent';
 import { useSidebar } from '../store/sidebar';
 import { FileTree } from '../components/Sidebar/FileTree';
@@ -11,6 +11,7 @@ import { AgentPanel } from '../components/Sidebar/AgentPanel';
 import { WorktreesPanel } from '../components/Sidebar/WorktreesPanel';
 import { TaskDetailPanel } from '../components/Sidebar/TaskDetailPanel';
 import { ProjectTaskTreePanel } from '../components/Sidebar/ProjectTaskTreePanel';
+import { SidebarAskPanel } from '../components/Sidebar/SidebarAskPanel';
 import { MarkdownEditor } from '../components/Editor/MarkdownEditor';
 import { CommandPalette } from '../components/CommandPalette';
 import { ProjectsNav } from '../components/Sidebar/ProjectsNav';
@@ -74,7 +75,8 @@ function isSidebarPanelId(value: string): value is SidebarPanelId {
     value === 'review' ||
     value === 'runlog' ||
     value === 'diff' ||
-    value === 'sessions'
+    value === 'sessions' ||
+    value === 'ask'
   );
 }
 
@@ -315,6 +317,7 @@ export function VaultView(): JSX.Element {
     if (sidebarPanel === 'review') return <ReviewInboxView />;
     if (sidebarPanel === 'runlog') return <RunLogPane />;
     if (sidebarPanel === 'diff') return <DiffWorkspacePane />;
+    if (sidebarPanel === 'ask') return <SidebarAskPanel />;
     if (sidebarPanel === 'sessions') return <TerminalSessionsPanel />;
     return <WorktreesPanel />;
   }
@@ -323,6 +326,7 @@ export function VaultView(): JSX.Element {
 
   const isProject =
     active?.relPath.startsWith('01_Projects/') === true && active?.path.endsWith('.md');
+  const showRightSidebar = shouldShowRightSidebar(view);
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -376,7 +380,9 @@ export function VaultView(): JSX.Element {
         ) : view.kind === 'review' ? (
           <ReviewView />
         ) : view.kind === 'resources' ? (
-          <ResourceView />
+          <ResourceView showResourceList={false} />
+        ) : view.kind === 'resource' ? (
+          <ResourceView key={view.resourceSlug} resourceSlug={view.resourceSlug} showResourceList={false} />
         ) : view.kind === 'knowledgeBase' ? (
           <KnowledgeBaseView />
         ) : view.kind === 'scheduled' ? (
@@ -416,41 +422,43 @@ export function VaultView(): JSX.Element {
         )}
       </section>
 
-      <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-[color:color-mix(in_oklab,white_88%,transparent)] dark:border-neutral-800 dark:bg-[color:color-mix(in_oklab,#111827_86%,transparent)]">
-        <div className="flex shrink-0 overflow-x-auto border-b border-neutral-200 px-2 pt-2 text-[11px] uppercase tracking-[0.18em] text-neutral-500 dark:border-neutral-800">
-          {sidebarIntentTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => selectSidebarIntent(tab.id)}
-              className={
-                'shrink-0 border-b px-3 py-2 transition-colors ' +
-                (sidebarIntent === tab.id
-                  ? 'border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100'
-                  : 'border-transparent hover:text-neutral-700 dark:hover:text-neutral-300')
-              }
-            >
-              {tab.title}
-            </button>
-          ))}
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-1 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-          {sidebarPanelTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => selectSidebarPanel(tab.id)}
-              className={
-                'rounded-full border px-2.5 py-1 transition-colors ' +
-                (sidebarPanel === tab.id
-                  ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
-                  : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800')
-              }
-            >
-              {tab.title}
-            </button>
-          ))}
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">{renderSidebarPanel()}</div>
-      </aside>
+      {showRightSidebar ? (
+        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-[color:color-mix(in_oklab,white_88%,transparent)] dark:border-neutral-800 dark:bg-[color:color-mix(in_oklab,#111827_86%,transparent)]">
+          <div className="flex shrink-0 overflow-x-auto border-b border-neutral-200 px-2 pt-2 text-[11px] uppercase tracking-[0.18em] text-neutral-500 dark:border-neutral-800">
+            {sidebarIntentTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => selectSidebarIntent(tab.id)}
+                className={
+                  'shrink-0 border-b px-3 py-2 transition-colors ' +
+                  (sidebarIntent === tab.id
+                    ? 'border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100'
+                    : 'border-transparent hover:text-neutral-700 dark:hover:text-neutral-300')
+                }
+              >
+                {tab.title}
+              </button>
+            ))}
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-1 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+            {sidebarPanelTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => selectSidebarPanel(tab.id)}
+                className={
+                  'rounded-full border px-2.5 py-1 transition-colors ' +
+                  (sidebarPanel === tab.id
+                    ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                    : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800')
+                }
+              >
+                {tab.title}
+              </button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">{renderSidebarPanel()}</div>
+        </aside>
+      ) : null}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
@@ -471,4 +479,8 @@ export function VaultView(): JSX.Element {
       <TaskDetailsHost />
     </div>
   );
+}
+
+export function shouldShowRightSidebar(view: WorkspaceView): boolean {
+  return view.kind !== 'askAnywhere';
 }

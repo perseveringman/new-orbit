@@ -81,6 +81,7 @@ export const TaskFrontmatter = z.object({
   ),
   project_uid: z.string().optional(),
   area_uid: z.string().optional(),
+  resource_uid: z.string().optional(),
   due: z.string().optional(),
   // R3: accept legacy xs/s/m/l/xl labels *or* a raw hour count so the
   // TaskEditor can surface a numeric "effort in hours" field without breaking
@@ -170,6 +171,7 @@ export interface TaskRecord {
   line?: number;      // inline tasks only, 1-based
   project_uid?: string;
   area_uid?: string;
+  resource_uid?: string;
   due?: string;
   effort?: Effort | number;
   tags?: string[];
@@ -222,6 +224,7 @@ export interface TaskFilter {
   status?: TaskStatus;
   project_uid?: string;
   area_uid?: string;
+  resource_uid?: string;
   due_before?: string; // ISO date
   tag?: string;
 }

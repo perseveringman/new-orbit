@@ -119,6 +119,12 @@ Orbit 任务文件位于 \`.orbit/agent/tasks/\`，采用四段式结构：
 - \`orbit task propose\`
 - \`orbit inbox help\`
 - \`orbit run request-merge\`
+
+## 素材访问边界
+- 只能访问 \`assets/_manifest.md\` 中已授权的素材 scope。
+- 需要读取本地素材前先读 manifest。
+- 不要在授权 scope 之外运行扫描、glob、find 或批量列目录命令。
+- 需要新素材时，用 CLI 或 Inbox 提议请求用户授权。
 `;
 }
 
@@ -166,6 +172,7 @@ function buildSafetyRules(): string {
 - 涉及任务推进时同步更新 task markdown。
 - 不把临时状态、草稿记录或运行时垃圾写入源码目录。
 - 对 vault 外路径或破坏性命令，先获得明确确认。
+- 素材访问只能发生在 \`assets/_manifest.md\` 声明的授权 scope 内。
 `;
 }
 
@@ -267,6 +274,9 @@ function buildEntry(target: EntryTarget): string {
 
 ## Agent 能力入口
 优先使用 \`orbit\` CLI；不要通过旧 \`create_task\` 路径直接创建看板任务。
+
+## 素材访问边界
+只能通过 \`assets/_manifest.md\` 中的授权 scope 访问本地素材。不要扫描未授权目录；需要新路径时请求用户授权。
 
 > 此文件面向 ${label} 入口。若需要更深入认知，请从 skills 索引继续阅读。
 `;

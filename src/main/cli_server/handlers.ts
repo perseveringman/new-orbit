@@ -28,12 +28,17 @@ import type { ProposalListFilter, ProposalResolveInput } from '../approval/types
 import { queryActivities } from '../activity/query';
 import type { ActivityQueryFilter } from '../activity/types';
 import { listProjects } from '../project';
+import { listAreas } from '../area';
 import { getPool } from '../agent/pool';
 import { appendExecutionLog } from '../task';
 import { getConversation } from '../orchestration/conversation';
 import { switchTaskRuntime } from '../orchestration/switch_runtime';
 import { cliServerError } from './errors';
 import type { CliHandlerRegistry } from './registry';
+import { createAssetStore } from '../assets/store';
+import { buildSpaceContext, getSpace, listSpaces } from '../space/context';
+import { createResourceStore } from '../resource/store';
+import type { SpaceContextOptions } from '@shared/space';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -178,6 +183,7 @@ function taskFilter(params: unknown): TaskFilter {
   }
   if (typeof params.project_uid === 'string') filter.project_uid = params.project_uid;
   if (typeof params.area_uid === 'string') filter.area_uid = params.area_uid;
+  if (typeof params.resource_uid === 'string') filter.resource_uid = params.resource_uid;
   if (typeof params.tag === 'string') filter.tag = params.tag;
   return filter;
 }
@@ -198,12 +204,39 @@ function proposalSubject(prefix: string, fallback: string): string {
   return `${prefix}: ${fallback}`;
 }
 
+function parseSpaceSections(value: unknown): SpaceContextOptions['sections'] {
+  if (!Array.isArray(value)) return undefined;
+  const allowed = new Set(['info', 'tasks', 'materials', 'outputs', 'conversations', 'relations']);
+  return value.filter(
+    (section): section is NonNullable<SpaceContextOptions['sections']>[number] =>
+      typeof section === 'string' && allowed.has(section)
+  );
+}
+
 async function projectBySlugOrUid(slugOrUid: string) {
   const project = (await listProjects(openSession().vault)).find(
     (item) => item.slug === slugOrUid || item.uid === slugOrUid
   );
   if (!project) throw cliServerError('not_found', `project not found: ${slugOrUid}`);
   return project;
+}
+
+async function spaceRootBySlugOrUid(slugOrUid: string): Promise<string> {
+  const vault = openSession().vault;
+  const project = (await listProjects(vault)).find(
+    (item) => item.slug === slugOrUid || item.uid === slugOrUid
+  );
+  if (project) {
+    if (project.legacy) throw cliServerError('invalid_params', 'materials require a folder-backed space');
+    return project.path;
+  }
+  const area = (await listAreas(vault, { includeArchived: true })).find(
+    (item) => item.slug === slugOrUid || item.uid === slugOrUid
+  );
+  if (area) return area.path;
+  const resource = await createResourceStore(vault).get(slugOrUid);
+  if (resource) return path.dirname(path.join(vault, resource.path));
+  throw cliServerError('not_found', `space not found: ${slugOrUid}`);
 }
 
 async function readProjectReadmeExcerpt(readmePath: string): Promise<string> {
@@ -268,6 +301,7 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     if (filter.status) tasks = tasks.filter((task) => task.status === filter.status);
     if (projectFilter) tasks = tasks.filter((task) => task.project_uid === projectFilter);
     if (filter.area_uid) tasks = tasks.filter((task) => task.area_uid === filter.area_uid);
+    if (filter.resource_uid) tasks = tasks.filter((task) => task.resource_uid === filter.resource_uid);
     if (filter.tag) tasks = tasks.filter((task) => (task.tags ?? []).includes(filter.tag ?? ''));
     return tasks;
   });
@@ -482,6 +516,123 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       subject: proposalSubject('Archive project', project.name),
       payload: { project_uid: uid, slug: project.slug, name: project.name }
     });
+  });
+
+  registry.register('space.context', async (params) => {
+    const input = objectParams(params, 'space.context');
+    const id = stringParam(input, 'id');
+    return buildSpaceContext(openSession().vault, id, {
+      summary: input.summary === true,
+      sections: parseSpaceSections(input.sections)
+    });
+  });
+
+  registry.register('space.list', async (params) => {
+    const input = isRecord(params) ? params : {};
+    const type = typeof input.type === 'string' ? input.type : undefined;
+    if (type && type !== 'project' && type !== 'area' && type !== 'resource') {
+      throw cliServerError('invalid_params', `invalid space type: ${type}`);
+    }
+    return listSpaces(openSession().vault, type ? { type: type as 'project' | 'area' | 'resource' } : {});
+  });
+
+  registry.register('space.get', async (params) => {
+    const input = objectParams(params, 'space.get');
+    return getSpace(openSession().vault, stringParam(input, 'id'));
+  });
+
+  registry.register('resource.list', async (params) => {
+    const input = isRecord(params) ? params : {};
+    return createResourceStore(openSession().vault).list({
+      include_archived: input.include_archived === true
+    });
+  });
+
+  registry.register('resource.get', async (params) => {
+    const input = objectParams(params, 'resource.get');
+    return createResourceStore(openSession().vault).get(stringParam(input, 'id'));
+  });
+
+  registry.register('resource.create', async (params) => {
+    const input = objectParams(params, 'resource.create');
+    return createResourceStore(openSession().vault).create({
+      title: stringParam(input, 'title'),
+      slug: optionalStringParam(input, 'slug'),
+      tags: Array.isArray(input.tags) ? input.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+      body: optionalStringParam(input, 'body')
+    });
+  });
+
+  registry.register('resource.archive', async (params) => {
+    const input = objectParams(params, 'resource.archive');
+    return createResourceStore(openSession().vault).archive(stringParam(input, 'id'));
+  });
+
+  registry.register('assets.manifest.get', async (params) => {
+    const project = stringParam(params, 'project');
+    return createAssetStore(await spaceRootBySlugOrUid(project)).manifest();
+  });
+
+  registry.register('assets.scope.add', async (params) => {
+    const input = objectParams(params, 'assets.scope.add');
+    const project = stringParam(input, 'project');
+    const source = stringParam(input, 'source');
+    const kind = stringParam(input, 'kind');
+    if (kind !== 'folder' && kind !== 'glob' && kind !== 'file' && kind !== 'url') {
+      throw cliServerError('invalid_params', `invalid asset scope kind: ${kind}`);
+    }
+    return createAssetStore(await spaceRootBySlugOrUid(project)).addScope({
+      source,
+      kind,
+      title: optionalStringParam(input, 'title'),
+      tags: Array.isArray(input.tags) ? input.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+      note: optionalStringParam(input, 'note'),
+      authorized_via: 'cli-manual'
+    });
+  });
+
+  registry.register('assets.scope.scan', async (params) => {
+    const input = objectParams(params, 'assets.scope.scan');
+    return createAssetStore(await spaceRootBySlugOrUid(stringParam(input, 'project'))).scan(
+      stringParam(input, 'scope_id'),
+      {
+        filter: optionalStringParam(input, 'filter'),
+        limit: typeof input.limit === 'number' ? input.limit : undefined
+      }
+    );
+  });
+
+  registry.register('assets.scope.stat', async (params) => {
+    const input = objectParams(params, 'assets.scope.stat');
+    return createAssetStore(await spaceRootBySlugOrUid(stringParam(input, 'project'))).stat(
+      stringParam(input, 'scope_id')
+    );
+  });
+
+  registry.register('assets.read', async (params) => {
+    const input = objectParams(params, 'assets.read');
+    return createAssetStore(await spaceRootBySlugOrUid(stringParam(input, 'project'))).readAuthorizedFile(
+      stringParam(input, 'path')
+    );
+  });
+
+  registry.register('assets.pin.add', async (params) => {
+    const input = objectParams(params, 'assets.pin.add');
+    return createAssetStore(await spaceRootBySlugOrUid(stringParam(input, 'project'))).addPin({
+      source: stringParam(input, 'source'),
+      title: optionalStringParam(input, 'title'),
+      parent_scope: optionalStringParam(input, 'parent_scope'),
+      tags: Array.isArray(input.tags) ? input.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+      note: optionalStringParam(input, 'note'),
+      pinned_by: 'user'
+    });
+  });
+
+  registry.register('assets.pin.remove', async (params) => {
+    const input = objectParams(params, 'assets.pin.remove');
+    return createAssetStore(await spaceRootBySlugOrUid(stringParam(input, 'project'))).removePin(
+      stringParam(input, 'pin_id')
+    );
   });
 
   registry.register('inbox.list', (params) =>

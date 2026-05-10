@@ -40,6 +40,7 @@ import { tasksOfFile } from './tasks';
 import { walkMarkdown } from './walk';
 import * as frontmatter from './frontmatter';
 import { toPosix, vaultRel } from './pathGuard';
+import { ensureSpaceLayout } from './space/layout';
 
 async function fileExists(p: string): Promise<boolean> {
   try {
@@ -76,6 +77,7 @@ async function runGh(args: string[], cwd: string): Promise<void> {
 }
 
 async function ensureAreaOrbitDirs(areaPath: string): Promise<void> {
+  await ensureSpaceLayout(areaPath);
   await fs.mkdir(path.join(areaPath, AREA_ORBIT_DIR, AREA_ORBIT_AGENT_DIR, AREA_ORBIT_SESSIONS_DIR), {
     recursive: true
   });

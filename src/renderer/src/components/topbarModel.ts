@@ -9,6 +9,7 @@ export interface WorkspaceDestination {
 
 export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
+  { label: 'Ask Anywhere', view: { kind: 'askAnywhere' }, icon: '✦' },
   { label: 'Vision', view: { kind: 'vision' }, icon: '✦' },
   { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
   { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
@@ -48,8 +49,9 @@ interface TopBarContextInput {
 
 const WORKSPACE_DETAILS: Record<
    | 'dashboard'
-   | 'vision'
-  | 'agents'
+    | 'vision'
+    | 'askAnywhere'
+   | 'agents'
   | 'developerConsole'
    | 'github'
    | 'inbox'
@@ -60,6 +62,7 @@ const WORKSPACE_DETAILS: Record<
     | 'memory'
     | 'review'
     | 'resources'
+    | 'resource'
     | 'knowledgeBase'
    | 'scheduled'
    | 'timeline'
@@ -71,6 +74,7 @@ const WORKSPACE_DETAILS: Record<
   string
 > = {
   dashboard: 'Vision, PARA health, and project activity.',
+  askAnywhere: 'Persistent AI conversations across your vault context.',
   vision: 'Trace goals to Areas, Projects, Resources, and milestones.',
   agents: 'Inspect reusable role templates, versions, and cross-project execution coverage.',
   developerConsole: 'Replay traceable agent, inbox, activity, and IPC events.',
@@ -83,6 +87,7 @@ const WORKSPACE_DETAILS: Record<
   review: 'Generate weekly and monthly health findings with actions.',
   feeds: 'Manage subscriptions and triage incoming feed items.',
   resources: 'Cultivate topic workstations from repeated notes, links, people, and projects.',
+  resource: 'Work inside one Resource Space with tasks, materials, outputs, chat, and timeline.',
   knowledgeBase: 'Import existing archives and activate excerpts into Notes.',
   scheduled: 'Manage recurring Orbit automations and execution history.',
   timeline: 'Review user-visible events as a daily life log.',
@@ -160,10 +165,20 @@ export function deriveTopBarContext({
     };
   }
 
+  if (view.kind === 'resource') {
+    return {
+      eyebrow: 'Resource room',
+      title: 'Resource',
+      detail: `${vaultLabel} · Work inside one Resource Space with tasks, materials, outputs, chat, and timeline.`,
+      stateLabel: 'Active resource'
+    };
+  }
+
   const title = WORKSPACE_DESTINATIONS.find((item) => item.view.kind === view.kind)?.label;
   const detail =
-    view.kind === 'dashboard' ||
-    view.kind === 'agents' ||
+     view.kind === 'dashboard' ||
+     view.kind === 'askAnywhere' ||
+     view.kind === 'agents' ||
     view.kind === 'github' ||
     view.kind === 'developerConsole' ||
     view.kind === 'inbox' ||

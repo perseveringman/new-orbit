@@ -82,6 +82,8 @@ export function tasksOfFile(
     data['type'] === 'project' ? asString(data['uid']) : asString(data['project_uid']);
   const ownerArea =
     data['type'] === 'area' ? asString(data['uid']) : asString(data['area_uid']);
+  const ownerResource =
+    data['type'] === 'resource' ? asString(data['id'] ?? data['uid']) : asString(data['resource_uid']);
 
   if (data['type'] === 'task') {
     const title = asString(data['title']) ?? path.basename(relPath, '.md');
@@ -100,6 +102,8 @@ export function tasksOfFile(
     if (pu) rec.project_uid = pu;
     const au = asString(data['area_uid']);
     if (au) rec.area_uid = au;
+    const ru = asString(data['resource_uid']);
+    if (ru) rec.resource_uid = ru;
     const due = asString(data['due']);
     if (due) rec.due = due;
     const effort = asEffort(data['effort']);
@@ -175,6 +179,7 @@ export function tasksOfFile(
     };
     if (ownerProject) rec.project_uid = ownerProject;
     if (ownerArea) rec.area_uid = ownerArea;
+    if (ownerResource) rec.resource_uid = ownerResource;
     out.push(rec);
   }
   return out;

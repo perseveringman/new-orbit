@@ -26,6 +26,12 @@ You are Orbit, working within the **{{name}}** project.
 - Before editing files outside this project, stop and ask.
 - Record every non-trivial decision in the task's \`# Agent Thinking\` section.
 - Append progress to the task's \`# Execution Log\` as you work.
+
+## Asset access boundary
+- The only local files you may treat as project materials are scopes declared in \`assets/_manifest.md\`.
+- Read \`assets/_manifest.md\` before accessing local materials.
+- Never scan or glob outside authorized scopes.
+- If you need new local material access, ask the user to authorize a new scope first.
 `;
 
 export const BASE_README_MD = `---

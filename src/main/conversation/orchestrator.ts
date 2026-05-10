@@ -22,6 +22,7 @@ import type {
 } from '@shared/conversation';
 import type { ToolTraceBlock } from '@shared/agent-tools';
 import { conversationScopeKey } from '@shared/conversation';
+import type { SDKInvocationMessage } from '@shared/runtime';
 import { ConversationStore } from './store';
 import { publishTraceableEvent } from '../events/bus';
 
@@ -33,6 +34,8 @@ export interface AppendTurnInput {
   artifactRefs?: string[];
   /** Phase B：assistant turn 的 tool_use/tool_result 轨迹。 */
   toolTrace?: ToolTraceBlock[];
+  /** 精确回放给 SDK 的内部消息片段。 */
+  replayMessages?: SDKInvocationMessage[];
 }
 
 export interface CreateConversationInput {
@@ -75,7 +78,10 @@ export class ConversationOrchestrator {
       content: input.content,
       ...(input.runtimeEventIds ? { runtimeEventIds: input.runtimeEventIds } : {}),
       ...(input.artifactRefs ? { artifactRefs: input.artifactRefs } : {}),
-      ...(input.toolTrace && input.toolTrace.length > 0 ? { toolTrace: input.toolTrace } : {})
+      ...(input.toolTrace && input.toolTrace.length > 0 ? { toolTrace: input.toolTrace } : {}),
+      ...(input.replayMessages && input.replayMessages.length > 0
+        ? { replayMessages: input.replayMessages }
+        : {})
     };
     await this.store.appendTurn(input.conversationId, turn);
     publishTraceableEvent({

@@ -28,6 +28,8 @@ import { ProjectGitHubView } from './ProjectGitHubView';
 import { ProjectSessionsView } from './ProjectSessionsView';
 import { ProjectPlannerView } from './ProjectPlannerView';
 import { ProjectRolesView } from './ProjectRolesView';
+import { ProjectMaterialsView } from './ProjectMaterialsView';
+import { SpaceOutputsView } from './SpaceOutputsView';
 
 /**
  * ProjectRoomView — the "inside a project" mode.
@@ -66,7 +68,7 @@ export function ProjectRoomView(): JSX.Element {
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
 
-  // Outer tab: 'kanban' / 'terminal' / 'sessions' / 'github', persisted per project
+  // Outer tab: persisted per project
   const outerTabKey = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
   const [outerTab, setOuterTabRaw] = useState<ProjectRoomOuterTab>(() => {
     try {
@@ -74,6 +76,8 @@ export function ProjectRoomView(): JSX.Element {
       return v === 'terminal' ||
         v === 'sessions' ||
         v === 'github' ||
+        v === 'materials' ||
+        v === 'outputs' ||
         v === 'planner' ||
         v === 'roles'
         ? v
@@ -101,7 +105,13 @@ export function ProjectRoomView(): JSX.Element {
       const key = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
       const v = localStorage.getItem(key);
       setOuterTabRaw(
-        v === 'terminal' || v === 'sessions' || v === 'github' || v === 'planner' || v === 'roles'
+        v === 'terminal' ||
+        v === 'sessions' ||
+        v === 'github' ||
+        v === 'materials' ||
+        v === 'outputs' ||
+        v === 'planner' ||
+        v === 'roles'
           ? v
           : 'kanban'
       );
@@ -170,6 +180,8 @@ export function ProjectRoomView(): JSX.Element {
         | 'task'
         | 'sessions'
         | 'github'
+        | 'materials'
+        | 'outputs'
         | 'planner'
         | 'roles'
         | 'readme'
@@ -182,6 +194,10 @@ export function ProjectRoomView(): JSX.Element {
       setOuterTab('sessions');
     } else if (hint === 'github') {
       setOuterTab('github');
+    } else if (hint === 'materials') {
+      setOuterTab('materials');
+    } else if (hint === 'outputs') {
+      setOuterTab('outputs');
     } else if (hint === 'planner') {
       setOuterTab('planner');
     } else if (hint === 'roles') {
@@ -402,8 +418,11 @@ export function ProjectRoomView(): JSX.Element {
         setOuterTab('sessions');
       } else if (e.key === '5') {
         e.preventDefault();
-        setOuterTab('planner');
+        setOuterTab('materials');
       } else if (e.key === '6') {
+        e.preventDefault();
+        setOuterTab('planner');
+      } else if (e.key === '7') {
         e.preventDefault();
         setOuterTab('roles');
       }
@@ -533,6 +552,12 @@ export function ProjectRoomView(): JSX.Element {
         <OuterTabButton active={outerTab === 'sessions'} onClick={() => setOuterTab('sessions')}>
           Sessions
         </OuterTabButton>
+        <OuterTabButton active={outerTab === 'materials'} onClick={() => setOuterTab('materials')}>
+          Materials
+        </OuterTabButton>
+        <OuterTabButton active={outerTab === 'outputs'} onClick={() => setOuterTab('outputs')}>
+          Outputs
+        </OuterTabButton>
         <OuterTabButton active={outerTab === 'planner'} onClick={() => setOuterTab('planner')}>
           Planner
         </OuterTabButton>
@@ -621,6 +646,14 @@ export function ProjectRoomView(): JSX.Element {
           onTasksChanged={refreshTasks}
           onOpenTerminal={() => setOuterTab('terminal')}
         />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'materials' ? 'flex' : 'hidden'}`}>
+        <ProjectMaterialsView project={project} />
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'outputs' ? 'flex' : 'hidden'}`}>
+        <SpaceOutputsView spaceId={project.uid} spaceLabel="project" />
       </div>
 
       <div className={`min-h-0 flex-1 ${outerTab === 'planner' ? 'flex' : 'hidden'}`}>

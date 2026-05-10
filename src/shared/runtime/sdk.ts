@@ -65,6 +65,8 @@ export interface SDKEndpointRegistrySnapshot {
  */
 export type SDKInvocationMessageContentBlock =
   | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string; signature: string }
+  | { type: 'redacted_thinking'; data: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean };
 
@@ -154,4 +156,3 @@ export function resolveModelAlias(endpoint: SDKEndpoint, modelHint?: string): st
   const requested = modelHint?.trim() || endpoint.defaultModel;
   return endpoint.modelAlias?.[requested] ?? requested;
 }
-
