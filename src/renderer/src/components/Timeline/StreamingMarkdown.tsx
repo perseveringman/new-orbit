@@ -48,10 +48,13 @@ export function StreamingMarkdown({
 type MarkdownBlock =
   | { kind: 'heading'; level: number; text: string }
   | { kind: 'paragraph'; text: string }
+  | { kind: 'table'; headers: string[]; alignments: TableAlignment[]; rows: string[][] }
   | { kind: 'unordered-list'; items: string[] }
   | { kind: 'ordered-list'; items: string[] }
   | { kind: 'blockquote'; lines: string[] }
   | { kind: 'code'; language?: string; code: string };
+
+type TableAlignment = 'left' | 'center' | 'right' | null;
 
 function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   const lines = content.split('\n');
@@ -75,6 +78,13 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
       }
       if (index < lines.length) index += 1;
       blocks.push({ kind: 'code', language, code: chunk.join('\n') });
+      continue;
+    }
+
+    const table = parseTableAt(lines, index);
+    if (table) {
+      blocks.push(table.block);
+      index = table.nextIndex;
       continue;
     }
 
@@ -120,7 +130,7 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
     }
 
     const paragraph: string[] = [];
-    while (index < lines.length && !isBlockBoundary(lines[index] ?? '')) {
+    while (index < lines.length && !isBlockBoundary(lines, index)) {
       paragraph.push(lines[index] ?? '');
       index += 1;
     }
@@ -130,15 +140,120 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   return blocks;
 }
 
-function isBlockBoundary(line: string): boolean {
+function isBlockBoundary(lines: string[], index: number): boolean {
+  const line = lines[index] ?? '';
   return (
     !line.trim() ||
+    line.startsWith('```') ||
+    Boolean(parseTableAt(lines, index)) ||
+    /^#{1,6}\s+/.test(line) ||
+    line.startsWith('> ') ||
+    /^[-*]\s+/.test(line) ||
+    /^\d+\.\s+/.test(line)
+  );
+}
+
+function parseTableAt(
+  lines: string[],
+  index: number
+): { block: Extract<MarkdownBlock, { kind: 'table' }>; nextIndex: number } | null {
+  const headerLine = lines[index] ?? '';
+  const separatorLine = lines[index + 1] ?? '';
+  if (!headerLine.includes('|') || !isTableSeparatorLine(separatorLine)) return null;
+
+  const headers = splitTableRow(headerLine);
+  const separators = splitTableRow(separatorLine);
+  if (headers.length < 2 || separators.length < 2) return null;
+  if (!separators.every(isTableSeparatorCell)) return null;
+
+  const alignments = separators.map(parseTableAlignment);
+  const rows: string[][] = [];
+  let nextIndex = index + 2;
+  while (nextIndex < lines.length) {
+    const rowLine = lines[nextIndex] ?? '';
+    if (!rowLine.trim() || !rowLine.includes('|')) break;
+    if (isBlockBoundaryExceptTable(lines, nextIndex)) break;
+    rows.push(normalizeTableRow(splitTableRow(rowLine), headers.length));
+    nextIndex += 1;
+  }
+
+  return {
+    block: {
+      kind: 'table',
+      headers: normalizeTableRow(headers, headers.length),
+      alignments: normalizeTableRow(alignments, headers.length, null),
+      rows
+    },
+    nextIndex
+  };
+}
+
+function isBlockBoundaryExceptTable(lines: string[], index: number): boolean {
+  const line = lines[index] ?? '';
+  return (
     line.startsWith('```') ||
     /^#{1,6}\s+/.test(line) ||
     line.startsWith('> ') ||
     /^[-*]\s+/.test(line) ||
     /^\d+\.\s+/.test(line)
   );
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  if (!line.includes('|')) return false;
+  const cells = splitTableRow(line);
+  return cells.length >= 2 && cells.every(isTableSeparatorCell);
+}
+
+function isTableSeparatorCell(cell: string): boolean {
+  return /^:?-{3,}:?$/.test(cell.trim());
+}
+
+function parseTableAlignment(cell: string): TableAlignment {
+  const trimmed = cell.trim();
+  const left = trimmed.startsWith(':');
+  const right = trimmed.endsWith(':');
+  if (left && right) return 'center';
+  if (right) return 'right';
+  if (left) return 'left';
+  return null;
+}
+
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  const source = trimmed.startsWith('|') && trimmed.endsWith('|')
+    ? trimmed.slice(1, -1)
+    : trimmed;
+  const cells: string[] = [];
+  let current = '';
+  let inCode = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? '';
+    const prev = source[index - 1];
+    if (char === '`' && prev !== '\\') {
+      inCode = !inCode;
+      current += char;
+      continue;
+    }
+    if (char === '|' && !inCode && prev !== '\\') {
+      cells.push(cleanTableCell(current));
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  cells.push(cleanTableCell(current));
+  return cells;
+}
+
+function cleanTableCell(value: string): string {
+  return value.trim().replace(/\\\|/g, '|');
+}
+
+function normalizeTableRow<T>(row: T[], length: number, fill: T | '' = ''): T[] {
+  if (row.length === length) return row;
+  if (row.length > length) return row.slice(0, length);
+  return [...row, ...Array.from({ length: length - row.length }, () => fill as T)];
 }
 
 function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
@@ -180,6 +295,8 @@ function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
           ))}
         </blockquote>
       );
+    case 'table':
+      return <MarkdownTable block={block} />;
     case 'code':
       return (
         <div className="overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-950 text-neutral-100 dark:border-neutral-800">
@@ -195,6 +312,56 @@ function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
       );
     case 'paragraph':
       return <p className="break-words">{renderInlineWithLineBreaks(block.text)}</p>;
+  }
+}
+
+function MarkdownTable({
+  block
+}: {
+  block: Extract<MarkdownBlock, { kind: 'table' }>;
+}): JSX.Element {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950/40">
+      <table className="min-w-full border-collapse text-left text-[12px] leading-5">
+        <thead className="bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-200">
+          <tr>
+            {block.headers.map((header, index) => (
+              <th
+                key={`${header}:${index}`}
+                className={`border-b border-neutral-200 px-3 py-2 font-semibold dark:border-neutral-800 ${alignmentClass(block.alignments[index])}`}
+              >
+                {renderInline(header, `table-head-${index}`)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+          {block.rows.map((row, rowIndex) => (
+            <tr key={`row-${rowIndex}`} className="align-top">
+              {block.headers.map((_, cellIndex) => (
+                <td
+                  key={`cell-${rowIndex}-${cellIndex}`}
+                  className={`max-w-[18rem] break-words px-3 py-2 text-neutral-700 dark:text-neutral-200 ${alignmentClass(block.alignments[cellIndex])}`}
+                >
+                  {renderInline(row[cellIndex] ?? '', `table-${rowIndex}-${cellIndex}`)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function alignmentClass(alignment: TableAlignment | undefined): string {
+  switch (alignment) {
+    case 'center':
+      return 'text-center';
+    case 'right':
+      return 'text-right';
+    default:
+      return 'text-left';
   }
 }
 

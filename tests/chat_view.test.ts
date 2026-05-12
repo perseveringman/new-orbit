@@ -77,6 +77,25 @@ describe('ChatView', () => {
     expect(html).not.toContain('```ts');
   });
 
+  it('renders markdown tables as semantic tables', () => {
+    const html = render([
+      ev(
+        'runtime.message',
+        {
+          text: '现有覆盖：\n\n| 板块 | 深度 |\n|---|---|\n| 古王国→中王国→新王国 | 时间线 + 信仰概念 |\n| 旅行速查 | 实用向 |',
+          role: 'assistant'
+        },
+        { id: 'table1' }
+      )
+    ]);
+
+    expect(html).toContain('<table');
+    expect(html).toContain('<th');
+    expect(html).toContain('<td');
+    expect(html).toContain('古王国→中王国→新王国');
+    expect(html).not.toContain('|---|---|');
+  });
+
   it('merges one streaming assistant response into one bubble', () => {
     const html = render([
       ev('runtime.message', { text: '灯光', role: 'assistant', isStreaming: true }, { id: 's1', runId: 'run-stream', spanId: 's1' }),
