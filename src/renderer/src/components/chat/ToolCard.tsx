@@ -27,7 +27,7 @@ export function ToolCard({
       {hasDetails ? (
         <details>
           <summary className="cursor-pointer select-none">
-            <ToolCardHeader summary={summary} status={status} />
+            <ToolCardHeader summary={summary} status={status} inlineWithMarker />
           </summary>
           <div className="mt-2 border-t border-amber-200/70 pt-2 dark:border-amber-900/50">
             {inputJson ? (
@@ -79,9 +79,21 @@ export function ToolCard({
   );
 }
 
-function ToolCardHeader({ summary, status }: { summary: string; status: string }): JSX.Element {
+function ToolCardHeader({
+  summary,
+  status,
+  inlineWithMarker = false
+}: {
+  summary: string;
+  status: string;
+  inlineWithMarker?: boolean;
+}): JSX.Element {
   return (
-    <span className="inline-flex w-full items-center justify-between gap-3 align-middle">
+    <span
+      className={`inline-flex min-w-0 items-center justify-between gap-3 align-middle ${
+        inlineWithMarker ? 'w-[calc(100%-1rem)]' : 'w-full'
+      }`}
+    >
       <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-amber-950 dark:text-amber-50">
         {summary}
       </span>
