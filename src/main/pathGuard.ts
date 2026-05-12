@@ -1,5 +1,12 @@
 import path from 'node:path';
 
+export function isInsideRoot(root: string, target: string): boolean {
+  const absRoot = path.resolve(root);
+  const absTarget = path.resolve(target);
+  const rel = path.relative(absRoot, absTarget);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
 /**
  * Throw if `target` escapes `root`. Returns the resolved absolute path.
  * Both arguments may be relative or absolute.
@@ -7,8 +14,7 @@ import path from 'node:path';
 export function assertInsideVault(root: string, target: string): string {
   const absRoot = path.resolve(root);
   const absTarget = path.resolve(root, target);
-  const rel = path.relative(absRoot, absTarget);
-  if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+  if (isInsideRoot(absRoot, absTarget)) {
     return absTarget;
   }
   throw new Error(`path escapes vault: ${target}`);

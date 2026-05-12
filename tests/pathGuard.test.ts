@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertInsideVault } from '../src/main/pathGuard';
+import { assertInsideVault, isInsideRoot } from '../src/main/pathGuard';
 import path from 'node:path';
 
 describe('path-traversal guard', () => {
@@ -18,5 +18,11 @@ describe('path-traversal guard', () => {
 
   it('rejects unrelated absolute paths', () => {
     expect(() => assertInsideVault(root, '/etc/passwd')).toThrow(/escapes/);
+  });
+
+  it('checks already-resolved paths against a root', () => {
+    expect(isInsideRoot(root, path.join(root, 'nested', 'a.md'))).toBe(true);
+    expect(isInsideRoot(root, root)).toBe(true);
+    expect(isInsideRoot(root, `${root}-other/a.md`)).toBe(false);
   });
 });

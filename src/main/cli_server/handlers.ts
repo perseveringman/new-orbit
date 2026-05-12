@@ -1,10 +1,12 @@
 import { promises as fs } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import type { TaskFilter } from '@shared/schemas';
 import type { TaskRecord } from '@shared/schemas';
 import { normalizeTaskStatus } from '@shared/schemas';
 import { currentSession } from '../fs';
-import { assertInsideVault, toPosix, vaultRel } from '../pathGuard';
+import { isInsideRoot, toPosix, vaultRel } from '../pathGuard';
+import { ensureExternalReadAccess } from '../external-path-access';
 import { materializeTaskGraph } from '../orchestration/task_graph';
 import { updateTaskFrontmatter } from '../task';
 import { contentHash } from '../content_hash';
@@ -77,13 +79,94 @@ function objectParams(params: unknown, method: string): Record<string, unknown> 
 
 async function readTarget(
   target: string
-): Promise<{ path: string; relPath: string; content: string }> {
+): Promise<{
+  path: string;
+  relPath: string;
+  external: boolean;
+  kind: 'file' | 'directory';
+  content: string;
+  entries?: Array<{ name: string; kind: 'file' | 'directory' | 'symlink' | 'other' }>;
+}> {
   const session = openSession();
   const byUid = session.refmap.resolveUid(target);
-  const abs = byUid ?? (path.isAbsolute(target) ? target : path.join(session.vault, target));
-  assertInsideVault(session.vault, abs);
+  const targetIsAbsolute = path.isAbsolute(target);
+  const abs = path.resolve(byUid ?? (targetIsAbsolute ? target : path.join(session.vault, target)));
+  const insideVault = isInsideRoot(session.vault, abs);
+  if (!insideVault) {
+    if (!targetIsAbsolute) {
+      throw cliServerError('path_outside_vault', `path escapes vault: ${target}`);
+    }
+    await ensureExternalReadAccess({
+      vaultPath: session.vault,
+      requestedTarget: target,
+      targetPath: abs
+    });
+  }
+  return readResolvedTarget(session.vault, abs, !insideVault);
+}
+
+async function readResolvedTarget(
+  vaultPath: string,
+  abs: string,
+  external: boolean
+): Promise<{
+  path: string;
+  relPath: string;
+  external: boolean;
+  kind: 'file' | 'directory';
+  content: string;
+  entries?: Array<{ name: string; kind: 'file' | 'directory' | 'symlink' | 'other' }>;
+}> {
+  const stat = await fs.stat(abs).catch((error: unknown) => {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+    if (code === 'ENOENT') {
+      throw cliServerError('not_found', `path not found: ${abs}`);
+    }
+    throw cliServerError('path_unreadable', `path is not readable: ${abs}`);
+  });
+  const relPath = external ? abs : toPosix(vaultRel(vaultPath, abs));
+  if (stat.isDirectory()) {
+    const { content, entries } = await readDirectoryListing(abs);
+    return { path: abs, relPath, external, kind: 'directory', content, entries };
+  }
+  if (!stat.isFile()) {
+    throw cliServerError('invalid_path', `only files and directories can be read: ${abs}`);
+  }
   const content = await fs.readFile(abs, 'utf8');
-  return { path: abs, relPath: toPosix(vaultRel(session.vault, abs)), content };
+  return { path: abs, relPath, external, kind: 'file', content };
+}
+
+async function readDirectoryListing(abs: string): Promise<{
+  content: string;
+  entries: Array<{ name: string; kind: 'file' | 'directory' | 'symlink' | 'other' }>;
+}> {
+  const limit = 200;
+  const dirents = await fs.readdir(abs, { withFileTypes: true });
+  const sorted = [...dirents].sort(compareDirents);
+  const visible = sorted.slice(0, limit).map((entry) => ({
+    name: entry.name,
+    kind: direntKind(entry)
+  }));
+  const lines = visible.map((entry) => `${entry.kind}\t${entry.name}`);
+  if (sorted.length > limit) {
+    const remaining = sorted.length - limit;
+    lines.push(`[orbit_truncated: ${remaining} more entr${remaining === 1 ? 'y' : 'ies'}]`);
+  }
+  return { content: lines.join('\n'), entries: visible };
+}
+
+function compareDirents(a: Dirent, b: Dirent): number {
+  const aDir = a.isDirectory();
+  const bDir = b.isDirectory();
+  if (aDir !== bDir) return aDir ? -1 : 1;
+  return a.name.localeCompare(b.name);
+}
+
+function direntKind(entry: Dirent): 'file' | 'directory' | 'symlink' | 'other' {
+  if (entry.isDirectory()) return 'directory';
+  if (entry.isFile()) return 'file';
+  if (entry.isSymbolicLink()) return 'symlink';
+  return 'other';
 }
 
 function resolveTask(target: string): TaskRecord {

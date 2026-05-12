@@ -35,7 +35,9 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
   {
     name: 'orbit_read',
     description:
-      'Read the full UTF-8 content of a single vault file by relative path. ' +
+      'Read the UTF-8 content of a file, or list the immediate entries of a directory. ' +
+      'Vault-relative paths run directly. Absolute paths outside the vault trigger a blocking user approval prompt before reading; ' +
+      'only use external absolute paths when the user explicitly provided that path. ' +
       'Use after `orbit_search` when you need the actual content of a hit, or when the user references a known path.',
     cliMethod: 'cat',
     timeoutMs: 30_000,
@@ -46,7 +48,8 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
       properties: {
         target: {
           type: 'string',
-          description: 'Vault-relative path (e.g. `01_Projects/2026-launch/index.md`).'
+          description:
+            'Vault-relative path, or a user-provided absolute external path that requires approval.'
         }
       }
     }
