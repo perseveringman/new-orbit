@@ -4,8 +4,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   ensureExternalReadAccess,
-  resetExternalPathAccessForTests,
-  setExternalPathAccessConfirmerForTests
+  rememberExternalPathApproval,
+  resetExternalPathAccessForTests
 } from '../src/main/external-path-access';
 
 describe('external path access approval', () => {
@@ -14,12 +14,6 @@ describe('external path access approval', () => {
   });
 
   it('allows vault paths without prompting', async () => {
-    let prompts = 0;
-    setExternalPathAccessConfirmerForTests(() => {
-      prompts += 1;
-      return false;
-    });
-
     const grant = await ensureExternalReadAccess({
       vaultPath: '/tmp/orbit-vault',
       requestedTarget: 'note.md',
@@ -28,14 +22,12 @@ describe('external path access approval', () => {
 
     expect(grant.external).toBe(false);
     expect(grant.approvedVia).toBe('vault');
-    expect(prompts).toBe(0);
   });
 
-  it('blocks external paths when the user denies approval', async () => {
+  it('blocks external paths until the in-app approval flow grants access', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-external-deny-'));
     const file = path.join(dir, 'outside.md');
     await fs.writeFile(file, '# outside', 'utf8');
-    setExternalPathAccessConfirmerForTests(() => false);
 
     await expect(
       ensureExternalReadAccess({
@@ -43,18 +35,14 @@ describe('external path access approval', () => {
         requestedTarget: file,
         targetPath: file
       })
-    ).rejects.toMatchObject({ code: 'external_path_denied' });
+    ).rejects.toMatchObject({ code: 'external_path_requires_approval' });
   });
 
   it('remembers approved external directories for the current app session', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-external-allow-'));
     const child = path.join(dir, 'child.md');
     await fs.writeFile(child, '# child', 'utf8');
-    let prompts = 0;
-    setExternalPathAccessConfirmerForTests(() => {
-      prompts += 1;
-      return true;
-    });
+    rememberExternalPathApproval(path.join(dir, 'vault'), dir);
 
     const first = await ensureExternalReadAccess({
       vaultPath: path.join(dir, 'vault'),
@@ -67,8 +55,7 @@ describe('external path access approval', () => {
       targetPath: child
     });
 
-    expect(first.approvedVia).toBe('prompt');
+    expect(first.approvedVia).toBe('cached');
     expect(second.approvedVia).toBe('cached');
-    expect(prompts).toBe(1);
   });
 });

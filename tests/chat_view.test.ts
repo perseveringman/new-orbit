@@ -1,7 +1,11 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { RuntimeEvent, RuntimeEventKind, RuntimeEventPayloadMap } from '../src/shared/chat-protocol';
+import type {
+  RuntimeEvent,
+  RuntimeEventKind,
+  RuntimeEventPayloadMap
+} from '../src/shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '../src/shared/chat-protocol';
 import { ChatView } from '../src/renderer/src/components/chat/ChatView';
 
@@ -98,9 +102,21 @@ describe('ChatView', () => {
 
   it('merges one streaming assistant response into one bubble', () => {
     const html = render([
-      ev('runtime.message', { text: '灯光', role: 'assistant', isStreaming: true }, { id: 's1', runId: 'run-stream', spanId: 's1' }),
-      ev('runtime.message', { text: '、背景', role: 'assistant', isStreaming: true }, { id: 's2', runId: 'run-stream', spanId: 's2' }),
-      ev('runtime.message', { text: '墙', role: 'assistant', isStreaming: true }, { id: 's3', runId: 'run-stream', spanId: 's3' }),
+      ev(
+        'runtime.message',
+        { text: '灯光', role: 'assistant', isStreaming: true },
+        { id: 's1', runId: 'run-stream', spanId: 's1' }
+      ),
+      ev(
+        'runtime.message',
+        { text: '、背景', role: 'assistant', isStreaming: true },
+        { id: 's2', runId: 'run-stream', spanId: 's2' }
+      ),
+      ev(
+        'runtime.message',
+        { text: '墙', role: 'assistant', isStreaming: true },
+        { id: 's3', runId: 'run-stream', spanId: 's3' }
+      ),
       ev('runtime.done', { exitCode: 0 }, { id: 'done', runId: 'run-stream', spanId: 'done' })
     ]);
 
@@ -130,7 +146,11 @@ describe('ChatView', () => {
   it('merges one thinking span into one block', () => {
     const html = render([
       ev('runtime.thinking', { text: '查看' }, { id: 't1', runId: 'run-think', spanId: 'think-1' }),
-      ev('runtime.thinking', { text: '有哪些' }, { id: 't2', runId: 'run-think', spanId: 'think-1' }),
+      ev(
+        'runtime.thinking',
+        { text: '有哪些' },
+        { id: 't2', runId: 'run-think', spanId: 'think-1' }
+      ),
       ev('runtime.thinking', { text: '项目' }, { id: 't3', runId: 'run-think', spanId: 'think-1' })
     ]);
 
@@ -140,7 +160,11 @@ describe('ChatView', () => {
 
   it('renders semantic thinking and tool summaries', () => {
     const html = render([
-      ev('runtime.thinking', { text: '查看有哪些项目需要更新，并准备下一步。' }, { id: 'think-summary', spanId: 'think-summary' }),
+      ev(
+        'runtime.thinking',
+        { text: '查看有哪些项目需要更新，并准备下一步。' },
+        { id: 'think-summary', spanId: 'think-summary' }
+      ),
       ev(
         'runtime.tool_use',
         { toolName: 'orbit_search', toolInput: { query: 'roadmap' }, spanId: 'tool-summary' },
@@ -166,11 +190,72 @@ describe('ChatView', () => {
     expect(html).not.toContain('Reject');
   });
 
-  it('hides thinking blocks when capability disabled', () => {
+  it('renders external path approval as an actionable awaiting-user card', () => {
     const html = render(
-      [ev('runtime.thinking', { text: 'pondering' })],
-      { ...DEFAULT_CHAT_HOST_CAPABILITIES, supportsThinking: false }
+      [
+        ev(
+          'runtime.awaiting_user',
+          {
+            kind: 'external_path_access',
+            status: 'pending',
+            proposalId: 'prop_external',
+            title: 'Allow external path read?',
+            targetPath: '/Users/ryan/outside',
+            hint: 'Approve in this chat or Inbox to continue.'
+          },
+          { id: 'await-external', spanId: 'prop_external' }
+        )
+      ],
+      { ...DEFAULT_CHAT_HOST_CAPABILITIES, canApproveTool: true }
     );
+
+    expect(html).toContain('Allow external path read?');
+    expect(html).toContain('/Users/ryan/outside');
+    expect(html).toContain('Allow read');
+    expect(html).toContain('Deny');
+  });
+
+  it('merges external path approval status updates by proposal id', () => {
+    const html = render(
+      [
+        ev(
+          'runtime.awaiting_user',
+          {
+            kind: 'external_path_access',
+            status: 'pending',
+            proposalId: 'prop_external',
+            title: 'Allow external path read?',
+            targetPath: '/Users/ryan/outside',
+            hint: 'Approve in this chat or Inbox to continue.'
+          },
+          { id: 'await-external', spanId: 'prop_external' }
+        ),
+        ev(
+          'runtime.awaiting_user',
+          {
+            kind: 'external_path_access',
+            status: 'approved',
+            proposalId: 'prop_external',
+            hint: 'Approved. Continuing.'
+          },
+          { id: 'await-external-approved', spanId: 'prop_external' }
+        )
+      ],
+      { ...DEFAULT_CHAT_HOST_CAPABILITIES, canApproveTool: true }
+    );
+
+    expect(html).toContain('approved');
+    expect(html).toContain('Approved. Continuing.');
+    expect(html.match(/Allow external path read/g)?.length).toBe(1);
+    expect(html).not.toContain('Allow read');
+    expect(html).not.toContain('Deny');
+  });
+
+  it('hides thinking blocks when capability disabled', () => {
+    const html = render([ev('runtime.thinking', { text: 'pondering' })], {
+      ...DEFAULT_CHAT_HOST_CAPABILITIES,
+      supportsThinking: false
+    });
     expect(html).not.toContain('pondering');
   });
 

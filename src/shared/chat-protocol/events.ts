@@ -102,7 +102,16 @@ export interface RuntimePartialStructuredOutputPayload {
 }
 
 export interface RuntimeAwaitingUserPayload {
+  kind?: string;
   hint?: string;
+  status?: 'pending' | 'approved' | 'rejected' | 'dismissed';
+  proposalId?: string;
+  inboxItemId?: string;
+  chatCardId?: string;
+  title?: string;
+  targetPath?: string;
+  requestedTarget?: string;
+  pathKind?: 'file' | 'directory';
 }
 
 export interface RuntimeInterruptPayload {

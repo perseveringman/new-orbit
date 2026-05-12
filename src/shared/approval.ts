@@ -7,7 +7,8 @@ export const PROPOSAL_TYPES = [
   'scope_expansion',
   'task_split',
   'merge',
-  'archive_project'
+  'archive_project',
+  'external_path_access'
 ] as const;
 export type ProposalType = (typeof PROPOSAL_TYPES)[number];
 
@@ -27,7 +28,8 @@ export const PROPOSAL_INBOX_SUBTYPES = {
   scope_expansion: 'A4',
   task_split: 'A4',
   merge: 'A1',
-  archive_project: 'D2'
+  archive_project: 'D2',
+  external_path_access: 'A4'
 } as const satisfies Record<ProposalType, 'A1' | 'A2' | 'A3' | 'A4' | 'D2'>;
 
 export const ProposalStatusSchema = z.enum(PROPOSAL_STATUSES);

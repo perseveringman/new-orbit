@@ -41,6 +41,10 @@ export function ConversationShell({
   welcomeMessage?: string;
 }): JSX.Element {
   const showStage = variant === 'full';
+  const capabilities = {
+    ...DEFAULT_CHAT_HOST_CAPABILITIES,
+    canApproveTool: true
+  };
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ConversationHeader
@@ -55,10 +59,14 @@ export function ConversationShell({
       <RuntimeStatusBar conversation={activeConversation} isLoading={isLoading} />
       {activeConversation ? <MemoryRecallChips conversation={activeConversation} /> : null}
       {activeId ? (
-        <div className={showStage ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_20rem]' : 'min-h-0 flex-1'}>
+        <div
+          className={
+            showStage ? 'grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_20rem]' : 'min-h-0 flex-1'
+          }
+        >
           <MessageTimeline
             conversationId={activeId}
-            capabilities={DEFAULT_CHAT_HOST_CAPABILITIES}
+            capabilities={capabilities}
             events={events}
             isLoading={isLoading}
             onAction={onAction}
@@ -85,7 +93,9 @@ export function ConversationShell({
 function MemoryRecallChips({ conversation }: { conversation: Conversation }): JSX.Element | null {
   const [memories, setMemories] = useState<MemoryNode[]>([]);
   const [hidden, setHidden] = useState(false);
-  const query = [conversation.title, conversation.summary, conversation.turns.at(-1)?.content].filter(Boolean).join('\n');
+  const query = [conversation.title, conversation.summary, conversation.turns.at(-1)?.content]
+    .filter(Boolean)
+    .join('\n');
 
   useEffect(() => {
     let cancelled = false;
@@ -117,11 +127,18 @@ function MemoryRecallChips({ conversation }: { conversation: Conversation }): JS
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">Relevant memory ({memories.length})</span>
         {memories.map((memory) => (
-          <span key={memory.id} className="rounded-full border border-violet-300 px-2 py-1 dark:border-violet-800">
+          <span
+            key={memory.id}
+            className="rounded-full border border-violet-300 px-2 py-1 dark:border-violet-800"
+          >
             {memory.title}
           </span>
         ))}
-        <button type="button" onClick={() => setHidden(true)} className="ml-auto text-violet-600 hover:text-violet-800 dark:text-violet-300">
+        <button
+          type="button"
+          onClick={() => setHidden(true)}
+          className="ml-auto text-violet-600 hover:text-violet-800 dark:text-violet-300"
+        >
           Hide memory
         </button>
       </div>

@@ -167,10 +167,12 @@ function buildRenderItems(
         items.push({
           key: a.id,
           node: (
-            <div className="rounded-xl border border-violet-300 bg-violet-50/80 px-3 py-2 text-xs text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
-              <span className="font-semibold">⏳ Awaiting user</span>
-              {a.payload.hint ? <span className="ml-2 opacity-80">{a.payload.hint}</span> : null}
-            </div>
+            <AwaitingUserCard
+              event={a}
+              canApprove={capabilities.canApproveTool}
+              onApprove={onApproveTool}
+              onReject={onRejectTool}
+            />
           )
         });
         break;
@@ -236,7 +238,119 @@ function buildRenderItems(
 }
 
 function normalizeRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
-  return mergeStreamingThinking(mergeStreamingMessages(events));
+  return mergeAwaitingUserEvents(mergeStreamingThinking(mergeStreamingMessages(events)));
+}
+
+function AwaitingUserCard({
+  event,
+  canApprove,
+  onApprove,
+  onReject
+}: {
+  event: RuntimeEvent<'runtime.awaiting_user'>;
+  canApprove: boolean;
+  onApprove?: (spanId: string) => void;
+  onReject?: (spanId: string) => void;
+}): JSX.Element {
+  const status = event.payload.status ?? 'pending';
+  const proposalId = event.payload.proposalId ?? event.spanId;
+  const title = event.payload.title ?? 'Awaiting user approval';
+  const showActions =
+    event.payload.kind === 'external_path_access' &&
+    status === 'pending' &&
+    canApprove &&
+    (onApprove || onReject);
+  return (
+    <div className="rounded-xl border border-violet-300 bg-violet-50/80 px-3 py-2 text-xs text-violet-900 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold">{title}</span>
+        <span className={awaitingStatusClassName(status)}>{awaitingStatusLabel(status)}</span>
+      </div>
+      {event.payload.targetPath ? (
+        <div className="mt-2 break-all rounded-md bg-white/70 px-2 py-1 font-mono text-[11px] text-violet-950 dark:bg-violet-950/40 dark:text-violet-100">
+          {event.payload.targetPath}
+        </div>
+      ) : null}
+      {event.payload.hint ? (
+        <p className="mt-2 whitespace-pre-wrap break-words text-[11px] opacity-80">
+          {event.payload.hint}
+        </p>
+      ) : null}
+      {showActions ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {onApprove ? (
+            <button
+              type="button"
+              onClick={() => onApprove(proposalId)}
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-emerald-700"
+            >
+              Allow read
+            </button>
+          ) : null}
+          {onReject ? (
+            <button
+              type="button"
+              onClick={() => onReject(proposalId)}
+              className="rounded-md border border-rose-300 bg-white/50 px-3 py-1.5 text-[11px] font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:bg-transparent dark:text-rose-200 dark:hover:bg-rose-950/30"
+            >
+              Deny
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function awaitingStatusLabel(
+  status: NonNullable<RuntimeEvent<'runtime.awaiting_user'>['payload']['status']>
+): string {
+  if (status === 'approved') return 'approved';
+  if (status === 'rejected') return 'rejected';
+  if (status === 'dismissed') return 'dismissed';
+  return 'pending';
+}
+
+function awaitingStatusClassName(
+  status: NonNullable<RuntimeEvent<'runtime.awaiting_user'>['payload']['status']>
+): string {
+  if (status === 'approved') {
+    return 'rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200';
+  }
+  if (status === 'rejected' || status === 'dismissed') {
+    return 'rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium text-rose-700 dark:bg-rose-900/50 dark:text-rose-200';
+  }
+  return 'rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/50 dark:text-violet-100';
+}
+
+function mergeAwaitingUserEvents(events: RuntimeEvent[]): RuntimeEvent[] {
+  const merged: RuntimeEvent[] = [];
+  const indexByKey = new Map<string, number>();
+  for (const event of events) {
+    if (event.kind !== 'runtime.awaiting_user') {
+      merged.push(event);
+      continue;
+    }
+    const awaiting = event as RuntimeEvent<'runtime.awaiting_user'>;
+    const key = awaiting.payload.proposalId ?? awaiting.spanId;
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, merged.length);
+      merged.push(awaiting);
+      continue;
+    }
+    const existing = merged[existingIndex] as RuntimeEvent<'runtime.awaiting_user'>;
+    merged[existingIndex] = {
+      ...existing,
+      ...awaiting,
+      id: existing.id,
+      payload: {
+        ...existing.payload,
+        ...awaiting.payload
+      }
+    };
+  }
+  return merged;
 }
 
 function mergeStreamingMessages(events: RuntimeEvent[]): RuntimeEvent[] {
@@ -277,9 +391,10 @@ function mergeStreamingMessages(events: RuntimeEvent[]): RuntimeEvent[] {
 
     const runFinished = events
       .slice(nextIndex)
-      .some((candidate) =>
-        candidate.runId === message.runId &&
-        (candidate.kind === 'runtime.done' || candidate.kind === 'runtime.error')
+      .some(
+        (candidate) =>
+          candidate.runId === message.runId &&
+          (candidate.kind === 'runtime.done' || candidate.kind === 'runtime.error')
       );
     merged.push({
       ...message,

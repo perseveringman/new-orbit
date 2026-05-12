@@ -7,10 +7,7 @@ import type { AgentToolDef, AgentTurnToolUse } from '@shared/agent-tools';
 import type { ActivityEventInput } from '@shared/activity';
 import type { AgentJournal } from '../src/main/agent-tools/journal';
 import { OrbitToolRegistry } from '../src/main/agent-tools/registry';
-import {
-  OrbitToolExecutor,
-  type ActivityEmitterLike
-} from '../src/main/agent-tools/executor';
+import { OrbitToolExecutor, type ActivityEmitterLike } from '../src/main/agent-tools/executor';
 
 vi.mock('../src/main/events/bus', () => ({
   publishTraceableEvent: vi.fn(),
@@ -24,6 +21,13 @@ const TOOL_DEF: AgentToolDef = {
   name: 'orbit_search',
   description: 'fake search',
   cliMethod: 'search',
+  inputSchema: { type: 'object' }
+};
+
+const READ_TOOL_DEF: AgentToolDef = {
+  name: 'orbit_read',
+  description: 'fake read',
+  cliMethod: 'cat',
   inputSchema: { type: 'object' }
 };
 
@@ -132,6 +136,57 @@ describe('OrbitToolExecutor', () => {
     expect(result.isError).toBe(false);
     expect(result.content.length).toBeLessThan(big.length);
     expect(result.content).toContain('orbit_truncated');
+  });
+
+  it('runs external path approval before reading an absolute path', async () => {
+    const calls: string[] = [];
+    const registry = new OrbitToolRegistry();
+    registry.registerMany([READ_TOOL_DEF]);
+    const executor = new OrbitToolExecutor({
+      toolRegistry: registry,
+      cliRegistry: new FakeCli((r) => {
+        calls.push('cli');
+        return { id: r.id, ok: true, data: 'file body' };
+      }) as unknown as CliHandlerRegistry,
+      externalPathApproval: {
+        getVaultPath: () => '/vault',
+        request: async (input) => {
+          calls.push('approval');
+          expect(input.requestedTarget).toBe('/Users/ryan/outside.md');
+          await input.emit({
+            id: 'await-1',
+            at: '2026-04-29T00:00:00Z',
+            kind: 'runtime.awaiting_user',
+            conversationId: input.conversationId,
+            runId: input.runId,
+            spanId: 'prop_external',
+            parentSpanId: input.toolUseId,
+            payload: {
+              kind: 'external_path_access',
+              status: 'pending',
+              proposalId: 'prop_external'
+            }
+          });
+        }
+      }
+    });
+    const events: RuntimeEvent[] = [];
+    const tu: AgentTurnToolUse = {
+      id: 'toolu_read',
+      name: 'orbit_read',
+      input: { target: '/Users/ryan/outside.md' }
+    };
+
+    const result = await executor.execute(tu, ctx, (event) => {
+      events.push(event);
+    });
+
+    expect(result.isError).toBe(false);
+    expect(calls).toEqual(['approval', 'cli']);
+    expect(events.map((event) => event.kind)).toEqual([
+      'runtime.awaiting_user',
+      'runtime.tool_result'
+    ]);
   });
 
   describe('Phase B activity & journal hooks', () => {

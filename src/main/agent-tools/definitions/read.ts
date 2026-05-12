@@ -27,7 +27,8 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
         limit: { type: 'integer', description: 'Maximum number of hits (default 30).' },
         project: {
           type: 'string',
-          description: 'Optional project uid or slug to scope the search to a single project folder.'
+          description:
+            'Optional project uid or slug to scope the search to a single project folder.'
         }
       }
     }
@@ -36,7 +37,7 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
     name: 'orbit_read',
     description:
       'Read the UTF-8 content of a file, or list the immediate entries of a directory. ' +
-      'Vault-relative paths run directly. Absolute paths outside the vault trigger a blocking user approval prompt before reading; ' +
+      'Vault-relative paths run directly. Absolute paths outside the vault trigger a blocking user approval card in chat and Inbox before reading; ' +
       'only use external absolute paths when the user explicitly provided that path. ' +
       'Use after `orbit_search` when you need the actual content of a hit, or when the user references a known path.',
     cliMethod: 'cat',
@@ -168,7 +169,7 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
   {
     name: 'orbit_project_overview',
     description:
-      "Aggregated overview of a single project (status, tags, current tasks, recent activity, materials). " +
+      'Aggregated overview of a single project (status, tags, current tasks, recent activity, materials). ' +
       'Use this when scoping advice to a specific project rather than running multiple smaller queries.',
     cliMethod: 'project.overview',
     timeoutMs: 30_000,
@@ -216,7 +217,7 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
   {
     name: 'orbit_resource_list',
     description:
-      "List Resources in the vault (long-lived knowledge containers). " +
+      'List Resources in the vault (long-lived knowledge containers). ' +
       'Use when the user wants an inventory of distillation targets or persistent reference material.',
     cliMethod: 'resource.list',
     timeoutMs: 30_000,

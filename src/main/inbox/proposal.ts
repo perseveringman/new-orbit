@@ -71,7 +71,10 @@ function proposalContext(
     ...(proposal.submitted_by_agent_run ? { run_id: proposal.submitted_by_agent_run } : {}),
     ...(proposal.submitted_during_task ? { task_uid: proposal.submitted_during_task } : {}),
     ...(typeof payload['project_uid'] === 'string' ? { project_uid: payload['project_uid'] } : {}),
-    ...(typeof payload['area_uid'] === 'string' ? { area_uid: payload['area_uid'] } : {})
+    ...(typeof payload['area_uid'] === 'string' ? { area_uid: payload['area_uid'] } : {}),
+    ...(typeof payload['conversation_id'] === 'string'
+      ? { conversation_id: payload['conversation_id'] }
+      : {})
   };
 }
 
@@ -80,5 +83,6 @@ function proposalSummary(type: Proposal['type'], subject: string): string {
   if (type === 'new_task') return `New task proposal: ${subject}`;
   if (type === 'planner_publish') return `Planner publish proposal: ${subject}`;
   if (type === 'scope_expansion') return `Scope expansion proposal: ${subject}`;
+  if (type === 'external_path_access') return `External path read approval requested: ${subject}`;
   return `Project archive proposal: ${subject}`;
 }

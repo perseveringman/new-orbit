@@ -17,7 +17,12 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { BrowserWindow } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { Conversation, ConversationAnchor, ConversationMeta, ConversationScope } from '@shared/conversation';
+import type {
+  Conversation,
+  ConversationAnchor,
+  ConversationMeta,
+  ConversationScope
+} from '@shared/conversation';
 import { conversationScopeKey } from '@shared/conversation';
 import type { RuntimeEvent } from '@shared/chat-protocol';
 import type { SpaceContextBundle } from '@shared/space';
@@ -86,7 +91,7 @@ You help the user think through projects, tasks, and ideas inside their Orbit va
 - **Never** output \`\`\`bash / \`\`\`shell / \`\`\`sh code fences. Those are just text to the user — nothing will execute. If you catch yourself about to write one, call the corresponding \`orbit_*\` tool instead.
 - **Never** invent tool names like \`bash\`, \`shell\`, \`terminal\`, \`run_command\`. They do not exist. You either have a specific \`orbit_*\` tool for the job, or you don't — if you don't, say so plainly to the user.
 - When a tool returns \`is_error: true\`, read the error message carefully, correct the parameter names / values, and call the tool again. Do not give up after one failure.
-- If the user explicitly provides an absolute local path outside the vault, you may call \`orbit_read\` on that exact path. Orbit will block and ask the user for approval before reading. Never use this to explore broad external locations the user did not name.
+- If the user explicitly provides an absolute local path outside the vault, you may call \`orbit_read\` on that exact path. Orbit will block and ask the user for approval in chat and Inbox before reading. Never use this to explore broad external locations the user did not name.
 
 ## Tool call examples (call exactly like this)
 - Inspect a project: call \`orbit_project_overview\` with \`{"id":"<project-slug-or-uid>"}\` (note the key is \`id\`, not \`slug\` or \`project\`).
@@ -331,7 +336,11 @@ export class AskAnywhereOrchestrator {
       return;
     }
     if (conv.currentRunId.startsWith('sdk-')) {
-      this.emitSyntheticError(conversationId, 'sdk_stop_not_supported', 'SDK streaming cancellation is not available yet.');
+      this.emitSyntheticError(
+        conversationId,
+        'sdk_stop_not_supported',
+        'SDK streaming cancellation is not available yet.'
+      );
       return;
     }
     await this.deps.pool.kill(conv.currentRunId, 'user_stop');
@@ -352,11 +361,7 @@ export class AskAnywhereOrchestrator {
     }
   }
 
-  private emitRuntimeBudgetHalt(
-    conversationId: string,
-    runId: string,
-    limit: number
-  ): void {
+  private emitRuntimeBudgetHalt(conversationId: string, runId: string, limit: number): void {
     const ev: RuntimeEvent = {
       id: `ask-budget-halt-${Date.now()}`,
       at: new Date().toISOString(),
@@ -385,10 +390,7 @@ export class AskAnywhereOrchestrator {
     endpointId?: string;
     model?: string;
   }): Promise<void> {
-    const maxIterations = Math.max(
-      1,
-      Math.min(50, this.deps.getAgentMaxIterations?.() ?? 25)
-    );
+    const maxIterations = Math.max(1, Math.min(50, this.deps.getAgentMaxIterations?.() ?? 25));
 
     // Phase C：加载 skill（应用级 / vault / space 三级合并 + requires detection）
     const vaultPath = this.deps.getVaultPath();
@@ -506,7 +508,9 @@ export class AskAnywhereOrchestrator {
     } catch (error) {
       this.emitSyntheticError(
         input.conversationId,
-        error instanceof Error ? error.message.split(':')[0] || 'sdk_agent_failed' : 'sdk_agent_failed',
+        error instanceof Error
+          ? error.message.split(':')[0] || 'sdk_agent_failed'
+          : 'sdk_agent_failed',
         error instanceof Error ? error.message : String(error)
       );
     } finally {
@@ -537,7 +541,9 @@ export class AskAnywhereOrchestrator {
             input.systemPrompt.trim(),
             input.scopedContext,
             'Runtime note: this SDK route cannot use local tools. Ask for confirmation before any action that would require modifying Orbit data.'
-          ].filter(Boolean).join('\n\n'),
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
           messages: rebuildMessages(input.turns, {
             appendUserText: input.userText
           }),
@@ -672,15 +678,24 @@ function buildPrompt({
   return parts.join('\n\n');
 }
 
-async function buildConversationContext(vaultPath: string, scope: ConversationScope): Promise<string> {
+async function buildConversationContext(
+  vaultPath: string,
+  scope: ConversationScope
+): Promise<string> {
   try {
     switch (scope.kind) {
       case 'project':
-        return renderSpaceContext(await buildSpaceContext(vaultPath, scope.project_id, { summary: true }));
+        return renderSpaceContext(
+          await buildSpaceContext(vaultPath, scope.project_id, { summary: true })
+        );
       case 'area':
-        return renderSpaceContext(await buildSpaceContext(vaultPath, scope.area_slug, { summary: true }));
+        return renderSpaceContext(
+          await buildSpaceContext(vaultPath, scope.area_slug, { summary: true })
+        );
       case 'resource':
-        return renderSpaceContext(await buildSpaceContext(vaultPath, scope.resource_slug, { summary: true }));
+        return renderSpaceContext(
+          await buildSpaceContext(vaultPath, scope.resource_slug, { summary: true })
+        );
       case 'note':
         return await renderNoteContext(vaultPath, scope.note_id);
       case 'task':
@@ -714,7 +729,14 @@ Tasks:
 ${tasks.length ? tasks.map((task) => `- ${task}`).join('\n') : '- none'}
 Materials: ${bundle.materials.scopes.length} scope(s), ${bundle.materials.pins.length} pin(s)
 Outputs:
-${bundle.outputs.length ? bundle.outputs.slice(0, 8).map((output) => `- ${output.title} (${output.path})`).join('\n') : '- none'}
+${
+  bundle.outputs.length
+    ? bundle.outputs
+        .slice(0, 8)
+        .map((output) => `- ${output.title} (${output.path})`)
+        .join('\n')
+    : '- none'
+}
 </current_orbit_context>`;
 }
 

@@ -8,7 +8,7 @@ export function registerApprovalIpc(getVaultPath: () => string | null): void {
   const service = (): ReturnType<typeof createApprovalServiceForVault> => {
     const vaultPath = getVaultPath();
     if (!vaultPath) throw new Error('no vault open');
-    return createApprovalServiceForVault(vaultPath, { onSync: broadcastSyncEvent });
+    return createApprovalServiceForVault(vaultPath, { onSync: broadcastApprovalSyncEvent });
   };
 
   ipcMain.handle(IPC.approval.submit, async (_event, input: ProposalSubmitInput) =>
@@ -23,7 +23,7 @@ export function registerApprovalIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.approval.get, async (_event, id: string) => service().get(id));
 }
 
-function broadcastSyncEvent(event: ProposalSyncEvent): void {
+export function broadcastApprovalSyncEvent(event: ProposalSyncEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(IPC.approval.event, event);

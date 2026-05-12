@@ -27,6 +27,11 @@ import { OrbitToolExecutor } from '../agent-tools/executor';
 import { AgentJournal } from '../agent-tools/journal';
 import { PHASE_C_TOOL_DEFS } from '../agent-tools/definitions';
 import { emitActivity } from '../activity';
+import { createApprovalServiceForVault } from '../approval/service';
+import { broadcastApprovalSyncEvent } from '../approval/ipc';
+import { createProposalInboxSync } from '../inbox/proposal';
+import { broadcastInboxEvent } from '../inbox/events';
+import { createExternalPathApprovalGate } from '../external-path-approval';
 import { AskAnywhereOrchestrator } from './orchestrator';
 
 let orchestrator: AskAnywhereOrchestrator | null = null;
@@ -51,11 +56,16 @@ function getAgentTools(): { registry: OrbitToolRegistry; executor: OrbitToolExec
   if (!agentTools || agentToolsVault !== vault) {
     const registry = new OrbitToolRegistry();
     registry.registerMany(PHASE_C_TOOL_DEFS);
+    const externalPathApproval = createExternalPathApprovalGate();
     const executor = new OrbitToolExecutor({
       toolRegistry: registry,
       cliRegistry: getInProcessCliRegistry(),
       activity: { emit: (input) => emitActivity(input) },
-      journal: new AgentJournal({ vaultPath: vault })
+      journal: new AgentJournal({ vaultPath: vault }),
+      externalPathApproval: {
+        getVaultPath: () => currentSession()?.vault ?? null,
+        request: (input) => externalPathApproval.request(input)
+      }
     });
     agentTools = { registry, executor };
     agentToolsVault = vault;
@@ -134,13 +144,54 @@ export function registerAskAnywhereChatIpc(): void {
         case 'chat.stop':
           await orch.stop(action.conversationId);
           break;
+        case 'chat.approve_tool':
+          await resolveToolApprovalFromChat(action, 'approved');
+          break;
+        case 'chat.reject_tool':
+          await resolveToolApprovalFromChat(action, 'rejected');
+          break;
         default:
-          // chat.retry / approve_tool / reject_tool 等：M5+ 实现
+          // chat.retry 等：M5+ 实现
           break;
       }
     } catch (err) {
       // 错误已通过 emitSyntheticError 推到 ChatView，这里仅日志
-      console.warn('[ask-anywhere] action failed', { kind: action.kind, error: (err as Error).message });
+      console.warn('[ask-anywhere] action failed', {
+        kind: action.kind,
+        error: (err as Error).message
+      });
     }
+  });
+}
+
+async function resolveToolApprovalFromChat(
+  action: ChatAction,
+  status: 'approved' | 'rejected'
+): Promise<void> {
+  const vaultPath = currentSession()?.vault;
+  if (!vaultPath) return;
+  const payload = action.payload as { spanId?: unknown; reason?: unknown };
+  const proposalId = typeof payload.spanId === 'string' ? payload.spanId : '';
+  if (!proposalId) return;
+
+  const approval = createApprovalServiceForVault(vaultPath, {
+    onSync: broadcastApprovalSyncEvent,
+    syncInbox: createProposalInboxSync(vaultPath, { onEvent: broadcastInboxEvent })
+  });
+  const proposal = await approval.get(proposalId);
+  if (!proposal || proposal.type !== 'external_path_access' || proposal.status !== 'pending') {
+    return;
+  }
+  const proposalPayload =
+    proposal.payload && typeof proposal.payload === 'object'
+      ? (proposal.payload as Record<string, unknown>)
+      : {};
+  const conversationId = proposalPayload['conversation_id'];
+  if (typeof conversationId === 'string' && conversationId !== action.conversationId) return;
+
+  await approval.resolve(proposalId, {
+    status,
+    resolution_source: 'chat',
+    ...(typeof payload.reason === 'string' ? { resolution_note: payload.reason } : {})
   });
 }

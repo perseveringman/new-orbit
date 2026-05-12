@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Conversation, ConversationScope } from '@shared/conversation';
 import { conversationScopeKey } from '@shared/conversation';
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
+import type { Proposal } from '@shared/approval';
 import type { ConversationStage } from '@shared/stage';
 import { conversationTurnsToRuntimeEvents } from '../chat/historyEvents';
 
@@ -76,12 +77,7 @@ export interface UseAskAnywhereSessionResult {
 export function useAskAnywhereSession(
   options: UseAskAnywhereSessionOptions = {}
 ): UseAskAnywhereSessionResult {
-  const {
-    enabled = true,
-    initialActiveId = null,
-    scope,
-    title = 'Ask Anywhere'
-  } = options;
+  const { enabled = true, initialActiveId = null, scope, title = 'Ask Anywhere' } = options;
   const sessionScope = scope ?? ASK_ANYWHERE_GLOBAL_SCOPE;
   const scopeKey = conversationScopeKey(sessionScope);
   const [sessions, setSessions] = useState<Conversation[]>([]);
@@ -93,12 +89,15 @@ export function useAskAnywhereSession(
   const [isLoading, setIsLoading] = useState(false);
   const activeIdRef = useRef<string | null>(activeId);
 
-  const selectActiveId = useCallback((id: string | null) => {
-    activeIdRef.current = id;
-    setActiveId(id);
-    writeLastActiveId(id, scopeKey);
-    if (id) void window.orbit.chat.setLastActiveConversation(sessionScope, id);
-  }, [scopeKey, sessionScope]);
+  const selectActiveId = useCallback(
+    (id: string | null) => {
+      activeIdRef.current = id;
+      setActiveId(id);
+      writeLastActiveId(id, scopeKey);
+      if (id) void window.orbit.chat.setLastActiveConversation(sessionScope, id);
+    },
+    [scopeKey, sessionScope]
+  );
 
   useEffect(() => {
     if (!initialActiveId) return;
@@ -119,11 +118,15 @@ export function useAskAnywhereSession(
     const list = await window.orbit.chat.listConversations();
     const askOnly = list.filter((c) => {
       const conversationKey = conversationScopeKey(c.scope ?? ASK_ANYWHERE_GLOBAL_SCOPE);
-      return !c.archived &&
+      return (
+        !c.archived &&
         (!scope || conversationKey === scopeKey) &&
-        c.anchors.some((a) => a.kind === 'ask_anywhere_session');
+        c.anchors.some((a) => a.kind === 'ask_anywhere_session')
+      );
     });
-    const full = await Promise.all(askOnly.map((meta) => window.orbit.chat.getConversation(meta.id)));
+    const full = await Promise.all(
+      askOnly.map((meta) => window.orbit.chat.getConversation(meta.id))
+    );
     const conversations = sortByUpdatedDesc(full.filter((c): c is Conversation => c !== null));
     setSessions(conversations);
 
@@ -131,14 +134,16 @@ export function useAskAnywhereSession(
     const current = activeIdRef.current;
     if (current && ids.has(current)) return;
 
-    const serverLast = await window.orbit.chat.getLastActiveConversation(sessionScope).catch(() => null);
+    const serverLast = await window.orbit.chat
+      .getLastActiveConversation(sessionScope)
+      .catch(() => null);
     const remembered = readLastActiveId(scopeKey);
     const fallback =
       serverLast && ids.has(serverLast.id)
         ? serverLast.id
         : remembered && ids.has(remembered)
           ? remembered
-          : conversations[0]?.id ?? null;
+          : (conversations[0]?.id ?? null);
     selectActiveId(fallback);
   }, [scope, scopeKey, selectActiveId, sessionScope]);
 
@@ -191,6 +196,18 @@ export function useAskAnywhereSession(
     };
   }, [enabled, reload]);
 
+  useEffect(() => {
+    if (!enabled) return;
+    const off = window.orbit.approval.onEvent((event) => {
+      const runtimeEvent = externalPathProposalToRuntimeEvent(event.proposal, activeIdRef.current);
+      if (!runtimeEvent) return;
+      setEvents((current) => [...current, runtimeEvent]);
+    });
+    return () => {
+      off();
+    };
+  }, [enabled]);
+
   const handleNew = useCallback(async () => {
     const conv = await window.orbit.chat.createConversation({
       anchor: {
@@ -207,23 +224,23 @@ export function useAskAnywhereSession(
     return conv;
   }, [reload, sessionScope, scopeKey, selectActiveId, title]);
 
-  const handleArchive = useCallback(async (id: string) => {
-    await window.orbit.chat.archiveConversation(id);
-    if (activeIdRef.current === id) {
-      selectActiveId(null);
-    }
-    await reload();
-  }, [reload, selectActiveId]);
-
-  const handleArtifactAction = useCallback(
-    async (artifactId: string, actionId: string) => {
-      if (!activeIdRef.current) return;
-      const conversationId = activeIdRef.current;
-      await window.orbit.stage.execAction(conversationId, artifactId, actionId);
-      setStage(await window.orbit.stage.get(conversationId));
+  const handleArchive = useCallback(
+    async (id: string) => {
+      await window.orbit.chat.archiveConversation(id);
+      if (activeIdRef.current === id) {
+        selectActiveId(null);
+      }
+      await reload();
     },
-    []
+    [reload, selectActiveId]
   );
+
+  const handleArtifactAction = useCallback(async (artifactId: string, actionId: string) => {
+    if (!activeIdRef.current) return;
+    const conversationId = activeIdRef.current;
+    await window.orbit.stage.execAction(conversationId, artifactId, actionId);
+    setStage(await window.orbit.stage.get(conversationId));
+  }, []);
 
   const handleAction = useCallback(async (action: ChatAction) => {
     if (!activeIdRef.current) return;
@@ -279,4 +296,55 @@ export function useAskAnywhereSession(
     handleAction,
     handleArtifactAction
   };
+}
+
+function externalPathProposalToRuntimeEvent(
+  proposal: Proposal,
+  activeConversationId: string | null
+): RuntimeEvent<'runtime.awaiting_user'> | null {
+  if (proposal.type !== 'external_path_access') return null;
+  const payload = asRecord(proposal.payload);
+  const conversationId = stringValue(payload['conversation_id']);
+  if (!conversationId || conversationId !== activeConversationId) return null;
+  const runId = stringValue(payload['run_id']) ?? proposal.submitted_by_agent_run ?? 'approval';
+  const parentSpanId = stringValue(payload['tool_use_id']);
+  const targetPath = stringValue(payload['target_path']);
+  const requestedTarget = stringValue(payload['requested_target']);
+  const pathKind = payload['path_kind'] === 'directory' ? 'directory' : 'file';
+  return {
+    id: `approval-sync-${proposal.id}-${proposal.status}-${proposal.resolved_at ?? proposal.submitted_at}`,
+    at: proposal.resolved_at ?? proposal.submitted_at,
+    kind: 'runtime.awaiting_user',
+    conversationId,
+    runId,
+    spanId: proposal.id,
+    ...(parentSpanId ? { parentSpanId } : {}),
+    payload: {
+      kind: 'external_path_access',
+      status: proposal.status,
+      proposalId: proposal.id,
+      title: stringValue(payload['title']) ?? 'Allow external path read?',
+      hint: hintForExternalPathStatus(proposal.status),
+      pathKind,
+      ...(proposal.inbox_item_id ? { inboxItemId: proposal.inbox_item_id } : {}),
+      ...(proposal.chat_card_id ? { chatCardId: proposal.chat_card_id } : {}),
+      ...(targetPath ? { targetPath } : {}),
+      ...(requestedTarget ? { requestedTarget } : {})
+    }
+  };
+}
+
+function hintForExternalPathStatus(status: Proposal['status']): string {
+  if (status === 'approved') return 'Approved. Continuing.';
+  if (status === 'rejected') return 'Rejected. The read will not run.';
+  if (status === 'dismissed') return 'Dismissed. The read will not run.';
+  return 'Approve in this chat or Inbox to continue.';
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
 }

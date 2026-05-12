@@ -1,9 +1,19 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { InboxCaptureInput, InboxDismissInput, InboxListFilter, InboxMessageInput, InboxResolveInput } from './types';
+import type {
+  InboxCaptureInput,
+  InboxDismissInput,
+  InboxListFilter,
+  InboxMessageInput,
+  InboxResolveInput
+} from './types';
 import { createInboxServiceForVault } from './service';
-import { dismissInboxItemWithProposalSync, resolveInboxItemWithProposalSync } from './proposal_sync';
+import {
+  dismissInboxItemWithProposalSync,
+  resolveInboxItemWithProposalSync
+} from './proposal_sync';
 import { broadcastInboxEvent } from './events';
+import { broadcastApprovalSyncEvent } from '../approval/ipc';
 
 export function registerInboxIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
@@ -26,12 +36,14 @@ export function registerInboxIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.inbox.get, async (_event, id: string) => service().get(id));
   ipcMain.handle(IPC.inbox.resolve, async (_event, id: string, input?: InboxResolveInput) =>
     resolveInboxItemWithProposalSync(vaultPath(), id, input, {
-      inbox: { onEvent: broadcastInboxEvent }
+      inbox: { onEvent: broadcastInboxEvent },
+      approval: { onSync: broadcastApprovalSyncEvent }
     })
   );
   ipcMain.handle(IPC.inbox.dismiss, async (_event, id: string, input?: InboxDismissInput) =>
     dismissInboxItemWithProposalSync(vaultPath(), id, input, {
-      inbox: { onEvent: broadcastInboxEvent }
+      inbox: { onEvent: broadcastInboxEvent },
+      approval: { onSync: broadcastApprovalSyncEvent }
     })
   );
   ipcMain.handle(IPC.inbox.archive, async (_event, id: string) => service().archive(id));

@@ -12,10 +12,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type {
-  RuntimeEvent,
-  RuntimeToolResultPayload
-} from '@shared/chat-protocol';
+import path from 'node:path';
+import type { RuntimeEvent, RuntimeToolResultPayload } from '@shared/chat-protocol';
 import type { AgentTurnToolUse } from '@shared/agent-tools';
 import type { ActivityAction, ActivityEventInput } from '@shared/activity';
 import { publishTraceableEvent } from '../events/bus';
@@ -24,6 +22,7 @@ import type { CliResponse } from '@shared/cli_protocol';
 import type { OrbitToolRegistry } from './registry';
 import type { AgentRuntimeEventSink } from './llm-client';
 import type { AgentJournal } from './journal';
+import type { ExternalPathApprovalGate } from '../external-path-approval';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** Tool 结果序列化字节上限（约 10KB），超过截断 + 注明。 */
@@ -34,6 +33,10 @@ export interface ActivityEmitterLike {
   emit(input: ActivityEventInput): unknown;
 }
 
+export interface ExternalPathApprovalLike extends ExternalPathApprovalGate {
+  getVaultPath(): string | null;
+}
+
 export interface OrbitToolExecutorDeps {
   toolRegistry: OrbitToolRegistry;
   cliRegistry: CliHandlerRegistry;
@@ -41,6 +44,8 @@ export interface OrbitToolExecutorDeps {
   activity?: ActivityEmitterLike;
   /** Phase B：Agent journal（destructive tool 执行前追加 before-state）。 */
   journal?: AgentJournal;
+  /** Ask Anywhere：external absolute reads are approved through chat + Inbox. */
+  externalPathApproval?: ExternalPathApprovalLike;
 }
 
 export interface OrbitToolExecuteContext {
@@ -66,6 +71,7 @@ export class OrbitToolExecutor {
   private readonly cliRegistry: CliHandlerRegistry;
   private readonly activity: ActivityEmitterLike | undefined;
   private readonly journal: AgentJournal | undefined;
+  private readonly externalPathApproval: ExternalPathApprovalLike | undefined;
 
   /**
    * 兼容两种构造：
@@ -74,21 +80,20 @@ export class OrbitToolExecutor {
    */
   constructor(toolRegistry: OrbitToolRegistry, cliRegistry: CliHandlerRegistry);
   constructor(deps: OrbitToolExecutorDeps);
-  constructor(
-    a: OrbitToolRegistry | OrbitToolExecutorDeps,
-    b?: CliHandlerRegistry
-  ) {
+  constructor(a: OrbitToolRegistry | OrbitToolExecutorDeps, b?: CliHandlerRegistry) {
     if (b) {
       this.toolRegistry = a as OrbitToolRegistry;
       this.cliRegistry = b;
       this.activity = undefined;
       this.journal = undefined;
+      this.externalPathApproval = undefined;
     } else {
       const deps = a as OrbitToolExecutorDeps;
       this.toolRegistry = deps.toolRegistry;
       this.cliRegistry = deps.cliRegistry;
       this.activity = deps.activity;
       this.journal = deps.journal;
+      this.externalPathApproval = deps.externalPathApproval;
     }
   }
 
@@ -156,6 +161,7 @@ export class OrbitToolExecutor {
     // 3) 串行调用 CliHandlerRegistry，包裹超时
     let response: CliResponse;
     try {
+      await this.maybeRequestExternalPathApproval(toolDef, toolUse, ctx, emit);
       response = await withTimeout(
         this.cliRegistry.handle({
           id: `agent-${toolUse.id}`,
@@ -165,17 +171,11 @@ export class OrbitToolExecutor {
         timeoutMs
       );
     } catch (err) {
-      const code = err instanceof TimeoutError ? 'timeout' : 'handler_error';
-      const message =
-        err instanceof Error ? err.message : `tool execution failed: ${String(err)}`;
-      const result = this.finalizeError(
-        toolUse,
-        startedAt,
-        code,
-        message,
-        isDestructive,
-        ctx
-      );
+      const { code, message } =
+        err instanceof TimeoutError
+          ? { code: 'timeout', message: err.message }
+          : executionError(err);
+      const result = this.finalizeError(toolUse, startedAt, code, message, isDestructive, ctx);
       this.recordActivityFailure(toolDef, toolUse, result, ctx);
       const ev = await emitToolResult(emit, ctx, toolUse, result);
       eventIds.push(ev.id);
@@ -349,6 +349,30 @@ export class OrbitToolExecutor {
       }
     });
   }
+
+  private async maybeRequestExternalPathApproval(
+    toolDef: { cliMethod: string },
+    toolUse: AgentTurnToolUse,
+    ctx: OrbitToolExecuteContext,
+    emit: AgentRuntimeEventSink
+  ): Promise<void> {
+    if (!this.externalPathApproval) return;
+    if (toolUse.name !== 'orbit_read' || toolDef.cliMethod !== 'cat') return;
+    const target = externalReadTarget(toolUse.input);
+    if (!target || !path.isAbsolute(target)) return;
+    const vaultPath = this.externalPathApproval.getVaultPath();
+    if (!vaultPath) return;
+    await this.externalPathApproval.request({
+      vaultPath,
+      requestedTarget: target,
+      targetPath: path.resolve(target),
+      conversationId: ctx.conversationId,
+      runId: ctx.runId,
+      toolUseId: toolUse.id,
+      toolName: toolUse.name,
+      emit
+    });
+  }
 }
 
 // =================================================================================
@@ -381,10 +405,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 function serializeResult(data: unknown): { content: string; size: number } {
   let raw: string;
   try {
-    raw =
-      typeof data === 'string'
-        ? data
-        : JSON.stringify(data ?? null, null, 2);
+    raw = typeof data === 'string' ? data : JSON.stringify(data ?? null, null, 2);
   } catch {
     raw = String(data);
   }
@@ -396,6 +417,23 @@ function serializeResult(data: unknown): { content: string; size: number } {
     content: `${truncated}\n\n[orbit_truncated: original ${size} bytes, showing first ~${truncated.length} chars]`,
     size
   };
+}
+
+function executionError(err: unknown): { code: string; message: string } {
+  if (err instanceof Error) {
+    const code =
+      'code' in err && typeof (err as { code?: unknown }).code === 'string'
+        ? (err as { code: string }).code
+        : 'handler_error';
+    return { code, message: err.message };
+  }
+  return { code: 'handler_error', message: `tool execution failed: ${String(err)}` };
+}
+
+function externalReadTarget(input: unknown): string | null {
+  if (!input || typeof input !== 'object') return null;
+  const target = (input as Record<string, unknown>)['target'];
+  return typeof target === 'string' && target ? target : null;
 }
 
 async function emitToolResult(

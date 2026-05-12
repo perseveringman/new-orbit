@@ -58,6 +58,40 @@ describe('inbox proposal/chat sync model', () => {
     ]);
   });
 
+  it('syncs external path read approvals to an A4 Inbox item', async () => {
+    const approval = createApprovalService(createApprovalStore(vaultPath), {
+      id: () => 'prop_external_path',
+      now: () => new Date('2026-05-12T10:00:00.000Z'),
+      emitActivity: () => undefined,
+      syncInbox: createProposalInboxSync(vaultPath, {
+        now: () => new Date('2026-05-12T10:00:00.000Z'),
+        emitActivity: () => undefined
+      })
+    });
+
+    const proposal = await approval.submit({
+      type: 'external_path_access',
+      submitted_by: 'agent',
+      submitted_by_agent_run: 'run_external',
+      subject: 'Allow Ask Anywhere to read /Users/ryan/outside',
+      payload: {
+        title: 'Allow external path read?',
+        description: '/Users/ryan/outside',
+        access: 'read',
+        target_path: '/Users/ryan/outside',
+        requested_target: '/Users/ryan/outside',
+        path_kind: 'directory',
+        conversation_id: 'conv_external'
+      }
+    });
+
+    const inbox = await createInboxStore(vaultPath).get(proposal.inbox_item_id!);
+    expect(inbox?.subtype).toBe('A4');
+    expect(inbox?.context.proposal_id).toBe('prop_external_path');
+    expect(inbox?.context.conversation_id).toBe('conv_external');
+    expect(inbox?.summary).toContain('External path read approval requested');
+  });
+
   it('resolving an Inbox proposal item resolves the shared proposal store', async () => {
     const approval = createApprovalService(createApprovalStore(vaultPath), {
       id: () => 'prop_archive',
