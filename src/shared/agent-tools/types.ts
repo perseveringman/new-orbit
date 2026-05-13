@@ -6,6 +6,11 @@
  * skill / scope 过滤等元数据保留字段位，Phase C 启用。
  */
 
+import type {
+  AuthorityPermission,
+  AuthorityRiskLevel,
+  AuthorityToolFamily,
+} from '@shared/authority';
 import type { ConversationScope } from '@shared/conversation';
 
 /** 极简 JSON Schema（Anthropic tools.input_schema 接受标准 JSON Schema 子集）。 */
@@ -53,6 +58,48 @@ export interface AgentToolDef {
   scopes?: ConversationScope['kind'][];
   /** 单次执行上限，单位 ms。默认 30s，搜索/扫描类放宽到 120s。 */
   timeoutMs?: number;
+  /** Agent Authority 工具族，用于审批、白名单与可观测性。 */
+  family?: AuthorityToolFamily;
+  /** 默认风险等级。具体执行时仍可按参数重新分级。 */
+  risk?: AuthorityRiskLevel;
+  /** 默认权限集合。具体执行时仍可按参数补充。 */
+  permissions?: AuthorityPermission[];
+  /** 工具来源，便于对照 OpenClaw 能力矩阵。 */
+  source?: 'orbit' | 'openclaw-inspired';
+  /** 当前注册状态。未实现的 OpenClaw 对齐项会以 planned 暴露到注册页面。 */
+  status?: 'active' | 'planned';
+  /** 对应的 OpenClaw tool 名或能力族。 */
+  openClawEquivalent?: string;
+}
+
+export type AgentToolRegistrationStatus = 'active' | 'planned';
+
+export interface AgentToolRegistrationView {
+  name: string;
+  description: string;
+  family: AuthorityToolFamily;
+  risk: AuthorityRiskLevel;
+  permissions: AuthorityPermission[];
+  scopes: ConversationScope['kind'][];
+  status: AgentToolRegistrationStatus;
+  source: 'orbit' | 'openclaw-inspired';
+  cliMethod?: string;
+  destructive?: boolean;
+  timeoutMs?: number;
+  openClawEquivalent?: string;
+}
+
+export interface AgentToolRegistrySnapshot {
+  generatedAt: number;
+  totalActive: number;
+  totalPlanned: number;
+  active: AgentToolRegistrationView[];
+  planned: AgentToolRegistrationView[];
+  openClawParity: {
+    implemented: string[];
+    planned: string[];
+    missing: string[];
+  };
 }
 
 /** Anthropic 风格的 tool_choice 直通。 */

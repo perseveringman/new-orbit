@@ -44,6 +44,7 @@ import type {
 } from './dashboard';
 import type { TraceableEvent, TraceableEventFilter, TraceableEventQueryResult } from './events';
 import type { ChatAction, RuntimeEvent as ChatRuntimeEvent } from './chat-protocol';
+import type { AgentToolRegistrySnapshot } from './agent-tools';
 import type {
   Conversation as ChatConversation,
   ConversationAnchor as ChatConversationAnchor,
@@ -396,6 +397,9 @@ export const IPC = {
       testEndpoint: 'runtime:sdk:endpoint:test',
       decide: 'runtime:sdk:decide'
     }
+  },
+  tools: {
+    snapshot: 'tools:snapshot'
   },
   dashboard: {
     summary: 'dashboard:summary',
@@ -1309,6 +1313,9 @@ export interface OrbitApi {
       ): Promise<SDKEndpointTestResult>;
       decide(input: RuntimeRouteInput): Promise<RuntimeRouteDecision>;
     };
+  };
+  tools: {
+    snapshot(): Promise<AgentToolRegistrySnapshot>;
   };
   dashboard: {
     summary(): Promise<DashboardSummary>;

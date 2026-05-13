@@ -68,6 +68,7 @@ import type {
   ConversationTurn as ChatConversationTurn
 } from '@shared/conversation';
 import type { ChatAppendTurnInput, ChatCreateConversationInput } from '@shared/ipc';
+import type { AgentToolRegistrySnapshot } from '@shared/agent-tools';
 import type {
   Proposal,
   ProposalListFilter,
@@ -334,6 +335,9 @@ const api: OrbitApi = {
         ipcRenderer.invoke(IPC.runtime.sdk.testEndpoint, endpointId, model, prompt),
       decide: (input) => ipcRenderer.invoke(IPC.runtime.sdk.decide, input)
     }
+  },
+  tools: {
+    snapshot: (): Promise<AgentToolRegistrySnapshot> => ipcRenderer.invoke(IPC.tools.snapshot)
   },
   dashboard: {
     summary: (): Promise<DashboardSummary> => ipcRenderer.invoke(IPC.dashboard.summary),

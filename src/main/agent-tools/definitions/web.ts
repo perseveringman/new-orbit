@@ -15,6 +15,12 @@ export const WEB_TOOL_DEFS: readonly AgentToolDef[] = [
       'Search the public web for current or external information. Use this for recent news, live facts, vendor docs, or anything not likely to be in the Orbit vault. ' +
       'This is not vault search; use orbit_search for local Orbit content.',
     cliMethod: 'web.search',
+    family: 'web',
+    risk: 'L0_observe',
+    permissions: ['read', 'network'],
+    source: 'openclaw-inspired',
+    status: 'active',
+    openClawEquivalent: 'web_search',
     timeoutMs: 45_000,
     inputSchema: {
       type: 'object',
@@ -51,6 +57,12 @@ export const WEB_TOOL_DEFS: readonly AgentToolDef[] = [
       'Fetch and extract readable text from a public http(s) URL. Use after orbit_web_search when a result needs source details, quotes, dates, or verification. ' +
       'Private network, localhost, and credential-bearing URLs are blocked.',
     cliMethod: 'web.fetch',
+    family: 'web',
+    risk: 'L0_observe',
+    permissions: ['read', 'network'],
+    source: 'openclaw-inspired',
+    status: 'active',
+    openClawEquivalent: 'web_fetch',
     timeoutMs: 45_000,
     inputSchema: {
       type: 'object',

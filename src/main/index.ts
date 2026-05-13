@@ -31,6 +31,7 @@ import { registerInboxIpc } from './inbox';
 import { registerConversationIpc } from './conversation/ipc';
 import { registerAskAnywhereChatIpc } from './ask-anywhere/ipc';
 import { registerStageIpc } from './ask-anywhere/stage-ipc';
+import { registerAgentToolsIpc } from './agent-tools/ipc';
 import { migrateLegacyTaskConversations } from './conversation/migration';
 import {
   QUICK_CAPTURE_ACCELERATOR,
@@ -385,6 +386,7 @@ function registerIpc(): void {
   registerConversationIpc();
   registerAskAnywhereChatIpc();
   registerStageIpc(() => currentVault?.path ?? null);
+  registerAgentToolsIpc();
   registerGitIpc();
   registerGitHubIpc();
   registerEnvIpc();

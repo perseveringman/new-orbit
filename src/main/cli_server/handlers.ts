@@ -46,6 +46,17 @@ import { createResourceStore } from '../resource/store';
 import type { SpaceContextOptions } from '@shared/space';
 import { runWebFetch } from '../web-tools/fetch';
 import { runWebSearch, type WebSearchProvider } from '../web-tools/search';
+import { runShellTool } from '../tools/shell';
+import {
+  closeBrowserTool,
+  openBrowserTool,
+  snapshotBrowserTool
+} from '../tools/browser';
+import {
+  listSubagentsTool,
+  spawnSubagentTool,
+  stopSubagentTool
+} from '../tools/subagent';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -410,6 +421,14 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       ...(typeof input.max_chars === 'number' ? { maxChars: input.max_chars } : {})
     });
   });
+
+  registry.register('shell.run', (params) => runShellTool(params));
+  registry.register('browser.open', (params) => openBrowserTool(params));
+  registry.register('browser.snapshot', (params) => snapshotBrowserTool(params));
+  registry.register('browser.close', (params) => closeBrowserTool(params));
+  registry.register('subagent.spawn', (params) => spawnSubagentTool(params));
+  registry.register('subagent.list', () => listSubagentsTool());
+  registry.register('subagent.stop', (params) => stopSubagentTool(params));
 
   registry.register('task.list', async (params) => {
     const session = openSession();

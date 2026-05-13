@@ -20,6 +20,26 @@ Layer 3  Surfaces         Timeline / Chat / Search / Dashboard / Resource / Area
 
 最重要的修正：**Feeds 不是用户数据。只有进入 Library 才算用户数据。**
 
+### 2026-05-13 — Ask Anywhere OpenClaw parity foundation
+
+Status: **implemented (foundation)**.
+
+Delivered:
+
+- Ask Anywhere agent tool registry now exposes OpenClaw-inspired web, shell, browser, and subagent tool families.
+- `orbit_shell_run` runs bounded argv-style local commands through Agent Authority.
+- `orbit_browser_open` / `orbit_browser_snapshot` / `orbit_browser_close` provide rendered public-page inspection.
+- `orbit_subagent_spawn` / `orbit_subagent_list` / `orbit_subagent_stop` provide first helper-agent control surface with profile-based authority checks.
+- Tool Registry workspace page shows active tools, planned OpenClaw parity tools, risk levels, permissions, and remaining gaps.
+
+Next parity backlog:
+
+- richer browser actions with final-click safeguards
+- session history/send/status APIs
+- automation cron/heartbeat tooling
+- plugin/gateway tool bridge
+- media/PDF tool family
+
 ---
 
 ## 1. 已完成里程碑

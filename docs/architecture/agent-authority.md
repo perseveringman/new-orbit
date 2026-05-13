@@ -148,6 +148,20 @@ This is how Orbit becomes less interruptive without becoming less accountable.
 
 ## 7. Tool family guidance
 
+### Registry and parity surface
+
+Ask-Anywhere tools must be registered through the central agent tool registry, not hidden in model-provider-specific prompts.
+
+Each registered tool records:
+
+- tool family
+- risk level
+- requested permissions
+- OpenClaw-equivalent capability, when applicable
+- active/planned status
+
+The renderer exposes a Tool Registry page so future work can verify what is actually available to models and what remains planned. This page is the source of truth for OpenClaw parity tracking at runtime.
+
 ### Shell
 
 Shell must run through `AuthorityRequest`.
