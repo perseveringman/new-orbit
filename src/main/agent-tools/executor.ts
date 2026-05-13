@@ -162,11 +162,12 @@ export class OrbitToolExecutor {
     let response: CliResponse;
     try {
       await this.maybeRequestExternalPathApproval(toolDef, toolUse, ctx, emit);
+      const cliParams = paramsWithAgentContext(toolDef, toolUse, ctx);
       response = await withTimeout(
         this.cliRegistry.handle({
           id: `agent-${toolUse.id}`,
           method: toolDef.cliMethod,
-          params: toolUse.input
+          params: cliParams
         }),
         timeoutMs
       );
@@ -434,6 +435,25 @@ function externalReadTarget(input: unknown): string | null {
   if (!input || typeof input !== 'object') return null;
   const target = (input as Record<string, unknown>)['target'];
   return typeof target === 'string' && target ? target : null;
+}
+
+function paramsWithAgentContext(
+  toolDef: { cliMethod: string },
+  toolUse: AgentTurnToolUse,
+  ctx: OrbitToolExecuteContext
+): unknown {
+  if (!toolDef.cliMethod.startsWith('task.propose')) return toolUse.input;
+  const input =
+    toolUse.input && typeof toolUse.input === 'object' && !Array.isArray(toolUse.input)
+      ? { ...(toolUse.input as Record<string, unknown>) }
+      : {};
+  if (typeof input['run_id'] !== 'string' || !input['run_id']) {
+    input['run_id'] = ctx.runId;
+  }
+  if (typeof input['conversation_id'] !== 'string' || !input['conversation_id']) {
+    input['conversation_id'] = ctx.conversationId;
+  }
+  return input;
 }
 
 async function emitToolResult(

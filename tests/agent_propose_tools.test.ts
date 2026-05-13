@@ -69,8 +69,12 @@ describe('Executor + propose tool', () => {
 
   it('emits agent.proposal_submitted Activity on successful propose', async () => {
     const seen: ActivityEventInput[] = [];
+    const requests: CliRequest[] = [];
     const executor = makeExecutor({
-      handler: () => ({ id: 'x', ok: true, data: { id: 'proposal-1' } }),
+      handler: (request) => {
+        requests.push(request);
+        return { id: 'x', ok: true, data: { id: 'proposal-1' } };
+      },
       activity: {
         emit: (input) => {
           seen.push(input);
@@ -88,6 +92,12 @@ describe('Executor + propose tool', () => {
     expect(seen[0]?.action).toBe('agent.proposal_submitted');
     expect(seen[0]?.actor).toBe('agent');
     expect(seen[0]?.context?.tool_name).toBe('orbit_task_propose');
+    expect(requests[0]?.params).toMatchObject({
+      title: 'Add OAuth',
+      project_uid: 'proj-1',
+      run_id: 'run',
+      conversation_id: 'conv'
+    });
   });
 
   it('emits agent.tool_failed on propose failure (not agent.proposal_submitted)', async () => {

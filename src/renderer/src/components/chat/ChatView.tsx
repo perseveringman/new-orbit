@@ -255,11 +255,13 @@ function AwaitingUserCard({
   const status = event.payload.status ?? 'pending';
   const proposalId = event.payload.proposalId ?? event.spanId;
   const title = event.payload.title ?? 'Awaiting user approval';
+  const isExternalPathApproval = event.payload.kind === 'external_path_access';
   const showActions =
-    event.payload.kind === 'external_path_access' &&
     status === 'pending' &&
     canApprove &&
     (onApprove || onReject);
+  const approveLabel = isExternalPathApproval ? 'Allow read' : 'Approve';
+  const rejectLabel = isExternalPathApproval ? 'Deny' : 'Reject';
   return (
     <div className="rounded-xl border border-violet-300 bg-violet-50/80 px-3 py-2 text-xs text-violet-900 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -284,7 +286,7 @@ function AwaitingUserCard({
               onClick={() => onApprove(proposalId)}
               className="rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-emerald-700"
             >
-              Allow read
+              {approveLabel}
             </button>
           ) : null}
           {onReject ? (
@@ -293,7 +295,7 @@ function AwaitingUserCard({
               onClick={() => onReject(proposalId)}
               className="rounded-md border border-rose-300 bg-white/50 px-3 py-1.5 text-[11px] font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:bg-transparent dark:text-rose-200 dark:hover:bg-rose-950/30"
             >
-              Deny
+              {rejectLabel}
             </button>
           ) : null}
         </div>

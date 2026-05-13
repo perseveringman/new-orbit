@@ -179,7 +179,7 @@ async function resolveToolApprovalFromChat(
     syncInbox: createProposalInboxSync(vaultPath, { onEvent: broadcastInboxEvent })
   });
   const proposal = await approval.get(proposalId);
-  if (!proposal || proposal.type !== 'external_path_access' || proposal.status !== 'pending') {
+  if (!proposal || proposal.status !== 'pending') {
     return;
   }
   const proposalPayload =

@@ -15,7 +15,10 @@ import { dependencyTree, detectCycleForUpdate, dependencyRefs } from '../depende
 import { taskReadyState } from '../auto_runner/ready_set';
 import { getAutoRunnerDispatcher } from '../auto_runner/dispatcher';
 import { createApprovalServiceForVault } from '../approval/service';
+import { broadcastApprovalSyncEvent } from '../approval/ipc';
 import { createInboxServiceForVault } from '../inbox/service';
+import { broadcastInboxEvent } from '../inbox/events';
+import { createProposalInboxSync } from '../inbox/proposal';
 import {
   dismissInboxItemWithProposalSync,
   resolveInboxItemWithProposalSync
@@ -272,11 +275,15 @@ function taskFilter(params: unknown): TaskFilter {
 }
 
 function approvalService() {
-  return createApprovalServiceForVault(openSession().vault);
+  const vaultPath = openSession().vault;
+  return createApprovalServiceForVault(vaultPath, {
+    onSync: broadcastApprovalSyncEvent,
+    syncInbox: createProposalInboxSync(vaultPath, { onEvent: broadcastInboxEvent })
+  });
 }
 
 function inboxService() {
-  return createInboxServiceForVault(openSession().vault);
+  return createInboxServiceForVault(openSession().vault, { onEvent: broadcastInboxEvent });
 }
 
 function proposalSubmitter(params: Record<string, unknown>): 'agent' | 'user' {
@@ -502,6 +509,9 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       ...(projectUid ? { project_uid: projectUid } : {}),
       ...(areaUid ? { area_uid: areaUid } : {}),
       ...(typeof input.description === 'string' ? { description: input.description } : {}),
+      ...(typeof input.conversation_id === 'string'
+        ? { conversation_id: input.conversation_id }
+        : {}),
       ...(isRecord(input.frontmatter) ? { frontmatter: input.frontmatter } : {})
     };
     return approvalService().submit({
@@ -529,7 +539,13 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       ...(typeof input.run_id === 'string' ? { submitted_by_agent_run: input.run_id } : {}),
       submitted_during_task: currentUid,
       subject: proposalSubject('Scope expansion', currentUid),
-      payload: { current_task_uid: currentUid, summary }
+      payload: {
+        current_task_uid: currentUid,
+        summary,
+        ...(typeof input.conversation_id === 'string'
+          ? { conversation_id: input.conversation_id }
+          : {})
+      }
     });
   });
 
@@ -546,7 +562,13 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       ...(typeof input.run_id === 'string' ? { submitted_by_agent_run: input.run_id } : {}),
       submitted_during_task: currentUid,
       subject: proposalSubject('Task split', currentUid),
-      payload: { current_task_uid: currentUid, summary }
+      payload: {
+        current_task_uid: currentUid,
+        summary,
+        ...(typeof input.conversation_id === 'string'
+          ? { conversation_id: input.conversation_id }
+          : {})
+      }
     });
   });
 
@@ -732,7 +754,11 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     return resolveInboxItemWithProposalSync(
       openSession().vault,
       stringParam(input, 'id'),
-      (isRecord(input.input) ? input.input : {}) as InboxResolveInput
+      (isRecord(input.input) ? input.input : {}) as InboxResolveInput,
+      {
+        inbox: { onEvent: broadcastInboxEvent },
+        approval: { onSync: broadcastApprovalSyncEvent }
+      }
     );
   });
   registry.register('inbox.dismiss', (params) => {
@@ -740,7 +766,11 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     return dismissInboxItemWithProposalSync(
       openSession().vault,
       stringParam(input, 'id'),
-      (isRecord(input.input) ? input.input : {}) as InboxDismissInput
+      (isRecord(input.input) ? input.input : {}) as InboxDismissInput,
+      {
+        inbox: { onEvent: broadcastInboxEvent },
+        approval: { onSync: broadcastApprovalSyncEvent }
+      }
     );
   });
   registry.register('inbox.archive', (params) => inboxService().archive(stringParam(params, 'id')));

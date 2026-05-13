@@ -92,6 +92,36 @@ describe('inbox proposal/chat sync model', () => {
     expect(inbox?.summary).toContain('External path read approval requested');
   });
 
+  it('syncs Ask-Anywhere task proposals to Inbox with conversation context', async () => {
+    const approval = createApprovalService(createApprovalStore(vaultPath), {
+      id: () => 'prop_new_task_chat',
+      now: () => new Date('2026-05-12T10:00:00.000Z'),
+      emitActivity: () => undefined,
+      syncInbox: createProposalInboxSync(vaultPath, {
+        now: () => new Date('2026-05-12T10:00:00.000Z'),
+        emitActivity: () => undefined
+      })
+    });
+
+    const proposal = await approval.submit({
+      type: 'new_task',
+      submitted_by: 'agent',
+      submitted_by_agent_run: 'run_task',
+      subject: 'New task: 标签与收尾',
+      payload: {
+        title: '标签与收尾',
+        description: 'Finish tag cleanup.',
+        project_uid: 'proj_collect',
+        conversation_id: 'conv_task'
+      }
+    });
+
+    const inbox = await createInboxStore(vaultPath).get(proposal.inbox_item_id!);
+    expect(inbox?.subtype).toBe('A2');
+    expect(inbox?.context.proposal_id).toBe('prop_new_task_chat');
+    expect(inbox?.context.conversation_id).toBe('conv_task');
+  });
+
   it('resolving an Inbox proposal item resolves the shared proposal store', async () => {
     const approval = createApprovalService(createApprovalStore(vaultPath), {
       id: () => 'prop_archive',

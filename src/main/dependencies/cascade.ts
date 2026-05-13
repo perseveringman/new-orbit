@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import type { ActivityEventInput } from '../activity';
 import { emitActivity } from '../activity';
 import { createInboxServiceForVault, type InboxService } from '../inbox';
+import { broadcastInboxEvent } from '../inbox/events';
 import { updateTaskFrontmatter } from '../task';
 import type { TaskRecord } from '@shared/schemas';
 import { dependentTasksOf } from './graph';
@@ -40,7 +41,8 @@ function blockedReason(dependencyUid: string, reason: DependencyUnavailableReaso
 export async function cascadeDependencyUnavailable(
   input: DependencyUnavailableInput
 ): Promise<DependencyCascadeResult> {
-  const inbox = input.inbox ?? createInboxServiceForVault(input.vaultPath);
+  const inbox =
+    input.inbox ?? createInboxServiceForVault(input.vaultPath, { onEvent: broadcastInboxEvent });
   const activity = input.emitActivity ?? emitActivity;
   const dependencyTitle = input.dependencyTitle ?? input.dependencyUid;
   const affected = dependentTasksOf(input.dependencyUid, input.tasks);

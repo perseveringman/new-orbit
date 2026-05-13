@@ -161,11 +161,14 @@ export function useAskAnywhereSession(
     }
 
     let cancelled = false;
-    void window.orbit.chat.getConversation(activeId).then((conv) => {
+    void (async () => {
+      const conv = await window.orbit.chat.getConversation(activeId);
       if (cancelled || !conv) return;
-      setEvents(turnsToEvents(conv));
+      const pendingApprovals = await pendingProposalEventsForConversation(activeId).catch(() => []);
+      if (cancelled) return;
+      setEvents([...turnsToEvents(conv), ...pendingApprovals]);
       setIsLoading(Boolean(conv.currentRunId));
-    });
+    })();
     void window.orbit.stage.get(activeId).then((next) => {
       if (!cancelled) setStage(next);
     });
@@ -199,7 +202,7 @@ export function useAskAnywhereSession(
   useEffect(() => {
     if (!enabled) return;
     const off = window.orbit.approval.onEvent((event) => {
-      const runtimeEvent = externalPathProposalToRuntimeEvent(event.proposal, activeIdRef.current);
+      const runtimeEvent = proposalToRuntimeEvent(event.proposal, activeIdRef.current);
       if (!runtimeEvent) return;
       setEvents((current) => [...current, runtimeEvent]);
     });
@@ -298,11 +301,22 @@ export function useAskAnywhereSession(
   };
 }
 
-function externalPathProposalToRuntimeEvent(
+async function pendingProposalEventsForConversation(
+  conversationId: string
+): Promise<RuntimeEvent<'runtime.awaiting_user'>[]> {
+  const proposals = await window.orbit.approval.list({
+    status: 'pending',
+    includeArchived: false
+  });
+  return proposals
+    .map((proposal) => proposalToRuntimeEvent(proposal, conversationId))
+    .filter((event): event is RuntimeEvent<'runtime.awaiting_user'> => event !== null);
+}
+
+function proposalToRuntimeEvent(
   proposal: Proposal,
   activeConversationId: string | null
 ): RuntimeEvent<'runtime.awaiting_user'> | null {
-  if (proposal.type !== 'external_path_access') return null;
   const payload = asRecord(proposal.payload);
   const conversationId = stringValue(payload['conversation_id']);
   if (!conversationId || conversationId !== activeConversationId) return null;
@@ -320,25 +334,44 @@ function externalPathProposalToRuntimeEvent(
     spanId: proposal.id,
     ...(parentSpanId ? { parentSpanId } : {}),
     payload: {
-      kind: 'external_path_access',
+      kind: proposal.type,
       status: proposal.status,
       proposalId: proposal.id,
-      title: stringValue(payload['title']) ?? 'Allow external path read?',
-      hint: hintForExternalPathStatus(proposal.status),
-      pathKind,
+      title: proposalTitle(proposal, payload),
+      hint: hintForProposalStatus(proposal, payload),
       ...(proposal.inbox_item_id ? { inboxItemId: proposal.inbox_item_id } : {}),
       ...(proposal.chat_card_id ? { chatCardId: proposal.chat_card_id } : {}),
       ...(targetPath ? { targetPath } : {}),
-      ...(requestedTarget ? { requestedTarget } : {})
+      ...(requestedTarget ? { requestedTarget } : {}),
+      ...(proposal.type === 'external_path_access' ? { pathKind } : {})
     }
   };
 }
 
-function hintForExternalPathStatus(status: Proposal['status']): string {
-  if (status === 'approved') return 'Approved. Continuing.';
-  if (status === 'rejected') return 'Rejected. The read will not run.';
-  if (status === 'dismissed') return 'Dismissed. The read will not run.';
-  return 'Approve in this chat or Inbox to continue.';
+function proposalTitle(proposal: Proposal, payload: Record<string, unknown>): string {
+  if (proposal.type === 'external_path_access') {
+    return stringValue(payload['title']) ?? 'Allow external path read?';
+  }
+  if (proposal.type === 'new_task') {
+    return `Approve task: ${stringValue(payload['title']) ?? proposal.subject}`;
+  }
+  return proposal.subject;
+}
+
+function hintForProposalStatus(
+  proposal: Proposal,
+  payload: Record<string, unknown>
+): string {
+  if (proposal.status === 'approved') return 'Approved. Inbox will update automatically.';
+  if (proposal.status === 'rejected') return 'Rejected. Inbox will update automatically.';
+  if (proposal.status === 'dismissed') return 'Dismissed. Inbox will update automatically.';
+  if (proposal.type === 'external_path_access') return 'Approve in this chat or Inbox to continue.';
+  const detail = stringValue(payload['description']) ?? stringValue(payload['summary']);
+  const action =
+    proposal.type === 'new_task'
+      ? 'Approve here or in Inbox to create this task.'
+      : 'Approve here or in Inbox to continue.';
+  return [detail, action].filter(Boolean).join('\n\n');
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

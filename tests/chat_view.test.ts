@@ -215,6 +215,29 @@ describe('ChatView', () => {
     expect(html).toContain('Deny');
   });
 
+  it('renders task proposals as actionable approval cards', () => {
+    const html = render(
+      [
+        ev(
+          'runtime.awaiting_user',
+          {
+            kind: 'new_task',
+            status: 'pending',
+            proposalId: 'prop_task',
+            title: 'Approve task: 标签与收尾',
+            hint: 'Approve here or in Inbox to create this task.'
+          },
+          { id: 'await-task', spanId: 'prop_task' }
+        )
+      ],
+      { ...DEFAULT_CHAT_HOST_CAPABILITIES, canApproveTool: true }
+    );
+
+    expect(html).toContain('Approve task: 标签与收尾');
+    expect(html).toContain('Approve');
+    expect(html).toContain('Reject');
+  });
+
   it('merges external path approval status updates by proposal id', () => {
     const html = render(
       [

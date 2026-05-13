@@ -15,12 +15,13 @@ import type {
   SaveLibraryArticleInput,
   UpdateThoughtInput
 } from '@shared/capture';
-import type { InboxEvent, InboxStatus } from '@shared/inbox';
+import type { InboxStatus } from '@shared/inbox';
 import { createFeedService } from './feed/service';
 import { createLibraryService } from './library/service';
 import { createQuickCaptureService } from './quick/service';
 import { createThoughtService } from './thoughts/service';
 import { publishTraceableEvent } from '../events/bus';
+import { broadcastInboxEvent } from '../inbox/events';
 
 export function registerCaptureIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
@@ -190,11 +191,5 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
 export function broadcastQuickCaptureOpen(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send(IPC.quickCapture.open);
-  }
-}
-
-function broadcastInboxEvent(event: InboxEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(IPC.inbox.event, event);
   }
 }

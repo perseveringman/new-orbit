@@ -48,6 +48,7 @@ export const NewTaskProposalPayloadSchema = z
     description: z.string().optional(),
     uid: z.string().min(1).optional(),
     status: z.enum(TASK_STATUSES).optional(),
+    conversation_id: z.string().min(1).optional(),
     frontmatter: JsonObjectSchema.optional()
   })
   .strict()
