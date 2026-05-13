@@ -12,6 +12,7 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Ask Anywhere', view: { kind: 'askAnywhere' }, icon: '✦' },
   { label: 'Vision', view: { kind: 'vision' }, icon: '✦' },
   { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: 'Tools', view: { kind: 'tools' }, icon: '⌘' },
   { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
   { label: 'Console', view: { kind: 'developerConsole' }, icon: '⌁' },
   { label: 'GitHub', view: { kind: 'github' }, icon: '⌘' },
@@ -51,6 +52,7 @@ const WORKSPACE_DETAILS: Record<
    | 'dashboard'
     | 'vision'
     | 'askAnywhere'
+   | 'tools'
    | 'agents'
   | 'developerConsole'
    | 'github'
@@ -75,6 +77,7 @@ const WORKSPACE_DETAILS: Record<
 > = {
   dashboard: 'Vision, PARA health, and project activity.',
   askAnywhere: 'Persistent AI conversations across your vault context.',
+  tools: 'Inspect registered Ask Anywhere tools, authority levels, and OpenClaw parity.',
   vision: 'Trace goals to Areas, Projects, Resources, and milestones.',
   agents: 'Inspect reusable role templates, versions, and cross-project execution coverage.',
   developerConsole: 'Replay traceable agent, inbox, activity, and IPC events.',
