@@ -54,6 +54,8 @@ export interface CreateConversationInput {
   anchors: ConversationAnchor[];
   scope?: ConversationScope;
   runtimeHint?: string;
+  runtimeEndpointHint?: string;
+  runtimeModelHint?: string;
   title?: string;
   tags?: string[];
 }
@@ -71,6 +73,8 @@ export class ConversationStore {
       anchors: input.anchors,
       scope: input.scope ?? anchorToConversationScope(input.anchors[0] ?? { kind: 'ask_anywhere_session', refId: 'global', addedAt: now }),
       ...(input.runtimeHint ? { runtimeHint: input.runtimeHint } : {}),
+      ...(input.runtimeEndpointHint ? { runtimeEndpointHint: input.runtimeEndpointHint } : {}),
+      ...(input.runtimeModelHint ? { runtimeModelHint: input.runtimeModelHint } : {}),
       ...(input.title ? { title: input.title } : {}),
       ...(input.tags ? { tags: input.tags } : {})
     };
@@ -155,6 +159,8 @@ export class ConversationStore {
     patch: {
       currentRunId?: string | null;
       runtimeHint?: string | null;
+      runtimeEndpointHint?: string | null;
+      runtimeModelHint?: string | null;
       vendorSessionId?: string | null;
     }
   ): Promise<void> {
@@ -167,6 +173,14 @@ export class ConversationStore {
     if (patch.runtimeHint !== undefined) {
       if (patch.runtimeHint === null) delete meta.runtimeHint;
       else meta.runtimeHint = patch.runtimeHint;
+    }
+    if (patch.runtimeEndpointHint !== undefined) {
+      if (patch.runtimeEndpointHint === null) delete meta.runtimeEndpointHint;
+      else meta.runtimeEndpointHint = patch.runtimeEndpointHint;
+    }
+    if (patch.runtimeModelHint !== undefined) {
+      if (patch.runtimeModelHint === null) delete meta.runtimeModelHint;
+      else meta.runtimeModelHint = patch.runtimeModelHint;
     }
     if (patch.vendorSessionId !== undefined) {
       if (patch.vendorSessionId === null) delete meta.vendorSessionId;

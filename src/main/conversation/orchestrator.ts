@@ -43,6 +43,8 @@ export interface CreateConversationInput {
   anchor: ConversationAnchor;
   scope?: ConversationScope;
   runtimeHint?: string;
+  runtimeEndpointHint?: string;
+  runtimeModelHint?: string;
   title?: string;
 }
 
@@ -60,6 +62,8 @@ export class ConversationOrchestrator {
       anchors: [input.anchor],
       ...(input.scope ? { scope: input.scope } : {}),
       ...(input.runtimeHint ? { runtimeHint: input.runtimeHint } : {}),
+      ...(input.runtimeEndpointHint ? { runtimeEndpointHint: input.runtimeEndpointHint } : {}),
+      ...(input.runtimeModelHint ? { runtimeModelHint: input.runtimeModelHint } : {}),
       ...(input.title ? { title: input.title } : {})
     });
     publishTraceableEvent({
@@ -128,6 +132,8 @@ export class ConversationOrchestrator {
     patch: {
       currentRunId?: string | null;
       runtimeHint?: string | null;
+      runtimeEndpointHint?: string | null;
+      runtimeModelHint?: string | null;
       vendorSessionId?: string | null;
     }
   ): Promise<void> {

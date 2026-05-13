@@ -8,6 +8,7 @@ import type { AgentToolDef } from '@shared/agent-tools';
 import { READ_TOOL_DEFS } from './read';
 import { WRITE_TOOL_DEFS } from './write';
 import { PROPOSE_TOOL_DEFS } from './propose';
+import { WEB_TOOL_DEFS } from './web';
 
 /** Phase A 兼容导出。 */
 export const PHASE_A_TOOL_DEFS: readonly AgentToolDef[] = [...READ_TOOL_DEFS];
@@ -18,8 +19,9 @@ export const PHASE_B_TOOL_DEFS: readonly AgentToolDef[] = [...READ_TOOL_DEFS, ..
 /** Phase C：B + propose 系列（agent 提议 → 用户审批）。 */
 export const PHASE_C_TOOL_DEFS: readonly AgentToolDef[] = [
   ...READ_TOOL_DEFS,
+  ...WEB_TOOL_DEFS,
   ...WRITE_TOOL_DEFS,
   ...PROPOSE_TOOL_DEFS
 ];
 
-export { READ_TOOL_DEFS, WRITE_TOOL_DEFS, PROPOSE_TOOL_DEFS };
+export { READ_TOOL_DEFS, WEB_TOOL_DEFS, WRITE_TOOL_DEFS, PROPOSE_TOOL_DEFS };

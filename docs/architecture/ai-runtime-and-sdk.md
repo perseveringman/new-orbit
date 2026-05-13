@@ -12,7 +12,7 @@ Orbit has two runtime tracks:
 | Track | Name | Primary use |
 |---|---|---|
 | A | External Agent CLI | long-running task execution, tool-heavy work, worktree/sandbox mutation |
-| B | Native SDK | Ask-Anywhere, synthesis, summaries, short interactions, background analysis |
+| B | Native SDK Agent | Ask-Anywhere universal agent surface, synthesis, summaries, short interactions, background analysis |
 
 Track A examples:
 
@@ -148,16 +148,27 @@ The router applies:
 
 ## 7. Ask-Anywhere
 
-Ask-Anywhere should use Track B by default.
+Ask-Anywhere is Orbit's universal agent surface, not an internal-only planning chat.
 
-Rationale:
+Design direction:
 
-- It is usually short-lived.
-- It does not need worktree/sandbox mutation.
-- It benefits from low-latency SDK streaming.
-- It should be available even when no project/task runtime is active.
+- The user should be able to ask for Orbit work, live web research, file inspection, model switching, and future external tool work from the same surface.
+- Tool capability is model-independent. A model switch changes the reasoning model, not whether `orbit_web_search`, `orbit_web_fetch`, vault tools, or future browser/system tools exist.
+- Track B is the default for interactive Ask-Anywhere because it gives low-latency streaming and structured tool_use loops.
+- Track A remains the execution track for long-running, code-heavy, worktree/sandbox mutations, and workflows where an external CLI agent already provides a richer tool runtime.
+- Ask-Anywhere may escalate or delegate to Track A, but it should not answer "I cannot do that" merely because the current model provider lacks a native tool.
 
-Ask-Anywhere can still escalate to Track A when the user explicitly asks to execute a project task.
+Current Track B tool families:
+
+- Orbit vault and workflow tools: `orbit_search`, `orbit_read`, task/project/resource/inbox/activity tools.
+- Web tools: `orbit_web_search`, `orbit_web_fetch`, implemented in Orbit's tool layer so all Anthropic-compatible SDK endpoints can use live web access.
+- Conversation runtime commands: `/model`, `/endpoint`, and related status/list commands for per-conversation routing hints.
+
+Safety boundary:
+
+- Read-only tools execute directly and are fully traced.
+- Low-risk writes execute directly only when handlers whitelist fields and Activity/Journal records are written.
+- High-risk destructive work, broad filesystem mutation, shell execution, browser automation, and external side effects must be introduced as explicit tool families with policy, consent, audit, and rollback design before being exposed.
 
 ---
 

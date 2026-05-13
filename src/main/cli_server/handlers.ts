@@ -44,6 +44,8 @@ import { createAssetStore } from '../assets/store';
 import { buildSpaceContext, getSpace, listSpaces } from '../space/context';
 import { createResourceStore } from '../resource/store';
 import type { SpaceContextOptions } from '@shared/space';
+import { runWebFetch } from '../web-tools/fetch';
+import { runWebSearch, type WebSearchProvider } from '../web-tools/search';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -72,6 +74,16 @@ function stringParam(params: unknown, key: string): string {
 
 function optionalStringParam(params: Record<string, unknown>, key: string): string | undefined {
   return typeof params[key] === 'string' && params[key] ? params[key] : undefined;
+}
+
+function webSearchProvider(value: string): WebSearchProvider {
+  if (value === 'auto' || value === 'brave' || value === 'duckduckgo') return value;
+  throw cliServerError('invalid_params', `invalid web search provider: ${value}`);
+}
+
+function webFreshness(value: string): 'day' | 'week' | 'month' | 'year' {
+  if (value === 'day' || value === 'week' || value === 'month' || value === 'year') return value;
+  throw cliServerError('invalid_params', `invalid web freshness: ${value}`);
 }
 
 function objectParams(params: unknown, method: string): Record<string, unknown> {
@@ -378,6 +390,26 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
   });
 
   registry.register('cat', async (params) => readTarget(stringParam(params, 'target')));
+
+  registry.register('web.search', async (params) => {
+    const input = objectParams(params, 'web.search');
+    return runWebSearch({
+      query: stringParam(input, 'query'),
+      ...(typeof input.count === 'number' ? { count: input.count } : {}),
+      ...(typeof input.provider === 'string' ? { provider: webSearchProvider(input.provider) } : {}),
+      ...(typeof input.country === 'string' ? { country: input.country } : {}),
+      ...(typeof input.language === 'string' ? { language: input.language } : {}),
+      ...(typeof input.freshness === 'string' ? { freshness: webFreshness(input.freshness) } : {})
+    });
+  });
+
+  registry.register('web.fetch', async (params) => {
+    const input = objectParams(params, 'web.fetch');
+    return runWebFetch({
+      url: stringParam(input, 'url'),
+      ...(typeof input.max_chars === 'number' ? { maxChars: input.max_chars } : {})
+    });
+  });
 
   registry.register('task.list', async (params) => {
     const session = openSession();

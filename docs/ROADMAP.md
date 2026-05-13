@@ -502,6 +502,29 @@ Acceptance:
 - Area dashboard is assembled, not manually maintained.
 - Area-scoped chat injects correct context.
 
+### 6.7 Ask-Anywhere universal tool layer
+
+Status: **implemented (foundation)**.
+
+Goal: 把 Ask-Anywhere 从“内部规划/知识库助手”升级为 Orbit 的通用代理入口，参考 OpenClaw 的工具层设计：工具能力独立于模型，模型只负责推理和调用。
+
+Implemented notes:
+
+- Ask-Anywhere system prompt 改为 universal agent surface，不再声明“只能操作 vault 内部数据”。
+- 新增 `orbit_web_search` / `orbit_web_fetch` agent tools；搜索 provider 先支持 `auto`、Brave API（`BRAVE_API_KEY`）和 keyless DuckDuckGo fallback。
+- `orbit_web_fetch` 支持公网 http(s) 抓取、正文抽取、长度限制、超时和 SSRF/private-network 防护。
+- SDK agent 路由支持 Conversation 级 `runtimeEndpointHint` / `runtimeModelHint`。
+- Ask-Anywhere 支持 `/model`、`/model list`、`/model <endpoint>/<model>`、`/endpoint <id>`、`/model auto` 等会话内模型/端点切换命令。
+
+Next tool families to reach OpenClaw-class parity:
+
+- shell / process execution with consent, sandbox, allowlist, and rollback policy
+- browser automation
+- subagents / session tools
+- cron / heartbeat automation
+- media and document tools
+- plugin tool packs and per-agent allow/deny policy
+
 ---
 ## 4. Phase 7 — Semantic Memory, Search, Review, Vision
 
@@ -764,6 +787,8 @@ Phase 6.4 Timeline
 Phase 6.5 Resource Workstation
   ↓
 Phase 6.6 Area Dashboard
+  ↓
+Phase 6.7 Ask-Anywhere Universal Tool Layer
   ↓
 Phase 7 Semantic Search + Memory + Review + Vision
   ↓

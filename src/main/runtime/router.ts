@@ -4,6 +4,7 @@ import type {
   RuntimeRouteDecision,
   RuntimeRouteInput,
   RuntimeRouteMode,
+  SDKEndpointRegistrySnapshot,
   SDKEndpointTestResult,
   SDKInvocationInput,
   SDKResolvedInvocation,
@@ -23,6 +24,10 @@ export class RuntimeRouter {
     private readonly keyVault: SDKKeyVault,
     private readonly adapter = new AnthropicSDKAdapter()
   ) {}
+
+  async endpointSnapshot(): Promise<SDKEndpointRegistrySnapshot> {
+    return this.registry.snapshot();
+  }
 
   async decide(input: RuntimeRouteInput): Promise<RuntimeRouteDecision> {
     // Agent 模式优先级最高：SDK 必须可用，否则直接拒绝（不 fallback CLI）。

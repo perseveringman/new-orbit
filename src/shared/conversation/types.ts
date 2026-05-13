@@ -87,6 +87,8 @@ export interface ConversationMeta {
   scope?: ConversationScope;
   currentRunId?: string;
   runtimeHint?: string;
+  runtimeEndpointHint?: string;
+  runtimeModelHint?: string;
   vendorSessionId?: string;
   title?: string;
   titleSource?: ConversationTitleSource;
