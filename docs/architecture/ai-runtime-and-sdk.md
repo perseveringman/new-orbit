@@ -168,7 +168,8 @@ Safety boundary:
 
 - Read-only tools execute directly and are fully traced.
 - Low-risk writes execute directly only when handlers whitelist fields and Activity/Journal records are written.
-- High-risk destructive work, broad filesystem mutation, shell execution, browser automation, and external side effects must be introduced as explicit tool families with policy, consent, audit, and rollback design before being exposed.
+- High-risk destructive work, broad filesystem mutation, shell execution, browser automation, and external side effects must be introduced as explicit tool families with Agent Authority policy, scoped grants, consent, audit, and rollback design before being exposed.
+- Repeated approvals should become user-editable authority grants; temporary no-approval modes are represented as bounded Autopilot sessions, never as global root access.
 
 ---
 

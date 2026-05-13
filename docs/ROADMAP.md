@@ -515,12 +515,13 @@ Implemented notes:
 - `orbit_web_fetch` 支持公网 http(s) 抓取、正文抽取、长度限制、超时和 SSRF/private-network 防护。
 - SDK agent 路由支持 Conversation 级 `runtimeEndpointHint` / `runtimeModelHint`。
 - Ask-Anywhere 支持 `/model`、`/model list`、`/model <endpoint>/<model>`、`/endpoint <id>`、`/model auto` 等会话内模型/端点切换命令。
+- 新增 Agent Authority foundation：共享权限契约、grant store、policy evaluator、ADR-021、`agent-authority.md`，后续 shell/browser/subagent 必须先生成 `AuthorityRequest` 再执行。
 
 Next tool families to reach OpenClaw-class parity:
 
-- shell / process execution with consent, sandbox, allowlist, and rollback policy
-- browser automation
-- subagents / session tools
+- shell / process execution with Agent Authority grants, sandbox/worktree defaults, command-prefix allowlists, and rollback policy
+- browser automation with domain/action grants and final-click guard for external side effects
+- subagents / session tools with profile-based narrowed authority envelopes
 - cron / heartbeat automation
 - media and document tools
 - plugin tool packs and per-agent allow/deny policy

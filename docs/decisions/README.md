@@ -68,6 +68,9 @@ ADR 借鉴自 Michael Nygard 的 [Documenting Architecture Decisions](https://co
 | 016 | [Agent 启动协议 — 先了解项目全貌再开工](ADR-016-agent-onboarding-protocol.md) | accepted | `task-execution-lifecycle-realignment` |
 | 017 | [External Gateway via cc-connect](ADR-017-external-gateway-via-cc-connect.md) | accepted | `cc-connect-integration-architecture` |
 | 018 | [Space 作为统一数据原语（UI 保留三入口）](ADR-018-space-as-unified-data-primitive.md) | accepted | `space-unified-rollout` (TBD) |
+| 019 | [Ask-Anywhere agent 的直写边界](ADR-019-ask-anywhere-agent-direct-write-boundary.md) | accepted | `swift-vortex-darwin` |
+| 020 | [Ask-Anywhere as universal agent surface](ADR-020-ask-anywhere-universal-agent-surface.md) | accepted | `ask-anywhere-universal-tool-layer` |
+| 021 | [Configurable agent authority and learnable grants](ADR-021-configurable-agent-authority.md) | accepted | `agent-authority` |
 
 ---
 
