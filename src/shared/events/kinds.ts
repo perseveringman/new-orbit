@@ -45,6 +45,8 @@ export const TRACEABLE_EVENT_KINDS = [
   'conversation.message.added',
   'conversation.meaningful',
   'conversation.anchor.added',
+  'conversation.updated',
+  'conversation.title.updated',
   'conversation.compacted',
   'conversation.ended',
   // Channel（D-3 / D-4，预留）

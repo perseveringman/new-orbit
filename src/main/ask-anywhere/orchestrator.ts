@@ -38,6 +38,7 @@ import { rebuildMessages } from '../agent-tools/rebuild-messages';
 import { readVisionForSystemPrompt } from '../agent-tools/vision-reader';
 import { SkillLoader } from '../agent-tools/skill-loader';
 import type { LoadedSkill } from '@shared/agent-tools';
+import { generateConversationAutoTitle, shouldAutoTitleConversation } from '../conversation/title';
 import { createStageStore, extractArtifactFences } from './stage-store';
 import { assertInsideVault, toPosix, vaultRel } from '../pathGuard';
 import { buildSpaceContext } from '../space/context';
@@ -489,7 +490,7 @@ export class AskAnywhereOrchestrator {
 
       const finalText = result.text.trim();
       if (finalText) {
-        await this.deps.conversations.appendTurn({
+        const assistantTurn = await this.deps.conversations.appendTurn({
           conversationId: input.conversationId,
           role: 'assistant',
           content: finalText,
@@ -504,6 +505,9 @@ export class AskAnywhereOrchestrator {
             await stage.add(input.conversationId, artifact);
           }
         }
+        void this.maybeAutoTitleConversation(input.conversationId, assistantTurn.id).catch((error) =>
+          console.warn('[ask-anywhere] auto title failed', error)
+        );
       }
     } catch (error) {
       this.emitSyntheticError(
@@ -555,7 +559,7 @@ export class AskAnywhereOrchestrator {
       );
       const finalText = result.text.trim();
       if (finalText) {
-        await this.deps.conversations.appendTurn({
+        const assistantTurn = await this.deps.conversations.appendTurn({
           conversationId: input.conversationId,
           role: 'assistant',
           content: finalText,
@@ -569,6 +573,9 @@ export class AskAnywhereOrchestrator {
             await stage.add(input.conversationId, artifact);
           }
         }
+        void this.maybeAutoTitleConversation(input.conversationId, assistantTurn.id).catch((error) =>
+          console.warn('[ask-anywhere] auto title failed', error)
+        );
       }
     } catch (error) {
       this.emitSyntheticError(
@@ -591,7 +598,7 @@ export class AskAnywhereOrchestrator {
     const text = aggregator.toFinalText();
     try {
       if (text) {
-        await this.deps.conversations.appendTurn({
+        const assistantTurn = await this.deps.conversations.appendTurn({
           conversationId,
           role: 'assistant',
           content: text,
@@ -604,6 +611,9 @@ export class AskAnywhereOrchestrator {
             await stage.add(conversationId, artifact);
           }
         }
+        void this.maybeAutoTitleConversation(conversationId, assistantTurn.id).catch((error) =>
+          console.warn('[ask-anywhere] auto title failed', error)
+        );
       }
     } finally {
       await this.deps.conversations
@@ -626,6 +636,29 @@ export class AskAnywhereOrchestrator {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send(IPC.chat.runtimeEvent, ev);
     }
+  }
+
+  private async maybeAutoTitleConversation(
+    conversationId: string,
+    assistantTurnId: string
+  ): Promise<void> {
+    const conversation = await this.deps.conversations.getConversation(conversationId);
+    if (!conversation) return;
+    const generated = await generateConversationAutoTitle({
+      conversation,
+      assistantTurnId,
+      router: this.deps.getRuntimeRouter?.() ?? null
+    });
+    if (!generated) return;
+    const latest = await this.deps.conversations.getConversation(conversationId);
+    if (!latest || !shouldAutoTitleConversation(latest)) return;
+    await this.deps.conversations.updateConversation(conversationId, {
+      title: generated.title,
+      titleSource: 'auto',
+      titleGeneratedFromTurnId: generated.generatedFromTurnId,
+      titleConfidence: generated.confidence,
+      titleUpdatedAt: new Date().toISOString()
+    });
   }
 }
 

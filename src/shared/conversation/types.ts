@@ -59,6 +59,7 @@ export interface ConversationMessage {
 }
 
 export type ConversationStatus = 'active' | 'paused' | 'ended';
+export type ConversationTitleSource = 'auto' | 'manual';
 
 export type ConversationScope =
   | { kind: 'global' }
@@ -88,6 +89,10 @@ export interface ConversationMeta {
   runtimeHint?: string;
   vendorSessionId?: string;
   title?: string;
+  titleSource?: ConversationTitleSource;
+  titleGeneratedFromTurnId?: string;
+  titleConfidence?: number;
+  titleUpdatedAt?: string;
   summary?: string;
   tags?: string[];
   artifacts?: ConversationArtifactRef[];

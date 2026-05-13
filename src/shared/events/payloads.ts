@@ -153,6 +153,14 @@ export interface ConversationAnchorAddedPayload {
   anchor: { kind: string; refId: string };
 }
 
+export interface ConversationUpdatedPayload {
+  conversationId: string;
+  title?: string;
+  titleSource?: string;
+  titleGeneratedFromTurnId?: string;
+  titleConfidence?: number;
+}
+
 export interface ConversationCompactedPayload {
   conversationId: string;
   removedTurnCount: number;
@@ -342,6 +350,8 @@ export interface TraceableEventPayloadMap {
   'conversation.message.added': ConversationMessageAddedPayload;
   'conversation.meaningful': ConversationMeaningfulPayload;
   'conversation.anchor.added': ConversationAnchorAddedPayload;
+  'conversation.updated': ConversationUpdatedPayload;
+  'conversation.title.updated': ConversationUpdatedPayload;
   'conversation.compacted': ConversationCompactedPayload;
   'conversation.ended': ConversationEndedPayload;
   'channel.inbound.message': ChannelInboundMessagePayload;

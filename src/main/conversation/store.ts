@@ -16,6 +16,7 @@ import type {
   ConversationAnchor,
   ConversationScope,
   ConversationMeta,
+  ConversationTitleSource,
   ConversationStatus,
   ConversationTurn
 } from '@shared/conversation';
@@ -121,6 +122,10 @@ export class ConversationStore {
 
   async updateMeta(id: string, patch: {
     title?: string;
+    titleSource?: ConversationTitleSource;
+    titleGeneratedFromTurnId?: string;
+    titleConfidence?: number;
+    titleUpdatedAt?: string;
     summary?: string;
     tags?: string[];
     archived?: boolean;
@@ -129,9 +134,11 @@ export class ConversationStore {
   }): Promise<Conversation | null> {
     const meta = await this.readMeta(id);
     if (!meta) return null;
+    const titlePatch = normalizeTitlePatch(patch);
     const next: ConversationMeta = {
       ...meta,
       ...patch,
+      ...titlePatch,
       updatedAt: new Date().toISOString()
     };
     await this.writeMeta(next);
@@ -264,4 +271,18 @@ export class ConversationStore {
       throw error;
     }
   }
+}
+
+function normalizeTitlePatch(patch: {
+  title?: string;
+  titleSource?: ConversationTitleSource;
+  titleUpdatedAt?: string;
+}): Partial<ConversationMeta> {
+  if (patch.title === undefined) return {};
+  const title = patch.title.trim();
+  return {
+    title,
+    titleSource: patch.titleSource ?? 'manual',
+    titleUpdatedAt: patch.titleUpdatedAt ?? new Date().toISOString()
+  };
 }

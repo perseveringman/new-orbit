@@ -211,6 +211,20 @@ export function useAskAnywhereSession(
     };
   }, [enabled]);
 
+  useEffect(() => {
+    if (!enabled) return;
+    const off = window.orbit.events.onEvent((event) => {
+      if (event.source !== 'conversation') return;
+      if (event.kind !== 'conversation.title.updated' && event.kind !== 'conversation.updated') {
+        return;
+      }
+      void reload();
+    });
+    return () => {
+      off();
+    };
+  }, [enabled, reload]);
+
   const handleNew = useCallback(async () => {
     const conv = await window.orbit.chat.createConversation({
       anchor: {

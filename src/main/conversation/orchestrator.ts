@@ -17,6 +17,7 @@ import type {
   ConversationAnchor,
   ConversationMeta,
   ConversationScope,
+  ConversationTitleSource,
   ConversationTurn,
   ConversationTurnRole
 } from '@shared/conversation';
@@ -144,9 +145,38 @@ export class ConversationOrchestrator {
 
   async updateConversation(
     conversationId: string,
-    patch: { title?: string; summary?: string; tags?: string[]; archived?: boolean; scope?: ConversationScope }
+    patch: {
+      title?: string;
+      titleSource?: ConversationTitleSource;
+      titleGeneratedFromTurnId?: string;
+      titleConfidence?: number;
+      titleUpdatedAt?: string;
+      summary?: string;
+      tags?: string[];
+      archived?: boolean;
+      scope?: ConversationScope;
+    }
   ): Promise<Conversation | null> {
-    return this.store.updateMeta(conversationId, patch);
+    const conv = await this.store.updateMeta(conversationId, patch);
+    if (conv) {
+      publishTraceableEvent({
+        source: 'conversation',
+        kind: patch.title !== undefined ? 'conversation.title.updated' : 'conversation.updated',
+        conversationId,
+        payload: {
+          conversationId,
+          ...(patch.title !== undefined
+            ? {
+                title: conv.title,
+                titleSource: conv.titleSource,
+                titleGeneratedFromTurnId: conv.titleGeneratedFromTurnId,
+                titleConfidence: conv.titleConfidence
+              }
+            : {})
+        }
+      });
+    }
+    return conv;
   }
 
   async archiveConversation(conversationId: string): Promise<Conversation | null> {
