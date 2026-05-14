@@ -88,6 +88,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
 let currentVault: VaultInfo | null = null;
 let mobileInboundWatcher: MobileInboundWatcher | null = null;
+const DEFAULT_ZOOM_FACTOR = 1;
 
 // Install crash handlers as early as possible.
 installMainCrashHandlers({
@@ -111,6 +112,11 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: false
     }
+  });
+
+  mainWindow.webContents.setZoomFactor(DEFAULT_ZOOM_FACTOR);
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.setZoomFactor(DEFAULT_ZOOM_FACTOR);
   });
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
