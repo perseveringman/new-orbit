@@ -36,16 +36,59 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
-function probeVersion(binaryPath: string, args: string[] = ['--version']): Promise<string | null> {
+export interface RuntimeVersionProbe {
+  ok: boolean;
+  version: string | null;
+  error: string | null;
+}
+
+export function summarizeVersionProbeError(message: string): string {
+  const normalized = message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' ');
+  if (!normalized) return 'Version probe failed.';
+  if (/\bENOENT\b/.test(normalized)) {
+    return 'Version probe failed: missing executable referenced by CLI wrapper (ENOENT).';
+  }
+  if (/\bEACCES\b/.test(normalized)) {
+    return 'Version probe failed: CLI is not executable (EACCES).';
+  }
+  return normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
+}
+
+export function probeVersion(
+  binaryPath: string,
+  args: string[] = ['--version']
+): Promise<RuntimeVersionProbe> {
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: RuntimeVersionProbe): void => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
     const child = execFile(binaryPath, args, { timeout: 3000 }, (error, stdout, stderr) => {
+      const out = (stdout || '').trim();
+      const err = (stderr || '').trim();
       if (error) {
-        resolve((stderr || '').trim() || null);
+        finish({
+          ok: false,
+          version: null,
+          error: summarizeVersionProbeError([err, out, error.message].filter(Boolean).join('\n'))
+        });
         return;
       }
-      resolve((stdout || '').trim() || null);
+      finish({ ok: true, version: out || err || null, error: null });
     });
-    child.on('error', () => resolve(null));
+    child.on('error', (error: Error) =>
+      finish({
+        ok: false,
+        version: null,
+        error: summarizeVersionProbeError(error.message)
+      })
+    );
   });
 }
 
@@ -148,21 +191,22 @@ async function probeRuntimes(): Promise<RuntimeDescriptor[]> {
         provider.overridePath
       );
       if (!binaryPath) return null;
-      const version = await probeVersion(binaryPath);
+      const versionProbe = await probeVersion(binaryPath);
       return {
         runtimeId: `${provider.provider}:${binaryPath}`,
         mode: 'local',
         provider: provider.provider,
         name: `${provider.provider} local runtime`,
         binaryPath,
-        version,
-        status: 'online',
+        version: versionProbe.version,
+        status: versionProbe.ok ? 'online' : 'degraded',
         discoveredAt: now,
         lastSeenAt: now,
         capabilities: provider.capabilities,
         limits: {
           maxConcurrentRuns: provider.maxConcurrentRuns
-        }
+        },
+        ...(versionProbe.error ? { metadata: { versionProbeError: versionProbe.error } } : {})
       } satisfies RuntimeDescriptor;
     })
   );

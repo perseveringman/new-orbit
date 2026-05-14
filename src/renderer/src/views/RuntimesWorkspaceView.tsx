@@ -219,7 +219,7 @@ export function RuntimesWorkspaceSurface({
                                 <RuntimeStatusBadge status={runtime.status} />
                               </div>
                               <div className="mt-1 text-xs text-neutral-500">
-                                {runtime.provider} · {runtime.version ?? 'unknown version'}
+                                {runtime.provider} · {runtimeVersionLabel(runtime)}
                               </div>
                             </div>
                             <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] dark:bg-neutral-800">
@@ -254,7 +254,7 @@ export function RuntimesWorkspaceSurface({
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-[11px] text-neutral-500">
-                      <span>Version: {selectedRuntime.version ?? 'unknown'}</span>
+                      <span>Version: {runtimeVersionLabel(selectedRuntime)}</span>
                       <span>
                         Last seen: {new Date(selectedRuntime.lastSeenAt).toLocaleString()}
                       </span>
@@ -370,6 +370,16 @@ export function RuntimesWorkspaceSurface({
                               {new Date(selectedRuntime.discoveredAt).toLocaleString()}
                             </dd>
                           </div>
+                          {selectedRuntime.metadata?.versionProbeError && (
+                            <div>
+                              <dt className="text-xs uppercase tracking-wide text-neutral-500">
+                                Probe issue
+                              </dt>
+                              <dd className="mt-1 break-words text-amber-700 dark:text-amber-300">
+                                {selectedRuntime.metadata.versionProbeError}
+                              </dd>
+                            </div>
+                          )}
                         </dl>
                       </section>
 
@@ -495,6 +505,11 @@ function ReportListItem({
       </div>
     </li>
   );
+}
+
+function runtimeVersionLabel(runtime: RuntimeDescriptor): string {
+  if (runtime.version) return runtime.version;
+  return runtime.status === 'degraded' ? 'version unavailable' : 'unknown version';
 }
 
 function WorkspaceStat({

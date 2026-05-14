@@ -124,6 +124,44 @@ describe('orchestration workspace surfaces', () => {
     expect(html).toContain('claude local runtime');
   });
 
+  it('renders a degraded runtime probe error separately from version', () => {
+    const degradedSnapshot: DispatchSnapshot = {
+      ...snapshot,
+      runtimes: [
+        {
+          ...snapshot.runtimes[0]!,
+          runtimeId: 'codex:/Users/example/.local/bin/codex',
+          provider: 'codex',
+          name: 'codex local runtime',
+          binaryPath: '/Users/example/.local/bin/codex',
+          version: null,
+          status: 'degraded',
+          metadata: {
+            versionProbeError:
+              'Version probe failed: missing executable referenced by CLI wrapper (ENOENT).'
+          }
+        }
+      ],
+      leases: [],
+      reports: []
+    };
+    const html = renderToStaticMarkup(
+      createElement(RuntimesWorkspaceSurface, {
+        snapshot: degradedSnapshot,
+        loading: false,
+        projects: [],
+        selectedRuntimeId: 'codex:/Users/example/.local/bin/codex',
+        onRefresh: noop,
+        onSelectRuntime: noop,
+        onOpenProjectRoles: noop
+      })
+    );
+
+    expect(html).toContain('Version: version unavailable');
+    expect(html).toContain('Probe issue');
+    expect(html).toContain('missing executable referenced by CLI wrapper');
+  });
+
   it('renders the agents library with versions and project bindings', () => {
     const html = renderToStaticMarkup(
       createElement(AgentsLibrarySurface, {
