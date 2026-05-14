@@ -1,5 +1,6 @@
 import type { Conversation } from '@shared/conversation';
 import type { CreateMemoryInput, MemoryExtractionInput, MemoryKind } from '@shared/memory';
+import { deriveMemoryLayer } from '@shared/memory';
 import type { SynthesisSource } from '@shared/synthesis';
 
 export function extractFromConversation(conversation: Conversation): MemoryExtractionInput {
@@ -31,6 +32,7 @@ function candidateFromSentence(sentence: string, source: SynthesisSource): Creat
   if (!kind) return null;
   const summary = sentence.replace(/^(user|assistant|system):\s*/i, '').slice(0, 220);
   return {
+    layer: deriveMemoryLayer(kind),
     kind,
     title: titleFromSummary(summary, kind),
     summary,

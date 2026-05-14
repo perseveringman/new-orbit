@@ -18,6 +18,7 @@ describe('MemoryContent', () => {
     expect(html).toContain('Transparent long-term memory');
     expect(html).toContain('Read source first');
     expect(html).toContain('Promote to Resource');
+    expect(html).toContain('semantic');
     expect(html).toContain('Stable');
   });
 });
@@ -25,11 +26,13 @@ describe('MemoryContent', () => {
 function baseElement(overrides: Partial<Parameters<typeof MemoryContent>[0]> = {}): ReturnType<typeof createElement> {
   return createElement(MemoryContent, {
     kind: 'all',
+    layer: 'all',
     nodes: [],
     state: 'success',
     error: null,
     digest: null,
     onKindChange: vi.fn(),
+    onLayerChange: vi.fn(),
     onReload: vi.fn(),
     onCreate: vi.fn(),
     onArchive: vi.fn(),
@@ -43,6 +46,7 @@ function baseElement(overrides: Partial<Parameters<typeof MemoryContent>[0]> = {
 function sampleMemory(): MemoryNode {
   return {
     id: 'mem-1',
+    layer: 'semantic',
     kind: 'preference',
     title: 'Read source first',
     summary: 'User prefers reading source before docs.',

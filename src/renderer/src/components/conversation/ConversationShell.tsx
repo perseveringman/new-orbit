@@ -1,7 +1,7 @@
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '@shared/chat-protocol';
 import type { Conversation } from '@shared/conversation';
-import type { MemoryNode } from '@shared/memory';
+import type { RecallResult } from '@shared/memory';
 import type { ConversationStage } from '@shared/stage';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ConversationHeader } from './ConversationHeader';
@@ -91,7 +91,7 @@ export function ConversationShell({
 }
 
 function MemoryRecallChips({ conversation }: { conversation: Conversation }): JSX.Element | null {
-  const [memories, setMemories] = useState<MemoryNode[]>([]);
+  const [recall, setRecall] = useState<RecallResult | null>(null);
   const [hidden, setHidden] = useState(false);
   const query = [conversation.title, conversation.summary, conversation.turns.at(-1)?.content]
     .filter(Boolean)
@@ -99,8 +99,9 @@ function MemoryRecallChips({ conversation }: { conversation: Conversation }): JS
 
   useEffect(() => {
     let cancelled = false;
+    setHidden(false);
     if (!query.trim()) {
-      setMemories([]);
+      setRecall(null);
       return;
     }
     void window.orbit.memory
@@ -111,29 +112,33 @@ function MemoryRecallChips({ conversation }: { conversation: Conversation }): JS
         used_in: 'context_injection'
       })
       .then((result) => {
-        if (!cancelled) setMemories(result.memories);
+        if (!cancelled) setRecall(result);
       })
       .catch(() => {
-        if (!cancelled) setMemories([]);
+        if (!cancelled) setRecall(null);
       });
     return () => {
       cancelled = true;
     };
   }, [conversation.id, query]);
 
-  if (hidden || !memories.length) return null;
+  if (hidden || !recall?.memories.length) return null;
   return (
     <div className="border-b border-violet-200 bg-violet-50 px-4 py-2 text-xs text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">Relevant memory ({memories.length})</span>
-        {memories.map((memory) => (
-          <span
-            key={memory.id}
-            className="rounded-full border border-violet-300 px-2 py-1 dark:border-violet-800"
-          >
-            {memory.title}
-          </span>
-        ))}
+        <span className="font-medium">Relevant memory ({recall.memories.length})</span>
+        {recall.memories.map((memory) => {
+          const match = recall.matches.find((item) => item.memory_id === memory.id);
+          return (
+            <span
+              key={memory.id}
+              title={match?.reasons.join(' · ') ?? recall.explanation}
+              className="rounded-full border border-violet-300 px-2 py-1 dark:border-violet-800"
+            >
+              {memory.layer}: {memory.title}
+            </span>
+          );
+        })}
         <button
           type="button"
           onClick={() => setHidden(true)}

@@ -6,7 +6,7 @@ import { extractMemoryCandidates } from '../src/main/memory/extractor';
 import { generateMemoryDigest } from '../src/main/memory/digest-synthesis';
 import { recallContext } from '../src/main/memory/recall-service';
 import { createMemoryStore } from '../src/main/memory/store';
-import { deriveMemoryStability } from '../src/shared/memory';
+import { deriveMemoryLayer, deriveMemoryStability } from '../src/shared/memory';
 
 let vaultPath: string;
 
@@ -23,6 +23,9 @@ describe('Memory Layer', () => {
     expect(deriveMemoryStability({ evidence_count: 1, confidence: 0.55, recall_count: 0 })).toBe('volatile');
     expect(deriveMemoryStability({ evidence_count: 3, confidence: 0.7, recall_count: 0 })).toBe('stable');
     expect(deriveMemoryStability({ evidence_count: 10, confidence: 0.8, recall_count: 5, user_confirmed: true })).toBe('core');
+    expect(deriveMemoryLayer('preference')).toBe('semantic');
+    expect(deriveMemoryLayer('lesson')).toBe('episodic');
+    expect(deriveMemoryLayer('pattern')).toBe('procedural');
   });
 
   it('creates, updates, merges, archives, and filters memories', async () => {
@@ -31,12 +34,14 @@ describe('Memory Layer', () => {
     const second = await store.create({ kind: 'preference', title: 'Read source first', summary: 'Same preference reinforced.', confidence: 0.8 });
 
     expect(first.id).toBe(second.id);
+    expect(second.layer).toBe('semantic');
     expect(second.evidence_count).toBe(2);
 
     const lesson = await store.create({ kind: 'lesson', title: 'Specify branch', summary: 'Next time specify target branch before worktree.', confidence: 0.6 });
     const merged = await store.merge(lesson.id, first.id);
     expect(merged.evidence_count).toBeGreaterThanOrEqual(3);
     expect(await store.list({ kind: 'lesson' })).toHaveLength(0);
+    expect(await store.list({ layer: 'semantic' })).toHaveLength(1);
     expect(await store.list({ include_archived: true })).toHaveLength(2);
   });
 
@@ -59,6 +64,8 @@ describe('Memory Layer', () => {
     const stats = await store.getRecallStats(memory.id);
 
     expect(result.memories[0].id).toBe(memory.id);
+    expect(result.matches[0].memory_id).toBe(memory.id);
+    expect(result.matches[0].reasons.join(' ')).toContain('matched terms');
     expect(stats.total).toBe(1);
     expect(stats.by_kind.ask).toBe(1);
   });
@@ -85,6 +92,7 @@ describe('Memory Layer', () => {
 
     expect(digest.artifact.kind).toBe('memory.digest');
     expect(digest.artifact.provenance.prompt_version).toBe('memory.digest.v1');
+    expect(digest.artifact.payload.layer_counts.procedural.total).toBe(1);
     expect(digest.clusters[0].theme).toBe('pattern');
   });
 });

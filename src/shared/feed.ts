@@ -295,6 +295,7 @@ export interface FeedItemMetadata {
   subtitle_track_count?: number;
   subtitle_languages?: string[];
   preferred_transcript_track_id?: string;
+  subtitle_download_errors?: string[];
   last_processing_error?: string;
 }
 

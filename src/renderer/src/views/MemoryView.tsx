@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { MemoryDigestResult, MemoryKind, MemoryNode } from '@shared/memory';
-import { MEMORY_KINDS } from '@shared/memory';
+import type { MemoryDigestResult, MemoryKind, MemoryLayer, MemoryNode } from '@shared/memory';
+import { MEMORY_KINDS, MEMORY_LAYERS } from '@shared/memory';
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
 
 export function MemoryView(): JSX.Element {
+  const [layer, setLayer] = useState<MemoryLayer | 'all'>('all');
   const [kind, setKind] = useState<MemoryKind | 'all'>('all');
   const [nodes, setNodes] = useState<MemoryNode[]>([]);
   const [state, setState] = useState<LoadState>('loading');
@@ -15,7 +16,7 @@ export function MemoryView(): JSX.Element {
     setState('loading');
     setError(null);
     try {
-      const next = await window.orbit.memory.list({ kind });
+      const next = await window.orbit.memory.list({ layer, kind });
       setNodes(next);
       setState(next.length ? 'success' : 'empty');
     } catch (err) {
@@ -28,7 +29,7 @@ export function MemoryView(): JSX.Element {
     void load();
     const off = window.orbit.memory.onEvent(() => void load());
     return off;
-  }, [kind]);
+  }, [layer, kind]);
 
   async function createManual(): Promise<void> {
     const title = window.prompt('Memory title');
@@ -64,10 +65,12 @@ export function MemoryView(): JSX.Element {
   return (
     <MemoryContent
       kind={kind}
+      layer={layer}
       nodes={nodes}
       state={state}
       error={error}
       digest={digest}
+      onLayerChange={setLayer}
       onKindChange={setKind}
       onReload={() => void load()}
       onCreate={() => void createManual()}
@@ -80,11 +83,13 @@ export function MemoryView(): JSX.Element {
 }
 
 export function MemoryContent(props: {
+  layer: MemoryLayer | 'all';
   kind: MemoryKind | 'all';
   nodes: MemoryNode[];
   state: LoadState;
   error: string | null;
   digest: MemoryDigestResult | null;
+  onLayerChange(layer: MemoryLayer | 'all'): void;
   onKindChange(kind: MemoryKind | 'all'): void;
   onReload(): void;
   onCreate(): void;
@@ -118,6 +123,22 @@ export function MemoryContent(props: {
             <Stat label="Recalls" value={stats.recalls} />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
+            {(['all', ...MEMORY_LAYERS] as const).map((item) => (
+              <button
+                key={item}
+                onClick={() => props.onLayerChange(item)}
+                className={`rounded-full border px-3 py-1.5 text-xs ${props.layer === item ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'}`}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
+            <span>semantic {stats.semantic}</span>
+            <span>episodic {stats.episodic}</span>
+            <span>procedural {stats.procedural}</span>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
             {(['all', ...MEMORY_KINDS] as const).map((item) => (
               <button
                 key={item}
@@ -135,6 +156,9 @@ export function MemoryContent(props: {
             <strong>Memory digest generated</strong>
             <p className="mt-1 text-neutral-600 dark:text-neutral-300">
               {props.digest.artifact.scope_key}: {props.digest.artifact.payload.new_memories.length} new, {props.digest.artifact.payload.reinforced_memories.length} reinforced.
+            </p>
+            <p className="mt-2 text-neutral-600 dark:text-neutral-300">
+              semantic {props.digest.artifact.payload.layer_counts.semantic.total} · episodic {props.digest.artifact.payload.layer_counts.episodic.total} · procedural {props.digest.artifact.payload.layer_counts.procedural.total}
             </p>
           </section>
         )}
@@ -173,6 +197,7 @@ function MemoryCard(props: {
     <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap gap-2">
         <span className={`rounded-full border px-2 py-1 text-xs ${tone}`}>{props.node.stability}</span>
+        <span className="rounded-full border border-emerald-300 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">{props.node.layer}</span>
         <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">{props.node.kind}</span>
         <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">confidence {props.node.confidence.toFixed(2)}</span>
       </div>
@@ -181,6 +206,18 @@ function MemoryCard(props: {
       <p className="mt-3 text-xs text-neutral-500">
         evidence {props.node.evidence_count} · recalls {props.node.recall_count} · sources {props.node.sources.length}
       </p>
+      <p className="mt-2 text-xs text-neutral-500">
+        Why it exists: {props.node.sources[0]?.title ?? props.node.sources[0]?.ref ?? 'manual memory'}{props.node.user_confirmed ? ' · user confirmed' : ''}
+      </p>
+      {props.node.related_entities?.length ? (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {props.node.related_entities.slice(0, 6).map((entity) => (
+            <span key={entity} className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] text-neutral-500 dark:bg-neutral-800">
+              {entity}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <button onClick={() => props.onConfirm(props.node)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Confirm</button>
         <button onClick={() => props.onPromote(props.node.id, 'resource')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Promote to Resource</button>
@@ -214,11 +251,14 @@ function StateCard(props: { title: string; body: string; actionLabel: string; on
   );
 }
 
-function summarize(nodes: MemoryNode[]): { total: number; stable: number; core: number; recalls: number } {
+function summarize(nodes: MemoryNode[]): { total: number; stable: number; core: number; recalls: number; semantic: number; episodic: number; procedural: number } {
   return {
     total: nodes.length,
     stable: nodes.filter((node) => node.stability === 'stable').length,
     core: nodes.filter((node) => node.stability === 'core').length,
-    recalls: nodes.reduce((sum, node) => sum + node.recall_count, 0)
+    recalls: nodes.reduce((sum, node) => sum + node.recall_count, 0),
+    semantic: nodes.filter((node) => node.layer === 'semantic').length,
+    episodic: nodes.filter((node) => node.layer === 'episodic').length,
+    procedural: nodes.filter((node) => node.layer === 'procedural').length
   };
 }

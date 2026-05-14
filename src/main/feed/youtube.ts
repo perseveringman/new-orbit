@@ -32,6 +32,7 @@ export interface YouTubeVideoArchive {
   subtitle_requested_languages: string[];
   subtitle_available_languages: string[];
   automatic_caption_languages: string[];
+  subtitle_download_errors?: string[];
 }
 
 export interface YouTubeSubtitleArchiveTrack {
@@ -81,6 +82,7 @@ export interface FeedYouTubeMetadata {
   subtitle_track_count?: number;
   subtitle_languages?: string[];
   preferred_transcript_track_id?: string;
+  subtitle_download_errors?: string[];
 }
 
 export interface YouTubeArchiveOptions {
@@ -98,7 +100,7 @@ export interface YouTubeFeedProvider {
   buildMarkdown(sourceType: YouTubeSourceType, archive: YouTubeVideoArchive): YouTubeMarkdownRecord;
 }
 
-const DEFAULT_SUBTITLE_LANGUAGES = ['zh-Hans', 'zh-Hant', 'zh', 'en'];
+const DEFAULT_SUBTITLE_LANGUAGES = ['en', 'zh-Hans', 'zh'];
 const YT_DLP_SHARED_ARGS = [
   '--no-warnings',
   '--cookies-from-browser',
@@ -256,24 +258,23 @@ async function fetchYouTubeArchive(videoId: string, options: YouTubeArchiveOptio
   const subtitleLanguages = normalizeSubtitleLanguages(options.subtitleLanguages);
 
   try {
-    let download = await downloadYouTubeArchive(videoId, tmpDir, outputTemplate, subtitleLanguages);
-    let info = download.info;
-    let manualLanguages = subtitleLanguageKeys(info.subtitles);
-    let automaticLanguages = subtitleLanguageKeys(info.automatic_captions);
-    let attemptedLanguages = [...subtitleLanguages];
-    let subtitleTracks = await readSubtitleTracks(download.subtitleFiles, manualLanguages, automaticLanguages);
-    let subtitleFile = chooseSubtitleFile(download.subtitleFiles, attemptedLanguages);
+    const archive = await downloadYouTubeArchive(videoId, tmpDir, outputTemplate, subtitleLanguages);
+    const info = archive.info;
+    const manualLanguages = subtitleLanguageKeys(info.subtitles);
+    const automaticLanguages = subtitleLanguageKeys(info.automatic_captions);
+    const attemptedLanguages = [...subtitleLanguages];
+    const subtitleDownloadErrors: string[] = archive.error ? [archive.error] : [];
+    let subtitleFiles = await listSubtitleFiles(tmpDir);
+    let subtitleTracks = await readSubtitleTracks(subtitleFiles, manualLanguages, automaticLanguages);
 
-    if (!subtitleFile) {
+    if (subtitleTracks.length === 0) {
       const fallbackLanguage = chooseFallbackSubtitleLanguage(manualLanguages, automaticLanguages, subtitleLanguages);
       if (fallbackLanguage && !attemptedLanguages.includes(fallbackLanguage)) {
-        attemptedLanguages = [...attemptedLanguages, fallbackLanguage];
-        download = await downloadYouTubeArchive(videoId, tmpDir, outputTemplate, [fallbackLanguage]);
-        info = download.info;
-        manualLanguages = subtitleLanguageKeys(info.subtitles);
-        automaticLanguages = subtitleLanguageKeys(info.automatic_captions);
-        subtitleTracks = await readSubtitleTracks(download.subtitleFiles, manualLanguages, automaticLanguages);
-        subtitleFile = chooseSubtitleFile(download.subtitleFiles, attemptedLanguages);
+        const result = await downloadYouTubeSubtitleLanguage(videoId, tmpDir, outputTemplate, fallbackLanguage);
+        attemptedLanguages.push(fallbackLanguage);
+        if (result.error) subtitleDownloadErrors.push(`${fallbackLanguage}: ${result.error}`);
+        subtitleFiles = await listSubtitleFiles(tmpDir);
+        subtitleTracks = await readSubtitleTracks(subtitleFiles, manualLanguages, automaticLanguages);
       }
     }
 
@@ -293,10 +294,50 @@ async function fetchYouTubeArchive(videoId: string, options: YouTubeArchiveOptio
       subtitle_requested_languages: attemptedLanguages,
       subtitle_available_languages: manualLanguages,
       automatic_caption_languages: automaticLanguages,
+      ...(subtitleDownloadErrors.length > 0 ? { subtitle_download_errors: subtitleDownloadErrors } : {}),
       ...(primaryTrack ? { subtitle_language: primaryTrack.language } : {})
     };
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+async function downloadYouTubeArchive(
+  videoId: string,
+  tmpDir: string,
+  outputTemplate: string,
+  subtitleLanguages: string[]
+): Promise<{ info: YouTubeInfoRecord; error?: string }> {
+  let archiveError: string | undefined;
+  try {
+    await runYtDlp(buildYouTubeArchiveArgs(videoId, outputTemplate, subtitleLanguages));
+  } catch (error) {
+    archiveError = error instanceof Error ? error.message : String(error);
+  }
+
+  const info = await readDownloadedYouTubeInfo(tmpDir);
+  if (info) return { info, ...(archiveError ? { error: archiveError } : {}) };
+
+  if (archiveError) {
+    if (isYtDlpRateLimitedError(archiveError)) throw new Error(archiveError);
+    try {
+      return { info: await fetchYouTubeInfo(videoId), error: archiveError };
+    } catch {
+      throw new Error(archiveError);
+    }
+  }
+
+  throw new Error(`yt-dlp did not produce video metadata for ${videoId}.`);
+}
+
+async function readDownloadedYouTubeInfo(tmpDir: string): Promise<YouTubeInfoRecord | null> {
+  const files = await fs.readdir(tmpDir);
+  const infoFile = files.find((file) => file.endsWith('.info.json'));
+  if (!infoFile) return null;
+  try {
+    return JSON.parse(await fs.readFile(path.join(tmpDir, infoFile), 'utf8')) as YouTubeInfoRecord;
+  } catch {
+    return null;
   }
 }
 
@@ -350,26 +391,52 @@ function chooseSubtitleTrack(tracks: YouTubeSubtitleArchiveTrack[], languagePrio
   return scored[0]?.track ?? null;
 }
 
-async function downloadYouTubeArchive(
+async function fetchYouTubeInfo(videoId: string): Promise<YouTubeInfoRecord> {
+  const { stdout } = await runYtDlp(buildYouTubeInfoArgs(videoId));
+  try {
+    return JSON.parse(stdout) as YouTubeInfoRecord;
+  } catch {
+    throw new Error(`yt-dlp produced invalid video metadata for ${videoId}.`);
+  }
+}
+
+async function downloadYouTubeSubtitleLanguage(
   videoId: string,
   tmpDir: string,
   outputTemplate: string,
-  subtitleLanguages: string[]
-): Promise<{ info: YouTubeInfoRecord; subtitleFiles: string[] }> {
-  await runYtDlp(buildYouTubeArchiveArgs(videoId, outputTemplate, subtitleLanguages));
+  language: string
+): Promise<{ files: string[]; error?: string }> {
+  try {
+    await runYtDlp(buildYouTubeArchiveArgs(videoId, outputTemplate, [language]));
+  } catch (error) {
+    return {
+      files: await listSubtitleFiles(tmpDir),
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+  return { files: await listSubtitleFiles(tmpDir) };
+}
+
+async function listSubtitleFiles(tmpDir: string): Promise<string[]> {
   const files = (await fs.readdir(tmpDir)).map((file) => path.join(tmpDir, file));
-  const infoFile = files.find((file) => file.endsWith('.info.json'));
-  if (!infoFile) throw new Error('yt-dlp did not produce video metadata.');
-  return {
-    info: JSON.parse(await fs.readFile(infoFile, 'utf8')) as YouTubeInfoRecord,
-    subtitleFiles: files.filter((file) => file.endsWith('.json3') || file.endsWith('.vtt'))
-  };
+  return files.filter((file) => file.endsWith('.json3') || file.endsWith('.vtt'));
+}
+
+export function buildYouTubeInfoArgs(videoId: string): string[] {
+  return [
+    '--dump-single-json',
+    '--skip-download',
+    '--ignore-no-formats-error',
+    ...YT_DLP_SHARED_ARGS,
+    `https://www.youtube.com/watch?v=${videoId}`
+  ];
 }
 
 export function buildYouTubeArchiveArgs(videoId: string, outputTemplate: string, subtitleLanguages: string[]): string[] {
   return [
     '--no-playlist',
     '--skip-download',
+    '--ignore-no-formats-error',
     '--write-info-json',
     '--write-subs',
     '--write-auto-subs',
@@ -421,6 +488,7 @@ function buildYouTubeMarkdown(sourceType: YouTubeSourceType, archive: YouTubeVid
     automatic_caption_languages: archive.automatic_caption_languages,
     subtitle_track_count: archive.subtitle_tracks.length,
     subtitle_languages: subtitleLanguages,
+    ...(archive.subtitle_download_errors?.length ? { subtitle_download_errors: archive.subtitle_download_errors } : {}),
     ...(archive.subtitle_tracks.length > 0 && archive.subtitle_language
       ? { preferred_transcript_track_id: transcriptTrackId('youtube', archive.subtitle_language, archive.subtitle_tracks.find((track) => track.language === archive.subtitle_language)?.source_kind ?? 'auto') }
       : {})
@@ -452,6 +520,7 @@ function buildYouTubeMarkdown(sourceType: YouTubeSourceType, archive: YouTubeVid
     `- automatic_caption_languages: ${metadata.automatic_caption_languages?.join(', ') || '_none_'}`,
     `- subtitle_track_count: ${metadata.subtitle_track_count ?? 0}`,
     `- subtitle_languages: ${metadata.subtitle_languages?.join(', ') || '_none_'}`,
+    `- subtitle_download_errors: ${metadata.subtitle_download_errors?.join(' | ') || '_none_'}`,
     `- language: ${inlineValue(metadata.language)}`,
     `- availability: ${inlineValue(metadata.availability)}`,
     `- tags: ${tags.length > 0 ? tags.join(', ') : '_none_'}`,
@@ -683,7 +752,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn('yt-dlp', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PATH: ytDlpPathEnv(process.env.PATH) }
+    });
     let stdout = '';
     let stderr = '';
     proc.stdout.on('data', (chunk: Buffer) => {
@@ -694,13 +766,40 @@ async function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: strin
     });
     proc.on('error', reject);
     proc.on('close', (code) => {
-      if (code === 0 || stdout.trim()) {
+      if (code === 0) {
         resolve({ stdout, stderr });
         return;
       }
-      reject(new Error(stderr.trim() || `yt-dlp exited with code ${code ?? 'unknown'}`));
+      reject(new Error(ytDlpErrorMessage(code, stdout, stderr)));
     });
   });
+}
+
+function ytDlpPathEnv(currentPath: string | undefined): string {
+  const parts = [
+    ...(currentPath?.split(':') ?? []),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ].filter(Boolean);
+  return [...new Set(parts)].join(':');
+}
+
+function ytDlpErrorMessage(code: number | null, stdout: string, stderr: string): string {
+  const combined = `${stderr}\n${stdout}`
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-12)
+    .join('\n');
+  return combined || `yt-dlp exited with code ${code ?? 'unknown'}`;
+}
+
+function isYtDlpRateLimitedError(value: string): boolean {
+  return /429|too many requests|rate.?limit/i.test(value);
 }
 
 function stringValue(value: unknown): string | undefined {

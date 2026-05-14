@@ -44,6 +44,11 @@ const FEEDS_ROOT = 'feeds';
 const SOURCES_FILE = '_sources.json';
 const FEED_ASSET_ROOT = path.join('.orbit', 'feed');
 const DEFAULT_YOUTUBE_RECENT_COUNT = 20;
+const DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES = ['en', 'zh-Hans', 'zh'];
+const YOUTUBE_DOWNLOAD_INTERVAL_MS = 5_000;
+const YOUTUBE_RATE_LIMIT_BASE_DELAY_MS = 30_000;
+const YOUTUBE_RATE_LIMIT_MAX_RETRIES = 5;
+const YOUTUBE_TRANSIENT_RETRY_DELAY_MS = 5_000;
 
 export interface FeedStoreOptions {
   now?: () => Date;
@@ -86,7 +91,7 @@ export class FeedStore {
     if (duplicate) return duplicate;
     const now = this.now().toISOString();
     const defaultProcessing = youtube
-      ? { extract_readable: true, auto_analyze: false, generate_item_summary: true, preferred_languages: ['zh-Hans', 'zh-Hant', 'zh', 'en'] }
+      ? { extract_readable: true, auto_analyze: false, generate_item_summary: true, preferred_languages: DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES }
       : { extract_readable: false, auto_analyze: false, generate_item_summary: true };
     const defaultFetchPolicy = youtube
       ? {
@@ -654,8 +659,10 @@ export class FeedStore {
       'youtube_transcript_markdown',
       fetchedAt
     );
+    const existingMetadata = { ...(item.metadata ?? {}) };
+    delete existingMetadata.last_processing_error;
     const metadata = {
-      ...(item.metadata ?? {}),
+      ...existingMetadata,
       ...record.metadata,
       ...(source ? { source_url: source.url } : {})
     };
@@ -903,13 +910,46 @@ export class FeedStore {
       }
     };
     await this.writeFetchRun(progressRun);
-    for (const item of extractionTargets) {
-      if (!source.processing_policy?.extract_readable || transcriptFetched >= transcriptLimit) break;
+    const boundedExtractionTargets = source.processing_policy?.extract_readable
+      ? extractionTargets.slice(0, transcriptLimit)
+      : [];
+    for (const [index, item] of boundedExtractionTargets.entries()) {
+      if (!source.processing_policy?.extract_readable) break;
+      if (index > 0 && YOUTUBE_DOWNLOAD_INTERVAL_MS > 0) {
+        const waitingAt = this.now().toISOString();
+        progressRun = {
+          ...progressRun,
+          stages: markRunStage(
+            progressRun.stages,
+            'extract-readable',
+            'running',
+            `Waiting ${formatWait(YOUTUBE_DOWNLOAD_INTERVAL_MS)} before the next YouTube transcript request.`,
+            waitingAt,
+            { total: extractTotal, completed: transcriptFetched }
+          )
+        };
+        await this.writeFetchRun(progressRun);
+        await sleep(YOUTUBE_DOWNLOAD_INTERVAL_MS);
+      }
       try {
-        await this.ensureYouTubeReadableContent(item);
+        await this.processYouTubeExtractionTarget(item, source, async (detail) => {
+          const retryAt = this.now().toISOString();
+          progressRun = {
+            ...progressRun,
+            stages: markRunStage(progressRun.stages, 'extract-readable', 'running', detail, retryAt, {
+              total: extractTotal,
+              completed: transcriptFetched
+            }),
+            stats: {
+              ...(progressRun.stats ?? {}),
+              transcripts_fetched: transcriptFetched,
+              transcript_failures: failed,
+              transcript_retry_targets: retryItems.length
+            }
+          };
+          await this.writeFetchRun(progressRun);
+        });
         transcriptFetched += 1;
-        if (source.processing_policy?.auto_analyze) await this.analyzeItem(item.id);
-        if (source.processing_policy?.auto_translate_to) await this.translateItem(item.id, source.processing_policy.auto_translate_to);
       } catch (error) {
         failed += 1;
         const message = error instanceof Error ? error.message : String(error);
@@ -996,6 +1036,43 @@ export class FeedStore {
       skipped: selected.length - createdItems.length,
       failed
     };
+  }
+
+  private async processYouTubeExtractionTarget(
+    item: FeedItem,
+    source: FeedSource,
+    onRetry: (detail: string) => Promise<void>
+  ): Promise<void> {
+    let lastError: unknown;
+    let usedTransientRetry = false;
+    for (let retry = 0; retry <= YOUTUBE_RATE_LIMIT_MAX_RETRIES; retry += 1) {
+      try {
+        await this.ensureYouTubeReadableContent(item);
+        if (source.processing_policy?.auto_analyze) await this.analyzeItem(item.id);
+        if (source.processing_policy?.auto_translate_to) await this.translateItem(item.id, source.processing_policy.auto_translate_to);
+        return;
+      } catch (error) {
+        lastError = error;
+        const message = errorMessage(error);
+        if (isYouTubeUnavailableError(message)) break;
+        if (isYouTubeRateLimitError(message) && retry < YOUTUBE_RATE_LIMIT_MAX_RETRIES) {
+          const delay = YOUTUBE_RATE_LIMIT_BASE_DELAY_MS * 2 ** retry;
+          await onRetry(
+            `YouTube rate limited transcript extraction for ${item.title}. Retrying in ${formatWait(delay)} (${retry + 1}/${YOUTUBE_RATE_LIMIT_MAX_RETRIES}).`
+          );
+          await sleep(delay);
+          continue;
+        }
+        if (!usedTransientRetry) {
+          usedTransientRetry = true;
+          await onRetry(`Retrying transcript extraction for ${item.title} after a transient yt-dlp failure.`);
+          await sleep(YOUTUBE_TRANSIENT_RETRY_DELAY_MS);
+          continue;
+        }
+        break;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'youtube_transcript_extraction_failed'));
   }
 
   private async updateSourceAfterFetch(source: FeedSource, patch: Partial<FeedSource>): Promise<void> {
@@ -1379,6 +1456,31 @@ function markRunStage(
         }
       : stage
   );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isYouTubeRateLimitError(value: string): boolean {
+  return /429|too many requests|rate.?limit/i.test(value);
+}
+
+function isYouTubeUnavailableError(value: string): boolean {
+  return /video unavailable|removed by the uploader|private video|account.*terminated|copyright/i.test(value);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatWait(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
 function isYouTubeItem(item: FeedItem): boolean {

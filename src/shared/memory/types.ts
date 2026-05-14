@@ -4,11 +4,15 @@ import type { SynthesisArtifact, SynthesisSource } from '../synthesis';
 export const MEMORY_KINDS = ['interest', 'preference', 'pattern', 'lesson', 'entity_memory', 'goal'] as const;
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 
+export const MEMORY_LAYERS = ['semantic', 'episodic', 'procedural'] as const;
+export type MemoryLayer = (typeof MEMORY_LAYERS)[number];
+
 export const MEMORY_STABILITIES = ['volatile', 'stable', 'core'] as const;
 export type MemoryStability = (typeof MEMORY_STABILITIES)[number];
 
 export interface MemoryNode {
   id: string;
+  layer: MemoryLayer;
   kind: MemoryKind;
   title: string;
   summary: string;
@@ -28,6 +32,7 @@ export interface MemoryNode {
 
 export interface MemoryCluster {
   id: string;
+  layer: MemoryLayer;
   theme: string;
   memories: string[];
   coherence: number;
@@ -52,6 +57,7 @@ export interface MemoryExtractionInput {
 }
 
 export interface CreateMemoryInput {
+  layer?: MemoryLayer;
   kind: MemoryKind;
   title: string;
   summary: string;
@@ -64,6 +70,7 @@ export interface CreateMemoryInput {
 }
 
 export interface UpdateMemoryInput {
+  layer?: MemoryLayer;
   kind?: MemoryKind;
   title?: string;
   summary?: string;
@@ -78,6 +85,7 @@ export interface UpdateMemoryInput {
 }
 
 export interface MemoryFilter {
+  layer?: MemoryLayer | 'all';
   kind?: MemoryKind | 'all';
   stability?: MemoryStability | 'all';
   include_archived?: boolean;
@@ -87,6 +95,7 @@ export interface MemoryFilter {
 export interface RecallOptions {
   user_id?: string;
   scope?: string;
+  layer?: MemoryLayer | 'all';
   max_memories?: number;
   min_confidence?: number;
   exclude_volatile?: boolean;
@@ -97,6 +106,24 @@ export interface RecallOptions {
 export interface RecallResult {
   memories: MemoryNode[];
   explanation: string;
+  matches: MemoryRecallMatch[];
+}
+
+export interface MemoryRecallSignals {
+  keyword_overlap: number;
+  entity_overlap: number;
+  confidence: number;
+  stability_boost: number;
+  recall_boost: number;
+  layer_boost: number;
+}
+
+export interface MemoryRecallMatch {
+  memory_id: string;
+  score: number;
+  matched_terms: string[];
+  signals: MemoryRecallSignals;
+  reasons: string[];
 }
 
 export interface RecallStats {
@@ -110,6 +137,7 @@ export interface MemoryDigestPayload {
   reinforced_memories: string[];
   fading_memories: string[];
   clusters: MemoryCluster[];
+  layer_counts: Record<MemoryLayer, { total: number; stable: number; core: number; recalled: number }>;
 }
 
 export interface PromoteMemoryToResourceResult {
@@ -137,8 +165,18 @@ export function isMemoryKind(value: string): value is MemoryKind {
   return (MEMORY_KINDS as readonly string[]).includes(value);
 }
 
+export function isMemoryLayer(value: string): value is MemoryLayer {
+  return (MEMORY_LAYERS as readonly string[]).includes(value);
+}
+
 export function isMemoryStability(value: string): value is MemoryStability {
   return (MEMORY_STABILITIES as readonly string[]).includes(value);
+}
+
+export function deriveMemoryLayer(kind: MemoryKind): MemoryLayer {
+  if (kind === 'lesson') return 'episodic';
+  if (kind === 'pattern') return 'procedural';
+  return 'semantic';
 }
 
 export function deriveMemoryStability(input: {

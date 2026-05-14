@@ -217,11 +217,12 @@ Search 页面支持：
 
 Memory 页面支持：
 
+- hybrid layers：semantic（偏好、目标、兴趣、实体事实）/ episodic（过去经历与教训）/ procedural（工作方式与可复用流程）。
 - filter by kind：interest / preference / pattern / lesson / entity memory / goal。
 - stability：volatile / stable / core，会根据 evidence、confidence、recall count 和用户确认自动演化。
 - actions：Confirm、Archive、Promote to Resource、Promote to Project。
 - **Generate digest**：生成 `memory.digest` synthesis artifact，汇总新增、增强、可能衰退的记忆和 clusters。
-- Ask-Anywhere：有相关记忆被唤回时，会在对话顶部显示 memory chips，并可隐藏。
+- Ask-Anywhere：有相关记忆被唤回时，会在对话顶部显示 memory chips、memory layer 和召回原因，并可隐藏。
 
 ## 5.11 Review System
 

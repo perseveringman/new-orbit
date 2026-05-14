@@ -18,7 +18,13 @@ export async function* handleMemoryRecall(
     used_in: 'question_answer'
   });
   const text = result.memories.length
-    ? result.memories.map((memory, index) => `${index + 1}. ${memory.title}: ${memory.summary}`).join('\n')
+    ? result.memories
+        .map((memory, index) => {
+          const match = result.matches.find((item) => item.memory_id === memory.id);
+          const reason = match?.reasons[0] ? ` (${match.reasons[0]})` : '';
+          return `${index + 1}. [${memory.layer}/${memory.kind}] ${memory.title}: ${memory.summary}${reason}`;
+        })
+        .join('\n')
     : result.explanation;
   yield { type: 'text.delta', requestId: request.requestId, text };
   for (const memory of result.memories.slice(0, 3)) {
@@ -27,9 +33,8 @@ export async function* handleMemoryRecall(
       requestId: request.requestId,
       kind: 'memory',
       ref: memory.id,
-      preview: { title: memory.title, summary: memory.summary, confidence: memory.confidence }
+      preview: { title: memory.title, summary: memory.summary, layer: memory.layer, confidence: memory.confidence }
     };
   }
   yield { type: 'request.completed', requestId: request.requestId, summary: `Recalled ${result.memories.length} memory item(s).` };
 }
-

@@ -1,4 +1,4 @@
-import type { MemoryDigestPayload, MemoryDigestResult } from '@shared/memory';
+import type { MemoryDigestPayload, MemoryDigestResult, MemoryLayer, MemoryNode } from '@shared/memory';
 import type { SynthesisProvenance } from '@shared/synthesis';
 import { createSynthesisStore } from '../synthesis/store';
 import { createMemoryStore, type MemoryStore } from './store';
@@ -20,7 +20,8 @@ export async function generateMemoryDigestWithStore(
     new_memories: memories.filter((memory) => memory.created_at >= period.from && memory.created_at <= period.to),
     reinforced_memories: memories.filter((memory) => memory.evidence_count >= 3 || memory.recall_count > 0).map((memory) => memory.id),
     fading_memories: memories.filter((memory) => memory.stability === 'volatile' && memory.recall_count === 0).map((memory) => memory.id),
-    clusters
+    clusters,
+    layer_counts: summarizeLayers(memories)
   };
   const provenance: SynthesisProvenance = {
     runtime: 'local:heuristic',
@@ -45,6 +46,22 @@ export async function generateMemoryDigestWithStore(
     payload
   });
   return { artifact: artifact as MemoryDigestResult['artifact'], memories, clusters };
+}
+
+function summarizeLayers(memories: MemoryNode[]): Record<MemoryLayer, { total: number; stable: number; core: number; recalled: number }> {
+  const summary: Record<MemoryLayer, { total: number; stable: number; core: number; recalled: number }> = {
+    semantic: { total: 0, stable: 0, core: 0, recalled: 0 },
+    episodic: { total: 0, stable: 0, core: 0, recalled: 0 },
+    procedural: { total: 0, stable: 0, core: 0, recalled: 0 }
+  };
+  for (const memory of memories) {
+    const bucket = summary[memory.layer];
+    bucket.total += 1;
+    if (memory.stability === 'stable') bucket.stable += 1;
+    if (memory.stability === 'core') bucket.core += 1;
+    if (memory.recall_count > 0) bucket.recalled += 1;
+  }
+  return summary;
 }
 
 function currentMonthPeriod(): { from: string; to: string } {

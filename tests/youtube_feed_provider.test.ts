@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildYouTubeArchiveArgs,
+  buildYouTubeInfoArgs,
   chooseFallbackSubtitleLanguage,
   chooseSubtitleFile,
   json3ToSegments,
@@ -64,9 +65,15 @@ hello <b>orbit</b>
   });
 
   it('builds yt-dlp archive args with cookies and auto captions enabled', () => {
-    const args = buildYouTubeArchiveArgs('abc123', '/tmp/abc123.%(ext)s', ['zh-Hans', 'zh', 'en']);
+    const infoArgs = buildYouTubeInfoArgs('abc123');
+    expect(infoArgs).toContain('--dump-single-json');
+    expect(infoArgs).toContain('--ignore-no-formats-error');
+
+    const args = buildYouTubeArchiveArgs('abc123', '/tmp/abc123.%(ext)s', ['zh-Hans', 'en']);
     expect(args).toContain('--write-auto-subs');
     expect(args).toContain('--cookies-from-browser');
+    expect(args).toContain('--ignore-no-formats-error');
+    expect(args).toContain('--write-info-json');
     expect(args.slice(args.indexOf('--cookies-from-browser'), args.indexOf('--cookies-from-browser') + 2)).toEqual([
       '--cookies-from-browser',
       'chrome'

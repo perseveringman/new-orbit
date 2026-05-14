@@ -6,7 +6,6 @@ import type {
   CreateMemoryInput,
   MemoryCluster,
   MemoryFilter,
-  MemoryKind,
   MemoryNode,
   PromoteMemoryToProjectResult,
   PromoteMemoryToResourceResult,
@@ -14,7 +13,7 @@ import type {
   RecallStats,
   UpdateMemoryInput
 } from '@shared/memory';
-import { deriveMemoryStability, isMemoryKind, isMemoryStability } from '@shared/memory';
+import { deriveMemoryLayer, deriveMemoryStability, isMemoryKind, isMemoryLayer, isMemoryStability } from '@shared/memory';
 import type { SynthesisSource } from '@shared/synthesis';
 import { publishTraceableEvent } from '../events/bus';
 import { createProject, listProjects } from '../project';
@@ -34,6 +33,7 @@ export class MemoryStore {
     const query = filter.query?.trim().toLowerCase();
     return nodes
       .filter((node) => filter.include_archived || !node.archived)
+      .filter((node) => !filter.layer || filter.layer === 'all' || node.layer === filter.layer)
       .filter((node) => !filter.kind || filter.kind === 'all' || node.kind === filter.kind)
       .filter((node) => !filter.stability || filter.stability === 'all' || node.stability === filter.stability)
       .filter((node) => !query || memoryText(node).toLowerCase().includes(query))
@@ -64,6 +64,7 @@ export class MemoryStore {
     const now = new Date().toISOString();
     const node: MemoryNode = {
       id: `mem-${randomUUID()}`,
+      layer: input.layer ?? deriveMemoryLayer(input.kind),
       kind: input.kind,
       title: input.title.trim(),
       summary: input.summary.trim(),
@@ -90,11 +91,15 @@ export class MemoryStore {
   async update(id: string, patch: UpdateMemoryInput): Promise<MemoryNode> {
     const current = await this.get(id);
     if (!current) throw new Error(`memory_not_found:${id}`);
+    if (patch.layer && !isMemoryLayer(patch.layer)) throw new Error(`invalid_memory_layer:${patch.layer}`);
     if (patch.kind && !isMemoryKind(patch.kind)) throw new Error(`invalid_memory_kind:${patch.kind}`);
     if (patch.stability && !isMemoryStability(patch.stability)) throw new Error(`invalid_memory_stability:${patch.stability}`);
+    const nextKind = patch.kind ?? current.kind;
     const next: MemoryNode = {
       ...current,
       ...patch,
+      layer: patch.layer ?? (patch.kind ? deriveMemoryLayer(nextKind) : current.layer),
+      kind: nextKind,
       title: patch.title?.trim() ?? current.title,
       summary: patch.summary?.trim() ?? current.summary,
       confidence: patch.confidence === undefined ? current.confidence : clamp01(patch.confidence),
@@ -136,7 +141,7 @@ export class MemoryStore {
     const resource = await createResourceStore(this.vaultPath).create({
       title: memory.title,
       body: `# ${memory.title}\n\n${memory.summary}\n\n${memory.detail ?? ''}`.trim(),
-      tags: ['memory', memory.kind]
+      tags: ['memory', memory.layer, memory.kind]
     });
     const updated = await this.update(memory.id, {
       related_entities: unique([...(memory.related_entities ?? []), `resource:${resource.frontmatter.slug}`])
@@ -205,11 +210,12 @@ export class MemoryStore {
 
   async listClusters(): Promise<MemoryCluster[]> {
     const nodes = await this.list();
-    const groups = new Map<MemoryKind, MemoryNode[]>();
-    for (const node of nodes) groups.set(node.kind, [...(groups.get(node.kind) ?? []), node]);
-    return Array.from(groups.entries()).map(([kind, memories]) => ({
-      id: `cluster-${kind}`,
-      theme: kind.replace('_', ' '),
+    const groups = new Map<string, MemoryNode[]>();
+    for (const node of nodes) groups.set(clusterKey(node), [...(groups.get(clusterKey(node)) ?? []), node]);
+    return Array.from(groups.entries()).map(([key, memories]) => ({
+      id: `cluster-${key}`,
+      layer: memories[0]?.layer ?? 'semantic',
+      theme: key.split(':')[1]?.replace('_', ' ') ?? key,
       memories: memories.map((memory) => memory.id),
       coherence: Math.min(1, 0.4 + memories.length * 0.1)
     }));
@@ -304,12 +310,17 @@ export function createMemoryStore(vaultPath: string): MemoryStore {
 }
 
 function normalizeMemory(value: unknown): MemoryNode {
-  const node = value as MemoryNode;
+  const raw = value as MemoryNode;
+  const node: MemoryNode = {
+    ...raw,
+    layer: raw.layer ?? deriveMemoryLayer(raw.kind)
+  };
   validateMemoryNode(node);
   return node;
 }
 
 function validateMemoryInput(input: CreateMemoryInput): void {
+  if (input.layer && !isMemoryLayer(input.layer)) throw new Error(`invalid_memory_layer:${String(input.layer)}`);
   if (!isMemoryKind(input.kind)) throw new Error(`invalid_memory_kind:${String(input.kind)}`);
   if (!input.title.trim()) throw new Error('memory_title_required');
   if (!input.summary.trim()) throw new Error('memory_summary_required');
@@ -317,6 +328,7 @@ function validateMemoryInput(input: CreateMemoryInput): void {
 
 function validateMemoryNode(node: MemoryNode): void {
   if (!node?.id?.startsWith('mem-')) throw new Error('invalid_memory_id');
+  if (!isMemoryLayer(node.layer)) throw new Error(`invalid_memory_layer:${String(node.layer)}`);
   if (!isMemoryKind(node.kind)) throw new Error(`invalid_memory_kind:${String(node.kind)}`);
   if (!isMemoryStability(node.stability)) throw new Error(`invalid_memory_stability:${String(node.stability)}`);
   if (!node.title.trim()) throw new Error('memory_title_required');
@@ -343,7 +355,11 @@ function clamp01(value: number): number {
 }
 
 function memoryText(node: MemoryNode): string {
-  return [node.title, node.summary, node.detail, node.related_entities?.join(' ')].filter(Boolean).join('\n');
+  return [node.layer, node.kind, node.title, node.summary, node.detail, node.related_entities?.join(' ')].filter(Boolean).join('\n');
+}
+
+function clusterKey(node: MemoryNode): string {
+  return `${node.layer}:${node.kind}`;
 }
 
 function slugify(value: string): string {
@@ -361,7 +377,7 @@ function publishMemoryEvent(type: string, memory: MemoryNode, extra: Record<stri
     source: 'synthesis',
     type,
     summary: `${memory.kind}: ${memory.title}`,
-    payload: { memory_id: memory.id, kind: memory.kind, stability: memory.stability, ...extra }
+    payload: { memory_id: memory.id, layer: memory.layer, kind: memory.kind, stability: memory.stability, ...extra }
   });
 }
 
