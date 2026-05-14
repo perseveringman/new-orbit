@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight, GitBranch, RefreshCw } from 'lucide-react';
 import { classifyPatch, formatShortSha } from './Inspector/changes/diffFormatting';
 
 // TODO(integration): replace with @shared/git DiffResult
@@ -25,6 +26,8 @@ interface LocalDiffResult {
 export interface DiffPaneProps {
   worktreeId: string;
   base?: string;
+  branchLabel?: string;
+  branchControl?: ReactNode;
   className?: string;
 }
 
@@ -32,18 +35,149 @@ const STATUS_META: Record<
   LocalDiffFile['status'],
   { glyph: string; className: string; label: string }
 > = {
-  added: { glyph: '●+', className: 'text-emerald-400', label: 'Added' },
-  modified: { glyph: '●~', className: 'text-amber-400', label: 'Modified' },
-  deleted: { glyph: '●-', className: 'text-red-400', label: 'Deleted' },
-  renamed: { glyph: '●→', className: 'text-sky-400', label: 'Renamed' }
+  added: { glyph: 'A', className: 'text-emerald-400', label: 'Added' },
+  modified: { glyph: 'M', className: 'text-amber-400', label: 'Modified' },
+  deleted: { glyph: 'D', className: 'text-red-400', label: 'Deleted' },
+  renamed: { glyph: 'R', className: 'text-sky-400', label: 'Renamed' }
 };
 
 export { classifyPatch, formatShortSha };
 
+export type UnifiedDiffRow =
+  | {
+      type: 'skip';
+      key: string;
+      count: number;
+    }
+  | {
+      type: 'line';
+      key: string;
+      kind: 'add' | 'del' | 'ctx' | 'meta';
+      marker: '+' | '-' | ' ';
+      oldLine: number | null;
+      newLine: number | null;
+      text: string;
+    };
+
+function isPatchMetadata(line: string): boolean {
+  return (
+    line.startsWith('diff --git') ||
+    line.startsWith('index ') ||
+    line.startsWith('--- ') ||
+    line.startsWith('+++ ') ||
+    line.startsWith('new file mode') ||
+    line.startsWith('deleted file mode') ||
+    line.startsWith('similarity index') ||
+    line.startsWith('rename ')
+  );
+}
+
+export function parseUnifiedPatch(patch: string): UnifiedDiffRow[] {
+  const rawLines = patch.split('\n');
+  const lines = rawLines[rawLines.length - 1] === '' ? rawLines.slice(0, -1) : rawLines;
+  const rows: UnifiedDiffRow[] = [];
+  let oldLine = 1;
+  let newLine = 1;
+  let nextUnchangedOldLine = 1;
+  let hunkIndex = 0;
+
+  lines.forEach((line, index) => {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunk) {
+      const oldStart = Number(hunk[1]);
+      const newStart = Number(hunk[2]);
+      const skipped = oldStart - nextUnchangedOldLine;
+      if (skipped > 0) {
+        rows.push({
+          type: 'skip',
+          key: `skip:${hunkIndex}:${oldStart}`,
+          count: skipped
+        });
+      }
+      oldLine = oldStart;
+      newLine = newStart;
+      nextUnchangedOldLine = oldStart;
+      hunkIndex += 1;
+      return;
+    }
+
+    if (isPatchMetadata(line)) return;
+
+    if (line.startsWith('\\')) {
+      rows.push({
+        type: 'line',
+        key: `meta:${index}`,
+        kind: 'meta',
+        marker: ' ',
+        oldLine: null,
+        newLine: null,
+        text: line
+      });
+      return;
+    }
+
+    const marker = line.startsWith('+') ? '+' : line.startsWith('-') ? '-' : ' ';
+    const text = marker === ' ' ? (line.startsWith(' ') ? line.slice(1) : line) : line.slice(1);
+
+    if (marker === '+') {
+      rows.push({
+        type: 'line',
+        key: `add:${index}:${newLine}`,
+        kind: 'add',
+        marker,
+        oldLine: null,
+        newLine,
+        text
+      });
+      newLine += 1;
+      return;
+    }
+
+    if (marker === '-') {
+      rows.push({
+        type: 'line',
+        key: `del:${index}:${oldLine}`,
+        kind: 'del',
+        marker,
+        oldLine,
+        newLine: null,
+        text
+      });
+      oldLine += 1;
+      nextUnchangedOldLine = oldLine;
+      return;
+    }
+
+    rows.push({
+      type: 'line',
+      key: `ctx:${index}:${oldLine}:${newLine}`,
+      kind: 'ctx',
+      marker,
+      oldLine,
+      newLine,
+      text
+    });
+    oldLine += 1;
+    newLine += 1;
+    nextUnchangedOldLine = oldLine;
+  });
+
+  return rows;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function lineNumber(row: Extract<UnifiedDiffRow, { type: 'line' }>): number | null {
+  if (row.kind === 'add') return row.newLine;
+  return row.oldLine ?? row.newLine;
+}
+
 export function DiffPane(props: DiffPaneProps): JSX.Element {
-  const { worktreeId, base, className } = props;
+  const { worktreeId, base, branchLabel, branchControl, className } = props;
   const [result, setResult] = useState<LocalDiffResult | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -62,9 +196,10 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
       const raw = await fn({ worktreeId, base });
       const r = raw as unknown as LocalDiffResult;
       setResult(r);
-      setSelected((prev) => {
-        if (prev && r.files.some((f) => f.path === prev)) return prev;
-        return r.files[0]?.path ?? null;
+      setCollapsedFiles((current) => {
+        const next: Record<string, boolean> = {};
+        for (const file of r.files) next[file.path] = current[file.path] ?? false;
+        return next;
       });
     } catch (e) {
       setError((e as Error).message || 'Failed to load diff');
@@ -90,18 +225,19 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
     return { add: result.totalAdditions, del: result.totalDeletions };
   }, [result]);
 
-  const selectedFile = useMemo(
-    () => (result && selected ? result.files.find((f) => f.path === selected) ?? null : null),
-    [result, selected]
-  );
-
-  const patchLines = useMemo(
-    () => (selectedFile && !selectedFile.binary ? classifyPatch(selectedFile.patch) : []),
-    [selectedFile]
+  const rowsByFile = useMemo(
+    () =>
+      new Map(
+        (result?.files ?? []).map((file) => [
+          file.path,
+          file.binary ? [] : parseUnifiedPatch(file.patch)
+        ])
+      ),
+    [result?.files]
   );
 
   const rootClass = [
-    'flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 text-neutral-200',
+    'flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-800 bg-[#111111] text-neutral-200',
     className ?? ''
   ]
     .filter(Boolean)
@@ -109,32 +245,34 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
 
   return (
     <div className={rootClass}>
-      <header className="flex items-center justify-between gap-3 border-b border-neutral-800 px-3 py-2 text-xs">
-        <div className="flex items-center gap-2 font-mono">
-          <span className="text-neutral-400">{effectiveBase}</span>
-          <span className="text-neutral-600">→</span>
-          <span className="text-neutral-200">
-            {result ? formatShortSha(result.head) : '…'}
+      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-neutral-800 px-3 text-xs">
+        <div className="flex min-w-0 items-center gap-2">
+          <GitBranch size={14} className="shrink-0 text-neutral-500" />
+          {branchControl ?? (
+            <span className="shrink-0 text-neutral-400">Branch</span>
+          )}
+          <span className="font-mono text-emerald-400">+{formatNumber(totals.add)}</span>
+          <span className="font-mono text-rose-400">-{formatNumber(totals.del)}</span>
+          <span className="min-w-0 truncate font-mono text-neutral-500">
+            {effectiveBase}
+            <span className="px-1.5 text-neutral-700">→</span>
+            {branchLabel || (result ? formatShortSha(result.head) : '…')}
           </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
           {result && (
-            <span className="ml-2 text-neutral-500">
-              (merge-base {formatShortSha(result.mergeBase)})
+            <span className="hidden font-mono text-[11px] text-neutral-600 xl:inline">
+              merge-base {formatShortSha(result.mergeBase)}
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="font-mono">
-            <span className="text-emerald-400">+{totals.add}</span>
-            <span className="text-neutral-600">/</span>
-            <span className="text-rose-400">-{totals.del}</span>
-          </span>
           <button
             type="button"
             onClick={() => setNonce((n) => n + 1)}
             disabled={loading}
-            className="rounded border border-neutral-700 px-2 py-0.5 text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+            className="rounded p-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100 disabled:opacity-50"
+            title="Refresh diff"
           >
-            {loading ? 'Loading…' : 'Refresh'}
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </header>
@@ -159,75 +297,97 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
       )}
 
       {!error && result && result.files.length > 0 && (
-        <div className="flex min-h-0 flex-1">
-          <aside className="w-64 shrink-0 overflow-y-auto border-r border-neutral-800">
-            <ul className="sticky top-0 divide-y divide-neutral-900">
-              {result.files.map((f) => {
-                const meta = STATUS_META[f.status];
-                const active = f.path === selected;
-                return (
-                  <li key={f.path}>
-                    <button
-                      type="button"
-                      onClick={() => setSelected(f.path)}
-                      className={[
-                        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs',
-                        active ? 'bg-neutral-800/80' : 'hover:bg-neutral-900'
-                      ].join(' ')}
-                      title={meta.label}
-                    >
-                      <span className={`font-mono ${meta.className}`}>{meta.glyph}</span>
-                      <span className="flex-1 truncate font-mono text-neutral-200">
-                        {f.path}
-                      </span>
-                      <span className="font-mono text-[10px] text-neutral-500">
-                        <span className="text-emerald-400">+{f.additions}</span>
-                        /
-                        <span className="text-rose-400">-{f.deletions}</span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </aside>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="min-w-[720px] pb-8">
+            {result.files.map((file) => {
+              const meta = STATUS_META[file.status];
+              const collapsed = collapsedFiles[file.path] === true;
+              const rows = rowsByFile.get(file.path) ?? [];
 
-          <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            {selectedFile?.binary ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
-                Binary file — not shown
-              </div>
-            ) : selectedFile ? (
-              <pre className="m-0 flex-1 overflow-auto font-mono text-xs leading-5">
-                {patchLines.map((l) => {
-                  const bg =
-                    l.kind === 'add'
-                      ? 'bg-emerald-500/20'
-                      : l.kind === 'del'
-                        ? 'bg-rose-500/20'
-                        : '';
-                  const fg =
-                    l.kind === 'hunk'
-                      ? 'italic text-neutral-500'
-                      : l.kind === 'meta'
-                        ? 'text-neutral-500'
-                        : 'text-neutral-200';
-                  return (
-                    <div key={l.n} className={`flex ${bg}`}>
-                      <span className="w-10 shrink-0 select-none border-r border-neutral-800 px-2 text-right text-neutral-600">
-                        {l.n}
-                      </span>
-                      <span className={`whitespace-pre px-2 ${fg}`}>{l.text || ' '}</span>
+              return (
+                <section key={file.path} className="border-b border-neutral-900/80">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsedFiles((current) => ({
+                        ...current,
+                        [file.path]: !collapsed
+                      }))
+                    }
+                    className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-neutral-900 bg-[#111111]/95 px-3 py-2 text-left backdrop-blur"
+                  >
+                    <span className="rounded bg-neutral-800 p-1 text-neutral-400">
+                      {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                    </span>
+                    <span className={`w-4 shrink-0 text-center text-[11px] font-semibold ${meta.className}`} title={meta.label}>
+                      {meta.glyph}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-sm text-neutral-100">
+                      {file.path}
+                    </span>
+                    <span className="shrink-0 font-mono text-xs">
+                      <span className="text-emerald-400">+{formatNumber(file.additions)}</span>
+                      <span className="px-1 text-neutral-700"> </span>
+                      <span className="text-rose-400">-{formatNumber(file.deletions)}</span>
+                    </span>
+                  </button>
+
+                  {!collapsed && (
+                    <div className="font-mono text-xs leading-5">
+                      {file.binary ? (
+                        <div className="flex h-24 items-center justify-center text-neutral-500">
+                          Binary file — not shown
+                        </div>
+                      ) : rows.length === 0 ? (
+                        <div className="flex h-24 items-center justify-center text-neutral-500">
+                          No textual patch available
+                        </div>
+                      ) : (
+                        rows.map((row) => {
+                          if (row.type === 'skip') {
+                            return (
+                              <div key={row.key} className="flex items-center py-1">
+                                <span className="w-11 shrink-0" />
+                                <div className="mx-2 flex-1 rounded-md bg-neutral-800 px-3 py-1 text-[11px] text-neutral-500">
+                                  {formatNumber(row.count)} unmodified lines
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          const number = lineNumber(row);
+                          const isAdd = row.kind === 'add';
+                          const isDel = row.kind === 'del';
+                          const rowClass = isAdd
+                            ? 'border-l-2 border-emerald-400 bg-emerald-950/45 text-emerald-50'
+                            : isDel
+                              ? 'border-l-2 border-rose-400 bg-rose-950/35 text-rose-50'
+                              : 'border-l-2 border-transparent text-neutral-300';
+                          const markerClass = isAdd
+                            ? 'text-emerald-300'
+                            : isDel
+                              ? 'text-rose-300'
+                              : 'text-neutral-600';
+
+                          return (
+                            <div key={row.key} className={`flex min-w-max ${rowClass}`}>
+                              <span className="w-11 shrink-0 select-none px-2 text-right text-neutral-500">
+                                {number ?? ''}
+                              </span>
+                              <span className={`w-5 shrink-0 select-none text-center ${markerClass}`}>
+                                {row.marker}
+                              </span>
+                              <span className="whitespace-pre pr-4">{row.text || ' '}</span>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
-                  );
-                })}
-              </pre>
-            ) : (
-              <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
-                Select a file
-              </div>
-            )}
-          </section>
+                  )}
+                </section>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

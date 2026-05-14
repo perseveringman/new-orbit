@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { WorktreeRecord } from '@shared/git';
+import { GitBranch } from 'lucide-react';
 import { DiffPane } from './DiffPane';
 
 export function DiffWorkspacePane(): JSX.Element {
@@ -31,27 +32,48 @@ export function DiffWorkspacePane(): JSX.Element {
 
   if (worktrees.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center rounded border border-dashed border-neutral-300 text-sm text-neutral-500 dark:border-neutral-700">
-        No active worktree to diff.
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-800 bg-[#111111] text-neutral-200">
+        <header className="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-800 px-3 text-xs">
+          <GitBranch size={14} className="text-neutral-500" />
+          <span className="text-neutral-400">Branch</span>
+          <span className="font-mono text-emerald-400">+0</span>
+          <span className="font-mono text-rose-400">-0</span>
+          <span className="font-mono text-neutral-500">main → worktree</span>
+        </header>
+        <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-neutral-500">
+          No active worktree to diff.
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="flex h-full flex-col gap-2">
+  const selectedWorktree = worktrees.find((worktree) => worktree.id === selected) ?? worktrees[0];
+  const branchControl =
+    worktrees.length > 1 ? (
       <select
         value={selected}
         onChange={(e) => setSelected(e.target.value)}
-        className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+        className="max-w-40 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 outline-none"
       >
         {worktrees.map((worktree) => (
           <option key={worktree.id} value={worktree.id}>
-            {worktree.id} · {worktree.branch}
+            {worktree.branch}
           </option>
         ))}
       </select>
+    ) : (
+      <span className="max-w-40 truncate text-neutral-300">{selectedWorktree?.branch ?? 'Branch'}</span>
+    );
+
+  return (
+    <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1">
-        <DiffPane worktreeId={selected} className="h-full" />
+        <DiffPane
+          worktreeId={selected}
+          branchLabel={selectedWorktree?.branch}
+          branchControl={branchControl}
+          className="h-full"
+        />
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatShortSha } from '../src/renderer/src/components/DiffPane';
+import { formatShortSha, parseUnifiedPatch } from '../src/renderer/src/components/DiffPane';
 
 describe('formatShortSha', () => {
   it('truncates a 40-char sha to 7 chars', () => {
@@ -42,5 +42,44 @@ describe('classifyPatch', () => {
     );
 
     expect(lines?.map((line) => line.kind)).toEqual(['meta', 'hunk', 'del', 'add', 'ctx']);
+  });
+});
+
+describe('parseUnifiedPatch', () => {
+  it('collapses unchanged ranges before hunks and assigns display line numbers', () => {
+    const rows = parseUnifiedPatch(
+      [
+        'diff --git a/docs/ROADMAP.md b/docs/ROADMAP.md',
+        'index 111..222 100644',
+        '--- a/docs/ROADMAP.md',
+        '+++ b/docs/ROADMAP.md',
+        '@@ -20,3 +20,4 @@',
+        ' unchanged before',
+        '-old item',
+        '+new item',
+        '+extra item',
+        ' unchanged after',
+        '@@ -90,2 +91,2 @@',
+        '-remove later',
+        '+add later'
+      ].join('\n')
+    );
+
+    expect(rows[0]).toMatchObject({ type: 'skip', count: 19 });
+    expect(rows.find((row) => row.type === 'skip' && row.count === 67)).toBeTruthy();
+    expect(rows.filter((row) => row.type === 'line').map((row) => row.kind)).toEqual([
+      'ctx',
+      'del',
+      'add',
+      'add',
+      'ctx',
+      'del',
+      'add'
+    ]);
+    expect(rows.find((row) => row.type === 'line' && row.kind === 'add')).toMatchObject({
+      newLine: 21,
+      oldLine: null,
+      text: 'new item'
+    });
   });
 });
