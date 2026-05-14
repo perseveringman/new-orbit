@@ -19,7 +19,6 @@ export type VaultViewKind =
   | 'gateway'
   | 'askAnywhere'
   | 'conversations'
-  | 'today'
   | 'dashboard'
   | 'vision'
   | 'journals'
@@ -51,7 +50,6 @@ export type SidebarSurfaceId =
   | 'gateway'
   | 'askAnywhere'
   | 'conversations'
-  | 'today'
   | 'dashboard'
   | 'vision'
   | 'journals'
@@ -275,9 +273,6 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   },
   conversations: {
     intents: [{ id: 'focus', title: 'Focus', panels: ['inspector'] }]
-  },
-  today: {
-    intents: [{ id: 'focus', title: 'Focus', panels: ['task-detail'] }]
   },
   dashboard: {
     intents: [

@@ -60,7 +60,6 @@ import { ScheduledTasksView } from './ScheduledTasksView';
 import { TimelineView } from './TimelineView';
 import { GatewayView } from './GatewayView';
 import { ConversationsView } from './ConversationsView';
-import { TodayView } from './TodayView';
 import { KanbanView } from './KanbanView';
 import { AreaRoomView } from './AreaRoomView';
 import { AreaOverview } from './AreaOverview';
@@ -552,8 +551,6 @@ export function VaultView(): JSX.Element {
           <AskAnywhereView initialActiveId={view.activeId ?? null} />
         ) : view.kind === 'conversations' ? (
           <ConversationsView />
-        ) : view.kind === 'today' ? (
-          <TodayView />
         ) : view.kind === 'github' ? (
           <GitHubWorkspaceView />
         ) : view.kind === 'vision' ? (

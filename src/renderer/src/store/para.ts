@@ -24,7 +24,6 @@ export type WorkspaceView =
   | { kind: 'gateway' }
   | { kind: 'askAnywhere'; activeId?: string }
   | { kind: 'conversations' }
-  | { kind: 'today' }
   | { kind: 'journals' }
   | { kind: 'runtimes' }
   | { kind: 'kanban'; projectUid: string | null }

@@ -166,8 +166,6 @@ function workspaceLabel(kind: WorkspaceView['kind']): string {
       return 'Notes';
     case 'search':
       return 'Search';
-    case 'today':
-      return 'Today';
     default:
       return 'Workspace';
   }

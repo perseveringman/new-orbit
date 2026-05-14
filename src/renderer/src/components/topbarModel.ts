@@ -28,7 +28,6 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Timeline', view: { kind: 'timeline' }, icon: '☼' },
   { label: 'Scheduled', view: { kind: 'scheduled' }, icon: '⏰' },
   { label: 'Gateway', view: { kind: 'gateway' }, icon: '✈️' },
-  { label: 'Today', view: { kind: 'today' }, icon: '✓' },
   { label: 'Journals', view: { kind: 'journals' }, icon: '📓' },
   { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
 ];
@@ -69,7 +68,6 @@ const WORKSPACE_DETAILS: Record<
    | 'scheduled'
    | 'timeline'
    | 'gateway'
-   | 'today'
   | 'journals'
   | 'kanban'
   | 'runtimes',
@@ -95,7 +93,6 @@ const WORKSPACE_DETAILS: Record<
   scheduled: 'Manage recurring Orbit automations and execution history.',
   timeline: 'Review user-visible events as a daily life log.',
   gateway: 'Configure remote channels into Ask-Anywhere and Capture.',
-  today: 'Focus on the tasks scheduled for today.',
   journals: 'Review past daily notes and decisions.',
   kanban: 'Track task flow across active projects.',
   runtimes: 'Observe local providers, runtime capabilities, and orchestration load.'
@@ -193,7 +190,6 @@ export function deriveTopBarContext({
     view.kind === 'scheduled' ||
     view.kind === 'timeline' ||
     view.kind === 'gateway' ||
-    view.kind === 'today' ||
     view.kind === 'journals' ||
     view.kind === 'kanban' ||
     view.kind === 'runtimes'

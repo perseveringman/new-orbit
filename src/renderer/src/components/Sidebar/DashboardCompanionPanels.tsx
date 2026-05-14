@@ -75,7 +75,7 @@ export function DashboardFocusPanel(): JSX.Element {
   return (
     <div className="space-y-3">
       <PanelTop
-        title="Today command"
+        title="Dashboard command"
         detail="Use the side pane as a launchpad, not another passive summary."
         loading={loading}
         onRefresh={reload}
@@ -106,7 +106,7 @@ export function DashboardFocusPanel(): JSX.Element {
           title="Plan ready work"
           detail="Tasks ready or waiting for assignment."
           value={readyTasks}
-          onClick={() => setView({ kind: 'today' })}
+          onClick={() => setView({ kind: 'kanban', projectUid: null })}
         />
         <ActionRow
           icon={<Bot size={14} />}

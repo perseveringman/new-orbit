@@ -27,7 +27,6 @@ describe('top bar model', () => {
       'Timeline',
       'Scheduled',
       'Gateway',
-      'Today',
       'Journals',
       'Kanban'
     ]);

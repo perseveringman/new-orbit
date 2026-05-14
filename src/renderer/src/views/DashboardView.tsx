@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import {
   AlertTriangle,
   Bot,
-  CalendarCheck,
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
@@ -201,8 +200,11 @@ export function DashboardView(): JSX.Element {
             <CommandButton icon={<Inbox size={14} />} onClick={() => setView({ kind: 'inbox' })}>
               Inbox
             </CommandButton>
-            <CommandButton icon={<CalendarCheck size={14} />} onClick={() => setView({ kind: 'today' })}>
-              Today
+            <CommandButton
+              icon={<ListTodo size={14} />}
+              onClick={() => setView({ kind: 'kanban', projectUid: null })}
+            >
+              Kanban
             </CommandButton>
             <CommandButton
               icon={<RefreshCw size={14} className={loadingSummary ? 'animate-spin' : ''} />}
@@ -243,7 +245,7 @@ export function DashboardView(): JSX.Element {
                 value={readyCount}
                 detail={`${pendingTasks} tasks plus ${inboxPending} inbox`}
                 tone={readyCount > 0 ? 'sky' : 'neutral'}
-                onClick={() => setView({ kind: 'today' })}
+                onClick={() => setView({ kind: 'kanban', projectUid: null })}
               />
               <SignalTile
                 icon={<AlertTriangle size={16} />}
