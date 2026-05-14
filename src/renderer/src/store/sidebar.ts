@@ -34,7 +34,6 @@ interface SidebarState {
   pinned: boolean;
   focus: SidebarFocusState;
   memories: Partial<Record<SidebarSurfaceId, SidebarMemory>>;
-  panelWidths: Partial<Record<SidebarPanelId, number>>;
 
   reset(): void;
   setSurface(surface: SidebarSurfaceId): void;
@@ -63,13 +62,6 @@ const MAX_WIDTH = 720;
 function clampWidth(width: number): number {
   if (Number.isNaN(width)) return getSidebarDefaultWidth(DEFAULT_PANEL);
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(width)));
-}
-
-function widthForPanel(
-  panel: SidebarPanelId,
-  rememberedWidths: Partial<Record<SidebarPanelId, number>>
-): number {
-  return rememberedWidths[panel] ?? getSidebarDefaultWidth(panel);
 }
 
 function createEmptyFocus(): SidebarFocusState {
@@ -106,7 +98,6 @@ export const useSidebar = create<SidebarState>((set, get) => ({
   memories: {
     [DEFAULT_SURFACE]: { intent: DEFAULT_INTENT, panel: DEFAULT_PANEL }
   },
-  panelWidths: {},
 
   reset() {
     set({
@@ -119,8 +110,7 @@ export const useSidebar = create<SidebarState>((set, get) => ({
       focus: createEmptyFocus(),
       memories: {
         [DEFAULT_SURFACE]: { intent: DEFAULT_INTENT, panel: DEFAULT_PANEL }
-      },
-      panelWidths: {}
+      }
     });
   },
 
@@ -135,7 +125,6 @@ export const useSidebar = create<SidebarState>((set, get) => ({
       surface,
       intent,
       panel,
-      width: widthForPanel(panel, state.panelWidths),
       memories: remember(state.memories, surface, intent, panel)
     }));
   },
@@ -149,7 +138,6 @@ export const useSidebar = create<SidebarState>((set, get) => ({
       intent: resolvedIntent,
       panel,
       paneMode: state.paneMode === 'hidden' ? 'expanded' : state.paneMode,
-      width: widthForPanel(panel, state.panelWidths),
       memories: remember(state.memories, surface, resolvedIntent, panel)
     }));
   },
@@ -162,7 +150,6 @@ export const useSidebar = create<SidebarState>((set, get) => ({
     set((state) => ({
       panel: resolvedPanel,
       paneMode: 'expanded',
-      width: widthForPanel(resolvedPanel, state.panelWidths),
       memories: remember(state.memories, surface, intent, resolvedPanel)
     }));
   },
@@ -172,15 +159,8 @@ export const useSidebar = create<SidebarState>((set, get) => ({
   },
 
   setWidth(width) {
-    const panel = get().panel;
     const clamped = clampWidth(width);
-    set((state) => ({
-      width: clamped,
-      panelWidths: {
-        ...state.panelWidths,
-        [panel]: clamped
-      }
-    }));
+    set({ width: clamped });
   },
 
   setPinned(pinned) {
@@ -215,7 +195,6 @@ export const useSidebar = create<SidebarState>((set, get) => ({
       intent: resolvedIntent,
       panel: resolvedPanel,
       paneMode: 'expanded',
-      width: widthForPanel(resolvedPanel, state.panelWidths),
       focus: focus ? { ...state.focus, ...focus } : state.focus,
       memories: remember(state.memories, targetSurface, resolvedIntent, resolvedPanel)
     }));

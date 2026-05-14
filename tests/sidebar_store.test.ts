@@ -70,9 +70,12 @@ describe('sidebar store', () => {
     expect(useSidebar.getState().panel).toBe('inspector');
   });
 
-  it('tracks companion pane mode and clamps remembered panel widths', () => {
+  it('keeps companion pane width stable across tab and surface changes', () => {
     expect(useSidebar.getState().paneMode).toBe('expanded');
     expect(useSidebar.getState().width).toBe(320);
+
+    useSidebar.getState().setWidth(560);
+    expect(useSidebar.getState().width).toBe(560);
 
     useSidebar.getState().setSurface('project.terminal');
     useSidebar.getState().selectIntent('execution');
@@ -84,11 +87,14 @@ describe('sidebar store', () => {
 
     useSidebar.getState().setSurface('editor');
     useSidebar.getState().selectPanel('files');
-    expect(useSidebar.getState().width).toBe(320);
+    expect(useSidebar.getState().width).toBe(720);
 
     useSidebar.getState().setSurface('project.terminal');
     useSidebar.getState().selectIntent('execution');
     useSidebar.getState().selectPanel('diff');
+    expect(useSidebar.getState().width).toBe(720);
+
+    useSidebar.getState().openPanel({ panel: 'task-detail', surface: 'project.terminal' });
     expect(useSidebar.getState().width).toBe(720);
 
     useSidebar.getState().setPaneMode('rail');
