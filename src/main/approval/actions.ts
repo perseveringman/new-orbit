@@ -1,5 +1,7 @@
 import { parseProposalPayload, type NewTaskProposalPayload, type Proposal } from './types';
 import { createTask, type CreateTaskResult } from '../project';
+import { normalizeTaskExecutionMode } from '@shared/schemas';
+import { ConversationStore } from '../conversation/store';
 
 export interface NewTaskApprovalResult extends CreateTaskResult {
   type: 'task_created';
@@ -16,9 +18,26 @@ export async function createTaskFromApprovedProposal(
   const payload = parseProposalPayload(proposal.type, proposal.payload) as NewTaskProposalPayload;
   const createdBy =
     proposal.submitted_by === 'agent' ? `agent_run:${proposal.submitted_by_agent_run}` : 'user';
+  const executionMode =
+    payload.execution_mode ?? normalizeTaskExecutionMode(payload.frontmatter?.['execution_mode']) ?? 'human';
   const frontmatter: Record<string, unknown> = {
     ...(payload.frontmatter ?? {}),
     status: payload.status ?? payload.frontmatter?.['status'] ?? 'todo',
+    execution_mode: executionMode,
+    execution_strategy: executionMode === 'agent' ? 'autonomous' : 'manual',
+    ...(payload.conversation_id
+      ? {
+          source_conversation_id: payload.conversation_id,
+          conversation_ids: uniqueStrings([
+            payload.conversation_id,
+            ...(Array.isArray(payload.frontmatter?.['conversation_ids'])
+              ? (payload.frontmatter['conversation_ids'] as unknown[]).filter(
+                  (entry): entry is string => typeof entry === 'string'
+                )
+              : [])
+          ])
+        }
+      : {}),
     created_by: createdBy,
     approved_by: 'user',
     approved_at: approvedAt,
@@ -31,10 +50,22 @@ export async function createTaskFromApprovedProposal(
   const created = await createTask(vaultPath, {
     project_uid: payload.project_uid,
     area_uid: payload.area_uid,
+    resource_uid: payload.resource_uid,
     title: payload.title,
     description: payload.description,
     uid: payload.uid,
     frontmatter
   });
+  if (payload.conversation_id) {
+    await new ConversationStore(vaultPath).addAnchor(payload.conversation_id, {
+      kind: 'task',
+      refId: created.uid,
+      addedAt: approvedAt
+    });
+  }
   return { type: 'task_created', ...created };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }

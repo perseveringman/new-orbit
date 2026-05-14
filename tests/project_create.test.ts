@@ -132,7 +132,9 @@ describe('project.create (R1)', () => {
     await fs.stat(path.join(research.projectPath, 'docs'));
     await fs.stat(path.join(research.projectPath, 'notes'));
     await expect(readProjectConfig(research.projectPath)).resolves.toMatchObject({
-      execution_context: 'sandbox'
+      execution_context: {
+        kind: 'sandbox'
+      }
     });
     await expect(fs.readFile(path.join(research.projectPath, 'AGENT.md'), 'utf8')).resolves.toContain(
       'execution_context: sandbox'
@@ -146,7 +148,9 @@ describe('project.create (R1)', () => {
     await fs.stat(path.join(writing.projectPath, 'drafts'));
     await fs.stat(path.join(writing.projectPath, 'final'));
     await expect(readProjectConfig(writing.projectPath)).resolves.toMatchObject({
-      execution_context: 'sandbox'
+      execution_context: {
+        kind: 'sandbox'
+      }
     });
   });
 

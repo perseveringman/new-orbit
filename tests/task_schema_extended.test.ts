@@ -22,6 +22,7 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       git_branch: 'orbit/ghost/abc',
       worktree_path: '.orbit/worktrees/wt-1',
       pr_url: 'https://github.com/x/y/pull/1',
+      execution_mode: 'agent',
       execution_strategy: 'autonomous',
       origin: 'agent',
       created_by: 'agent:planner',
@@ -29,6 +30,8 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       owner_id: 'binding-1',
       claimed_at: '2026-04-25T00:00:00.000Z',
       active_run_id: 'run-1',
+      source_conversation_id: 'conv-1',
+      conversation_ids: ['conv-1', 'conv-2'],
       approved_by: 'user',
       approved_at: '2026-04-26T00:00:00.000Z',
       proposed_by_agent_run: 'run-2',
@@ -50,6 +53,9 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       expect(r.data.pre_conditions).toEqual(['a', 'b']);
       expect(r.data.effort).toBe(4);
       expect(r.data.owner_type).toBe('binding');
+      expect(r.data.execution_mode).toBe('agent');
+      expect(r.data.source_conversation_id).toBe('conv-1');
+      expect(r.data.conversation_ids).toEqual(['conv-1', 'conv-2']);
       expect(r.data.candidate_role_slugs).toEqual(['executor', 'reviewer']);
       expect(r.data.approved_by).toBe('user');
       expect(r.data.proposed_by_agent_run).toBe('run-2');
@@ -91,6 +97,17 @@ describe('TaskFrontmatter (R3 extensions)', () => {
       title: 'x',
       status: 'inbox',
       execution_strategy: 'rogue'
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejects invalid execution_mode', () => {
+    const r = TaskFrontmatter.safeParse({
+      uid: 't3-mode',
+      type: 'task',
+      title: 'x',
+      status: 'todo',
+      execution_mode: 'robot'
     });
     expect(r.success).toBe(false);
   });

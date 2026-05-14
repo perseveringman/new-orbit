@@ -1,8 +1,10 @@
 import type { TaskRecord } from '@shared/schemas';
+import { isAgentClaimableTask } from '@shared/schemas';
 import { unmetDependencies } from '../dependencies/graph';
 
 export type ReadyReason =
   | 'ready'
+  | 'not_agent_claimable'
   | 'status_not_todo'
   | 'awaiting_approval'
   | 'dependency_missing'
@@ -25,14 +27,28 @@ export interface ReadySet {
   blocked: ReadyTask[];
 }
 
+export interface ReadySetOptions {
+  requireAgentClaimable?: boolean;
+}
+
 function requiresUserApproval(task: TaskRecord): boolean {
   return typeof task.created_by === 'string' && task.created_by.startsWith('agent_run:');
 }
 
 export function taskReadyState(
   task: TaskRecord,
-  taskIndex: Map<string, TaskRecord>
+  taskIndex: Map<string, TaskRecord>,
+  options: ReadySetOptions = {}
 ): ReadyResult {
+  if (options.requireAgentClaimable && !isAgentClaimableTask(task)) {
+    return {
+      ready: false,
+      reason: 'not_agent_claimable',
+      detail: 'task is not marked for agent claim',
+      unmetDeps: []
+    };
+  }
+
   if (task.status !== 'todo') {
     return {
       ready: false,
@@ -73,7 +89,10 @@ export function taskReadyState(
   return { ready: true, reason: 'ready', unmetDeps: [] };
 }
 
-export function buildReadySet(tasks: readonly TaskRecord[]): ReadySet {
+export function buildReadySet(
+  tasks: readonly TaskRecord[],
+  options: ReadySetOptions = {}
+): ReadySet {
   const taskIndex = new Map<string, TaskRecord>();
   for (const task of tasks) {
     if (task.uid) taskIndex.set(task.uid, task);
@@ -82,10 +101,14 @@ export function buildReadySet(tasks: readonly TaskRecord[]): ReadySet {
   const ready: ReadyTask[] = [];
   const blocked: ReadyTask[] = [];
   for (const task of tasks) {
-    const readiness = taskReadyState(task, taskIndex);
+    const readiness = taskReadyState(task, taskIndex, options);
     const entry = { task, readiness };
     if (readiness.ready) ready.push(entry);
     else blocked.push(entry);
   }
   return { ready, blocked };
+}
+
+export function buildClaimableReadySet(tasks: readonly TaskRecord[]): ReadySet {
+  return buildReadySet(tasks, { requireAgentClaimable: true });
 }

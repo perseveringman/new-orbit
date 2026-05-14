@@ -13,7 +13,7 @@ import {
   type PlannerProposalReply,
   type ProjectRoleBinding
 } from '@shared/orchestration';
-import type { TaskRecord } from '@shared/schemas';
+import { taskExecutionMode, type TaskRecord } from '@shared/schemas';
 import { currentSession } from '../fs';
 import { detectClaude } from '../agent/cli';
 import { AgentRunner } from '../agent/runner';
@@ -151,6 +151,7 @@ function buildPlannerPrompt(args: {
         status: task.status,
         preConditions: task.pre_conditions ?? [],
         executionStrategy: task.execution_strategy ?? 'manual',
+        executionMode: taskExecutionMode(task),
         recommendedRole: task.recommended_role ?? null,
         tags: task.tags ?? []
       })),

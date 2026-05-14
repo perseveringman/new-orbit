@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createApprovalServiceForVault } from '../src/main/approval';
+import { ConversationStore } from '../src/main/conversation/store';
 import * as frontmatter from '../src/main/frontmatter';
 import { createProject } from '../src/main/project';
 import { createVault } from '../src/main/vault';
@@ -31,6 +32,11 @@ describe('new_task approval materialization', () => {
       now: () => new Date('2026-04-26T10:00:00.000Z'),
       emitActivity: () => undefined
     });
+    await new ConversationStore(vaultPath).create({
+      id: 'conv_design',
+      title: 'Design session',
+      anchors: [{ kind: 'ask_anywhere_session', refId: 'global', addedAt: '2026-04-26T09:00:00.000Z' }]
+    });
 
     const submitted = await service.submit({
       type: 'new_task',
@@ -43,6 +49,7 @@ describe('new_task approval materialization', () => {
         title: 'Fix follow-up bug',
         description: 'Bug found while executing parent task.',
         uid: 'task_from_proposal',
+        conversation_id: 'conv_design',
         frontmatter: {
           priority: 'high'
         }
@@ -75,6 +82,8 @@ describe('new_task approval materialization', () => {
 
     expect(parsed['uid']).toBe('task_from_proposal');
     expect(parsed['status']).toBe('todo');
+    expect(parsed['execution_mode']).toBe('human');
+    expect(parsed['execution_strategy']).toBe('manual');
     expect(parsed['priority']).toBe('high');
     expect(parsed['created_by']).toBe('agent_run:run_approved');
     expect(parsed['approved_by']).toBe('user');
@@ -82,8 +91,17 @@ describe('new_task approval materialization', () => {
     expect(parsed['proposed_by_agent_run']).toBe('run_approved');
     expect(parsed['proposed_during_task']).toBe('task_parent');
     expect(parsed['proposal_id']).toBe('prop_new_task');
+    expect(parsed['source_conversation_id']).toBe('conv_design');
+    expect(parsed['conversation_ids']).toEqual(['conv_design']);
     expect(parsed['approval_decision_note']).toBe('Worth tracking');
     expect(parsed['derived_from']).toBe('task_parent');
     expect(raw).toContain('Bug found while executing parent task.');
+
+    const conversation = await new ConversationStore(vaultPath).get('conv_design');
+    expect(conversation?.anchors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'task', refId: 'task_from_proposal' })
+      ])
+    );
   });
 });

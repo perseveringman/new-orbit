@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { EntitySummary } from '@shared/schemas';
-import type { ProjectSummaryDTO, TemplateMetaDTO } from '@shared/ipc';
+import type { ProjectSummaryDTO, ProjectWorkdirProbeDTO, TemplateMetaDTO } from '@shared/ipc';
 import { NewProjectForm, isValidSlug, slugify } from '../../schemas/newProject';
 import { useFiles } from '../../store/files';
 import { useWorkspace } from '../../store/workspace';
@@ -29,11 +29,17 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
 
   const [step, setStep] = useState<1 | 2>(1);
-  const [creationMode, setCreationMode] = useState<'local' | 'github-import'>('local');
+  const [creationMode, setCreationMode] = useState<
+    'link-existing' | 'scaffold-new' | 'github-import'
+  >('link-existing');
   const [name, setName] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [workdirPath, setWorkdirPath] = useState('');
+  const [workdirProbe, setWorkdirProbe] = useState<ProjectWorkdirProbeDTO | null>(null);
+  const [parentDir, setParentDir] = useState('');
+  const [githubParentDir, setGithubParentDir] = useState('');
   const [githubOwner, setGithubOwner] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
   const [agentExposureMode, setAgentExposureMode] = useState<
@@ -53,11 +59,15 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
   useEffect(() => {
     if (!open) return;
     setStep(1);
-    setCreationMode('local');
+    setCreationMode('link-existing');
     setName('');
     setSlug('');
     setSlugTouched(false);
     setDescription('');
+    setWorkdirPath('');
+    setWorkdirProbe(null);
+    setParentDir('');
+    setGithubParentDir('');
     setGithubOwner('');
     setGithubRepo('');
     setAgentExposureMode('isolated');
@@ -95,11 +105,27 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
 
   const slugValid = isValidSlug(slug);
   const slugConflict = useMemo(() => existingSlugs.includes(slug), [existingSlugs, slug]);
+  const githubTargetDir = githubParentDir ? joinPath(githubParentDir, slug || githubRepo.trim()) : '';
 
   const canNext =
     creationMode === 'github-import'
-      ? githubOwner.trim().length > 0 && githubRepo.trim().length > 0 && slugValid && !slugConflict
-      : name.trim().length > 0 && slugValid && !slugConflict && !!template;
+      ? githubOwner.trim().length > 0 &&
+        githubRepo.trim().length > 0 &&
+        githubParentDir.trim().length > 0 &&
+        slugValid &&
+        !slugConflict
+      : creationMode === 'link-existing'
+        ? name.trim().length > 0 &&
+          workdirPath.trim().length > 0 &&
+          workdirProbe?.exists === true &&
+          workdirProbe?.isDirectory === true &&
+          slugValid &&
+          !slugConflict
+        : name.trim().length > 0 &&
+          parentDir.trim().length > 0 &&
+          slugValid &&
+          !slugConflict &&
+          !!template;
   const canCreate = canNext;
 
   async function submit(): Promise<void> {
@@ -127,22 +153,40 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
               repo: githubRepo.trim(),
               slug: parsed.slug,
               name: parsed.name || githubRepo.trim(),
+              targetDir: githubTargetDir,
               agent_exposure: { mode: agentExposureMode }
             })
-          : await window.orbit.project.create({
-              slug: parsed.slug,
-              template: parsed.template,
-              name: parsed.name,
-              description: parsed.description,
-              ...(parsed.area_uid ? { area_uid: parsed.area_uid } : {}),
-              ...(parsed.tags ? { tags: parsed.tags } : {}),
-              agent_exposure: { mode: parsed.agent_exposure_mode }
-            });
+          : creationMode === 'link-existing'
+            ? await window.orbit.project.linkExisting({
+                slug: parsed.slug,
+                name: parsed.name,
+                workdirPath,
+                description: parsed.description,
+                ...(parsed.area_uid ? { area_uid: parsed.area_uid } : {}),
+                ...(parsed.tags ? { tags: parsed.tags } : {}),
+                execution_context: workdirProbe?.recommendedExecutionContext ?? 'worktree',
+                vendor_bridge_files: parsed.agent_exposure_mode !== 'isolated'
+              })
+            : await window.orbit.project.scaffoldNew({
+                slug: parsed.slug,
+                template: parsed.template,
+                name: parsed.name,
+                parentDir,
+                dirName: parsed.slug,
+                description: parsed.description,
+                initializeGit: true,
+                ...(parsed.area_uid ? { area_uid: parsed.area_uid } : {}),
+                ...(parsed.tags ? { tags: parsed.tags } : {}),
+                execution_context: 'worktree',
+                vendor_bridge_files: parsed.agent_exposure_mode !== 'isolated'
+              });
       await refreshProjects();
       setActiveProjectUid(res.uid);
       toast(
         creationMode === 'github-import'
           ? `Imported ${githubOwner}/${githubRepo} → ${res.slug}`
+          : creationMode === 'link-existing'
+            ? `Linked project ${res.slug}`
           : `Created project ${res.slug}`
       );
       // Open README for instant editing (R3 will route to Project Room)
@@ -169,6 +213,22 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
     setTagInput('');
   }
 
+  async function chooseExistingWorkdir(): Promise<void> {
+    const picked = await window.orbit.project.chooseDirectory();
+    if (picked.canceled || !picked.path) return;
+    setWorkdirPath(picked.path);
+    const probe = await window.orbit.project.probeWorkdir(picked.path);
+    setWorkdirProbe(probe);
+    if (!name.trim()) setName(basename(picked.path));
+  }
+
+  async function chooseParentDir(target: 'scaffold' | 'github'): Promise<void> {
+    const picked = await window.orbit.project.chooseDirectory();
+    if (picked.canceled || !picked.path) return;
+    if (target === 'scaffold') setParentDir(picked.path);
+    else setGithubParentDir(picked.path);
+  }
+
   if (!open) return null;
 
   return (
@@ -189,44 +249,93 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                 <select
                   className={input}
                   value={creationMode}
-                  onChange={(e) => setCreationMode(e.target.value as 'local' | 'github-import')}
+                  onChange={(e) =>
+                    setCreationMode(
+                      e.target.value as 'link-existing' | 'scaffold-new' | 'github-import'
+                    )
+                  }
                 >
-                  <option value="local">Start local Orbit project</option>
+                  <option value="link-existing">Link existing code directory</option>
+                  <option value="scaffold-new">Create new code directory</option>
                   <option value="github-import">Import from GitHub repository</option>
                 </select>
               </label>
               {creationMode === 'github-import' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="mb-1 block text-xs text-neutral-500">GitHub owner</span>
-                    <input
-                      className={input}
-                      value={githubOwner}
-                      onChange={(e) => setGithubOwner(e.target.value)}
-                      placeholder="e.g. vercel"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs text-neutral-500">Repository</span>
-                    <input
-                      className={input}
-                      value={githubRepo}
-                      onChange={(e) => setGithubRepo(e.target.value)}
-                      placeholder="e.g. next.js"
-                    />
-                  </label>
-                </div>
-              ) : (
-                <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">Name</span>
-                  <input
-                    className={input}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Orbit Docs Site"
-                    autoFocus
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-neutral-500">GitHub owner</span>
+                      <input
+                        className={input}
+                        value={githubOwner}
+                        onChange={(e) => setGithubOwner(e.target.value)}
+                        placeholder="e.g. vercel"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-neutral-500">Repository</span>
+                      <input
+                        className={input}
+                        value={githubRepo}
+                        onChange={(e) => setGithubRepo(e.target.value)}
+                        placeholder="e.g. next.js"
+                      />
+                    </label>
+                  </div>
+                  <PathPicker
+                    label="Clone parent directory"
+                    value={githubParentDir}
+                    buttonLabel="Choose"
+                    onChoose={() => void chooseParentDir('github')}
                   />
-                </label>
+                </>
+              ) : creationMode === 'link-existing' ? (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-neutral-500">Name</span>
+                    <input
+                      className={input}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Orbit Docs Site"
+                      autoFocus
+                    />
+                  </label>
+                  <PathPicker
+                    label="Existing workdir"
+                    value={workdirPath}
+                    buttonLabel="Choose"
+                    onChoose={() => void chooseExistingWorkdir()}
+                  />
+                  {workdirProbe && (
+                    <p className="text-[11px] text-neutral-500">
+                      {workdirProbe.exists && workdirProbe.isDirectory
+                        ? workdirProbe.git?.is_repo
+                          ? `Git repo detected · ${workdirProbe.recommendedExecutionContext}`
+                          : `Directory detected · ${workdirProbe.recommendedExecutionContext}`
+                        : 'Directory is not readable.'}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-neutral-500">Name</span>
+                    <input
+                      className={input}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Orbit Docs Site"
+                      autoFocus
+                    />
+                  </label>
+                  <PathPicker
+                    label="Workdir parent directory"
+                    value={parentDir}
+                    buttonLabel="Choose"
+                    onChoose={() => void chooseParentDir('scaffold')}
+                  />
+                </>
               )}
               {creationMode === 'github-import' && (
                 <label className="block">
@@ -285,7 +394,18 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                   </p>
                 )}
               </label>
-              {creationMode === 'local' && (
+              {creationMode === 'link-existing' && (
+                <label className="block">
+                  <span className="mb-1 block text-xs text-neutral-500">Description</span>
+                  <textarea
+                    className={input + ' min-h-[88px] resize-y'}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Short project note. Orbit keeps this in the coordination README."
+                  />
+                </label>
+              )}
+              {creationMode === 'scaffold-new' && (
                 <>
                   <label className="block">
                     <span className="mb-1 block text-xs text-neutral-500">Description</span>
@@ -293,7 +413,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                       className={input + ' min-h-[88px] resize-y'}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="One-liner or longer. Lands in README.md + AGENT.md."
+                      placeholder="One-liner or longer. Lands in the new workdir README."
                     />
                   </label>
                   <label className="block">
@@ -371,10 +491,22 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                   <b>Source:</b>{' '}
                   {creationMode === 'github-import'
                     ? `${githubOwner || 'owner'}/${githubRepo || 'repo'}`
-                    : `template:${template}`}
+                    : creationMode === 'link-existing'
+                      ? 'linked workdir'
+                      : `template:${template}`}
                 </div>
                 <div>
-                  <b>Path:</b> 01_Projects/{slug}/
+                  <b>Coordination:</b> 01_Projects/{slug}/
+                </div>
+                <div className="truncate">
+                  <b>Workdir:</b>{' '}
+                  {creationMode === 'github-import'
+                    ? githubTargetDir || 'choose a clone parent'
+                    : creationMode === 'link-existing'
+                      ? workdirPath || 'choose an existing directory'
+                      : parentDir
+                        ? joinPath(parentDir, slug)
+                        : 'choose a parent directory'}
                 </div>
                 <div>
                   <b>Exposure:</b> {agentExposureMode}
@@ -409,7 +541,17 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
               </button>
             ) : (
               <button className={btnPrimary} onClick={submit} disabled={!canCreate || busy}>
-                 {busy ? (creationMode === 'github-import' ? 'Importing…' : 'Creating…') : creationMode === 'github-import' ? 'Import project' : 'Create project'}
+                 {busy
+                   ? creationMode === 'github-import'
+                     ? 'Importing…'
+                     : creationMode === 'link-existing'
+                       ? 'Linking…'
+                       : 'Creating…'
+                   : creationMode === 'github-import'
+                     ? 'Import project'
+                     : creationMode === 'link-existing'
+                       ? 'Link project'
+                       : 'Create project'}
                </button>
              )}
           </div>
@@ -417,4 +559,44 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
       </div>
     </div>
   );
+}
+
+function PathPicker({
+  label,
+  value,
+  buttonLabel,
+  onChoose
+}: {
+  label: string;
+  value: string;
+  buttonLabel: string;
+  onChoose(): void;
+}): JSX.Element {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs text-neutral-500">{label}</span>
+      <div className="flex gap-2">
+        <input
+          className={input + ' font-mono text-xs'}
+          value={value}
+          onChange={() => undefined}
+          placeholder="No directory selected"
+          readOnly
+        />
+        <button className={btn} type="button" onClick={onChoose}>
+          {buttonLabel}
+        </button>
+      </div>
+    </label>
+  );
+}
+
+function basename(value: string): string {
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? value;
+}
+
+function joinPath(parent: string, child: string): string {
+  if (!parent) return child;
+  return `${parent.replace(/[\\/]+$/g, '')}/${child}`;
 }

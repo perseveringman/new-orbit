@@ -15,6 +15,7 @@ import type {
   StartTaskResult
 } from '@shared/agent';
 import type { TaskRecord } from '@shared/schemas';
+import { isAgentClaimableTask } from '@shared/schemas';
 import { currentSession } from '../fs';
 import { listProjects } from '../project';
 import { readTaskFile, updateTaskFrontmatter } from '../task';
@@ -214,7 +215,7 @@ export class DispatchService extends EventEmitter {
     const readyTasks = allTasks.filter((task) => {
       if (task.source !== 'file') return false;
       if (task.status !== 'todo') return false;
-      if (task.execution_strategy !== 'autonomous') return false;
+      if (!isAgentClaimableTask(task)) return false;
       if (task.owner_id) return false;
       if (preferredTaskId && task.id !== preferredTaskId) return false;
       return true;

@@ -9,7 +9,7 @@ import type { PoolEvent, RunnerPool } from '../agent/pool';
 import { getPool } from '../agent/pool';
 import { createExecutionContextForProject } from '../execution';
 import type { ExecutionContext } from '../execution';
-import { buildReadySet } from './ready_set';
+import { buildClaimableReadySet } from './ready_set';
 import { AutoRunnerEventBridge } from './event_bridge';
 import { launchCapacity, schedulerDecision, startsInCurrentHour } from './scheduler';
 import { readAutoRunnerSettings, setAutoRunnerEnabled } from './settings';
@@ -111,7 +111,7 @@ export class AutoRunnerDispatcher extends EventEmitter {
     const recent = startsInCurrentHour(this.startedAt, this.now());
     this.startedAt = recent;
     const tasks = await this.listTasks();
-    const ready = buildReadySet(tasks).ready.filter((entry) => this.isDispatchCandidate(entry.task));
+    const ready = buildClaimableReadySet(tasks).ready.filter((entry) => this.isDispatchCandidate(entry.task));
     return {
       attached: this.vaultPath !== null,
       enabled: settings.enabled,
@@ -138,7 +138,7 @@ export class AutoRunnerDispatcher extends EventEmitter {
       this.ensureTimer(settings);
       this.lastTickAt = this.now().toISOString();
       this.startedAt = startsInCurrentHour(this.startedAt, this.now());
-      const readyTasks = buildReadySet(await this.listTasks())
+      const readyTasks = buildClaimableReadySet(await this.listTasks())
         .ready.map((entry) => entry.task)
         .filter((task) => this.isDispatchCandidate(task));
       const decision = schedulerDecision(
@@ -211,6 +211,56 @@ export class AutoRunnerDispatcher extends EventEmitter {
         'Sandbox ExecutionContext is not implemented yet, so Auto-runner skipped this task.';
       await this.markTaskBlocked(task, message);
       await this.eventBridge.sandboxUnsupported({ vaultPath, task, message });
+      return;
+    }
+    if (context.kind === 'direct') {
+      try {
+        const startTransition = reduceTaskState(
+          {
+            task,
+            activeRunSegment: { sessionStatus: 'idle' },
+            pendingDependencies: []
+          },
+          { source: 'dispatcher', kind: 'agent_session_started' }
+        );
+        await this.updateTask(task, {
+          status: startTransition.newTaskStatus,
+          owner_type: 'agent',
+          owner_id: 'auto_runner',
+          claimed_at: this.now().toISOString()
+        });
+        const startResult = await this.startTaskImpl({
+          taskId: task.id,
+          instructions: AUTO_RUNNER_INSTRUCTIONS
+        });
+        if (startResult.kind !== 'ok') {
+          await this.markTaskBlocked(task, startResult.message);
+          await this.eventBridge.runFailed({
+            vaultPath,
+            task,
+            runId: 'auto-runner',
+            message: startResult.message
+          });
+          return;
+        }
+        const startedAt = this.now().toISOString();
+        this.running.set(task.id, {
+          taskId: task.id,
+          ...(task.uid ? { taskUid: task.uid } : {}),
+          title: task.title,
+          runId: startResult.runId,
+          projectPath,
+          startedAt
+        });
+        this.startedAt = [...startsInCurrentHour(this.startedAt, this.now()), startedAt];
+        await this.updateTask(task, { active_run_id: startResult.runId });
+        this.eventBridge.runStarted({ vaultPath, task, runId: startResult.runId });
+        this.emit('run_started', toRunDTO(this.running.get(task.id)!));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await this.markTaskBlocked(task, message);
+        await this.eventBridge.runFailed({ vaultPath, task, runId: 'auto-runner', message });
+      }
       return;
     }
 

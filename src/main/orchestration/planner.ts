@@ -191,6 +191,7 @@ export async function publishPlanProposal(
     const patch = {
       uid: node.taskUid,
       status,
+      execution_mode: node.executionStrategy === 'autonomous' ? 'agent' : 'human',
       execution_strategy: node.executionStrategy ?? 'manual',
       origin: proposal.source === 'planner' ? 'agent' : 'human',
       created_by: proposal.source === 'planner' ? 'agent:planner' : 'human:planner',

@@ -11,6 +11,7 @@ describe('top bar model', () => {
       'Ask Anywhere',
       'Vision',
       'Runtimes',
+      'Tools',
       'Agents',
       'Console',
       'GitHub',

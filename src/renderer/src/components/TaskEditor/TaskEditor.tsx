@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TaskRecord, TaskStatus } from '@shared/schemas';
-import { TASK_STATUSES } from '@shared/schemas';
+import type { TaskExecutionMode, TaskRecord, TaskStatus } from '@shared/schemas';
+import { normalizeTaskExecutionMode, TASK_EXECUTION_MODES, TASK_STATUSES } from '@shared/schemas';
 import type {
   OrphanRescueCandidate,
   ProjectSummaryDTO,
@@ -35,7 +35,12 @@ export interface TaskEditorProps {
 }
 
 const PRIORITIES = ['', 'low', 'med', 'high'] as const;
-const STRATEGIES = ['', 'manual', 'autonomous'] as const;
+const MODE_COPY: Record<TaskExecutionMode, string> = {
+  human: 'I do it myself',
+  assisted: 'I lead, AI helps',
+  agent: 'Agent may claim',
+  scheduled: 'Schedule-triggered'
+};
 const SECTIONS: { key: TaskSectionName; label: string }[] = [
   { key: 'description', label: 'Description' },
   { key: 'thinking', label: 'Agent Thinking' },
@@ -245,7 +250,11 @@ export function TaskEditor({
       : typeof task.derived_from === 'string'
         ? task.derived_from
         : null;
-  const strategy = (fm['execution_strategy'] as string) ?? '';
+  const executionMode =
+    normalizeTaskExecutionMode(fm['execution_mode']) ??
+    normalizeTaskExecutionMode(fm['execution_strategy']) ??
+    task.execution_mode ??
+    (task.execution_strategy === 'autonomous' ? 'agent' : 'human');
 
   const relationChoices = useMemo(
     () => siblings.filter((s) => s.uid && s.uid !== task.uid),
@@ -414,20 +423,21 @@ export function TaskEditor({
                 className={ctrl}
               />
             </Field>
-            <Field label="Strategy" className={label}>
+            <Field label="Mode" className={label}>
               <select
-                value={strategy}
-                onChange={(e) =>
+                value={executionMode}
+                onChange={(e) => {
+                  const next = e.target.value as TaskExecutionMode;
                   queueFrontmatter({
-                    execution_strategy:
-                      e.target.value === '' ? undefined : e.target.value
-                  })
-                }
+                    execution_mode: next,
+                    execution_strategy: next === 'agent' ? 'autonomous' : 'manual'
+                  });
+                }}
                 className={ctrl}
               >
-                {STRATEGIES.map((p) => (
-                  <option key={p} value={p}>
-                    {p || 'manual (default)'}
+                {TASK_EXECUTION_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode} — {MODE_COPY[mode]}
                   </option>
                 ))}
               </select>

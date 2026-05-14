@@ -8,3 +8,4 @@ export {
 } from './factory';
 export { UnsupportedSandboxExecutionContext } from './sandbox';
 export { WorktreeExecutionContext } from './worktree';
+export { DirectExecutionContext } from './direct';

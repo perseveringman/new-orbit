@@ -14,6 +14,8 @@ export const TASK_STATUSES = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const LEGACY_TASK_STATUSES = ['inbox', 'today'] as const;
 export type LegacyTaskStatus = (typeof LEGACY_TASK_STATUSES)[number];
+export const TASK_EXECUTION_MODES = ['human', 'assisted', 'agent', 'scheduled'] as const;
+export type TaskExecutionMode = (typeof TASK_EXECUTION_MODES)[number];
 
 export const PROJECT_STATUSES = ['active', 'paused', 'done', 'archived'] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -29,6 +31,26 @@ export function normalizeTaskStatus(value: unknown): TaskStatus | undefined {
   if (value === 'today') return 'todo';
   if ((TASK_STATUSES as readonly string[]).includes(value)) return value as TaskStatus;
   return undefined;
+}
+
+export function normalizeTaskExecutionMode(value: unknown): TaskExecutionMode | undefined {
+  if (typeof value !== 'string') return undefined;
+  if ((TASK_EXECUTION_MODES as readonly string[]).includes(value)) return value as TaskExecutionMode;
+  if (value === 'autonomous') return 'agent';
+  if (value === 'manual') return 'human';
+  return undefined;
+}
+
+export function taskExecutionMode(
+  task: Pick<TaskRecord, 'execution_mode' | 'execution_strategy'>
+): TaskExecutionMode {
+  return task.execution_mode ?? (task.execution_strategy === 'autonomous' ? 'agent' : 'human');
+}
+
+export function isAgentClaimableTask(
+  task: Pick<TaskRecord, 'execution_mode' | 'execution_strategy'>
+): boolean {
+  return taskExecutionMode(task) === 'agent';
 }
 
 export const ProjectFrontmatter = z.object({
@@ -97,6 +119,7 @@ export const TaskFrontmatter = z.object({
   github_issue_number: z.number().int().positive().optional(),
   github_issue_title: z.string().optional(),
   github_issue_url: z.string().optional(),
+  execution_mode: z.enum(TASK_EXECUTION_MODES).optional(),
   execution_strategy: z.enum(['manual', 'autonomous']).optional(),
   origin: z.enum(['human', 'agent', 'system', 'imported']).optional(),
   created_by: z.string().default('user'),
@@ -113,6 +136,8 @@ export const TaskFrontmatter = z.object({
   active_run_id: z.string().optional(),
   parent_task_uid: z.string().optional(),
   generated_from_task_uid: z.string().optional(),
+  source_conversation_id: z.string().optional(),
+  conversation_ids: z.array(z.string()).optional(),
   depends_on: z.array(z.string()).default([]),
   derived_from: z.string().nullable().default(null),
   role_binding_id: z.string().optional(),
@@ -176,6 +201,7 @@ export interface TaskRecord {
   effort?: Effort | number;
   tags?: string[];
   priority?: 'low' | 'med' | 'high';
+  execution_mode?: TaskExecutionMode;
   execution_strategy?: 'manual' | 'autonomous';
   pre_conditions?: string[];
   content_hash?: string;
@@ -198,6 +224,8 @@ export interface TaskRecord {
   active_run_id?: string;
   parent_task_uid?: string;
   generated_from_task_uid?: string;
+  source_conversation_id?: string;
+  conversation_ids?: string[];
   depends_on?: string[];
   derived_from?: string | null;
   role_binding_id?: string;
@@ -222,6 +250,7 @@ export interface EntitySummary {
 
 export interface TaskFilter {
   status?: TaskStatus;
+  execution_mode?: TaskExecutionMode;
   project_uid?: string;
   area_uid?: string;
   resource_uid?: string;

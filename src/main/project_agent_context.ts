@@ -35,9 +35,9 @@ async function exists(p: string): Promise<boolean> {
 }
 
 async function readPackageScripts(
-  projectDir: string
+  workdirPath: string
 ): Promise<Record<string, string> | null> {
-  const pkgPath = path.join(projectDir, 'package.json');
+  const pkgPath = path.join(workdirPath, 'package.json');
   try {
     const raw = JSON.parse(await fs.readFile(pkgPath, 'utf8')) as {
       scripts?: Record<string, string>;
@@ -80,7 +80,7 @@ Orbit 是一个个人愿景驱动的 AI 协作工作台。核心原则是：**�
 
 ## 核心概念
 - **Vault**：整个知识与项目的根目录，采用 PARA 结构组织。
-- **Project**：位于 \`01_Projects/\` 下的文件夹型项目，内部有 README、AGENT、任务与记忆目录。
+- **Project**：由 vault 中 \`01_Projects/\` 下的协调目录和真实 workdir 组成；README、任务与记忆留在协调目录，代码与构建命令在 workdir 中执行。
 - **Task**：位于 \`.orbit/agent/tasks/\` 的 Markdown 任务文件，是执行过程的最小管理单元。
 - **Worktree**：用于大改动、实验或并行任务的隔离工作副本。
 - **Distill / Auto-runner**：Orbit 中用于总结、回顾和持续推进工作的机制。
@@ -306,14 +306,14 @@ Use those files as the Orbit source of truth instead of treating root bridge fil
 `;
 }
 
-async function readCommunityConventions(projectDir: string): Promise<string | null> {
+async function readCommunityConventions(projectDir: string, workdirPath: string): Promise<string | null> {
   const config = await readProjectConfig(projectDir);
   const exposure = config?.agent_exposure ?? defaultAgentExposureSettings();
   const sections: string[] = [];
 
   if (exposure.consumeCommunityAgentMd) {
     try {
-      const raw = await fs.readFile(path.join(projectDir, PROJECT_AGENT_MD), 'utf8');
+      const raw = await fs.readFile(path.join(workdirPath, PROJECT_AGENT_MD), 'utf8');
       const { body } = frontmatter.read(raw);
       const content = body.trim();
       if (content) sections.push(`# Imported from AGENT.md\n\n${content}`);
@@ -324,7 +324,7 @@ async function readCommunityConventions(projectDir: string): Promise<string | nu
 
   if (exposure.consumeCommunityAgentsMd) {
     try {
-      const raw = (await fs.readFile(path.join(projectDir, 'AGENTS.md'), 'utf8')).trim();
+      const raw = (await fs.readFile(path.join(workdirPath, 'AGENTS.md'), 'utf8')).trim();
       if (raw) sections.push(`# Imported from AGENTS.md\n\n${raw}`);
     } catch {
       // ignore
@@ -333,7 +333,7 @@ async function readCommunityConventions(projectDir: string): Promise<string | nu
 
   if (exposure.consumeCommunityDotAgent) {
     try {
-      const dirents = await fs.readdir(path.join(projectDir, '.agent'), { withFileTypes: true });
+      const dirents = await fs.readdir(path.join(workdirPath, '.agent'), { withFileTypes: true });
       const entries = dirents
         .filter((entry) => entry.isFile() || entry.isDirectory())
         .map((entry) => `- ${entry.name}`);
@@ -350,15 +350,17 @@ async function readCommunityConventions(projectDir: string): Promise<string | nu
 
 export async function buildProjectAgentContextFiles(
   projectDir: string,
-  meta: ProjectAgentContextMeta
+  meta: ProjectAgentContextMeta,
+  opts: { workdirPath?: string } = {}
 ): Promise<Record<string, string>> {
-  const scripts = await readPackageScripts(projectDir);
-  const communityConventions = await readCommunityConventions(projectDir);
+  const workdirPath = opts.workdirPath ?? projectDir;
+  const scripts = await readPackageScripts(workdirPath);
+  const communityConventions = await readCommunityConventions(projectDir, workdirPath);
   const markers = {
-    hasMakefile: await exists(path.join(projectDir, 'Makefile')),
-    hasCargoToml: await exists(path.join(projectDir, 'Cargo.toml')),
-    hasPyproject: await exists(path.join(projectDir, 'pyproject.toml')),
-    hasRequirements: await exists(path.join(projectDir, 'requirements.txt'))
+    hasMakefile: await exists(path.join(workdirPath, 'Makefile')),
+    hasCargoToml: await exists(path.join(workdirPath, 'Cargo.toml')),
+    hasPyproject: await exists(path.join(workdirPath, 'pyproject.toml')),
+    hasRequirements: await exists(path.join(workdirPath, 'requirements.txt'))
   };
 
   return {
@@ -405,9 +407,9 @@ export async function buildProjectAgentContextFiles(
 export async function ensureProjectAgentContext(
   projectDir: string,
   meta: ProjectAgentContextMeta,
-  opts: { overwrite?: boolean } = {}
+  opts: { overwrite?: boolean; workdirPath?: string } = {}
 ): Promise<void> {
-  const files = await buildProjectAgentContextFiles(projectDir, meta);
+  const files = await buildProjectAgentContextFiles(projectDir, meta, opts);
   const config = await readProjectConfig(projectDir);
   const exposure = config?.agent_exposure ?? defaultAgentExposureSettings();
   const overwrite = opts.overwrite ?? false;

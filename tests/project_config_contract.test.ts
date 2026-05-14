@@ -26,7 +26,11 @@ describe('project config contract', () => {
         uid: expect.any(String),
         slug: 'demo',
         name: 'Demo',
-        execution_context: 'worktree'
+        execution_context: {
+          kind: 'worktree',
+          worktree_root: 'workdir-sibling',
+          worktree_dir_name: '.orbit-worktrees'
+        }
       });
       const raw = await fs.readFile(
         path.join(created.projectPath, '.orbit', 'config.json'),
@@ -36,7 +40,11 @@ describe('project config contract', () => {
         uid: cfg?.uid,
         slug: 'demo',
         name: 'Demo',
-        execution_context: 'worktree',
+        execution_context: {
+          kind: 'worktree',
+          worktree_root: 'workdir-sibling',
+          worktree_dir_name: '.orbit-worktrees'
+        },
         agent_exposure: {
           mode: 'isolated',
           exposeAgentMdBridge: false,
@@ -83,7 +91,11 @@ describe('project config contract', () => {
         uid: 'legacy-uid',
         slug: 'legacy-demo',
         name: 'Legacy Demo',
-        execution_context: 'worktree',
+        execution_context: {
+          kind: 'worktree',
+          worktree_root: 'workdir-sibling',
+          worktree_dir_name: '.orbit-worktrees'
+        },
         agent_exposure: {
           mode: 'isolated',
           exposeAgentMdBridge: false,
@@ -99,14 +111,17 @@ describe('project config contract', () => {
   });
 
   it('normalizes execution_context with worktree default and sandbox opt-in', () => {
-    expect(normalizeProjectConfig({}).execution_context).toBe('worktree');
-    expect(normalizeProjectConfig({ execution_context: 'worktree' }).execution_context).toBe(
+    expect(normalizeProjectConfig({}).execution_context.kind).toBe('worktree');
+    expect(normalizeProjectConfig({ execution_context: 'worktree' }).execution_context.kind).toBe(
       'worktree'
     );
-    expect(normalizeProjectConfig({ execution_context: 'sandbox' }).execution_context).toBe(
+    expect(normalizeProjectConfig({ execution_context: 'sandbox' }).execution_context.kind).toBe(
       'sandbox'
     );
-    expect(normalizeProjectConfig({ execution_context: 'git' }).execution_context).toBe('worktree');
+    expect(normalizeProjectConfig({ execution_context: 'direct' }).execution_context.kind).toBe(
+      'direct'
+    );
+    expect(normalizeProjectConfig({ execution_context: 'git' }).execution_context.kind).toBe('worktree');
   });
 
   it('selects sandbox defaults for research and writing templates only', () => {

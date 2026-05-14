@@ -22,7 +22,11 @@ export interface SpaceFrontmatter {
   secondary_area_uids?: string[];
   vision_ref?: string;
   tags: string[];
-  execution_context?: 'worktree' | 'sandbox' | 'none';
+  execution_context?: 'worktree' | 'direct' | 'sandbox' | 'none';
+  workdir?: {
+    path: string;
+    missing?: boolean;
+  };
   git_repo?: string;
   depth_stage?: 'exploring' | 'practicing' | 'mastered' | 'teaching';
   review_cadence?: 'weekly' | 'monthly' | 'quarterly';
@@ -79,4 +83,3 @@ export interface SpaceContextOptions {
   summary?: boolean;
   sections?: Array<'info' | 'tasks' | 'materials' | 'outputs' | 'conversations' | 'relations'>;
 }
-

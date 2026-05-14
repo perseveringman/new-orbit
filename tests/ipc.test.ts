@@ -52,6 +52,7 @@ describe('IPC contract', () => {
         'terminal',
         'terminalAgent',
         'timeline',
+        'tools',
         'vaultConfig',
         'vision',
         'workspace'
@@ -471,6 +472,7 @@ describe('IPC contract', () => {
           uid: 'project-1',
           slug: 'project-1',
           projectPath: '/tmp/project-1',
+          workdirPath: '/tmp/project-1',
           binding: null
         }),
         createPullRequest: async () => ({

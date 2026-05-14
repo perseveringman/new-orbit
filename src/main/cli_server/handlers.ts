@@ -3,7 +3,7 @@ import type { Dirent } from 'node:fs';
 import path from 'node:path';
 import type { TaskFilter } from '@shared/schemas';
 import type { TaskRecord } from '@shared/schemas';
-import { normalizeTaskStatus } from '@shared/schemas';
+import { normalizeTaskExecutionMode, normalizeTaskStatus, taskExecutionMode } from '@shared/schemas';
 import { currentSession } from '../fs';
 import { isInsideRoot, toPosix, vaultRel } from '../pathGuard';
 import { ensureExternalReadAccess } from '../external-path-access';
@@ -32,7 +32,14 @@ import type {
 import type { ProposalListFilter, ProposalResolveInput } from '../approval/types';
 import { queryActivities } from '../activity/query';
 import type { ActivityQueryFilter } from '../activity/types';
-import { listProjects } from '../project';
+import {
+  linkExistingProject,
+  listProjects,
+  migrateProjectWorkdir,
+  relinkProjectWorkdir,
+  scaffoldNewProject
+} from '../project';
+import { probeProjectWorkdir } from '../project_workdir';
 import { listAreas } from '../area';
 import { getPool } from '../agent/pool';
 import { appendExecutionLog } from '../task';
@@ -85,6 +92,15 @@ function stringParam(params: unknown, key: string): string {
 
 function optionalStringParam(params: Record<string, unknown>, key: string): string | undefined {
   return typeof params[key] === 'string' && params[key] ? params[key] : undefined;
+}
+
+function optionalExecutionContext(
+  params: Record<string, unknown>
+): 'worktree' | 'direct' | 'sandbox' | undefined {
+  const value = params['execution_context'];
+  if (value === undefined) return undefined;
+  if (value === 'worktree' || value === 'direct' || value === 'sandbox') return value;
+  throw cliServerError('invalid_params', `invalid execution_context: ${String(value)}`);
 }
 
 function webSearchProvider(value: string): WebSearchProvider {
@@ -226,6 +242,19 @@ function parseDependsOnParam(params: Record<string, unknown>): string[] | undefi
   return value as string[];
 }
 
+function parseExecutionModeParam(params: Record<string, unknown>): string | undefined {
+  const value = params['execution_mode'];
+  if (value === undefined) return undefined;
+  const mode = normalizeTaskExecutionMode(value);
+  if (!mode) {
+    throw cliServerError(
+      'invalid_params',
+      'execution_mode must be human, assisted, agent, or scheduled'
+    );
+  }
+  return mode;
+}
+
 async function refreshTask(absPath: string, content: string): Promise<void> {
   const session = openSession();
   const rel = toPosix(vaultRel(session.vault, absPath));
@@ -289,6 +318,13 @@ function taskFilter(params: unknown): TaskFilter {
     const status = normalizeTaskStatus(params.status);
     if (!status) throw cliServerError('invalid_params', `Unknown task status: ${params.status}`);
     filter.status = status;
+  }
+  if (typeof params.execution_mode === 'string') {
+    const mode = normalizeTaskExecutionMode(params.execution_mode);
+    if (!mode) {
+      throw cliServerError('invalid_params', `Unknown task execution_mode: ${params.execution_mode}`);
+    }
+    filter.execution_mode = mode;
   }
   if (typeof params.project_uid === 'string') filter.project_uid = params.project_uid;
   if (typeof params.area_uid === 'string') filter.area_uid = params.area_uid;
@@ -362,11 +398,17 @@ async function readProjectReadmeExcerpt(readmePath: string): Promise<string> {
     .join('\n');
 }
 
-async function listProjectKeyDocs(projectPath: string): Promise<string[]> {
+async function listProjectKeyDocs(project: Awaited<ReturnType<typeof projectBySlugOrUid>>): Promise<string[]> {
+  const projectPath = project.workdirPath ?? project.path;
   const entries = await fs.readdir(projectPath, { withFileTypes: true }).catch(() => []);
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
-    .map((entry) => toPosix(vaultRel(openSession().vault, path.join(projectPath, entry.name))))
+    .map((entry) => {
+      const abs = path.join(projectPath, entry.name);
+      return isInsideRoot(openSession().vault, abs)
+        ? toPosix(vaultRel(openSession().vault, abs))
+        : abs;
+    })
     .slice(0, 20);
 }
 
@@ -440,6 +482,9 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       : undefined;
     let tasks = materializeTaskGraph(session.tasks.allTasks());
     if (filter.status) tasks = tasks.filter((task) => task.status === filter.status);
+    if (filter.execution_mode) {
+      tasks = tasks.filter((task) => taskExecutionMode(task) === filter.execution_mode);
+    }
     if (projectFilter) tasks = tasks.filter((task) => task.project_uid === projectFilter);
     if (filter.area_uid) tasks = tasks.filter((task) => task.area_uid === filter.area_uid);
     if (filter.resource_uid) tasks = tasks.filter((task) => task.resource_uid === filter.resource_uid);
@@ -528,6 +573,11 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       assertDependencyUpdateAllowed(task, dependsOn);
       patch['depends_on'] = dependsOn;
     }
+    const executionMode = parseExecutionModeParam(params);
+    if (executionMode) {
+      patch['execution_mode'] = executionMode;
+      patch['execution_strategy'] = executionMode === 'agent' ? 'autonomous' : 'manual';
+    }
     if (Object.keys(patch).length === 0) {
       throw cliServerError('invalid_params', 'no task update fields provided');
     }
@@ -549,19 +599,25 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     const title = stringParam(input, 'title');
     const projectUid = optionalStringParam(input, 'project_uid');
     const areaUid = optionalStringParam(input, 'area_uid');
-    if (!projectUid && !areaUid) {
-      throw cliServerError('invalid_params', 'task.propose requires project_uid or area_uid');
+    const resourceUid = optionalStringParam(input, 'resource_uid');
+    const ownerCount = [projectUid, areaUid, resourceUid].filter(Boolean).length;
+    if (ownerCount === 0) {
+      throw cliServerError('invalid_params', 'task.propose requires project_uid, area_uid, or resource_uid');
     }
-    if (projectUid && areaUid) {
+    if (ownerCount > 1) {
       throw cliServerError('invalid_params', 'task.propose accepts only one owner');
     }
     const payload: Record<string, unknown> = {
       title,
       ...(projectUid ? { project_uid: projectUid } : {}),
       ...(areaUid ? { area_uid: areaUid } : {}),
+      ...(resourceUid ? { resource_uid: resourceUid } : {}),
       ...(typeof input.description === 'string' ? { description: input.description } : {}),
       ...(typeof input.conversation_id === 'string'
         ? { conversation_id: input.conversation_id }
+        : {}),
+      ...(typeof input.execution_mode === 'string'
+        ? { execution_mode: normalizeTaskExecutionMode(input.execution_mode) ?? input.execution_mode }
         : {}),
       ...(isRecord(input.frontmatter) ? { frontmatter: input.frontmatter } : {})
     };
@@ -632,6 +688,91 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     return project;
   });
 
+  registry.register('project.link', async (params) => {
+    const input = objectParams(params, 'project.link');
+    return linkExistingProject(openSession().vault, {
+      slug: stringParam(input, 'slug'),
+      name: stringParam(input, 'name'),
+      workdirPath: stringParam(input, 'workdir_path'),
+      ...(typeof input.description === 'string' ? { description: input.description } : {}),
+      ...(optionalExecutionContext(input)
+        ? { execution_context: optionalExecutionContext(input) }
+        : {}),
+      ...(typeof input.vendor_bridge_files === 'boolean'
+        ? { vendor_bridge_files: input.vendor_bridge_files }
+        : {})
+    });
+  });
+
+  registry.register('project.scaffold', async (params) => {
+    const input = objectParams(params, 'project.scaffold');
+    return scaffoldNewProject(openSession().vault, {
+      slug: stringParam(input, 'slug'),
+      name: stringParam(input, 'name'),
+      parentDir: stringParam(input, 'parent_dir'),
+      template: optionalStringParam(input, 'template') ?? 'blank',
+      ...(typeof input.dir_name === 'string' ? { dirName: input.dir_name } : {}),
+      ...(typeof input.description === 'string' ? { description: input.description } : {}),
+      ...(optionalExecutionContext(input)
+        ? { execution_context: optionalExecutionContext(input) }
+        : {}),
+      ...(typeof input.vendor_bridge_files === 'boolean'
+        ? { vendor_bridge_files: input.vendor_bridge_files }
+        : {})
+    });
+  });
+
+  registry.register('project.relink', async (params) => {
+    const input = objectParams(params, 'project.relink');
+    const project = await projectBySlugOrUid(stringParam(input, 'project'));
+    return relinkProjectWorkdir(openSession().vault, {
+      uid: project.uid,
+      workdirPath: stringParam(input, 'workdir_path'),
+      ...(optionalExecutionContext(input)
+        ? { execution_context: optionalExecutionContext(input) }
+        : {}),
+      ...(typeof input.vendor_bridge_files === 'boolean'
+        ? { vendor_bridge_files: input.vendor_bridge_files }
+        : {})
+    });
+  });
+
+  registry.register('project.migrateWorkdir', async (params) => {
+    const input = objectParams(params, 'project.migrateWorkdir');
+    const project = await projectBySlugOrUid(stringParam(input, 'project'));
+    return migrateProjectWorkdir(openSession().vault, {
+      uid: project.uid,
+      targetDir: stringParam(input, 'target_dir'),
+      ...(typeof input.remove_copied_files === 'boolean'
+        ? { removeCopiedFiles: input.remove_copied_files }
+        : {}),
+      ...(typeof input.initialize_git === 'boolean'
+        ? { initializeGit: input.initialize_git }
+        : {}),
+      ...(optionalExecutionContext(input)
+        ? { execution_context: optionalExecutionContext(input) }
+        : {})
+    });
+  });
+
+  registry.register('project.probeWorkdir', async (params) => {
+    const input = objectParams(params, 'project.probeWorkdir');
+    return probeProjectWorkdir(stringParam(input, 'path'));
+  });
+
+  registry.register('project.workdir', async (params) => {
+    const project = await projectBySlugOrUid(stringParam(params, 'slug'));
+    return {
+      uid: project.uid,
+      slug: project.slug,
+      coordinationPath: project.coordinationPath,
+      workdirPath: project.workdirPath,
+      workdirMissing: project.workdirMissing ?? false,
+      execution_context: project.execution_context ?? null,
+      git: project.git ?? null
+    };
+  });
+
   registry.register('project.overview', async (params) => {
     const slug = stringParam(params, 'slug');
     const project = await projectBySlugOrUid(slug);
@@ -646,7 +787,9 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
       project,
       readme_excerpt: await readProjectReadmeExcerpt(project.readmePath),
       task_counts: byStatus,
-      key_docs: project.legacy ? [project.relPath] : await listProjectKeyDocs(project.path)
+      coordination_path: project.coordinationPath,
+      workdir_path: project.workdirPath,
+      key_docs: project.legacy ? [project.relPath] : await listProjectKeyDocs(project)
     };
   });
 

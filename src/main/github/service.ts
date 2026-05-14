@@ -17,7 +17,14 @@ import type {
   GitHubWorktreeSummary,
   GitHubReviewSummary
 } from '@shared/github';
-import { listProjectTaskPaths, listProjects, projectDir } from '../project';
+import {
+  defaultExecutionContextConfig,
+  linkExistingProject,
+  listProjectTaskPaths,
+  listProjects,
+  projectDir
+} from '../project';
+import { probeProjectWorkdir, resolveProjectWorkdir } from '../project_workdir';
 import { ensureProjectAgentContext } from '../project_agent_context';
 import {
   defaultAgentExposureSettings,
@@ -30,6 +37,7 @@ import { newUid } from '../uid';
 import { readTaskFile, updateTaskFrontmatter } from '../task';
 import { WorktreeManager } from '../git/worktree';
 import type { WorktreeRecord } from '@shared/git';
+import { createExecutionContextForProject } from '../execution/factory';
 
 interface GhResult {
   stdout: string;
@@ -49,6 +57,7 @@ interface ImportArgs {
   repo: string;
   slug?: string;
   name?: string;
+  targetDir?: string;
   agent_exposure?: Partial<AgentExposureSettings>;
 }
 
@@ -65,6 +74,11 @@ interface Deps {
   cloneRepo?: (fullName: string, targetDir: string) => Promise<void>;
   now?: () => Date;
   listWorktrees?: (vault: string) => Promise<WorktreeRecord[]>;
+}
+
+interface ResolvedProjectPaths {
+  coordinationPath: string;
+  workdirPath: string;
 }
 
 interface RepoViewJson {
@@ -466,7 +480,15 @@ async function fetchProjectReviews(projectPath: string, deps: Deps): Promise<Git
 
 async function listGitHubWorktrees(vault: string, deps: Deps): Promise<WorktreeRecord[]> {
   if (deps.listWorktrees) return deps.listWorktrees(vault);
-  return new WorktreeManager({ vault }).list();
+  const records = await new WorktreeManager({ vault }).list();
+  for (const project of await listProjects(vault)) {
+    if (project.legacy) continue;
+    const context = await createExecutionContextForProject(project.coordinationPath, {
+      vaultPath: vault
+    });
+    records.push(...(await context.list()));
+  }
+  return [...new Map(records.map((record) => [record.id, record])).values()];
 }
 
 async function readTaskBindings(projectPath: string): Promise<GitHubTaskBinding[]> {
@@ -530,18 +552,18 @@ export async function getGitHubProjectDetails(
   projectUid: string,
   deps: Deps = {}
 ): Promise<GitHubProjectDetails> {
-  const projectPath =
-    (await resolveProjectPath(vault, projectUid)) ?? (() => {
+  const paths =
+    (await resolveProjectPaths(vault, projectUid)) ?? (() => {
       throw new Error(`project not found: ${projectUid}`);
     })();
   const overview = await getGitHubProjectState(vault, projectUid, deps);
   const [issues, pullRequests, checks, reviews, worktreeRecords, taskBindings] = await Promise.all([
-    fetchProjectIssues(projectPath, deps),
-    fetchProjectPullRequests(projectPath, deps),
-    fetchProjectChecks(projectPath, deps),
-    fetchProjectReviews(projectPath, deps),
+    fetchProjectIssues(paths.workdirPath, deps),
+    fetchProjectPullRequests(paths.workdirPath, deps),
+    fetchProjectChecks(paths.workdirPath, deps),
+    fetchProjectReviews(paths.workdirPath, deps),
     listGitHubWorktrees(vault, deps),
-    readTaskBindings(projectPath)
+    readTaskBindings(paths.coordinationPath)
   ]);
 
   const worktrees: GitHubWorktreeSummary[] = worktreeRecords.map((worktree) => {
@@ -601,35 +623,46 @@ export async function getGitHubProjectState(
   projectUid: string,
   deps: Deps = {}
 ): Promise<GitHubProjectState> {
-  const projectPath =
-    (await resolveProjectPath(vault, projectUid)) ?? (() => {
+  const paths =
+    (await resolveProjectPaths(vault, projectUid)) ?? (() => {
       throw new Error(`project not found: ${projectUid}`);
     })();
-  const config = await readProjectConfig(projectPath);
+  const config = await readProjectConfig(paths.coordinationPath);
   if (!config) throw new Error(`project config not found: ${projectUid}`);
-  const connection = await resolveConnection(deps, projectPath);
+  const connection = await resolveConnection(deps, paths.workdirPath);
   const binding = await resolveRepoBinding(
-    projectPath,
+    paths.workdirPath,
     deps,
     config.github?.connectedAt ?? nowIso(deps),
     config.github
   );
-  const git = simpleGit(projectPath);
-  const status = await git.status();
+  const git = simpleGit(paths.workdirPath);
+  const status = binding ? await git.status().catch(() => null) : null;
   const sync: GitHubSyncStatus | null = binding
     ? {
-        branch: status.current ?? '',
-        upstream: status.tracking ?? null,
-        ahead: status.ahead ?? 0,
-        behind: status.behind ?? 0,
-        hasUnpushedCommits: (status.ahead ?? 0) > 0,
-        hasRemoteUpdates: (status.behind ?? 0) > 0
+        branch: status?.current ?? '',
+        upstream: status?.tracking ?? null,
+        ahead: status?.ahead ?? 0,
+        behind: status?.behind ?? 0,
+        hasUnpushedCommits: (status?.ahead ?? 0) > 0,
+        hasRemoteUpdates: (status?.behind ?? 0) > 0
       }
     : null;
-  const pullRequest = binding ? await resolvePullRequest(projectPath, deps) : null;
+  const pullRequest = binding ? await resolvePullRequest(paths.workdirPath, deps) : null;
   if (binding && JSON.stringify(binding) !== JSON.stringify(config.github)) {
-    await writeProjectConfig(projectPath, {
+    await writeProjectConfig(paths.coordinationPath, {
       ...config,
+      git: {
+        ...(config.git ?? { is_repo: true }),
+        is_repo: true,
+        root_path: config.git?.root_path ?? paths.workdirPath,
+        default_branch: binding.defaultBranch,
+        remote_origin:
+          config.git?.remote_origin ??
+          binding.cloneUrlSsh ??
+          binding.cloneUrlHttps,
+        github_binding: binding
+      },
       github: binding
     });
   }
@@ -642,20 +675,18 @@ export async function getGitHubProjectState(
   };
 }
 
+async function resolveProjectPaths(vault: string, projectUid: string): Promise<ResolvedProjectPaths | null> {
+  const project = (await listProjects(vault)).find((item) => item.uid === projectUid);
+  if (!project || project.legacy) return null;
+  const config = await readProjectConfig(project.coordinationPath);
+  return {
+    coordinationPath: project.coordinationPath,
+    workdirPath: resolveProjectWorkdir(project.coordinationPath, config)
+  };
+}
+
 async function resolveProjectPath(vault: string, projectUid: string): Promise<string | null> {
-  const projectsRoot = path.join(vault, '01_Projects');
-  try {
-    const dirents = await fs.readdir(projectsRoot, { withFileTypes: true });
-    for (const entry of dirents) {
-      if (!entry.isDirectory()) continue;
-      const projectPath = path.join(projectsRoot, entry.name);
-      const config = await readProjectConfig(projectPath);
-      if (config?.uid === projectUid) return projectPath;
-    }
-  } catch {
-    // ignore
-  }
-  return null;
+  return (await resolveProjectPaths(vault, projectUid))?.workdirPath ?? null;
 }
 
 export async function publishProjectToGitHub(
@@ -663,16 +694,16 @@ export async function publishProjectToGitHub(
   args: PublishArgs,
   deps: Deps = {}
 ): Promise<GitHubProjectState> {
-  const projectPath = await resolveProjectPath(vault, args.projectUid);
-  if (!projectPath) throw new Error(`project not found: ${args.projectUid}`);
-  const config = await readProjectConfig(projectPath);
+  const paths = await resolveProjectPaths(vault, args.projectUid);
+  if (!paths) throw new Error(`project not found: ${args.projectUid}`);
+  const config = await readProjectConfig(paths.coordinationPath);
   if (!config) throw new Error(`project config not found: ${args.projectUid}`);
-  const git = simpleGit(projectPath);
+  const git = simpleGit(paths.workdirPath);
   const isRepo = await git.checkIsRepo();
   if (!isRepo) {
     await git.init();
     await git.add('.');
-    await git.commit(`orbit: init project ${path.basename(projectPath)}`).catch(() => undefined);
+    await git.commit(`orbit: init project ${path.basename(paths.workdirPath)}`).catch(() => undefined);
   }
   const create = await runGh(
     deps,
@@ -687,20 +718,32 @@ export async function publishProjectToGitHub(
       '--push',
       `--${args.visibility}`
     ],
-    projectPath
+    paths.workdirPath
   );
   if (create.code !== 0) {
     throw new Error(`gh repo create failed: ${create.stdout.trim()}`);
   }
-  await writeProjectConfig(projectPath, {
+  const binding = await resolveBindingFromRepository(
+    args.owner,
+    args.repo,
+    deps,
+    config.github?.connectedAt ?? nowIso(deps),
+    paths.workdirPath
+  );
+  await writeProjectConfig(paths.coordinationPath, {
     ...config,
-    github: await resolveBindingFromRepository(
-      args.owner,
-      args.repo,
-      deps,
-      config.github?.connectedAt ?? nowIso(deps),
-      projectPath
-    )
+    git: {
+      ...(config.git ?? { is_repo: true }),
+      is_repo: true,
+      root_path: config.git?.root_path ?? paths.workdirPath,
+      default_branch: binding.defaultBranch,
+      remote_origin:
+        config.git?.remote_origin ??
+        binding.cloneUrlSsh ??
+        binding.cloneUrlHttps,
+      github_binding: binding
+    },
+    github: binding
   });
   return getGitHubProjectState(vault, args.projectUid, deps);
 }
@@ -734,26 +777,84 @@ export async function importGitHubRepository(
   vault: string,
   args: ImportArgs,
   deps: Deps = {}
-): Promise<{ projectPath: string; uid: string; slug: string; binding: GitHubRepoBinding | null }> {
+): Promise<{ projectPath: string; workdirPath: string; uid: string; slug: string; binding: GitHubRepoBinding | null }> {
   const slug = args.slug ?? args.repo.toLowerCase();
-  const projectPath = projectDir(vault, slug);
-  await fs.access(projectPath).then(
+  const targetDir = args.targetDir ? path.resolve(args.targetDir) : projectDir(vault, slug);
+  await fs.access(targetDir).then(
     () => Promise.reject(new Error(`project already exists: ${slug}`)),
     () => Promise.resolve()
   );
-  await (deps.cloneRepo ?? cloneRepoDefault)(`${args.owner}/${args.repo}`, projectPath);
+  await (deps.cloneRepo ?? cloneRepoDefault)(`${args.owner}/${args.repo}`, targetDir);
   const createdAt = nowIso(deps);
   const uid = newUid();
+  if (args.targetDir) {
+    const created = await linkExistingProject(vault, {
+      slug,
+      uid,
+      name: args.name ?? args.repo,
+      workdirPath: targetDir,
+      execution_context: 'worktree',
+      vendor_bridge_files: args.agent_exposure?.mode !== 'isolated'
+    });
+    const config = await readProjectConfig(created.projectPath);
+    const probe = await probeProjectWorkdir(targetDir);
+    const binding = await resolveRepoBinding(targetDir, deps, createdAt);
+    if (config) {
+      await writeProjectConfig(created.projectPath, {
+        ...config,
+        git: {
+          ...(probe.git ?? config.git ?? { is_repo: true }),
+          is_repo: true,
+          root_path: probe.git?.root_path ?? targetDir,
+          ...(binding
+            ? {
+                default_branch: binding.defaultBranch,
+                remote_origin:
+                  probe.git?.remote_origin ??
+                  binding.cloneUrlSsh ??
+                  binding.cloneUrlHttps,
+                github_binding: binding
+              }
+            : {})
+        },
+        github: binding ?? undefined
+      });
+    }
+    return {
+      projectPath: created.projectPath,
+      workdirPath: targetDir,
+      uid,
+      slug,
+      binding
+    };
+  }
+  const projectPath = targetDir;
   const config = {
     uid,
     slug,
     name: args.name ?? args.repo,
+    type: 'project' as const,
     template: 'imported-github',
-    execution_context: 'worktree' as const,
+    workdir: {
+      path: projectPath,
+      kind: 'local' as const,
+      linked_at: createdAt,
+      linked_via: 'legacy-in-vault' as const,
+      permissions: {
+        agent_write: true,
+        auto_runner: true
+      }
+    },
+    execution_context: defaultExecutionContextConfig('worktree'),
     created_at: createdAt,
     vision_linked: true,
     setup: [],
     teardown: [],
+    vendor_bridge_files: args.agent_exposure?.mode !== 'isolated',
+    watcher: {
+      enabled: true,
+      extra_ignores: []
+    },
     agent_exposure: {
       ...defaultAgentExposureSettings(args.agent_exposure?.mode),
       ...(args.agent_exposure ?? {})
@@ -766,10 +867,11 @@ export async function importGitHubRepository(
     slug,
     name: args.name ?? args.repo,
     template: 'imported-github'
-  });
+  }, { workdirPath: projectPath });
   const state = await getGitHubProjectState(vault, uid, deps);
   return {
     projectPath,
+    workdirPath: projectPath,
     uid,
     slug,
     binding: state.binding

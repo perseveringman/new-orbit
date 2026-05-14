@@ -40,6 +40,27 @@ Next parity backlog:
 - plugin/gateway tool bridge
 - media/PDF tool family
 
+### 2026-05-13 — Project workdir decoupling
+
+Status: **implemented**.
+
+Delivered:
+
+- Project config now separates vault coordination folders from linked code
+  workdirs.
+- New project flows support linking existing code, scaffolding a new workdir,
+  and importing GitHub repos into a chosen workdir.
+- Agents, terminals, inspector files/changes, GitHub operations, CLI project
+  commands, and project-specific worktrees resolve against `workdirPath`.
+- Legacy in-vault projects remain supported through `linked_via:
+  "legacy-in-vault"`.
+- Project Room now supports relinking a project's workdir and moving legacy
+  in-vault code payloads into an external workdir.
+- Environment install actions resolve both vault-level and project-specific
+  worktree IDs.
+- Focused integration tests cover migration, external GitHub import, and
+  external-workdir worktree launch.
+
 ---
 
 ## 1. 已完成里程碑

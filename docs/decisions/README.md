@@ -71,6 +71,7 @@ ADR 借鉴自 Michael Nygard 的 [Documenting Architecture Decisions](https://co
 | 019 | [Ask-Anywhere agent 的直写边界](ADR-019-ask-anywhere-agent-direct-write-boundary.md) | accepted | `swift-vortex-darwin` |
 | 020 | [Ask-Anywhere as universal agent surface](ADR-020-ask-anywhere-universal-agent-surface.md) | accepted | `ask-anywhere-universal-tool-layer` |
 | 021 | [Configurable agent authority and learnable grants](ADR-021-configurable-agent-authority.md) | accepted | `agent-authority` |
+| 022 | [Project coordination 与 code workdir 解耦](ADR-022-project-workdir-decoupling.md) | accepted | `2026-05-13-project-workdir-decoupling` |
 
 ---
 

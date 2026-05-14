@@ -11,7 +11,7 @@ Available commands:
   search       Search the open vault
   cat          Read a vault file or UID
   memory      Memory search/save (${MEMORY_UNAVAILABLE})
-  project     Project commands: overview, graph, list, get, archive
+  project     Project commands: link, scaffold, relink, migrate-workdir, workdir, overview, graph, list, get, archive
   space       Space commands: list, show, context
   resource    Resource commands: list, get, create, archive
   assets      Project materials commands: list, show, scan, stat, read, add-scope, pin, unpin
@@ -76,6 +76,14 @@ export function generateProjectHelp(): string {
 
 Available subcommands:
   overview <slug>         Project vision/current phase/key docs summary
+  link <path> --name N    Link an existing code directory as an Orbit project
+  scaffold --name N --parent DIR
+                          Create a new code directory and Orbit coordination folder
+  relink <slug> <path>    Point an existing Orbit project at a different workdir
+  migrate-workdir <slug> <target-dir>
+                          Move legacy in-vault code payload into an external workdir
+  workdir <slug>          Show coordination/workdir paths
+  probe <path>            Inspect a directory before linking
   graph [--uid UID]       Return project/task graph data
   list                    List projects
   get <uid>               Get project metadata
@@ -83,6 +91,11 @@ Available subcommands:
 
 Examples:
   orbit project list --json
+  orbit project link ~/code/demo --name Demo --slug demo
+  orbit project scaffold --name Demo --parent ~/code
+  orbit project relink demo ~/code/demo
+  orbit project migrate-workdir demo ~/code/demo --remove-copied-files
+  orbit project workdir demo
   orbit project overview demo
   orbit project graph --uid project_uid
   orbit project archive project_uid --json
@@ -148,13 +161,13 @@ export function generateTaskHelp(): string {
   return `Usage: orbit task <subcommand> [args]
 
 Available subcommands:
-  list [--status S] [--project UID] [--area UID] [--resource UID] [--tag TAG]
+  list [--status S] [--mode human|assisted|agent|scheduled] [--project UID] [--area UID] [--resource UID] [--tag TAG]
   get <uid>
-  update <uid> [--status S] [--depends-on a,b]
+  update <uid> [--status S] [--mode human|assisted|agent|scheduled] [--depends-on a,b]
   related <uid>
   transcript <uid>
   switch-runtime <uid> --to <runtime-id>
-  propose --title T (--project UID | --area UID | --resource UID) [--run RUN] [--description TEXT|--file F]
+  propose --title T (--project UID | --area UID | --resource UID) [--mode human|assisted|agent|scheduled] [--conversation ID] [--run RUN] [--description TEXT|--file F]
   propose-scope <current-uid> [--run RUN] [--summary TEXT|--file F]
   propose-split <current-uid> [--run RUN] [--summary TEXT|--file F]
   deps <uid>
@@ -163,7 +176,7 @@ Available subcommands:
 Examples:
   orbit task list --status todo --project project_uid --json
   orbit task get task_uid --json
-  orbit task update task_uid --depends-on task_a,task_b
+  orbit task update task_uid --mode agent --depends-on task_a,task_b
   orbit task deps task_uid
   echo "details" | orbit task propose --title "Follow-up" --project project_uid --run run_1
 `;

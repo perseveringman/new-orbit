@@ -25,8 +25,16 @@ export function isGhostBranch(branch: string): boolean {
 }
 
 export interface WorktreeManagerDeps {
-  /** Vault root. */
+  /** Legacy root; also used as repo root when repoRoot is omitted. */
   vault: string;
+  /** Git repository root. */
+  repoRoot?: string;
+  /** Root directory that stores Orbit-created git worktrees. */
+  worktreeRoot?: string;
+  /** Vault root for logs and global Orbit state. */
+  vaultPath?: string;
+  /** Project coordination directory used for lifecycle config. */
+  projectPath?: string;
   /** Override simple-git factory (tests). */
   gitFactory?: SimpleGitFactory;
   /** Override short-id generator (tests). */
@@ -44,13 +52,13 @@ function worktreesDir(vault: string): string {
   return path.join(vault, ORBIT_DIR, ORBIT_WORKTREES_DIR);
 }
 
-function indexFile(vault: string): string {
-  return path.join(worktreesDir(vault), ORBIT_WORKTREE_INDEX);
+function indexFile(root: string): string {
+  return path.join(root, ORBIT_WORKTREE_INDEX);
 }
 
-async function readIndex(vault: string): Promise<IndexFile> {
+async function readIndex(root: string): Promise<IndexFile> {
   try {
-    const raw = await fs.readFile(indexFile(vault), 'utf8');
+    const raw = await fs.readFile(indexFile(root), 'utf8');
     const parsed = JSON.parse(raw) as Partial<IndexFile>;
     if (parsed && Array.isArray(parsed.worktrees)) {
       return { version: 1, worktrees: parsed.worktrees as WorktreeRecord[] };
@@ -61,8 +69,8 @@ async function readIndex(vault: string): Promise<IndexFile> {
   return { version: 1, worktrees: [] };
 }
 
-async function writeIndex(vault: string, data: IndexFile): Promise<void> {
-  const p = indexFile(vault);
+async function writeIndex(root: string, data: IndexFile): Promise<void> {
+  const p = indexFile(root);
   await fs.mkdir(path.dirname(p), { recursive: true });
   const tmp = `${p}.tmp-${process.pid}-${Date.now()}`;
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
@@ -88,19 +96,27 @@ export interface RemoveOpts {
  */
 export class WorktreeManager {
   private readonly vault: string;
+  private readonly repoRoot: string;
+  private readonly worktreeRoot: string;
+  private readonly vaultPath: string;
+  private readonly projectPath: string;
   private readonly gitFactory: SimpleGitFactory;
   private readonly shortId: () => string;
   private readonly queue: GitQueue;
 
   constructor(deps: WorktreeManagerDeps) {
     this.vault = deps.vault;
+    this.repoRoot = deps.repoRoot ?? deps.vault;
+    this.worktreeRoot = deps.worktreeRoot ?? worktreesDir(deps.vault);
+    this.vaultPath = deps.vaultPath ?? deps.vault;
+    this.projectPath = deps.projectPath ?? deps.vault;
     this.gitFactory = deps.gitFactory ?? simpleGit;
     this.shortId = deps.shortId ?? ((): string => nanoid(8));
     this.queue = deps.queue ?? getGitQueue();
   }
 
   private root(): SimpleGit {
-    return this.gitFactory(this.vault);
+    return this.gitFactory(this.repoRoot);
   }
 
   /** Create a ghost worktree at `<vault>/.orbit/worktrees/<shortId>`. */
@@ -108,7 +124,7 @@ export class WorktreeManager {
     return this.queue.run('global', async () => {
       const id = this.shortId();
       const branch = `${ORBIT_GHOST_BRANCH_PREFIX}${id}`;
-      const absPath = path.join(worktreesDir(this.vault), id);
+      const absPath = path.join(this.worktreeRoot, id);
       await fs.mkdir(path.dirname(absPath), { recursive: true });
 
       const base = opts.baseRef ?? (await this.defaultBranch());
@@ -117,8 +133,8 @@ export class WorktreeManager {
         // `git worktree add -b <branch> <path> <base>` creates branch + checkout.
         await g.raw(['worktree', 'add', '-b', branch, absPath, base]);
         await runProjectLifecycle('setup', {
-          projectPath: this.vault,
-          vaultPath: this.vault,
+          projectPath: this.projectPath,
+          vaultPath: this.vaultPath,
           worktreeId: id,
           cwd: absPath
         });
@@ -129,7 +145,7 @@ export class WorktreeManager {
         } catch {
           // ignore
         }
-        await appendGitLog(this.vault, {
+        await appendGitLog(this.vaultPath, {
           op: 'worktree.create.error',
           id,
           branch,
@@ -146,11 +162,11 @@ export class WorktreeManager {
       };
       if (opts.taskId) rec.taskId = opts.taskId;
 
-      const idx = await readIndex(this.vault);
+      const idx = await readIndex(this.worktreeRoot);
       idx.worktrees.push(rec);
-      await writeIndex(this.vault, idx);
+      await writeIndex(this.worktreeRoot, idx);
 
-      await appendGitLog(this.vault, {
+      await appendGitLog(this.vaultPath, {
         op: 'worktree.create',
         id,
         branch,
@@ -163,7 +179,7 @@ export class WorktreeManager {
 
   async list(): Promise<WorktreeRecord[]> {
     return this.queue.run('global', async () => {
-      const idx = await readIndex(this.vault);
+      const idx = await readIndex(this.worktreeRoot);
       // Reconcile with `git worktree list --porcelain` — drop records whose
       // path no longer exists, keep git-reported ones that we recorded.
       let live = new Set<string>();
@@ -186,7 +202,7 @@ export class WorktreeManager {
 
   async remove(id: string, opts: RemoveOpts = {}): Promise<void> {
     return this.queue.run('global', async () => {
-      const idx = await readIndex(this.vault);
+      const idx = await readIndex(this.worktreeRoot);
       const rec = idx.worktrees.find((w) => w.id === id);
       if (!rec) throw new Error(`worktree not found: ${id}`);
       const g = this.root();
@@ -201,8 +217,8 @@ export class WorktreeManager {
             name: 'teardown',
             run: async () => {
               await runProjectLifecycle('teardown', {
-                projectPath: this.vault,
-                vaultPath: this.vault,
+                projectPath: this.projectPath,
+                vaultPath: this.vaultPath,
                 worktreeId: id,
                 cwd: rec.path
               });
@@ -233,14 +249,14 @@ export class WorktreeManager {
             name: 'cleanup',
             run: async () => {
               idx.worktrees = idx.worktrees.filter((w) => w.id !== id);
-              await writeIndex(this.vault, idx);
-              await appendGitLog(this.vault, { op: 'worktree.remove', id, force: !!opts.force });
+              await writeIndex(this.worktreeRoot, idx);
+              await appendGitLog(this.vaultPath, { op: 'worktree.remove', id, force: !!opts.force });
             }
           }
         ],
         (phase, status) => {
           if (status === 'fail') {
-            void appendGitLog(this.vault, {
+            void appendGitLog(this.vaultPath, {
               op: 'worktree.remove.phase',
               id,
               phase,
@@ -250,7 +266,7 @@ export class WorktreeManager {
         }
       );
       if (!result.committed && result.error) {
-        await appendGitLog(this.vault, {
+        await appendGitLog(this.vaultPath, {
           op: 'worktree.remove.error',
           id,
           error: result.error.message
@@ -267,8 +283,8 @@ export class WorktreeManager {
    */
   async resetAll(): Promise<ResetAllResult> {
     return this.queue.run('global', async () => {
-      const idx = await readIndex(this.vault);
-      const root = worktreesDir(this.vault);
+      const idx = await readIndex(this.worktreeRoot);
+      const root = this.worktreeRoot;
       const targets = idx.worktrees.filter(
         (w) =>
           w.branch.startsWith(ORBIT_GHOST_BRANCH_PREFIX) &&
@@ -307,8 +323,8 @@ export class WorktreeManager {
       idx.worktrees = idx.worktrees.filter(
         (w) => !targets.some((t) => t.id === w.id)
       );
-      await writeIndex(this.vault, idx);
-      await appendGitLog(this.vault, {
+      await writeIndex(this.worktreeRoot, idx);
+      await appendGitLog(this.vaultPath, {
         op: 'worktree.resetAll',
         removed,
         errors: errors.length
@@ -319,17 +335,17 @@ export class WorktreeManager {
 
   /** Look up a record by id (bypasses queue; read-only). */
   async get(id: string): Promise<WorktreeRecord | null> {
-    const idx = await readIndex(this.vault);
+    const idx = await readIndex(this.worktreeRoot);
     return idx.worktrees.find((w) => w.id === id) ?? null;
   }
 
   /** Mark status in the index (used after merges). */
   async setStatus(id: string, status: WorktreeRecord['status']): Promise<void> {
-    const idx = await readIndex(this.vault);
+    const idx = await readIndex(this.worktreeRoot);
     const rec = idx.worktrees.find((w) => w.id === id);
     if (!rec) return;
     rec.status = status;
-    await writeIndex(this.vault, idx);
+    await writeIndex(this.worktreeRoot, idx);
   }
 
   private async defaultBranch(): Promise<string> {

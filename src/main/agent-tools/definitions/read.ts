@@ -86,7 +86,7 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
   {
     name: 'orbit_task_list',
     description:
-      'List tasks with optional filters (status, project, area, resource, tag). ' +
+      'List tasks with optional filters (status, execution mode, project, area, resource, tag). ' +
       'Use to enumerate work items before recommending priorities or summarising progress.',
     cliMethod: 'task.list',
     timeoutMs: 30_000,
@@ -96,7 +96,12 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
       properties: {
         status: {
           type: 'string',
-          description: 'Filter by task status (todo / doing / awaiting_user / done / archived).'
+          description: 'Filter by task status (backlog / waiting / todo / doing / blocked / done).'
+        },
+        execution_mode: {
+          type: 'string',
+          enum: ['human', 'assisted', 'agent', 'scheduled'],
+          description: 'Filter by task execution mode.'
         },
         project: { type: 'string', description: 'Project uid or slug.' },
         area: { type: 'string', description: 'Area uid or slug.' },

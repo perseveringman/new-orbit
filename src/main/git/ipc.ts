@@ -26,6 +26,9 @@ import { getInstallLock } from '../env/install_lock';
 import { CheckCache } from './check_cache';
 import { computeMergeBaseDiff } from './diff';
 import { getWorkingTreeDiff } from './diff';
+import { createExecutionContext, createExecutionContextForProject } from '../execution/factory';
+import type { ExecutionContext } from '../execution/types';
+import { listProjects } from '../project';
 import {
   getChanges as gitGetChanges,
   stagePaths as gitStagePaths,
@@ -50,6 +53,41 @@ function requireManager(vault: string): WorktreeManager {
     (manager as unknown as { _vault?: string })._vault = vault;
   }
   return manager;
+}
+
+function defaultExecutionContext(vault: string): ExecutionContext {
+  return createExecutionContext('worktree', { worktreeManager: requireManager(vault) });
+}
+
+async function executionContextForTask(
+  vault: string,
+  taskId: string
+): Promise<ExecutionContext | null> {
+  const sess = currentSession();
+  if (!sess) return null;
+  const task = sess.tasks.allTasks().find((entry) => entry.id === taskId || entry.uid === taskId);
+  if (!task?.project_uid) return null;
+  const project = (await listProjects(vault)).find((entry) => entry.uid === task.project_uid);
+  if (!project || project.legacy) return null;
+  return createExecutionContextForProject(project.coordinationPath, { vaultPath: vault });
+}
+
+async function findWorktreeContext(
+  vault: string,
+  id: string
+): Promise<{ context: ExecutionContext; rec: WorktreeRecord } | null> {
+  const fallback = defaultExecutionContext(vault);
+  const fallbackRec = await fallback.get(id);
+  if (fallbackRec) return { context: fallback, rec: fallbackRec };
+  for (const project of await listProjects(vault)) {
+    if (project.legacy) continue;
+    const context = await createExecutionContextForProject(project.coordinationPath, {
+      vaultPath: vault
+    });
+    const rec = await context.get(id);
+    if (rec) return { context, rec };
+  }
+  return null;
 }
 
 const checkCache = new CheckCache();
@@ -87,6 +125,14 @@ export function registerGitIpc(): void {
     async (_e, opts?: { taskId?: string }): Promise<WorktreeRecord> => {
       const sess = currentSession();
       if (!sess) throw new Error('no vault');
+      if (opts?.taskId) {
+        const context = await executionContextForTask(sess.vault, opts.taskId);
+        if (context) {
+          const rec = await context.create(opts);
+          broadcastEnv();
+          return rec;
+        }
+      }
       const mgr = requireManager(sess.vault);
       const rec = await mgr.create(opts ?? {});
       broadcastEnv();
@@ -97,7 +143,16 @@ export function registerGitIpc(): void {
   ipcMain.handle(IPC.git.listWorktrees, async (): Promise<WorktreeRecord[]> => {
     const sess = currentSession();
     if (!sess) return [];
-    return requireManager(sess.vault).list();
+    const records = await defaultExecutionContext(sess.vault).list();
+    for (const project of await listProjects(sess.vault)) {
+      if (project.legacy) continue;
+      const context = await createExecutionContextForProject(project.coordinationPath, {
+        vaultPath: sess.vault
+      });
+      records.push(...(await context.list()));
+    }
+    const byId = new Map(records.map((record) => [record.id, record]));
+    return [...byId.values()];
   });
 
   ipcMain.handle(
@@ -105,10 +160,10 @@ export function registerGitIpc(): void {
     async (_e, args: { worktreeId: string; base?: string }) => {
       const sess = currentSession();
       if (!sess) throw new Error('no vault');
-      const rec = await requireManager(sess.vault).get(args.worktreeId);
-      if (!rec) throw new Error(`worktree not found: ${args.worktreeId}`);
+      const found = await findWorktreeContext(sess.vault, args.worktreeId);
+      if (!found) throw new Error(`worktree not found: ${args.worktreeId}`);
       return computeMergeBaseDiff({
-        worktreePath: rec.path,
+        worktreePath: found.rec.path,
         base: args.base
       });
     }
@@ -126,7 +181,9 @@ export function registerGitIpc(): void {
     async (_e, id: string, opts?: { force?: boolean }): Promise<void> => {
       const sess = currentSession();
       if (!sess) return;
-      await requireManager(sess.vault).remove(id, opts ?? {});
+      const found = await findWorktreeContext(sess.vault, id);
+      if (!found) return;
+      await found.context.remove(id, opts ?? {});
       checkCache.delete(id);
     }
   );
@@ -134,7 +191,20 @@ export function registerGitIpc(): void {
   ipcMain.handle(IPC.git.resetAll, async (): Promise<ResetAllResult> => {
     const sess = currentSession();
     if (!sess) return { removed: 0, errors: [] };
-    const r = await requireManager(sess.vault).resetAll();
+    const contexts: ExecutionContext[] = [defaultExecutionContext(sess.vault)];
+    for (const project of await listProjects(sess.vault)) {
+      if (project.legacy) continue;
+      contexts.push(
+        await createExecutionContextForProject(project.coordinationPath, {
+          vaultPath: sess.vault
+        })
+      );
+    }
+    const results = await Promise.all(contexts.map((context) => context.resetAll()));
+    const r = {
+      removed: results.reduce((sum, result) => sum + result.removed, 0),
+      errors: results.flatMap((result) => result.errors)
+    };
     checkCache.clear();
     return r;
   });
@@ -147,9 +217,9 @@ export function registerGitIpc(): void {
     ): Promise<{ sha: string }> => {
       const sess = currentSession();
       if (!sess) throw new Error('no vault');
-      const mgr = requireManager(sess.vault);
-      const rec = await mgr.get(args.worktreeId);
-      if (!rec) throw new Error(`worktree not found: ${args.worktreeId}`);
+      const found = await findWorktreeContext(sess.vault, args.worktreeId);
+      if (!found) throw new Error(`worktree not found: ${args.worktreeId}`);
+      const rec = found.rec;
       if (!isGhostBranch(rec.branch)) {
         const err = new Error('not_a_ghost_branch') as Error & { code?: string };
         err.code = 'not_a_ghost_branch';
@@ -178,10 +248,10 @@ export function registerGitIpc(): void {
     async (_e, worktreeId: string): Promise<CheckReport> => {
       const sess = currentSession();
       if (!sess) throw new Error('no vault');
-      const mgr = requireManager(sess.vault);
-      const rec = await mgr.get(worktreeId);
-      if (!rec) throw new Error(`worktree not found: ${worktreeId}`);
-      const base = await defaultBranchOf(sess.vault);
+      const found = await findWorktreeContext(sess.vault, worktreeId);
+      if (!found) throw new Error(`worktree not found: ${worktreeId}`);
+      const rec = found.rec;
+      const base = await defaultBranchOf(rec.path);
       const report = await runPreMergeCheck(rec.path, base);
       checkCache.set(worktreeId, report);
       await appendGitLog(sess.vault, {
@@ -226,9 +296,9 @@ export function registerGitIpc(): void {
     ): Promise<MergeResult> => {
       const sess = currentSession();
       if (!sess) throw new Error('no vault');
-      const mgr = requireManager(sess.vault);
-      const rec = await mgr.get(worktreeId);
-      if (!rec) throw new Error(`worktree not found: ${worktreeId}`);
+      const found = await findWorktreeContext(sess.vault, worktreeId);
+      if (!found) throw new Error(`worktree not found: ${worktreeId}`);
+      const rec = found.rec;
 
       // Cache gate: require a successful, fresh (≤60s) check with matching HEAD.
       const wtGit = simpleGit(rec.path);
@@ -241,8 +311,9 @@ export function registerGitIpc(): void {
       }
 
       return getGitQueue().run('global', async () => {
-        const base = await defaultBranchOf(sess.vault);
-        const rootGit = simpleGit(sess.vault);
+        const base = await defaultBranchOf(rec.path);
+        const rootPath = (await primaryWorktreeForBranch(rec.path, base)) ?? sess.vault;
+        const rootGit = simpleGit(rootPath);
         // Ensure we're on base, not on the ghost branch (avoid self-merge).
         await rootGit.raw(['checkout', base]);
         let mergedSha: string | undefined;
@@ -262,7 +333,7 @@ export function registerGitIpc(): void {
           }
           mergedSha = (await rootGit.raw(['rev-parse', 'HEAD'])).trim();
           ok = true;
-          await mgr.setStatus(worktreeId, 'merged');
+          await found.context.setStatus(worktreeId, 'merged');
         } catch (e) {
           message = (e as Error).message;
           try {
@@ -357,6 +428,20 @@ async function defaultBranchOf(vault: string): Promise<string> {
     // ignore
   }
   return 'main';
+}
+
+async function primaryWorktreeForBranch(cwd: string, branch: string): Promise<string | null> {
+  const raw = await simpleGit(cwd).raw(['worktree', 'list', '--porcelain']).catch(() => '');
+  if (!raw.trim()) return null;
+  const blocks = raw.split(/\n\s*\n/);
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const worktree = lines.find((line) => line.startsWith('worktree '))?.slice('worktree '.length);
+    const branchRef = lines.find((line) => line.startsWith('branch '))?.slice('branch '.length);
+    const branchName = branchRef?.replace(/^refs\/heads\//, '');
+    if (worktree && branchName === branch) return worktree;
+  }
+  return null;
 }
 
 function broadcastEnv(): void {

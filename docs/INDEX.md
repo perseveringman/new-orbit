@@ -76,6 +76,11 @@ Current forward-looking plans:
    - gateway + Telegram
    - scheduled automation
 
+4. `plans/2026-05-13-personal-memory-intelligence-layer.md`
+   - personal memory intelligence proposal
+   - relation graph / Personal QA / reports
+   - current gap analysis for Today, Dashboard, Review, Journal, Library, Notes, Search, and Memory
+
 Historical plans remain under `plans/2026-*` and should be treated as background unless referenced by current architecture docs.
 
 ---

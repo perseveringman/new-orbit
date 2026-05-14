@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { normalizeTaskStatus } from '@shared/schemas';
+import { normalizeTaskExecutionMode, normalizeTaskStatus, taskExecutionMode } from '@shared/schemas';
 import type { TaskRecord } from '@shared/schemas';
 import type { SearchHit } from '@shared/types';
 import type { ActivityEvent } from '@shared/activity';
@@ -107,6 +107,18 @@ function splitCsv(value: string): string[] {
     .filter(Boolean);
 }
 
+function slugifyCli(input: string): string {
+  return input
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+    .replace(/^-+|-+$/g, '');
+}
+
 function parseLimit(args: string[], fallback = 30): { limit: number; rest: string[] } {
   const rest: string[] = [];
   let limit = fallback;
@@ -209,7 +221,10 @@ function formatTasks(data: unknown): string {
   if (tasks.length === 0) return 'No tasks\n';
   return (
     tasks
-      .map((task) => `${task.status}\t${task.uid ?? task.id}\t${task.title}\t${task.relPath}`)
+      .map(
+        (task) =>
+          `${task.status}\t${taskExecutionMode(task)}\t${task.uid ?? task.id}\t${task.title}\t${task.relPath}`
+      )
       .join('\n') + '\n'
   );
 }
@@ -223,6 +238,7 @@ function formatTaskGet(data: unknown): string {
     [
       `${task.uid ?? task.id}\t${task.title}`,
       `status\t${task.status}`,
+      `mode\t${taskExecutionMode(task)}`,
       `ready\t${readiness?.ready ? 'yes' : 'no'}`,
       readiness?.reason ? `reason\t${readiness.reason}` : '',
       readiness?.detail ? `detail\t${readiness.detail}` : '',
@@ -275,6 +291,8 @@ function formatProjectOverview(data: unknown): string {
     readme_excerpt?: string;
     task_counts?: Record<string, number>;
     key_docs?: string[];
+    coordination_path?: string;
+    workdir_path?: string;
   };
   const project = payload.project;
   if (!project) return 'Project not found\n';
@@ -284,6 +302,8 @@ function formatProjectOverview(data: unknown): string {
   return [
     `${project.slug}\t${project.name}\t${project.status ?? '-'}`,
     project.description ? `description\t${project.description}` : '',
+    payload.coordination_path ? `coordination\t${payload.coordination_path}` : '',
+    payload.workdir_path ? `workdir\t${payload.workdir_path}` : '',
     counts ? `tasks\t${counts}` : 'tasks\t-',
     payload.key_docs?.length ? `key_docs\t${payload.key_docs.join(', ')}` : '',
     payload.readme_excerpt ? `\n${payload.readme_excerpt}` : ''
@@ -444,6 +464,12 @@ function parseTaskList(args: string[]): Record<string, unknown> {
     } else if (arg === '--project') filter['project_uid'] = argvValue(args, ++i, '--project');
     else if (arg === '--area') filter['area_uid'] = argvValue(args, ++i, '--area');
     else if (arg === '--resource') filter['resource_uid'] = argvValue(args, ++i, '--resource');
+    else if (arg === '--mode') {
+      const value = argvValue(args, ++i, '--mode');
+      const mode = normalizeTaskExecutionMode(value);
+      if (!mode) throw usageError(`Unknown task mode: ${value}`);
+      filter['execution_mode'] = mode;
+    }
     else if (arg === '--tag') filter['tag'] = argvValue(args, ++i, '--tag');
     else throw usageError(`Unknown task list option: ${arg}`);
   }
@@ -461,6 +487,12 @@ function parseTaskUpdate(uid: string, args: string[]): Record<string, unknown> {
       patch['status'] = status;
     } else if (arg === '--depends-on')
       patch['depends_on'] = splitCsv(argvValue(args, ++i, '--depends-on'));
+    else if (arg === '--mode') {
+      const value = argvValue(args, ++i, '--mode');
+      const mode = normalizeTaskExecutionMode(value);
+      if (!mode) throw usageError(`Unknown task mode: ${value}`);
+      patch['execution_mode'] = mode;
+    }
     else throw usageError(`Unknown task update option: ${arg}`);
   }
   return patch;
@@ -494,6 +526,13 @@ async function parseTaskPropose(
     else if (arg === '--project') params['project_uid'] = argvValue(rest, ++i, '--project');
     else if (arg === '--area') params['area_uid'] = argvValue(rest, ++i, '--area');
     else if (arg === '--resource') params['resource_uid'] = argvValue(rest, ++i, '--resource');
+    else if (arg === '--conversation') params['conversation_id'] = argvValue(rest, ++i, '--conversation');
+    else if (arg === '--mode') {
+      const value = argvValue(rest, ++i, '--mode');
+      const mode = normalizeTaskExecutionMode(value);
+      if (!mode) throw usageError(`Unknown task mode: ${value}`);
+      params['execution_mode'] = mode;
+    }
     else if (arg === '--run') params['run_id'] = argvValue(rest, ++i, '--run');
     else if (arg === '--during-task')
       params['during_task_uid'] = argvValue(rest, ++i, '--during-task');
@@ -629,6 +668,94 @@ async function runProject(flags: ParsedGlobalFlags, options: CliRunOptions): Pro
     const uid = flags.args[2];
     if (!uid) throw usageError('Usage: orbit project get <uid>');
     return bridgeOutput(flags, options, 'project.get', { uid }, formatGeneric);
+  }
+  if (subcommand === 'link') {
+    const workdirPath = flags.args[2];
+    if (!workdirPath) {
+      throw usageError('Usage: orbit project link <workdir-path> --name NAME [--slug SLUG]');
+    }
+    const args = flags.args.slice(3);
+    const params: Record<string, unknown> = { workdir_path: workdirPath };
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--name') params['name'] = argvValue(args, ++i, '--name');
+      else if (arg === '--slug') params['slug'] = argvValue(args, ++i, '--slug');
+      else if (arg === '--description') params['description'] = argvValue(args, ++i, '--description');
+      else if (arg === '--execution-context') {
+        params['execution_context'] = argvValue(args, ++i, '--execution-context');
+      } else if (arg === '--bridge') params['vendor_bridge_files'] = true;
+      else throw usageError(`Unknown project link option: ${arg}`);
+    }
+    if (typeof params['name'] !== 'string') throw usageError('project link requires --name');
+    if (typeof params['slug'] !== 'string') params['slug'] = slugifyCli(params['name']);
+    return bridgeOutput(flags, options, 'project.link', params, formatGeneric);
+  }
+  if (subcommand === 'scaffold') {
+    const args = flags.args.slice(2);
+    const params: Record<string, unknown> = {};
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--name') params['name'] = argvValue(args, ++i, '--name');
+      else if (arg === '--slug') params['slug'] = argvValue(args, ++i, '--slug');
+      else if (arg === '--parent') params['parent_dir'] = argvValue(args, ++i, '--parent');
+      else if (arg === '--template') params['template'] = argvValue(args, ++i, '--template');
+      else if (arg === '--description') params['description'] = argvValue(args, ++i, '--description');
+      else if (arg === '--execution-context') {
+        params['execution_context'] = argvValue(args, ++i, '--execution-context');
+      } else if (arg === '--bridge') params['vendor_bridge_files'] = true;
+      else throw usageError(`Unknown project scaffold option: ${arg}`);
+    }
+    if (typeof params['name'] !== 'string' || typeof params['parent_dir'] !== 'string') {
+      throw usageError('Usage: orbit project scaffold --name NAME --parent DIR [--slug SLUG]');
+    }
+    if (typeof params['slug'] !== 'string') params['slug'] = slugifyCli(params['name']);
+    return bridgeOutput(flags, options, 'project.scaffold', params, formatGeneric);
+  }
+  if (subcommand === 'relink') {
+    const project = flags.args[2];
+    const workdirPath = flags.args[3];
+    if (!project || !workdirPath) {
+      throw usageError('Usage: orbit project relink <slug-or-uid> <workdir-path>');
+    }
+    const args = flags.args.slice(4);
+    const params: Record<string, unknown> = { project, workdir_path: workdirPath };
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--execution-context') {
+        params['execution_context'] = argvValue(args, ++i, '--execution-context');
+      } else if (arg === '--bridge') params['vendor_bridge_files'] = true;
+      else if (arg === '--isolated') params['vendor_bridge_files'] = false;
+      else throw usageError(`Unknown project relink option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'project.relink', params, formatGeneric);
+  }
+  if (subcommand === 'migrate-workdir') {
+    const project = flags.args[2];
+    const targetDir = flags.args[3];
+    if (!project || !targetDir) {
+      throw usageError('Usage: orbit project migrate-workdir <slug-or-uid> <target-dir>');
+    }
+    const args = flags.args.slice(4);
+    const params: Record<string, unknown> = { project, target_dir: targetDir };
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--remove-copied-files') params['remove_copied_files'] = true;
+      else if (arg === '--no-git') params['initialize_git'] = false;
+      else if (arg === '--execution-context') {
+        params['execution_context'] = argvValue(args, ++i, '--execution-context');
+      } else throw usageError(`Unknown project migrate-workdir option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'project.migrateWorkdir', params, formatGeneric);
+  }
+  if (subcommand === 'workdir') {
+    const slug = flags.args[2];
+    if (!slug) throw usageError('Usage: orbit project workdir <slug-or-uid>');
+    return bridgeOutput(flags, options, 'project.workdir', { slug }, formatGeneric);
+  }
+  if (subcommand === 'probe') {
+    const targetPath = flags.args[2];
+    if (!targetPath) throw usageError('Usage: orbit project probe <path>');
+    return bridgeOutput(flags, options, 'project.probeWorkdir', { path: targetPath }, formatGeneric);
   }
   if (subcommand === 'overview') {
     const slug = flags.args[2];

@@ -136,7 +136,7 @@ async function dirtyProjectSummaries(
       .filter((project) => project.status !== 'archived')
       .map(async (project) => {
         try {
-          const status = await simpleGit(project.path).status();
+          const status = await simpleGit(project.workdirPath ?? project.path).status();
           const count = status.files.length;
           return count > 0 ? { projectName: project.name, uncommittedFiles: count } : null;
         } catch (error) {

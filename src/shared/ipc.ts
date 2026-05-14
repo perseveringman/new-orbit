@@ -360,6 +360,12 @@ export const IPC = {
   },
   project: {
     create: 'project:create',
+    linkExisting: 'project:linkExisting',
+    scaffoldNew: 'project:scaffoldNew',
+    relinkWorkdir: 'project:relinkWorkdir',
+    migrateWorkdir: 'project:migrateWorkdir',
+    probeWorkdir: 'project:probeWorkdir',
+    chooseDirectory: 'project:chooseDirectory',
     list: 'project:list',
     archive: 'project:archive',
     getTasks: 'project:getTasks',
@@ -947,10 +953,56 @@ export interface ProjectSummaryDTO {
   area_uid?: string;
   area_slugs?: string[];
   path: string;
+  coordinationPath: string;
+  workdirPath: string;
+  workdirMissing?: boolean;
   readmePath: string;
   relPath: string;
   legacy: boolean;
   github?: GitHubRepoBinding;
+  git?: ProjectGitInfoDTO;
+  workdir?: ProjectWorkdirRefDTO;
+  execution_context?: ProjectExecutionContextDTO;
+  vendor_bridge_files?: boolean;
+}
+
+export type ProjectExecutionContextDTO = 'worktree' | 'direct' | 'sandbox';
+export type ProjectLinkedViaDTO =
+  | 'link-existing'
+  | 'scaffold-new'
+  | 'legacy-in-vault'
+  | 'migrated-from-vault';
+
+export interface ProjectWorkdirPermissionsDTO {
+  agent_write: boolean;
+  auto_runner: boolean;
+}
+
+export interface ProjectWorkdirRefDTO {
+  path: string;
+  kind: 'local';
+  linked_at: string;
+  linked_via: ProjectLinkedViaDTO;
+  permissions: ProjectWorkdirPermissionsDTO;
+}
+
+export interface ProjectGitInfoDTO {
+  is_repo: boolean;
+  root_path?: string;
+  default_branch?: string;
+  remote_origin?: string;
+  github_binding?: GitHubRepoBinding;
+}
+
+export interface ProjectWorkdirProbeDTO {
+  path: string;
+  exists: boolean;
+  isDirectory: boolean;
+  hasCodeMarkers: boolean;
+  markers: string[];
+  packageManager?: string;
+  git?: ProjectGitInfoDTO;
+  recommendedExecutionContext: ProjectExecutionContextDTO;
 }
 
 export interface AgentExposureSettingsDTO {
@@ -973,11 +1025,65 @@ export interface CreateProjectArgsDTO {
   agent_exposure?: AgentExposureSettingsDTO;
 }
 
+export interface LinkExistingProjectArgsDTO {
+  slug: string;
+  name: string;
+  workdirPath: string;
+  description?: string;
+  uid?: string;
+  area_uid?: string;
+  tags?: string[];
+  execution_context?: ProjectExecutionContextDTO;
+  vendor_bridge_files?: boolean;
+}
+
+export interface ScaffoldNewProjectArgsDTO {
+  slug: string;
+  name: string;
+  parentDir: string;
+  dirName?: string;
+  template: string;
+  description?: string;
+  uid?: string;
+  area_uid?: string;
+  tags?: string[];
+  initializeGit?: boolean;
+  execution_context?: ProjectExecutionContextDTO;
+  vendor_bridge_files?: boolean;
+}
+
+export interface RelinkProjectWorkdirArgsDTO {
+  uid: string;
+  workdirPath: string;
+  execution_context?: ProjectExecutionContextDTO;
+  vendor_bridge_files?: boolean;
+}
+
+export interface MigrateProjectWorkdirArgsDTO {
+  uid: string;
+  targetDir: string;
+  removeCopiedFiles?: boolean;
+  initializeGit?: boolean;
+  execution_context?: ProjectExecutionContextDTO;
+}
+
 export interface CreateProjectResultDTO {
   projectPath: string;
   relPath: string;
   uid: string;
   slug: string;
+}
+
+export interface ProjectWorkdirMutationResultDTO extends CreateProjectResultDTO {
+  workdirPath: string;
+  copiedFiles?: string[];
+  removedFiles?: string[];
+  skippedFiles?: string[];
+}
+
+export interface ChooseDirectoryResultDTO {
+  canceled: boolean;
+  path?: string;
 }
 
 export interface ArchiveProjectResultDTO {
@@ -1001,11 +1107,13 @@ export interface ImportGitHubRepositoryArgsDTO {
   repo: string;
   slug?: string;
   name?: string;
+  targetDir?: string;
   agent_exposure?: AgentExposureSettingsDTO;
 }
 
 export interface ImportGitHubRepositoryResultDTO {
   projectPath: string;
+  workdirPath: string;
   uid: string;
   slug: string;
   binding: GitHubRepoBinding | null;
@@ -1272,6 +1380,12 @@ export interface OrbitApi {
   };
   project: {
     create(args: CreateProjectArgsDTO): Promise<CreateProjectResultDTO>;
+    linkExisting(args: LinkExistingProjectArgsDTO): Promise<CreateProjectResultDTO>;
+    scaffoldNew(args: ScaffoldNewProjectArgsDTO): Promise<CreateProjectResultDTO>;
+    relinkWorkdir(args: RelinkProjectWorkdirArgsDTO): Promise<ProjectWorkdirMutationResultDTO>;
+    migrateWorkdir(args: MigrateProjectWorkdirArgsDTO): Promise<ProjectWorkdirMutationResultDTO>;
+    probeWorkdir(path: string): Promise<ProjectWorkdirProbeDTO>;
+    chooseDirectory(): Promise<ChooseDirectoryResultDTO>;
     list(): Promise<ProjectSummaryDTO[]>;
     archive(uid: string): Promise<ArchiveProjectResultDTO>;
     getTasks(uid: string): Promise<TaskRecord[]>;

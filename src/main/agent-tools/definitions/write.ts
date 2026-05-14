@@ -48,10 +48,10 @@ export const WRITE_TOOL_DEFS: readonly AgentToolDef[] = [
   {
     name: 'orbit_task_update',
     description:
-      'Update a task: status (todo/doing/awaiting_user/done/archived) and/or depends_on. ' +
+      'Update a task: status (backlog/waiting/todo/doing/blocked/done), execution_mode, and/or depends_on. ' +
       'Other frontmatter fields are NOT touched (handler-side whitelist). ' +
       'Use when the user explicitly asks to mark/transition a task or wire up dependencies; ' +
-      'avoid using it to silently move tasks the user has not asked about.',
+      'only set execution_mode=agent when the user explicitly delegates that work to agents.',
     cliMethod: 'task.update',
     destructive: true,
     timeoutMs: 30_000,
@@ -63,7 +63,12 @@ export const WRITE_TOOL_DEFS: readonly AgentToolDef[] = [
         uid: { type: 'string', description: 'Task uid (or slug).' },
         status: {
           type: 'string',
-          description: 'New status (todo / doing / awaiting_user / done / archived).'
+          description: 'New status (backlog / waiting / todo / doing / blocked / done).'
+        },
+        execution_mode: {
+          type: 'string',
+          enum: ['human', 'assisted', 'agent', 'scheduled'],
+          description: 'Who leads this task. Only agent tasks enter the auto-claim queue.'
         },
         depends_on: {
           type: 'array',

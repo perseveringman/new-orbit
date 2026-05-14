@@ -9,7 +9,46 @@ import {
 import type { GitHubRepoBinding } from '@shared/github';
 
 export type AgentExposureMode = 'isolated' | 'bridge' | 'compatible';
-export type ProjectExecutionContext = 'worktree' | 'sandbox';
+export type ProjectExecutionContext = 'worktree' | 'direct' | 'sandbox';
+export type ProjectWorkdirKind = 'local';
+export type ProjectLinkedVia =
+  | 'link-existing'
+  | 'scaffold-new'
+  | 'legacy-in-vault'
+  | 'migrated-from-vault';
+export type ProjectWorktreeRoot = 'workdir-sibling' | 'vault';
+
+export interface ProjectWorkdirPermissions {
+  agent_write: boolean;
+  auto_runner: boolean;
+}
+
+export interface ProjectWorkdirRef {
+  path: string;
+  kind: ProjectWorkdirKind;
+  linked_at: string;
+  linked_via: ProjectLinkedVia;
+  permissions: ProjectWorkdirPermissions;
+}
+
+export interface ProjectGitInfo {
+  is_repo: boolean;
+  root_path?: string;
+  default_branch?: string;
+  remote_origin?: string;
+  github_binding?: GitHubRepoBinding;
+}
+
+export interface ProjectExecutionContextConfig {
+  kind: ProjectExecutionContext;
+  worktree_root: ProjectWorktreeRoot;
+  worktree_dir_name: string;
+}
+
+export interface ProjectWatcherConfig {
+  enabled: boolean;
+  extra_ignores: string[];
+}
 
 export interface AgentExposureSettings {
   mode: AgentExposureMode;
@@ -24,13 +63,18 @@ export interface ProjectConfig {
   uid: string;
   slug: string;
   name?: string;
-  template: string;
-  execution_context: ProjectExecutionContext;
+  type: 'project';
+  template?: string;
+  workdir?: ProjectWorkdirRef;
+  git?: ProjectGitInfo;
+  execution_context: ProjectExecutionContextConfig;
   created_at: string;
   vision_linked?: boolean;
   setup?: string[];
   teardown?: string[];
-  agent_exposure: AgentExposureSettings;
+  vendor_bridge_files: boolean;
+  watcher: ProjectWatcherConfig;
+  agent_exposure?: AgentExposureSettings;
   github?: GitHubRepoBinding;
 }
 
@@ -130,23 +174,118 @@ export function normalizeAgentExposureSettings(raw: unknown): AgentExposureSetti
 }
 
 export function normalizeProjectExecutionContext(raw: unknown): ProjectExecutionContext {
-  return raw === 'sandbox' ? 'sandbox' : 'worktree';
+  return raw === 'sandbox' || raw === 'direct' || raw === 'worktree' ? raw : 'worktree';
+}
+
+export function normalizeProjectExecutionContextConfig(
+  raw: unknown
+): ProjectExecutionContextConfig {
+  if (isRecord(raw)) {
+    return {
+      kind: normalizeProjectExecutionContext(raw['kind']),
+      worktree_root:
+        raw['worktree_root'] === 'vault' || raw['worktree_root'] === 'workdir-sibling'
+          ? raw['worktree_root']
+          : 'workdir-sibling',
+      worktree_dir_name:
+        typeof raw['worktree_dir_name'] === 'string' && raw['worktree_dir_name'].trim()
+          ? raw['worktree_dir_name'].trim()
+          : '.orbit-worktrees'
+    };
+  }
+  return {
+    kind: normalizeProjectExecutionContext(raw),
+    worktree_root: 'workdir-sibling',
+    worktree_dir_name: '.orbit-worktrees'
+  };
+}
+
+function normalizeWorkdirPermissions(raw: unknown): ProjectWorkdirPermissions {
+  const record = isRecord(raw) ? raw : {};
+  return {
+    agent_write:
+      typeof record['agent_write'] === 'boolean' ? record['agent_write'] : true,
+    auto_runner:
+      typeof record['auto_runner'] === 'boolean' ? record['auto_runner'] : true
+  };
+}
+
+function normalizeProjectWorkdir(raw: unknown): ProjectWorkdirRef | undefined {
+  if (!isRecord(raw) || typeof raw['path'] !== 'string' || !raw['path'].trim()) {
+    return undefined;
+  }
+  return {
+    path: raw['path'],
+    kind: raw['kind'] === 'local' ? 'local' : 'local',
+    linked_at:
+      typeof raw['linked_at'] === 'string' ? raw['linked_at'] : new Date(0).toISOString(),
+    linked_via:
+      raw['linked_via'] === 'scaffold-new' ||
+      raw['linked_via'] === 'legacy-in-vault' ||
+      raw['linked_via'] === 'migrated-from-vault' ||
+      raw['linked_via'] === 'link-existing'
+        ? raw['linked_via']
+        : 'link-existing',
+    permissions: normalizeWorkdirPermissions(raw['permissions'])
+  };
+}
+
+function normalizeProjectGitInfo(raw: unknown, legacyGithub?: GitHubRepoBinding): ProjectGitInfo | undefined {
+  if (!isRecord(raw)) {
+    return legacyGithub ? { is_repo: true, github_binding: legacyGithub } : undefined;
+  }
+  const info: ProjectGitInfo = {
+    is_repo: raw['is_repo'] === true
+  };
+  if (typeof raw['root_path'] === 'string') info.root_path = raw['root_path'];
+  if (typeof raw['default_branch'] === 'string') info.default_branch = raw['default_branch'];
+  if (typeof raw['remote_origin'] === 'string') info.remote_origin = raw['remote_origin'];
+  const binding = normalizeGitHubRepoBinding(raw['github_binding']) ?? legacyGithub;
+  if (binding) info.github_binding = binding;
+  return info;
+}
+
+function normalizeWatcherConfig(raw: unknown): ProjectWatcherConfig {
+  const record = isRecord(raw) ? raw : {};
+  return {
+    enabled: typeof record['enabled'] === 'boolean' ? record['enabled'] : true,
+    extra_ignores: isStringArray(record['extra_ignores'])
+  };
+}
+
+export function projectExecutionContextKind(
+  config: Pick<ProjectConfig, 'execution_context'> | null | undefined
+): ProjectExecutionContext {
+  const raw = config?.execution_context as unknown;
+  return isRecord(raw)
+    ? normalizeProjectExecutionContext(raw['kind'])
+    : normalizeProjectExecutionContext(raw);
 }
 
 export function normalizeProjectConfig(raw: unknown): ProjectConfig {
   const record = isRecord(raw) ? raw : {};
+  const legacyGithub = normalizeGitHubRepoBinding(record['github']);
+  const agentExposure = normalizeAgentExposureSettings(record['agent_exposure']);
   return {
     uid: typeof record['uid'] === 'string' ? record['uid'] : '',
     slug: typeof record['slug'] === 'string' ? record['slug'] : '',
     name: typeof record['name'] === 'string' ? record['name'] : undefined,
+    type: 'project',
     template: typeof record['template'] === 'string' ? record['template'] : 'blank',
-    execution_context: normalizeProjectExecutionContext(record['execution_context']),
+    workdir: normalizeProjectWorkdir(record['workdir']),
+    git: normalizeProjectGitInfo(record['git'], legacyGithub),
+    execution_context: normalizeProjectExecutionContextConfig(record['execution_context']),
     created_at: typeof record['created_at'] === 'string' ? record['created_at'] : '',
     vision_linked: typeof record['vision_linked'] === 'boolean' ? record['vision_linked'] : true,
     setup: isStringArray(record['setup']),
     teardown: isStringArray(record['teardown']),
-    agent_exposure: normalizeAgentExposureSettings(record['agent_exposure']),
-    github: normalizeGitHubRepoBinding(record['github'])
+    vendor_bridge_files:
+      typeof record['vendor_bridge_files'] === 'boolean'
+        ? record['vendor_bridge_files']
+        : agentExposure.mode !== 'isolated',
+    watcher: normalizeWatcherConfig(record['watcher']),
+    agent_exposure: agentExposure,
+    github: legacyGithub
   };
 }
 

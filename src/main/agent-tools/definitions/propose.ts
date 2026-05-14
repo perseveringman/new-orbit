@@ -19,7 +19,8 @@ export const PROPOSE_TOOL_DEFS: readonly AgentToolDef[] = [
     description:
       'Propose a NEW task for the user to review in their Inbox. ' +
       'Use when the user agrees a piece of work should become a tracked task. ' +
-      'Requires either project_uid or area_uid (exactly one). ' +
+      'Requires exactly one owner: project_uid, area_uid, or resource_uid. ' +
+      'Default to execution_mode=human unless the user explicitly delegates it to agents. ' +
       'The task is NOT created directly — the user must approve it in the Inbox first.',
     cliMethod: 'task.propose',
     destructive: true,
@@ -42,6 +43,19 @@ export const PROPOSE_TOOL_DEFS: readonly AgentToolDef[] = [
         area_uid: {
           type: 'string',
           description: 'Area uid that owns the task. Mutually exclusive with project_uid.'
+        },
+        resource_uid: {
+          type: 'string',
+          description: 'Resource uid that owns the task. Mutually exclusive with project_uid and area_uid.'
+        },
+        execution_mode: {
+          type: 'string',
+          enum: ['human', 'assisted', 'agent', 'scheduled'],
+          description: 'Who leads the task. Only agent tasks enter the auto-claim queue.'
+        },
+        conversation_id: {
+          type: 'string',
+          description: 'Conversation that produced this task, when available.'
         },
         run_id: {
           type: 'string',

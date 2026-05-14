@@ -1,4 +1,5 @@
 import type { EntitySummary, TaskRecord } from '@shared/schemas';
+import { taskExecutionMode } from '@shared/schemas';
 import type { SearchHit } from '@shared/types';
 
 export interface TaskDocumentContext {
@@ -23,6 +24,7 @@ export function buildTaskContext({ task, entities, taskDocument }: TaskContextAr
   lines.push(`Task: ${task.title}`);
   lines.push(`- id: ${task.id}`);
   lines.push(`- status: ${task.status}`);
+  lines.push(`- execution_mode: ${taskExecutionMode(task)}`);
   lines.push(`- source: ${task.source}`);
   lines.push(`- file: ${task.relPath}`);
   if (task.uid) lines.push(`- uid: ${task.uid}`);

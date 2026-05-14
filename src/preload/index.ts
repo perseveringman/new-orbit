@@ -5,6 +5,7 @@ import {
   type DispatchEventDTO,
   type AreaConfigDTO,
   type CloseProjectResult,
+  type ChooseDirectoryResultDTO,
   type CreateAreaArgsDTO,
   type CreateGitHubPullRequestArgsDTO,
   type CreateProjectArgsDTO,
@@ -22,11 +23,17 @@ import {
   type ImportGitHubRepositoryArgsDTO,
   type ImportGitHubRepositoryResultDTO,
   type JournalListItemDTO,
+  type LinkExistingProjectArgsDTO,
+  type MigrateProjectWorkdirArgsDTO,
   type OrbitApi,
   type OrphanRescueCandidate,
   type PublishProjectToGitHubArgsDTO,
   type ProjectSummaryDTO,
+  type ProjectWorkdirMutationResultDTO,
+  type ProjectWorkdirProbeDTO,
+  type RelinkProjectWorkdirArgsDTO,
   type RoleEventDTO,
+  type ScaffoldNewProjectArgsDTO,
   type SearchOpts,
   type TemplateMetaDTO,
   type TerminalAgentSessionDetailDTO,
@@ -269,6 +276,22 @@ const api: OrbitApi = {
   project: {
     create: (args: CreateProjectArgsDTO): Promise<CreateProjectResultDTO> =>
       ipcRenderer.invoke(IPC.project.create, args),
+    linkExisting: (args: LinkExistingProjectArgsDTO): Promise<CreateProjectResultDTO> =>
+      ipcRenderer.invoke(IPC.project.linkExisting, args),
+    scaffoldNew: (args: ScaffoldNewProjectArgsDTO): Promise<CreateProjectResultDTO> =>
+      ipcRenderer.invoke(IPC.project.scaffoldNew, args),
+    relinkWorkdir: (
+      args: RelinkProjectWorkdirArgsDTO
+    ): Promise<ProjectWorkdirMutationResultDTO> =>
+      ipcRenderer.invoke(IPC.project.relinkWorkdir, args),
+    migrateWorkdir: (
+      args: MigrateProjectWorkdirArgsDTO
+    ): Promise<ProjectWorkdirMutationResultDTO> =>
+      ipcRenderer.invoke(IPC.project.migrateWorkdir, args),
+    probeWorkdir: (workdirPath: string): Promise<ProjectWorkdirProbeDTO> =>
+      ipcRenderer.invoke(IPC.project.probeWorkdir, workdirPath),
+    chooseDirectory: (): Promise<ChooseDirectoryResultDTO> =>
+      ipcRenderer.invoke(IPC.project.chooseDirectory),
     list: (): Promise<ProjectSummaryDTO[]> => ipcRenderer.invoke(IPC.project.list),
     archive: (uid: string): Promise<ArchiveProjectResultDTO> =>
       ipcRenderer.invoke(IPC.project.archive, uid),

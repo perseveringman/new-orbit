@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskRecord } from '../src/shared/schemas';
-import { buildReadySet, taskReadyState } from '../src/main/auto_runner/ready_set';
+import { buildClaimableReadySet, buildReadySet, taskReadyState } from '../src/main/auto_runner/ready_set';
 
 function task(overrides: Partial<TaskRecord>): TaskRecord {
   return {
@@ -50,5 +50,21 @@ describe('auto-runner ready set', () => {
 
     expect(set.ready.map((entry) => entry.task.uid)).toEqual(['ready', 'waiting']);
     expect(set.blocked.map((entry) => entry.task.uid)).toEqual(['done']);
+  });
+
+  it('keeps human-led tasks out of the agent claim queue', () => {
+    const set = buildClaimableReadySet([
+      task({ uid: 'human', execution_mode: 'human' }),
+      task({ uid: 'assisted', execution_mode: 'assisted' }),
+      task({ uid: 'scheduled', execution_mode: 'scheduled' }),
+      task({ uid: 'agent', execution_mode: 'agent' })
+    ]);
+
+    expect(set.ready.map((entry) => entry.task.uid)).toEqual(['agent']);
+    expect(set.blocked.map((entry) => [entry.task.uid, entry.readiness.reason])).toEqual([
+      ['human', 'not_agent_claimable'],
+      ['assisted', 'not_agent_claimable'],
+      ['scheduled', 'not_agent_claimable']
+    ]);
   });
 });

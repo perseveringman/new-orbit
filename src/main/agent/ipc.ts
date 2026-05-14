@@ -66,6 +66,8 @@ import {
 } from './claude_sessions';
 import { readCodexSessionMessages } from './codex_sessions';
 import { listProjects } from '../project';
+import { readProjectConfig } from '../project_config';
+import { resolveProjectWorkdir } from '../project_workdir';
 import { listAreas } from '../area';
 import { readTaskFile } from '../task';
 import { getLocalRuntimeManager } from '../orchestration/runtime';
@@ -190,7 +192,7 @@ async function resolveTerminalRoom(
 ): Promise<{ kind: 'project' | 'area'; path: string } | null> {
   const [projects, areas] = await Promise.all([listProjects(vaultPath), listAreas(vaultPath)]);
   const project = projects.find((item) => item.uid === uid);
-  if (project) return { kind: 'project', path: project.path };
+  if (project) return { kind: 'project', path: project.workdirPath ?? project.path };
   const area = areas.find((item) => item.uid === uid);
   if (area) return { kind: 'area', path: area.path };
   return null;
@@ -205,7 +207,11 @@ async function resolveTaskCwd(
   if (task.project_uid) {
     const projects = await listProjects(vaultPath);
     const project = projects.find((item) => item.uid === task.project_uid);
-    if (project) return project.legacy ? path.dirname(project.path) : project.path;
+    if (project) {
+      if (project.legacy) return path.dirname(project.path);
+      const config = await readProjectConfig(project.coordinationPath);
+      return resolveProjectWorkdir(project.coordinationPath, config);
+    }
   }
   if (task.area_uid) {
     const areas = await listAreas(vaultPath);
@@ -698,7 +704,11 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
 
   const cwd = await resolveTaskCwd(sess.vault, task, args.worktreePath);
 
-  const safety = SafetyGate.check({ cwd, prompt, vaultPath: sess.vault });
+  const linkedWorkdirs = (await listProjects(sess.vault))
+    .map((project) => project.workdirPath)
+    .filter(Boolean);
+  if (args.worktreePath) linkedWorkdirs.push(args.worktreePath);
+  const safety = SafetyGate.check({ cwd, prompt, vaultPath: sess.vault, linkedWorkdirs });
   if (!safety.ok) {
     return {
       kind: 'error',
@@ -714,6 +724,12 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       extraEnv['ORBIT_PORT'] = String(port);
       extraEnv['PORT'] = String(port);
     }
+    const cwdResolved = path.resolve(cwd);
+    const vaultResolved = path.resolve(sess.vault);
+    const canWriteVendorHooks =
+      Boolean(args.worktreePath) ||
+      cwdResolved === vaultResolved ||
+      cwdResolved.startsWith(vaultResolved + path.sep);
     const spawnOpts = {
       claudePath: detect.path,
       prompt,
@@ -726,7 +742,7 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
         runtimeName: runtime?.name,
         vendorSessionId: args.vendorSessionId,
         inputMode: args.vendorSessionId ? 'stream-json' : 'one-shot',
-        hookConfig: await getHookRuntimeConfig(),
+        hookConfig: canWriteVendorHooks ? await getHookRuntimeConfig() : undefined,
         extraEnv
     } as const;
     const opts = apiKey ? { ...spawnOpts, apiKey } : { ...spawnOpts };

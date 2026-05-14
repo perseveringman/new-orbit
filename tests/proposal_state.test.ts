@@ -50,7 +50,7 @@ describe('proposal state machine', () => {
         ...proposal(),
         payload: { title: 'Missing owner' }
       })
-    ).toThrow(/project_uid or area_uid/);
+    ).toThrow(/project_uid, area_uid, or resource_uid/);
 
     expect(() =>
       ProposalSchema.parse({

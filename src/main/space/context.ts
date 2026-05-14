@@ -69,7 +69,11 @@ export async function listSpaces(vaultPath: string, filter: { type?: SpaceType }
         updated_at: project.created_at ?? new Date(0).toISOString(),
         tags: project.tags ?? [],
         ...(project.area_uid ? { primary_area_uid: project.area_uid } : {}),
-        execution_context: project.template === 'research' || project.template === 'writing' ? 'sandbox' : 'worktree'
+        execution_context: project.execution_context ?? 'worktree',
+        workdir: {
+          path: project.workdirPath,
+          ...(project.workdirMissing ? { missing: true } : {})
+        }
       },
       path: project.path,
       relPath: project.relPath
@@ -136,7 +140,11 @@ async function resolveSpace(vaultPath: string, spaceId: string): Promise<Resolve
         ...(project.archived_at ? { archived_at: project.archived_at } : {}),
         ...(project.area_uid ? { primary_area_uid: project.area_uid } : {}),
         tags: project.tags ?? [],
-        execution_context: project.template === 'research' || project.template === 'writing' ? 'sandbox' : 'worktree'
+        execution_context: project.execution_context ?? 'worktree',
+        workdir: {
+          path: project.workdirPath,
+          ...(project.workdirMissing ? { missing: true } : {})
+        }
       }
     };
   }

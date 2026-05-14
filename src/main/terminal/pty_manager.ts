@@ -232,7 +232,17 @@ export async function openSession(args: OpenSessionArgs): Promise<SessionInfo> {
   if (!stat.isDirectory()) throw new Error(`cwd is not a directory: ${absCwd}`);
   if (vaultRootGuard) {
     const rootAbs = path.resolve(vaultRootGuard);
-    if (absCwd !== rootAbs && !isPathInside(absCwd, rootAbs)) {
+    const extraRoots = [
+      args.env?.['ORBIT_PROJECT_WORKDIR'],
+      args.env?.['ORBIT_WORKDIR_PATH']
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => path.resolve(value));
+    const insideAllowedRoot =
+      absCwd === rootAbs ||
+      isPathInside(absCwd, rootAbs) ||
+      extraRoots.some((root) => absCwd === root || isPathInside(absCwd, root));
+    if (!insideAllowedRoot) {
       throw new Error(`cwd escapes vault: ${absCwd}`);
     }
   }

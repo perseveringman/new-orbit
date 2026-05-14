@@ -10,6 +10,8 @@ const projects: ProjectSummaryDTO[] = [
     name: 'Orbit',
     status: 'active',
     path: '/tmp/orbit',
+    coordinationPath: '/tmp/orbit',
+    workdirPath: '/tmp/orbit',
     readmePath: '/tmp/orbit/README.md',
     relPath: '01_Projects/orbit',
     legacy: false

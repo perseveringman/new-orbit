@@ -112,6 +112,15 @@ export function tasksOfFile(
     if (tags) rec.tags = tags;
     const priority = asString(data['priority']);
     if (priority === 'low' || priority === 'med' || priority === 'high') rec.priority = priority;
+    const executionMode = asString(data['execution_mode']);
+    if (
+      executionMode === 'human' ||
+      executionMode === 'assisted' ||
+      executionMode === 'agent' ||
+      executionMode === 'scheduled'
+    ) {
+      rec.execution_mode = executionMode;
+    }
     const executionStrategy = asString(data['execution_strategy']);
     if (executionStrategy === 'manual' || executionStrategy === 'autonomous') {
       rec.execution_strategy = executionStrategy;
@@ -152,6 +161,10 @@ export function tasksOfFile(
     if (parentTaskUid) rec.parent_task_uid = parentTaskUid;
     const generatedFromTaskUid = asString(data['generated_from_task_uid']);
     if (generatedFromTaskUid) rec.generated_from_task_uid = generatedFromTaskUid;
+    const sourceConversationId = asString(data['source_conversation_id']);
+    if (sourceConversationId) rec.source_conversation_id = sourceConversationId;
+    const conversationIds = asStringArr(data['conversation_ids']);
+    if (conversationIds) rec.conversation_ids = conversationIds;
     rec.depends_on = asStringArr(data['depends_on']) ?? [];
     const derivedFrom = asNullableString(data['derived_from']);
     rec.derived_from = derivedFrom ?? null;

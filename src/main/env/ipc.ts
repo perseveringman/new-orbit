@@ -1,9 +1,12 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { EnvQueueStatus, InstallResult } from '@shared/git';
+import type { WorktreeRecord } from '@shared/git';
 import { currentSession } from '../fs';
 import { getInstallLock, type PackageManager } from './install_lock';
 import { WorktreeManager } from '../git/worktree';
+import { createExecutionContextForProject } from '../execution';
+import { listProjects } from '../project';
 
 let wired = false;
 
@@ -32,8 +35,7 @@ export function registerEnvIpc(): void {
     ): Promise<InstallResult> => {
       const sess = currentSession();
       if (!sess) throw new Error('no vault');
-      const mgr = new WorktreeManager({ vault: sess.vault });
-      const rec = await mgr.get(args.worktreeId);
+      const rec = await findInstallWorktreeRecord(sess.vault, args.worktreeId);
       if (!rec) throw new Error(`worktree not found: ${args.worktreeId}`);
       const installArgs = {
         vaultPath: sess.vault,
@@ -45,4 +47,24 @@ export function registerEnvIpc(): void {
       return getInstallLock().enqueue(installArgs);
     }
   );
+}
+
+export async function findInstallWorktreeRecord(
+  vault: string,
+  worktreeId: string
+): Promise<WorktreeRecord | null> {
+  const vaultManager = new WorktreeManager({ vault });
+  const legacyRecord = await vaultManager.get(worktreeId);
+  if (legacyRecord) return legacyRecord;
+
+  const projects = await listProjects(vault);
+  for (const project of projects) {
+    if (project.legacy) continue;
+    const context = await createExecutionContextForProject(project.coordinationPath, {
+      vaultPath: vault
+    });
+    const record = await context.get(worktreeId);
+    if (record) return record;
+  }
+  return null;
 }

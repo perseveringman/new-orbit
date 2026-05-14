@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
+import { taskExecutionMode } from '@shared/schemas';
 import type { DistillSuggestHit } from '@shared/ipc';
 import { useFiles } from '../store/files';
 import { useAgent } from '../store/agent';
@@ -38,6 +39,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
   const [useWorktree, setUseWorktree] = useState<boolean>(defaultWorktree);
   const [expanded, setExpanded] = useState(false);
   const [hits, setHits] = useState<DistillSuggestHit[] | null>(null);
+  const mode = taskExecutionMode(task);
 
   useEffect(() => {
     if (!expanded) return;
@@ -81,6 +83,29 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
                 {task.origin === 'agent' ? '🤖' : task.origin === 'system' ? '⚙️' : '📥'} {task.origin}
               </span>
             )}
+            <span
+              title={
+                mode === 'agent'
+                  ? 'Agent can claim this task when it is ready.'
+                  : mode === 'assisted'
+                    ? 'Human-led task that can use AI in conversation.'
+                    : mode === 'scheduled'
+                      ? 'Schedule-triggered task.'
+                      : 'Human-led task.'
+              }
+              className={
+                'rounded px-1.5 py-0.5 text-[10px] font-medium ' +
+                (mode === 'agent'
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                  : mode === 'assisted'
+                    ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+                    : mode === 'scheduled'
+                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      : 'bg-neutral-500/15 text-neutral-600 dark:text-neutral-300')
+              }
+            >
+              {mode}
+            </span>
             {task.owner_type && task.owner_id && (
               <span
                 title={`Owner: ${task.owner_type} (${task.owner_id})`}

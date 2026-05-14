@@ -25,6 +25,7 @@ export function ChangesPanel(): JSX.Element {
     () => (view.kind === 'project' ? projects.find((item) => item.uid === activeProjectUid) ?? null : null),
     [activeProjectUid, projects, view.kind]
   );
+  const projectCwd = project?.workdirPath ?? project?.path;
 
   const [summary, setSummary] = useState<ChangesSummary | null>(null);
   const [diffFiles, setDiffFiles] = useState<DiffFile[]>([]);
@@ -39,7 +40,7 @@ export function ChangesPanel(): JSX.Element {
 
   const load = useCallback(async () => {
     const token = ++loadTokenRef.current;
-    if (!project?.path) {
+    if (!project?.uid || !projectCwd) {
       if (token !== loadTokenRef.current) return;
       setSummary({ dirty: false, stagedCount: 0, unstagedCount: 0, untrackedCount: 0, files: [] });
       setDiffFiles([]);
@@ -53,9 +54,9 @@ export function ChangesPanel(): JSX.Element {
     setError(null);
     try {
       const [nextSummary, nextDiffFiles, nextGitStatus, nextGitHubState] = await Promise.all([
-        window.orbit.git.getChanges({ cwd: project.path }),
-        window.orbit.git.getWorkingTreeDiff({ cwd: project.path }),
-        window.orbit.git.status({ cwd: project.path }),
+        window.orbit.git.getChanges({ cwd: projectCwd }),
+        window.orbit.git.getWorkingTreeDiff({ cwd: projectCwd }),
+        window.orbit.git.status({ cwd: projectCwd }),
         window.orbit.github.getProjectState(project.uid).catch(() => null)
       ]);
 
@@ -77,7 +78,7 @@ export function ChangesPanel(): JSX.Element {
         setLoading(false);
       }
     }
-  }, [inspector, project?.path, project?.uid]);
+  }, [inspector, project?.uid, projectCwd]);
 
   useEffect(() => {
     void load();
@@ -113,13 +114,13 @@ export function ChangesPanel(): JSX.Element {
   );
 
   const handleStage = (path: string): void => {
-    if (!project?.path) return;
-    void runFileAction(path, () => window.orbit.git.stagePaths({ cwd: project.path, paths: [path] }));
+    if (!projectCwd) return;
+    void runFileAction(path, () => window.orbit.git.stagePaths({ cwd: projectCwd, paths: [path] }));
   };
 
   const handleUnstage = (path: string): void => {
-    if (!project?.path) return;
-    void runFileAction(path, () => window.orbit.git.unstagePaths({ cwd: project.path, paths: [path] }));
+    if (!projectCwd) return;
+    void runFileAction(path, () => window.orbit.git.unstagePaths({ cwd: projectCwd, paths: [path] }));
   };
 
   const handleDiscard = (path: string): void => {
@@ -128,17 +129,17 @@ export function ChangesPanel(): JSX.Element {
       setPendingDiscardPath(path);
       return;
     }
-    if (!project?.path) return;
-    void runFileAction(path, () => window.orbit.git.discardPaths({ cwd: project.path, paths: [path] }));
+    if (!projectCwd) return;
+    void runFileAction(path, () => window.orbit.git.discardPaths({ cwd: projectCwd, paths: [path] }));
   };
 
   const handleConfirmDiscard = (path: string): void => {
-    if (!project?.path) return;
-    void runFileAction(path, () => window.orbit.git.discardPaths({ cwd: project.path, paths: [path] }));
+    if (!projectCwd) return;
+    void runFileAction(path, () => window.orbit.git.discardPaths({ cwd: projectCwd, paths: [path] }));
   };
 
   const handleCommit = (): void => {
-    if (!project?.path) return;
+    if (!projectCwd) return;
     const message = inspector.commitMessage?.trim() ?? '';
     if (!message) {
       toast('Commit message is required');
@@ -148,7 +149,7 @@ export function ChangesPanel(): JSX.Element {
     setBusyAction('commit');
     void (async () => {
       try {
-        const result = await window.orbit.git.commitSelection({ cwd: project.path, message });
+        const result = await window.orbit.git.commitSelection({ cwd: projectCwd, message });
         inspector.setCommitMessage?.('');
         toast(`Committed ${result.sha.slice(0, 7)}`);
         await load();

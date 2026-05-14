@@ -104,16 +104,11 @@ Vault root:
     └── worktrees/
 ```
 
-Folder-backed project:
+Folder-backed project coordination directory:
 
 ```text
 01_Projects/<slug>/
 ├── README.md
-├── AGENT.md
-├── CLAUDE.md
-├── CODEX.md
-├── GEMINI.md
-├── .git/
 └── .orbit/
     ├── config.json
     ├── agent/
@@ -133,7 +128,29 @@ Folder-backed project:
         └── manifest.json
 ```
 
-Orbit 不再自动写入 `.mcp.json`，project bridge 仅用于 `AGENT.md` / `AGENTS.md` 兼容暴露。
+Project code and build commands live in the linked workdir declared by
+`01_Projects/<slug>/.orbit/config.json`:
+
+```json
+{
+  "workdir": {
+    "path": "/absolute/path/to/code",
+    "linked_via": "link-existing | scaffold-new | legacy-in-vault | migrated-from-vault"
+  },
+  "execution_context": {
+    "kind": "worktree | direct | sandbox",
+    "worktree_root": "workdir-sibling | vault",
+    "worktree_dir_name": ".orbit-worktrees"
+  }
+}
+```
+
+Legacy projects may still have `workdir.path === 01_Projects/<slug>`, but new UI
+entry points prefer either linking an existing code directory or scaffolding a
+new workdir outside the vault coordination folder. Project Room also exposes
+relink and legacy migration actions for changing `workdir.path` after creation.
+Orbit 不再自动写入 `.mcp.json`；project bridge 仅用于 `AGENT.md` / `AGENTS.md`
+兼容暴露。
 
 ## 5. File, refmap, and task index
 
@@ -170,7 +187,12 @@ Phase 4.0 separates project-level task state from execution-level agent session 
 - `WorktreeExecutionContext` adapts existing ghost worktree behavior.
 - `SandboxExecutionContext` is intentionally unsupported in this milestone and fails clearly.
 
-Project config (`.orbit/config.json`) stores `execution_context: "worktree" | "sandbox"`, defaulting to `worktree`.
+Project config (`.orbit/config.json`) stores `execution_context.kind` as
+`"worktree" | "direct" | "sandbox"`, defaulting to `worktree`. The execution
+root is resolved from the project coordination directory to its linked
+`workdir.path`; worktree projects create ghost worktrees beside the workdir by
+default, while direct projects run agents in the workdir without creating a
+worktree.
 
 `src/main/agent/runner.ts` still executes Claude Code, while `src/main/agent/adapter/`
 adds the Phase 3 runtime adapter layer:

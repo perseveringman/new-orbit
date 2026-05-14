@@ -145,6 +145,85 @@ describe('github integration core', () => {
     ).resolves.toContain('"template": "imported-github"');
   });
 
+  it('imports a GitHub repository into an external workdir with vault coordination metadata', async () => {
+    const externalRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-github-external-'));
+    try {
+      const targetDir = path.join(externalRoot, 'external-kit');
+      const ghCwds: Array<string | undefined> = [];
+      const imported = await importGitHubRepository(
+        vault,
+        {
+          owner: 'acme',
+          repo: 'external-kit',
+          targetDir
+        },
+        {
+          cloneRepo: async (_fullName, cloneTargetDir) => {
+            await fs.mkdir(cloneTargetDir, { recursive: true });
+            await fs.writeFile(
+              path.join(cloneTargetDir, 'README.md'),
+              '# External Kit\n\nImported repo.\n',
+              'utf8'
+            );
+            await fs.writeFile(
+              path.join(cloneTargetDir, 'package.json'),
+              '{"name":"external-kit"}\n',
+              'utf8'
+            );
+            const git = simpleGit(cloneTargetDir);
+            await git.init();
+            await git.addConfig('user.name', 'Orbit', false, 'local').catch(() => undefined);
+            await git
+              .addConfig('user.email', 'orbit@localhost', false, 'local')
+              .catch(() => undefined);
+            await git.add('.');
+            await git.commit('init');
+            await git.addRemote('origin', 'git@github.com:acme/external-kit.git');
+          },
+          runGh: async (args, cwd) => {
+            ghCwds.push(cwd);
+            if (args[0] === 'repo' && args[1] === 'view') {
+              return {
+                stdout: JSON.stringify({
+                  nameWithOwner: 'acme/external-kit',
+                  url: 'https://github.com/acme/external-kit',
+                  sshUrl: 'git@github.com:acme/external-kit.git',
+                  visibility: 'PUBLIC',
+                  defaultBranchRef: { name: 'main' }
+                }),
+                code: 0
+              };
+            }
+            throw new Error(`unexpected gh command: ${args.join(' ')}`);
+          }
+        }
+      );
+
+      expect(imported.projectPath).toBe(path.join(vault, '01_Projects', 'external-kit'));
+      expect(imported.workdirPath).toBe(targetDir);
+      expect(ghCwds.filter(Boolean)).toEqual([targetDir]);
+
+      const config = await readProjectConfig(imported.projectPath);
+      expect(config?.workdir).toMatchObject({
+        path: targetDir,
+        linked_via: 'link-existing'
+      });
+      expect(config?.github).toMatchObject({
+        fullName: 'acme/external-kit'
+      });
+      const coordinationReadme = await fs.readFile(
+        path.join(imported.projectPath, 'README.md'),
+        'utf8'
+      );
+      expect(coordinationReadme).toContain(`- Path: \`${targetDir}\``);
+      await expect(fs.readFile(path.join(targetDir, 'README.md'), 'utf8')).resolves.toContain(
+        '# External Kit'
+      );
+    } finally {
+      await fs.rm(externalRoot, { recursive: true, force: true });
+    }
+  });
+
   it('keeps the Orbit uid authoritative when an imported repo already has README frontmatter', async () => {
     const ghDeps = {
       cloneRepo: async (_fullName: string, targetDir: string) => {

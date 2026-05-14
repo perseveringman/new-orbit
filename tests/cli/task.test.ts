@@ -28,7 +28,7 @@ describe('CLI task commands', () => {
       EXIT_SUCCESS
     );
     await expect(
-      runCli(['task', 'update', 'task_1', '--status', 'done', '--depends-on', 'a,b'], {
+      runCli(['task', 'update', 'task_1', '--status', 'done', '--mode', 'assisted', '--depends-on', 'a,b'], {
         ...io.options,
         bridge
       })
@@ -62,6 +62,7 @@ describe('CLI task commands', () => {
     expect(bridge.calls[2]?.params).toEqual({
       uid: 'task_1',
       status: 'done',
+      execution_mode: 'assisted',
       depends_on: ['a', 'b']
     });
     expect(bridge.calls[6]?.params).toEqual({
@@ -79,7 +80,7 @@ describe('CLI task commands', () => {
     });
 
     await expect(
-      runCli(['task', 'propose', '--title', 'New task', '--area', 'area_1', '--run', 'run_1'], {
+      runCli(['task', 'propose', '--title', 'New task', '--area', 'area_1', '--mode', 'agent', '--run', 'run_1'], {
         ...io.options,
         bridge,
         stdin: 'details'
@@ -107,6 +108,7 @@ describe('CLI task commands', () => {
     expect(bridge.calls[0]?.params).toEqual({
       title: 'New task',
       area_uid: 'area_1',
+      execution_mode: 'agent',
       run_id: 'run_1',
       description: 'details'
     });

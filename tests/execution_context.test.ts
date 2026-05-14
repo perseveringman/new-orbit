@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { simpleGit } from 'simple-git';
 import type { ResetAllResult, WorktreeRecord } from '../src/shared/git';
 import type { WorktreeManager } from '../src/main/git/worktree';
 import {
@@ -9,6 +11,8 @@ import {
   WorktreeExecutionContext
 } from '../src/main/execution';
 import { writeProjectConfig } from '../src/main/project_config';
+import { createVault } from '../src/main/vault';
+import { createTask, linkExistingProject } from '../src/main/project';
 
 function createRecord(id: string): WorktreeRecord {
   return {
@@ -54,8 +58,8 @@ function stubWorktreeManager(): { manager: WorktreeManager; calls: string[] } {
 describe('ExecutionContext', () => {
   it('selects worktree by default and preserves sandbox opt-in', () => {
     expect(selectExecutionContextKind(null)).toBe('worktree');
-    expect(selectExecutionContextKind({ execution_context: 'worktree' })).toBe('worktree');
-    expect(selectExecutionContextKind({ execution_context: 'sandbox' })).toBe('sandbox');
+    expect(selectExecutionContextKind({ execution_context: executionContext('worktree') })).toBe('worktree');
+    expect(selectExecutionContextKind({ execution_context: executionContext('sandbox') })).toBe('sandbox');
   });
 
   it('WorktreeExecutionContext delegates to WorktreeManager without changing behavior', async () => {
@@ -81,12 +85,15 @@ describe('ExecutionContext', () => {
         uid: 'project-1',
         slug: 'project-1',
         name: 'Project 1',
+        type: 'project',
         template: 'blank',
-        execution_context: 'sandbox',
+        execution_context: executionContext('sandbox'),
         created_at: '2026-04-26T00:00:00.000Z',
         vision_linked: true,
         setup: [],
         teardown: [],
+        vendor_bridge_files: false,
+        watcher: { enabled: true, extra_ignores: [] },
         agent_exposure: {
           mode: 'isolated',
           exposeAgentMdBridge: false,
@@ -106,4 +113,54 @@ describe('ExecutionContext', () => {
       await fs.rm(projectDir, { recursive: true, force: true });
     }
   });
+
+  it('creates worktrees beside an external project workdir', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-external-worktree-'));
+    const vault = path.join(root, 'vault');
+    const repo = path.join(root, 'external-repo');
+    try {
+      await createVault(vault);
+      await fs.mkdir(repo, { recursive: true });
+      await fs.writeFile(path.join(repo, 'package.json'), '{"name":"external-repo"}\n', 'utf8');
+      const git = simpleGit(repo);
+      await git.init();
+      await git.addConfig('user.name', 'Orbit', false, 'local').catch(() => undefined);
+      await git.addConfig('user.email', 'orbit@localhost', false, 'local').catch(() => undefined);
+      await git.add('.');
+      await git.commit('init');
+      await git.branch(['-M', 'main']);
+
+      const project = await linkExistingProject(vault, {
+        slug: 'external-repo',
+        name: 'External Repo',
+        workdirPath: repo,
+        execution_context: 'worktree'
+      });
+      const task = await createTask(vault, {
+        project_uid: project.uid,
+        title: 'Use external worktree'
+      });
+      const context = await createExecutionContextForProject(project.projectPath, {
+        vaultPath: vault
+      });
+      const record = await context.create({ taskId: task.uid });
+
+      expect(record.path).toContain(path.join(root, '.orbit-worktrees', 'external-repo'));
+      await expect(fs.readFile(path.join(record.path, 'package.json'), 'utf8')).resolves.toContain(
+        'external-repo'
+      );
+
+      await context.remove(record.id, { force: true });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });
+
+function executionContext(kind: 'worktree' | 'direct' | 'sandbox') {
+  return {
+    kind,
+    worktree_root: 'workdir-sibling' as const,
+    worktree_dir_name: '.orbit-worktrees'
+  };
+}

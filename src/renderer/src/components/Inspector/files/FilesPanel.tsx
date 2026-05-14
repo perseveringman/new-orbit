@@ -71,13 +71,14 @@ export function FilesPanel(): JSX.Element {
   const activeProject = isProjectSurface
     ? projects.find((p) => p.uid === activeProjectUid)
     : null;
+  const activeProjectRoot = activeProject?.workdirPath ?? activeProject?.path;
 
   // Load the full project tree whenever we enter a project surface.
   useEffect(() => {
-    if (isProjectSurface && activeProject?.path) {
-      void refreshProjectTree(activeProject.path);
+    if (isProjectSurface && activeProjectRoot) {
+      void refreshProjectTree(activeProjectRoot);
     }
-  }, [isProjectSurface, activeProject?.path]);
+  }, [isProjectSurface, activeProjectRoot]);
 
   // Choose the tree source: project surfaces use the full project tree,
   // other surfaces use the existing vault markdown tree adapted to the shared shape.
@@ -90,8 +91,8 @@ export function FilesPanel(): JSX.Element {
   const filteredTree = rawTree ? applyFileQuery(rawTree, fileQuery) : null;
 
   function handleRefresh(): void {
-    if (isProjectSurface && activeProject?.path) {
-      void refreshProjectTree(activeProject.path);
+    if (isProjectSurface && activeProjectRoot) {
+      void refreshProjectTree(activeProjectRoot);
     }
   }
 
@@ -117,7 +118,9 @@ export function FilesPanel(): JSX.Element {
 
       {/* Tree body */}
       <div className={`flex-1 overflow-y-auto ${INSPECTOR_THEME.body}`}>
-        {filteredTree ? (
+        {isProjectSurface && activeProject?.workdirMissing ? (
+          <p className={`p-3 text-xs text-red-400`}>Linked workdir is missing.</p>
+        ) : filteredTree ? (
           <FilesTree root={filteredTree} />
         ) : isProjectSurface && projectTreeError ? (
           <p className={`p-3 text-xs text-red-400`}>{projectTreeError}</p>

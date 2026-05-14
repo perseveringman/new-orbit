@@ -2,4 +2,4 @@ export { AutoRunnerDispatcher, getAutoRunnerDispatcher, resetAutoRunnerDispatche
 export { AutoRunnerEventBridge } from './event_bridge';
 export { schedulerDecision, startsInCurrentHour, launchCapacity } from './scheduler';
 export { readAutoRunnerSettings, setAutoRunnerEnabled, updateAutoRunnerConfig } from './settings';
-export { buildReadySet, taskReadyState } from './ready_set';
+export { buildClaimableReadySet, buildReadySet, taskReadyState } from './ready_set';

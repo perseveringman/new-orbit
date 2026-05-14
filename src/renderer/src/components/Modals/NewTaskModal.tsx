@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { TaskRecord } from '@shared/schemas';
+import type { TaskExecutionMode, TaskRecord } from '@shared/schemas';
+import { TASK_EXECUTION_MODES } from '@shared/schemas';
 import type { CreateTaskResultDTO } from '@shared/ipc';
 import { useFiles } from '../../store/files';
 
@@ -31,6 +32,12 @@ const btnPrimary =
   'rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40';
 
 const PRIORITIES = ['', 'low', 'med', 'high'] as const;
+const MODE_COPY: Record<TaskExecutionMode, string> = {
+  human: 'I do it myself',
+  assisted: 'I lead, AI helps in conversation',
+  agent: 'Agent may claim when ready',
+  scheduled: 'Triggered by a schedule'
+};
 
 export function NewTaskModal({
   open,
@@ -45,6 +52,7 @@ export function NewTaskModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<string>('');
+  const [executionMode, setExecutionMode] = useState<TaskExecutionMode>('human');
   const [due, setDue] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -57,6 +65,7 @@ export function NewTaskModal({
     setTitle('');
     setDescription('');
     setPriority('');
+    setExecutionMode('human');
     setDue('');
     setTagInput('');
     setTags([]);
@@ -77,6 +86,8 @@ export function NewTaskModal({
       if (!projectUid && !areaUid && !resourceUid) throw new Error('Task owner is missing.');
       const fm: Record<string, unknown> = {};
       if (priority) fm['priority'] = priority;
+      fm['execution_mode'] = executionMode;
+      fm['execution_strategy'] = executionMode === 'agent' ? 'autonomous' : 'manual';
       if (due) fm['due'] = due;
       if (tags.length) fm['tags'] = tags;
       if (preConds.length) fm['pre_conditions'] = preConds;
@@ -161,6 +172,22 @@ export function NewTaskModal({
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
                     {p || '—'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
+                Mode
+              </span>
+              <select
+                value={executionMode}
+                onChange={(e) => setExecutionMode(e.target.value as TaskExecutionMode)}
+                className={input}
+              >
+                {TASK_EXECUTION_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode} — {MODE_COPY[mode]}
                   </option>
                 ))}
               </select>

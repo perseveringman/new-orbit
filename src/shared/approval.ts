@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TASK_STATUSES } from './schemas';
+import { TASK_EXECUTION_MODES, TASK_STATUSES } from './schemas';
 
 export const PROPOSAL_TYPES = [
   'new_task',
@@ -44,25 +44,28 @@ export const NewTaskProposalPayloadSchema = z
   .object({
     project_uid: z.string().min(1).optional(),
     area_uid: z.string().min(1).optional(),
+    resource_uid: z.string().min(1).optional(),
     title: z.string().min(1),
     description: z.string().optional(),
     uid: z.string().min(1).optional(),
     status: z.enum(TASK_STATUSES).optional(),
+    execution_mode: z.enum(TASK_EXECUTION_MODES).optional(),
     conversation_id: z.string().min(1).optional(),
     frontmatter: JsonObjectSchema.optional()
   })
   .strict()
   .superRefine((value, ctx) => {
-    if (!value.project_uid && !value.area_uid) {
+    const ownerCount = [value.project_uid, value.area_uid, value.resource_uid].filter(Boolean).length;
+    if (ownerCount === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'new_task payload requires project_uid or area_uid'
+        message: 'new_task payload requires project_uid, area_uid, or resource_uid'
       });
     }
-    if (value.project_uid && value.area_uid) {
+    if (ownerCount > 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'new_task payload must not set both project_uid and area_uid'
+        message: 'new_task payload must set exactly one owner'
       });
     }
   });

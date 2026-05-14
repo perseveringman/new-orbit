@@ -18,6 +18,8 @@ function task(overrides: Partial<TaskRecord>): TaskRecord {
     filePath: `/vault/${overrides.uid ?? 'task'}.md`,
     relPath: `${overrides.uid ?? 'task'}.md`,
     project_uid: 'project_1',
+    execution_mode: 'agent',
+    execution_strategy: 'autonomous',
     created_by: 'user',
     approved_by: 'user',
     depends_on: [],

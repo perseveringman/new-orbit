@@ -12,7 +12,9 @@ import {
   PROJECT_ORBIT_MEMORIES_DIR,
   PROJECT_README,
   PROJECT_ORBIT_TASKS_DIR,
-  PROJECT_TASKS_DIR
+  PROJECT_TASKS_DIR,
+  SPACE_ASSETS_DIR,
+  SPACE_OUTPUTS_DIR
 } from '@shared/constants';
 import { newUid } from './uid';
 import * as frontmatter from './frontmatter';
@@ -22,15 +24,25 @@ import { ensureProjectAgentContext } from './project_agent_context';
 import { walkMarkdown } from './walk';
 import {
   defaultAgentExposureSettings,
+  projectExecutionContextKind,
   readProjectConfig,
   writeProjectConfig,
   type AgentExposureSettings,
   type ProjectConfig,
-  type ProjectExecutionContext
+  type ProjectExecutionContext,
+  type ProjectExecutionContextConfig,
+  type ProjectGitInfo,
+  type ProjectLinkedVia,
+  type ProjectWorkdirRef
 } from './project_config';
 import { findAreaByUid } from './area';
 import { ensureSpaceLayout } from './space/layout';
 import { createResourceStore } from './resource/store';
+import {
+  probeProjectWorkdir,
+  resolveProjectWorkdir,
+  scaffoldWorkdirFromTemplate
+} from './project_workdir';
 
 export interface ProjectSummary {
   uid: string;
@@ -44,8 +56,13 @@ export interface ProjectSummary {
   template?: string;
   area_uid?: string;
   area_slugs?: string[];
-  /** Absolute path to the project folder (or legacy .md file). */
+  /** Absolute path to the vault coordination folder (or legacy .md file). */
   path: string;
+  /** Absolute path to the vault coordination folder. */
+  coordinationPath: string;
+  /** Absolute path to the linked work directory agents operate on. */
+  workdirPath: string;
+  workdirMissing?: boolean;
   /** Absolute path to README.md (folder mode) or the .md file (legacy). */
   readmePath: string;
   /** Vault-relative POSIX path to the project folder or legacy file. */
@@ -53,6 +70,10 @@ export interface ProjectSummary {
   /** Folder-mode projects have a `.agent/config.json`; legacy ones don't. */
   legacy: boolean;
   github?: GitHubRepoBinding;
+  git?: ProjectGitInfo;
+  workdir?: ProjectWorkdirRef;
+  execution_context?: ProjectExecutionContext;
+  vendor_bridge_files?: boolean;
 }
 
 export interface CreateProjectArgs {
@@ -66,11 +87,60 @@ export interface CreateProjectArgs {
   agent_exposure?: Partial<AgentExposureSettings>;
 }
 
+export interface LinkExistingProjectArgs {
+  slug: string;
+  name: string;
+  workdirPath: string;
+  description?: string;
+  uid?: string;
+  area_uid?: string;
+  tags?: string[];
+  execution_context?: ProjectExecutionContext;
+  vendor_bridge_files?: boolean;
+}
+
+export interface ScaffoldNewProjectArgs {
+  slug: string;
+  name: string;
+  parentDir: string;
+  dirName?: string;
+  template: string;
+  description?: string;
+  uid?: string;
+  area_uid?: string;
+  tags?: string[];
+  initializeGit?: boolean;
+  execution_context?: ProjectExecutionContext;
+  vendor_bridge_files?: boolean;
+}
+
+export interface RelinkProjectWorkdirArgs {
+  uid: string;
+  workdirPath: string;
+  execution_context?: ProjectExecutionContext;
+  vendor_bridge_files?: boolean;
+}
+
+export interface MigrateProjectWorkdirArgs {
+  uid: string;
+  targetDir: string;
+  removeCopiedFiles?: boolean;
+  initializeGit?: boolean;
+  execution_context?: ProjectExecutionContext;
+}
+
 export interface CreateProjectResult {
   projectPath: string;
   relPath: string;
   uid: string;
   slug: string;
+}
+
+export interface ProjectWorkdirMutationResult extends CreateProjectResult {
+  workdirPath: string;
+  copiedFiles?: string[];
+  removedFiles?: string[];
+  skippedFiles?: string[];
 }
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
@@ -102,6 +172,16 @@ export function projectConfigPath(vault: string, slug: string): string {
 
 export function defaultExecutionContextForTemplate(template: string): ProjectExecutionContext {
   return template === 'research' || template === 'writing' ? 'sandbox' : 'worktree';
+}
+
+export function defaultExecutionContextConfig(
+  kind: ProjectExecutionContext
+): ProjectExecutionContextConfig {
+  return {
+    kind,
+    worktree_root: 'workdir-sibling',
+    worktree_dir_name: '.orbit-worktrees'
+  };
 }
 
 async function initProjectGitRepo(dir: string, slug: string): Promise<void> {
@@ -162,12 +242,28 @@ export async function createProject(
     uid,
     slug: args.slug,
     name: args.name,
+    type: 'project',
     template: args.template,
-    execution_context: executionContext,
+    workdir: {
+      path: dir,
+      kind: 'local',
+      linked_at: createdAt,
+      linked_via: 'legacy-in-vault',
+      permissions: {
+        agent_write: true,
+        auto_runner: true
+      }
+    },
+    execution_context: defaultExecutionContextConfig(executionContext),
     created_at: createdAt,
     vision_linked: true,
     setup: [],
     teardown: [],
+    vendor_bridge_files: args.agent_exposure?.mode !== 'isolated',
+    watcher: {
+      enabled: true,
+      extra_ignores: []
+    },
     agent_exposure: {
       ...defaultAgentExposureSettings(args.agent_exposure?.mode),
       ...(args.agent_exposure ?? {})
@@ -193,6 +289,15 @@ export async function createProject(
   }
 
   await initProjectGitRepo(dir, args.slug);
+  const detected = await probeProjectWorkdir(dir);
+  const config = await readProjectConfig(dir);
+  if (config) {
+    await writeProjectConfig(dir, {
+      ...config,
+      git: detected.git,
+      github: detected.git?.github_binding
+    });
+  }
 
   return {
     projectPath: dir,
@@ -200,6 +305,515 @@ export async function createProject(
     uid,
     slug: args.slug
   };
+}
+
+export async function linkExistingProject(
+  vault: string,
+  args: LinkExistingProjectArgs
+): Promise<CreateProjectResult> {
+  assertValidSlug(args.slug);
+  const workdirProbe = await probeProjectWorkdir(args.workdirPath);
+  if (!workdirProbe.exists || !workdirProbe.isDirectory) {
+    throw new Error(`workdir is not a readable directory: ${args.workdirPath}`);
+  }
+  const dir = projectDir(vault, args.slug);
+  assertInsideVault(vault, dir);
+  if (await exists(dir)) throw new Error(`project already exists: ${args.slug}`);
+
+  const uid = args.uid ?? newUid();
+  const createdAt = new Date().toISOString();
+  await createCoordinationProject(dir, {
+    uid,
+    slug: args.slug,
+    name: args.name,
+    description: args.description,
+    template: 'linked-workdir',
+    createdAt,
+    area_uid: args.area_uid,
+    tags: args.tags,
+    workdirPath: workdirProbe.path,
+    git: workdirProbe.git,
+    executionContext:
+      args.execution_context ?? workdirProbe.recommendedExecutionContext,
+    vendorBridgeFiles: args.vendor_bridge_files ?? false,
+    linkedVia: 'link-existing'
+  });
+
+  return {
+    projectPath: dir,
+    relPath: toPosix(vaultRel(vault, dir)),
+    uid,
+    slug: args.slug
+  };
+}
+
+export async function scaffoldNewProject(
+  vault: string,
+  args: ScaffoldNewProjectArgs
+): Promise<CreateProjectResult> {
+  assertValidSlug(args.slug);
+  const dirName = args.dirName?.trim() || args.slug;
+  if (dirName.includes('/') || dirName.includes('\\') || dirName.includes('..')) {
+    throw new Error(`invalid workdir name: ${dirName}`);
+  }
+  const workdirPath = path.resolve(args.parentDir, dirName);
+  const coordDir = projectDir(vault, args.slug);
+  assertInsideVault(vault, coordDir);
+  if (await exists(coordDir)) throw new Error(`project already exists: ${args.slug}`);
+  const uid = args.uid ?? newUid();
+  const createdAt = new Date().toISOString();
+  const vars: Record<string, string> = {
+    uid,
+    slug: args.slug,
+    name: args.name,
+    description: args.description ?? '',
+    created_at: createdAt,
+    template: args.template,
+    vision_ref: '[[Vision]]',
+    execution_context:
+      args.execution_context ?? defaultExecutionContextForTemplate(args.template)
+  };
+  const scaffolded = await scaffoldWorkdirFromTemplate({
+    targetDir: workdirPath,
+    templateId: args.template,
+    vars,
+    initializeGit: args.initializeGit ?? true
+  });
+  const probe = await probeProjectWorkdir(workdirPath);
+  await createCoordinationProject(coordDir, {
+    uid,
+    slug: args.slug,
+    name: args.name,
+    description: args.description,
+    template: args.template,
+    createdAt,
+    area_uid: args.area_uid,
+    tags: args.tags,
+    workdirPath,
+    git: probe.git ?? scaffolded.git,
+    executionContext:
+      args.execution_context ??
+      probe.recommendedExecutionContext ??
+      defaultExecutionContextForTemplate(args.template),
+    vendorBridgeFiles: args.vendor_bridge_files ?? false,
+    linkedVia: 'scaffold-new'
+  });
+  return {
+    projectPath: coordDir,
+    relPath: toPosix(vaultRel(vault, coordDir)),
+    uid,
+    slug: args.slug
+  };
+}
+
+export async function relinkProjectWorkdir(
+  vault: string,
+  args: RelinkProjectWorkdirArgs
+): Promise<ProjectWorkdirMutationResult> {
+  const project = await requireFolderProjectByUid(vault, args.uid);
+  const probe = await probeProjectWorkdir(args.workdirPath);
+  if (!probe.exists || !probe.isDirectory) {
+    throw new Error(`workdir is not a readable directory: ${args.workdirPath}`);
+  }
+  const config = await requireProjectConfig(project.coordinationPath);
+  const executionContext =
+    args.execution_context ?? probe.recommendedExecutionContext ?? projectExecutionContextKind(config);
+  await updateProjectWorkdirConfig(project.coordinationPath, config, {
+    workdirPath: probe.path,
+    linkedVia: 'link-existing',
+    git: probe.git,
+    executionContext,
+    vendorBridgeFiles: args.vendor_bridge_files
+  });
+  await rewriteReadmeWorkdirSection(project.coordinationPath, {
+    workdirPath: probe.path,
+    git: probe.git,
+    linkedVia: 'link-existing'
+  });
+  await refreshProjectAgentContext(project.coordinationPath, config, {
+    workdirPath: probe.path,
+    template: project.template
+  });
+  return {
+    projectPath: project.coordinationPath,
+    relPath: project.relPath,
+    uid: project.uid,
+    slug: project.slug,
+    workdirPath: probe.path
+  };
+}
+
+export async function migrateProjectWorkdir(
+  vault: string,
+  args: MigrateProjectWorkdirArgs
+): Promise<ProjectWorkdirMutationResult> {
+  const project = await requireFolderProjectByUid(vault, args.uid);
+  const config = await requireProjectConfig(project.coordinationPath);
+  const currentWorkdir = path.resolve(project.workdirPath);
+  if (
+    path.resolve(project.coordinationPath) !== currentWorkdir &&
+    config.workdir?.linked_via !== 'legacy-in-vault'
+  ) {
+    throw new Error(
+      `project "${project.slug}" already uses an external workdir; use relink instead`
+    );
+  }
+  const targetDir = path.resolve(args.targetDir);
+  if (targetDir === path.resolve(project.coordinationPath) || isInside(targetDir, project.coordinationPath)) {
+    throw new Error('migration target must be outside the project coordination folder');
+  }
+  if (await exists(targetDir)) {
+    throw new Error(`migration target already exists: ${targetDir}`);
+  }
+
+  let copied: string[] = [];
+  let removed: string[] = [];
+  let skipped: string[] = [];
+  try {
+    await fs.mkdir(targetDir, { recursive: true });
+    const result = await copyLegacyWorkdirPayload(project.coordinationPath, targetDir, {
+      removeCopiedFiles: args.removeCopiedFiles ?? false
+    });
+    copied = result.copiedFiles;
+    removed = result.removedFiles;
+    skipped = result.skippedFiles;
+    if (args.initializeGit ?? true) {
+      await initProjectGitRepo(targetDir, project.slug);
+    }
+  } catch (error) {
+    await fs.rm(targetDir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+
+  const probe = await probeProjectWorkdir(targetDir);
+  const executionContext =
+    args.execution_context ?? probe.recommendedExecutionContext ?? projectExecutionContextKind(config);
+  await updateProjectWorkdirConfig(project.coordinationPath, config, {
+    workdirPath: targetDir,
+    linkedVia: 'migrated-from-vault',
+    git: probe.git,
+    executionContext
+  });
+  await rewriteReadmeWorkdirSection(project.coordinationPath, {
+    workdirPath: targetDir,
+    git: probe.git,
+    linkedVia: 'migrated-from-vault'
+  });
+  await refreshProjectAgentContext(project.coordinationPath, config, {
+    workdirPath: targetDir,
+    template: project.template,
+    overwrite: true
+  });
+  return {
+    projectPath: project.coordinationPath,
+    relPath: project.relPath,
+    uid: project.uid,
+    slug: project.slug,
+    workdirPath: targetDir,
+    copiedFiles: copied,
+    removedFiles: removed,
+    skippedFiles: skipped
+  };
+}
+
+async function createCoordinationProject(
+  dir: string,
+  args: {
+    uid: string;
+    slug: string;
+    name: string;
+    description?: string;
+    template: string;
+    createdAt: string;
+    area_uid?: string;
+    tags?: string[];
+    workdirPath: string;
+    git?: ProjectGitInfo;
+    executionContext: ProjectExecutionContext;
+    vendorBridgeFiles: boolean;
+    linkedVia: ProjectLinkedVia;
+  }
+): Promise<void> {
+  await fs.mkdir(dir, { recursive: true });
+  await ensureSpaceLayout(dir);
+  const readmeAbs = path.join(dir, PROJECT_README);
+  const tags = args.tags ?? [];
+  const readme = [
+    '---',
+    `uid: ${args.uid}`,
+    'type: project',
+    `title: ${JSON.stringify(args.name)}`,
+    `slug: ${args.slug}`,
+    'status: active',
+    `template: ${args.template}`,
+    `created_at: ${args.createdAt}`,
+    ...(args.area_uid ? [`area_uid: ${args.area_uid}`] : []),
+    `tags: ${JSON.stringify(tags)}`,
+    '---',
+    '',
+    `# ${args.name}`,
+    '',
+    args.description?.trim() ?? '',
+    '',
+    '## Workdir',
+    '',
+    `- Path: \`${args.workdirPath}\``,
+    args.git?.is_repo ? '- Git: detected' : '- Git: not detected',
+    ''
+  ].join('\n');
+  await fs.writeFile(readmeAbs, readme, 'utf8');
+  await writeProjectConfig(dir, {
+    uid: args.uid,
+    slug: args.slug,
+    name: args.name,
+    type: 'project',
+    template: args.template,
+    workdir: {
+      path: args.workdirPath,
+      kind: 'local',
+      linked_at: args.createdAt,
+      linked_via: args.linkedVia,
+      permissions: {
+        agent_write: true,
+        auto_runner: args.executionContext === 'worktree'
+      }
+    },
+    ...(args.git ? { git: args.git, github: args.git.github_binding } : {}),
+    execution_context: defaultExecutionContextConfig(args.executionContext),
+    created_at: args.createdAt,
+    vision_linked: true,
+    setup: [],
+    teardown: [],
+    vendor_bridge_files: args.vendorBridgeFiles,
+    watcher: {
+      enabled: true,
+      extra_ignores: []
+    },
+    agent_exposure: defaultAgentExposureSettings(args.vendorBridgeFiles ? 'bridge' : 'isolated')
+  });
+  await ensureProjectAgentContext(dir, {
+    uid: args.uid,
+    slug: args.slug,
+    name: args.name,
+    template: args.template,
+    ...(args.description ? { description: args.description } : {})
+  }, { workdirPath: args.workdirPath });
+}
+
+async function requireFolderProjectByUid(vault: string, uid: string): Promise<ProjectSummary> {
+  const project = (await listProjects(vault)).find((item) => item.uid === uid);
+  if (!project) throw new Error(`project not found: ${uid}`);
+  if (project.legacy) {
+    throw new Error(
+      `project "${project.slug}" is a legacy single-file project; run the v3 migration first`
+    );
+  }
+  return project;
+}
+
+async function requireProjectConfig(projectDir: string): Promise<ProjectConfig> {
+  const config = await readProjectConfig(projectDir);
+  if (!config) throw new Error(`project config missing: ${projectDir}`);
+  return config;
+}
+
+async function updateProjectWorkdirConfig(
+  projectDir: string,
+  config: ProjectConfig,
+  args: {
+    workdirPath: string;
+    linkedVia: ProjectLinkedVia;
+    git?: ProjectGitInfo;
+    executionContext: ProjectExecutionContext;
+    vendorBridgeFiles?: boolean;
+  }
+): Promise<ProjectConfig> {
+  const existingPermissions = config.workdir?.permissions ?? {
+    agent_write: true,
+    auto_runner: true
+  };
+  const next: ProjectConfig = {
+    ...config,
+    workdir: {
+      path: args.workdirPath,
+      kind: 'local',
+      linked_at: new Date().toISOString(),
+      linked_via: args.linkedVia,
+      permissions: {
+        agent_write: existingPermissions.agent_write,
+        auto_runner: args.executionContext === 'worktree'
+      }
+    },
+    execution_context: defaultExecutionContextConfig(args.executionContext),
+    vendor_bridge_files: args.vendorBridgeFiles ?? config.vendor_bridge_files
+  };
+  if (args.git) {
+    next.git = args.git;
+    if (args.git.github_binding) next.github = args.git.github_binding;
+    else delete next.github;
+  } else {
+    delete next.git;
+    delete next.github;
+  }
+  if (args.vendorBridgeFiles !== undefined) {
+    next.agent_exposure = defaultAgentExposureSettings(
+      args.vendorBridgeFiles ? 'bridge' : 'isolated'
+    );
+  }
+  await writeProjectConfig(projectDir, next);
+  return next;
+}
+
+async function refreshProjectAgentContext(
+  projectDir: string,
+  config: ProjectConfig,
+  opts: { workdirPath: string; template?: string; overwrite?: boolean }
+): Promise<void> {
+  await ensureProjectAgentContext(
+    projectDir,
+    {
+      uid: config.uid,
+      slug: config.slug || path.basename(projectDir),
+      name: config.name || config.slug || path.basename(projectDir),
+      template: opts.template ?? config.template ?? 'blank'
+    },
+    {
+      overwrite: opts.overwrite ?? true,
+      workdirPath: opts.workdirPath
+    }
+  );
+}
+
+async function rewriteReadmeWorkdirSection(
+  projectDir: string,
+  args: { workdirPath: string; git?: ProjectGitInfo; linkedVia: ProjectLinkedVia }
+): Promise<void> {
+  const readmeAbs = path.join(projectDir, PROJECT_README);
+  let raw = '';
+  try {
+    raw = await fs.readFile(readmeAbs, 'utf8');
+  } catch {
+    raw = `# ${path.basename(projectDir)}\n`;
+  }
+  const section = [
+    '## Workdir',
+    '',
+    `- Path: \`${args.workdirPath}\``,
+    args.git?.is_repo ? '- Git: detected' : '- Git: not detected',
+    `- Linked via: \`${args.linkedVia}\``
+  ].join('\n');
+  await fs.writeFile(readmeAbs, replaceMarkdownSection(raw, 'Workdir', section), 'utf8');
+}
+
+function replaceMarkdownSection(raw: string, title: string, section: string): string {
+  const normalized = raw.replace(/\r\n/g, '\n').replace(/\n*$/, '\n');
+  const lines = normalized.split('\n');
+  const header = `## ${title}`;
+  const start = lines.findIndex((line) => line.trim() === header);
+  const sectionLines = section.replace(/\n*$/, '').split('\n');
+  if (start === -1) {
+    return `${normalized.trimEnd()}\n\n${sectionLines.join('\n')}\n`;
+  }
+  let end = start + 1;
+  while (end < lines.length && !/^##\s+/.test(lines[end] ?? '')) end += 1;
+  lines.splice(start, end - start, ...sectionLines);
+  return `${lines.join('\n').replace(/\n*$/, '')}\n`;
+}
+
+interface LegacyCopyResult {
+  copiedFiles: string[];
+  removedFiles: string[];
+  skippedFiles: string[];
+}
+
+async function copyLegacyWorkdirPayload(
+  sourceDir: string,
+  targetDir: string,
+  opts: { removeCopiedFiles: boolean }
+): Promise<LegacyCopyResult> {
+  const copiedFiles: string[] = [];
+  const removedFiles: string[] = [];
+  const skippedFiles: string[] = [];
+
+  async function visit(srcDir: string, relDir: string): Promise<void> {
+    const entries = await fs.readdir(srcDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const rel = toPosix(path.join(relDir, entry.name));
+      const skipReason = legacyMigrationSkipReason(rel);
+      if (skipReason) {
+        skippedFiles.push(rel);
+        continue;
+      }
+      const src = path.join(srcDir, entry.name);
+      const dst = path.join(targetDir, rel);
+      if (entry.isDirectory()) {
+        await fs.mkdir(dst, { recursive: true });
+        await visit(src, rel);
+        if (opts.removeCopiedFiles) {
+          await fs.rmdir(src).catch(() => undefined);
+        }
+        continue;
+      }
+      await fs.mkdir(path.dirname(dst), { recursive: true });
+      if (entry.isFile()) {
+        await fs.copyFile(src, dst);
+      } else if (entry.isSymbolicLink()) {
+        await fs.symlink(await fs.readlink(src), dst);
+      } else {
+        skippedFiles.push(rel);
+        continue;
+      }
+      copiedFiles.push(rel);
+      if (opts.removeCopiedFiles) {
+        await fs.rm(src, { force: true });
+        removedFiles.push(rel);
+      }
+    }
+  }
+
+  await visit(sourceDir, '');
+  return {
+    copiedFiles: copiedFiles.sort(),
+    removedFiles: removedFiles.sort(),
+    skippedFiles: skippedFiles.sort()
+  };
+}
+
+function legacyMigrationSkipReason(relPath: string): string | null {
+  const rel = toPosix(relPath);
+  const parts = rel.split('/').filter(Boolean);
+  const first = parts[0] ?? '';
+  if (!first) return null;
+  const skipSegments = new Set([
+    PROJECT_ORBIT_DIR,
+    PROJECT_AGENT_DIR,
+    '.git',
+    'node_modules',
+    'dist',
+    'build',
+    '.next',
+    '.turbo',
+    '.cache',
+    'coverage'
+  ]);
+  if (parts.some((part) => skipSegments.has(part))) return 'managed-or-generated';
+  const rootOnly = new Set([
+    PROJECT_README,
+    'AGENT.md',
+    'AGENTS.md',
+    'CLAUDE.md',
+    'CODEX.md',
+    'GEMINI.md',
+    PROJECT_TASKS_DIR,
+    SPACE_ASSETS_DIR,
+    SPACE_OUTPUTS_DIR
+  ]);
+  return rootOnly.has(first) ? 'coordination-only' : null;
+}
+
+function isInside(child: string, parent: string): boolean {
+  const rel = path.relative(path.resolve(parent), path.resolve(child));
+  return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
 function parseReadmeSummary(
@@ -232,6 +846,8 @@ function parseReadmeSummary(
     name,
     status,
     path: dir,
+    coordinationPath: dir,
+    workdirPath: resolveProjectWorkdir(dir, config),
     readmePath: path.join(dir, PROJECT_README),
     relPath: toPosix(vaultRel(vault, dir)),
     legacy: false
@@ -247,6 +863,13 @@ function parseReadmeSummary(
   const areaSlugs = areaSlugsFromFrontmatter(data['areas']);
   if (areaSlugs.length) summary.area_slugs = areaSlugs;
   if (config?.github) summary.github = config.github;
+  else if (config?.git?.github_binding) summary.github = config.git.github_binding;
+  if (config?.git) summary.git = config.git;
+  if (config?.workdir) summary.workdir = config.workdir;
+  if (config) {
+    summary.execution_context = projectExecutionContextKind(config);
+    summary.vendor_bridge_files = config.vendor_bridge_files;
+  }
   return summary;
 }
 
@@ -265,7 +888,7 @@ export async function listProjects(vault: string): Promise<ProjectSummary[]> {
     return out;
   }
   for (const e of entries) {
-    const abs = path.join(root, e.name);
+      const abs = path.join(root, e.name);
     if (e.isDirectory()) {
       const config = await readProjectConfig(abs);
       const readmeAbs = path.join(abs, PROJECT_README);
@@ -276,6 +899,7 @@ export async function listProjects(vault: string): Promise<ProjectSummary[]> {
         if (!config) continue; // not a project folder
       }
       const summary = parseReadmeSummary(abs, vault, readme, config);
+      summary.workdirMissing = !(await exists(summary.workdirPath));
       out.push(summary);
     } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
       try {
@@ -295,6 +919,8 @@ export async function listProjects(vault: string): Promise<ProjectSummary[]> {
           name,
           status,
           path: abs,
+          coordinationPath: abs,
+          workdirPath: abs,
           readmePath: abs,
           relPath: toPosix(vaultRel(vault, abs)),
           legacy: true

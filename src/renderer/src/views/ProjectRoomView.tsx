@@ -67,6 +67,7 @@ export function ProjectRoomView(): JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
+  const [workdirBusy, setWorkdirBusy] = useState(false);
 
   // Outer tab: persisted per project
   const outerTabKey = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
@@ -305,6 +306,58 @@ export function ProjectRoomView(): JSX.Element {
     }
   }
 
+  async function relinkWorkdir(): Promise<void> {
+    if (!project || workdirBusy) return;
+    const chosen = await window.orbit.project.chooseDirectory();
+    if (chosen.canceled || !chosen.path) return;
+    setWorkdirBusy(true);
+    try {
+      await disposeTerminalsByPrefix(`${project.uid}::`);
+      await window.orbit.project.relinkWorkdir({
+        uid: project.uid,
+        workdirPath: chosen.path
+      });
+      toast(`Workdir linked → ${chosen.path}`);
+      await refreshProjects();
+      await refreshGitHubState();
+    } catch (e) {
+      toast(`Relink workdir failed: ${(e as Error).message}`);
+    } finally {
+      setWorkdirBusy(false);
+    }
+  }
+
+  async function migrateWorkdirOut(): Promise<void> {
+    if (!project || workdirBusy) return;
+    const chosen = await window.orbit.project.chooseDirectory();
+    if (chosen.canceled || !chosen.path) return;
+    const targetDir = joinFsPath(chosen.path, project.slug);
+    if (
+      !window.confirm(
+        `Move copied code files from the Orbit coordination folder into:\n\n${targetDir}\n\nOrbit tasks, assets, outputs, and metadata stay in the vault.`
+      )
+    ) {
+      return;
+    }
+    setWorkdirBusy(true);
+    try {
+      await disposeTerminalsByPrefix(`${project.uid}::`);
+      const result = await window.orbit.project.migrateWorkdir({
+        uid: project.uid,
+        targetDir,
+        removeCopiedFiles: true,
+        initializeGit: true
+      });
+      toast(`Workdir moved → ${result.workdirPath}`);
+      await refreshProjects();
+      await refreshGitHubState();
+    } catch (e) {
+      toast(`Move workdir failed: ${(e as Error).message}`);
+    } finally {
+      setWorkdirBusy(false);
+    }
+  }
+
   async function publishToGitHub(): Promise<void> {
     setOuterTab('github');
   }
@@ -441,6 +494,17 @@ export function ProjectRoomView(): JSX.Element {
   }
 
   const isLegacy = project.legacy;
+  const isLegacyInVaultWorkdir =
+    !isLegacy &&
+    (project.workdir?.linked_via === 'legacy-in-vault' ||
+      project.workdirPath === project.coordinationPath);
+  const workdirLabel = project.workdirMissing
+    ? 'missing'
+    : isLegacyInVaultWorkdir
+      ? 'in vault'
+      : project.workdir
+        ? 'external'
+        : 'implicit';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -502,9 +566,39 @@ export function ProjectRoomView(): JSX.Element {
                 Authenticate gh
               </button>
             )}
+            {!isLegacy && (
+              <span
+                className={`rounded border px-2 py-0.5 ${
+                  project.workdirMissing
+                    ? 'border-red-300 text-red-700 dark:border-red-700 dark:text-red-300'
+                    : 'border-neutral-300 dark:border-neutral-700'
+                }`}
+                title={project.workdirPath}
+              >
+                Workdir · {workdirLabel}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {!isLegacy && isLegacyInVaultWorkdir && (
+            <button
+              className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/30"
+              disabled={workdirBusy}
+              onClick={() => void migrateWorkdirOut()}
+            >
+              Move Workdir Out
+            </button>
+          )}
+          {!isLegacy && (
+            <button
+              className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              disabled={workdirBusy}
+              onClick={() => void relinkWorkdir()}
+            >
+              Relink Workdir
+            </button>
+          )}
           <button
             className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
             onClick={() => void refreshGitHubState()}
@@ -620,14 +714,16 @@ export function ProjectRoomView(): JSX.Element {
         <TerminalManager
           ref={managerRef}
           projectUid={project.uid}
-          cwd={project.path}
+          cwd={project.workdirPath ?? project.path}
           dark={dark}
           env={
             vault
               ? {
                   ORBIT_VAULT_PATH: vault.path,
                   ORBIT_PROJECT_UID: project.uid,
-                  ORBIT_PROJECT_SLUG: project.slug
+                  ORBIT_PROJECT_SLUG: project.slug,
+                  ORBIT_PROJECT_COORDINATION: project.coordinationPath ?? project.path,
+                  ORBIT_PROJECT_WORKDIR: project.workdirPath ?? project.path
                 }
               : undefined
           }
@@ -695,6 +791,11 @@ export function ProjectRoomView(): JSX.Element {
       />
     </div>
   );
+}
+
+function joinFsPath(parent: string, child: string): string {
+  const sep = parent.includes('\\') && !parent.includes('/') ? '\\' : '/';
+  return `${parent.replace(/[\\/]+$/, '')}${sep}${child}`;
 }
 
 function OuterTabButton({

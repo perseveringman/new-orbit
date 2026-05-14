@@ -279,23 +279,31 @@ export interface SafetyDecision {
 /**
  * Pre-spawn safety gate. Runs alongside the budget gate and enforces
  * two rules today:
- *  - `cwd` must be the vault root OR a path under
- *    `<vault>/.orbit/worktrees/`. Anywhere else is rejected so a
- *    malformed IPC call can't spawn an agent in an arbitrary directory.
+ *  - `cwd` must be the vault root, a path under `<vault>/.orbit/worktrees/`,
+ *    or a linked project workdir supplied by the project config layer.
  *  - The composed prompt must not exceed a hard 100 000-char limit.
  *    This is a guardrail against runaway hydration reply growth.
  */
 export const MAX_PROMPT_CHARS = 100_000;
 
 export const SafetyGate = {
-  check(args: { cwd: string; prompt: string; vaultPath: string }): SafetyDecision {
+  check(args: {
+    cwd: string;
+    prompt: string;
+    vaultPath: string;
+    linkedWorkdirs?: string[];
+  }): SafetyDecision {
     const vault = path.resolve(args.vaultPath);
     const cwd = path.resolve(args.cwd);
     const wtRoot =
       path.resolve(path.join(vault, ORBIT_DIR, ORBIT_WORKTREES_DIR)) + path.sep;
     const inVault = cwd === vault || cwd.startsWith(vault + path.sep);
     const inWorktrees = cwd.startsWith(wtRoot);
-    if (!inVault && !inWorktrees) {
+    const inLinkedWorkdir = (args.linkedWorkdirs ?? []).some((workdir) => {
+      const root = path.resolve(workdir);
+      return cwd === root || cwd.startsWith(root + path.sep);
+    });
+    if (!inVault && !inWorktrees && !inLinkedWorkdir) {
       return { ok: false, reason: `cwd outside vault: ${args.cwd}` };
     }
     if (inVault && !inWorktrees) {

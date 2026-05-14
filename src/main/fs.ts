@@ -1,18 +1,25 @@
 import { promises as fs, Dirent } from 'node:fs';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import {
   IPC,
   type ArchiveProjectResultDTO,
+  type ChooseDirectoryResultDTO,
   type CreateProjectArgsDTO,
   type CreateProjectResultDTO,
   type CreateTaskArgsDTO,
   type CreateTaskResultDTO,
   type EntityFilter,
+  type LinkExistingProjectArgsDTO,
+  type MigrateProjectWorkdirArgsDTO,
   type CloseProjectResult,
   type OrphanRescueCandidate,
   type ProjectSummaryDTO,
+  type ProjectWorkdirMutationResultDTO,
+  type ProjectWorkdirProbeDTO,
+  type RelinkProjectWorkdirArgsDTO,
+  type ScaffoldNewProjectArgsDTO,
   type TemplateMetaDTO,
   type V3MigrationReport
 } from '@shared/ipc';
@@ -26,6 +33,7 @@ import type {
 } from '@shared/types';
 import {
   inferTypeFromPath,
+  taskExecutionMode,
   type EntitySummary,
   type TaskFilter,
   type TaskRecord,
@@ -48,9 +56,14 @@ import {
   archiveProjectByUid,
   createProject,
   createTask,
+  linkExistingProject,
   listProjectTaskPaths,
-  listProjects
+  listProjects,
+  migrateProjectWorkdir,
+  relinkProjectWorkdir,
+  scaffoldNewProject
 } from './project';
+import { probeProjectWorkdir } from './project_workdir';
 import { contentHash } from './content_hash';
 import { listTemplates } from './templates';
 import {
@@ -387,6 +400,49 @@ async function ensureUidOnDisk(sess: VaultSession, abs: string): Promise<string>
   return uid;
 }
 
+function isPathInside(root: string, target: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  return rel === '' || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function isInsideVault(sess: VaultSession, abs: string): boolean {
+  return isPathInside(sess.vault, abs);
+}
+
+async function assertInsideVaultOrLinkedWorkdir(
+  sess: VaultSession,
+  abs: string
+): Promise<'vault' | 'workdir'> {
+  if (isInsideVault(sess, abs)) {
+    assertInsideVault(sess.vault, abs);
+    return 'vault';
+  }
+  const projects = await listProjects(sess.vault);
+  const resolved = path.resolve(abs);
+  for (const project of projects) {
+    if (!project.workdirMissing && isPathInside(project.workdirPath, resolved)) {
+      return 'workdir';
+    }
+  }
+  throw new Error('path is outside vault and linked project workdirs');
+}
+
+async function indexProjectReadme(sess: VaultSession, projectPath: string, uid: string): Promise<void> {
+  try {
+    const readmeAbs = path.join(projectPath, 'README.md');
+    const content = await fs.readFile(readmeAbs, 'utf8');
+    const rel = toPosix(vaultRel(sess.vault, readmeAbs));
+    sess.index.upsert(rel, content);
+    sess.search.upsert(rel);
+    sess.tasks.upsert(rel, content);
+    sess.refmap.set(uid, readmeAbs);
+    sess.refmap.setContentHash(uid, contentHash(content));
+    await sess.refmap.flush();
+  } catch {
+    // best effort; watcher will pick it up
+  }
+}
+
 export async function closeFsSession(): Promise<void> {
   if (!current) return;
   await current.watcher.stop();
@@ -403,7 +459,7 @@ export function registerFsIpc(): void {
 
   ipcMain.handle(IPC.fs.exists, async (_e, abs: string) => {
     const sess = getSession();
-    assertInsideVault(sess.vault, abs);
+    await assertInsideVaultOrLinkedWorkdir(sess, abs);
     try {
       await fs.access(abs);
       return true;
@@ -414,8 +470,9 @@ export function registerFsIpc(): void {
 
   ipcMain.handle(IPC.fs.readFile, async (_e, abs: string) => {
     const sess = getSession();
-    assertInsideVault(sess.vault, abs);
+    const scope = await assertInsideVaultOrLinkedWorkdir(sess, abs);
     const content = await fs.readFile(abs, 'utf8');
+    if (scope === 'workdir') return content;
     if (abs.toLowerCase().endsWith('.md')) {
       const { uid, content: withUid, changed } = ensureUid(content);
       const rel = toPosix(vaultRel(sess.vault, abs));
@@ -450,9 +507,9 @@ export function registerFsIpc(): void {
 
   ipcMain.handle(IPC.fs.writeFile, async (_e, abs: string, content: string) => {
     const sess = getSession();
-    assertInsideVault(sess.vault, abs);
+    const scope = await assertInsideVaultOrLinkedWorkdir(sess, abs);
     await atomicWriteFile(abs, content);
-    if (abs.toLowerCase().endsWith('.md')) {
+    if (scope === 'vault' && abs.toLowerCase().endsWith('.md')) {
       const rel = toPosix(vaultRel(sess.vault, abs));
       sess.index.upsert(rel, content);
       sess.search.upsert(rel);
@@ -469,20 +526,26 @@ export function registerFsIpc(): void {
       initialContent?: string
     ): Promise<CreateFileResult> => {
       const sess = getSession();
-      assertInsideVault(sess.vault, dirPath);
+      const scope = await assertInsideVaultOrLinkedWorkdir(sess, dirPath);
       if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
         throw new Error('invalid filename');
       }
       await fs.mkdir(dirPath, { recursive: true });
       const abs = path.join(dirPath, filename.endsWith('.md') ? filename : `${filename}.md`);
-      assertInsideVault(sess.vault, abs);
+      await assertInsideVaultOrLinkedWorkdir(sess, abs);
       const exists = await fs.access(abs).then(
         () => true,
         () => false
       );
       if (exists) throw new Error('file already exists');
-      const { content } = ensureUid(initialContent ?? '');
+      const { content } =
+        scope === 'vault'
+          ? ensureUid(initialContent ?? '')
+          : { content: initialContent ?? '' };
       await atomicWriteFile(abs, content);
+      if (scope === 'workdir') {
+        return { path: abs, relPath: toPosix(path.relative(dirPath, abs)) };
+      }
       const rel = toPosix(vaultRel(sess.vault, abs));
       sess.index.upsert(rel, content);
       sess.search.upsert(rel);
@@ -498,8 +561,18 @@ export function registerFsIpc(): void {
     IPC.fs.rename,
     async (_e, oldPath: string, newPath: string): Promise<RenameResult> => {
       const sess = getSession();
-      assertInsideVault(sess.vault, oldPath);
-      assertInsideVault(sess.vault, newPath);
+      const oldScope = await assertInsideVaultOrLinkedWorkdir(sess, oldPath);
+      const newScope = await assertInsideVaultOrLinkedWorkdir(sess, newPath);
+      if (oldScope !== newScope) throw new Error('cannot rename across vault/workdir boundary');
+      if (oldScope === 'workdir') {
+        await fs.mkdir(path.dirname(newPath), { recursive: true });
+        await fs.rename(oldPath, newPath);
+        return {
+          newPath,
+          newRelPath: toPosix(path.relative(path.dirname(oldPath), newPath)),
+          linksUpdated: 0
+        };
+      }
       const dependencyIdentity = oldPath.toLowerCase().endsWith('.md')
         ? await readTaskIdentity(oldPath)
         : null;
@@ -538,7 +611,15 @@ export function registerFsIpc(): void {
 
   ipcMain.handle(IPC.fs.deleteFile, async (_e, abs: string) => {
     const sess = getSession();
-    assertInsideVault(sess.vault, abs);
+    const scope = await assertInsideVaultOrLinkedWorkdir(sess, abs);
+    if (scope === 'workdir') {
+      const trashDir = path.join(sess.vault, ORBIT_DIR, ORBIT_TRASH_DIR);
+      await fs.mkdir(trashDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const safeName = path.resolve(abs).replace(/^[A-Za-z]:/, '').replace(/[\\/]/g, '__');
+      await fs.rename(abs, path.join(trashDir, `${stamp}__external__${safeName}`));
+      return;
+    }
     const dependencyIdentity = abs.toLowerCase().endsWith('.md') ? await readTaskIdentity(abs) : null;
     const tasksBeforeDelete = dependencyIdentity ? sess.tasks.allTasks() : [];
     const trashDir = path.join(sess.vault, ORBIT_DIR, ORBIT_TRASH_DIR);
@@ -592,7 +673,8 @@ export function registerFsIpc(): void {
     IPC.fs.backlinksOf,
     async (_e, abs: string): Promise<BacklinkItem[]> => {
       const sess = getSession();
-      assertInsideVault(sess.vault, abs);
+      const scope = await assertInsideVaultOrLinkedWorkdir(sess, abs);
+      if (scope === 'workdir') return [];
       const rel = toPosix(vaultRel(sess.vault, abs));
       return sess.index.backlinksOf(rel).map((b) => ({
         path: path.join(sess.vault, b.relPath),
@@ -621,6 +703,9 @@ export function registerFsIpc(): void {
       const sess = getSession();
       let list = materializeTaskGraph(sess.tasks.allTasks());
       if (filter?.status) list = list.filter((t) => t.status === filter.status);
+      if (filter?.execution_mode) {
+        list = list.filter((t) => taskExecutionMode(t) === filter.execution_mode);
+      }
       if (filter?.project_uid) list = list.filter((t) => t.project_uid === filter.project_uid);
       if (filter?.area_uid) list = list.filter((t) => t.area_uid === filter.area_uid);
       if (filter?.resource_uid) list = list.filter((t) => t.resource_uid === filter.resource_uid);
@@ -669,21 +754,74 @@ export function registerFsIpc(): void {
     async (_e, args: CreateProjectArgsDTO): Promise<CreateProjectResultDTO> => {
       const sess = getSession();
       const result = await createProject(sess.vault, args);
-      // Bring the new README into the in-memory indices.
-      try {
-        const readmeAbs = path.join(result.projectPath, 'README.md');
-        const content = await fs.readFile(readmeAbs, 'utf8');
-        const rel = toPosix(vaultRel(sess.vault, readmeAbs));
-        sess.index.upsert(rel, content);
-        sess.search.upsert(rel);
-        sess.tasks.upsert(rel, content);
-        sess.refmap.set(result.uid, readmeAbs);
-        sess.refmap.setContentHash(result.uid, contentHash(content));
-        await sess.refmap.flush();
-      } catch {
-        // best effort; watcher will pick it up
-      }
+      await indexProjectReadme(sess, result.projectPath, result.uid);
       return result;
+    }
+  );
+
+  ipcMain.handle(
+    IPC.project.linkExisting,
+    async (_e, args: LinkExistingProjectArgsDTO): Promise<CreateProjectResultDTO> => {
+      const sess = getSession();
+      const result = await linkExistingProject(sess.vault, args);
+      await indexProjectReadme(sess, result.projectPath, result.uid);
+      return result;
+    }
+  );
+
+  ipcMain.handle(
+    IPC.project.scaffoldNew,
+    async (_e, args: ScaffoldNewProjectArgsDTO): Promise<CreateProjectResultDTO> => {
+      const sess = getSession();
+      const result = await scaffoldNewProject(sess.vault, args);
+      await indexProjectReadme(sess, result.projectPath, result.uid);
+      return result;
+    }
+  );
+
+  ipcMain.handle(
+    IPC.project.relinkWorkdir,
+    async (
+      _e,
+      args: RelinkProjectWorkdirArgsDTO
+    ): Promise<ProjectWorkdirMutationResultDTO> => {
+      const sess = getSession();
+      const result = await relinkProjectWorkdir(sess.vault, args);
+      await indexProjectReadme(sess, result.projectPath, result.uid);
+      return result;
+    }
+  );
+
+  ipcMain.handle(
+    IPC.project.migrateWorkdir,
+    async (
+      _e,
+      args: MigrateProjectWorkdirArgsDTO
+    ): Promise<ProjectWorkdirMutationResultDTO> => {
+      const sess = getSession();
+      const result = await migrateProjectWorkdir(sess.vault, args);
+      await indexProjectReadme(sess, result.projectPath, result.uid);
+      return result;
+    }
+  );
+
+  ipcMain.handle(
+    IPC.project.probeWorkdir,
+    async (_e, workdirPath: string): Promise<ProjectWorkdirProbeDTO> => {
+      return probeProjectWorkdir(workdirPath);
+    }
+  );
+
+  ipcMain.handle(
+    IPC.project.chooseDirectory,
+    async (): Promise<ChooseDirectoryResultDTO> => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory']
+      });
+      return {
+        canceled: result.canceled,
+        ...(result.filePaths[0] ? { path: result.filePaths[0] } : {})
+      };
     }
   );
 
@@ -889,13 +1027,13 @@ export function registerFsIpc(): void {
 
   ipcMain.handle(IPC.fs.listProjectTree, async (_e, root: string) => {
     const sess = getSession();
-    assertInsideVault(sess.vault, root);
+    await assertInsideVaultOrLinkedWorkdir(sess, root);
     return _listProjectTree(root);
   });
 
   ipcMain.handle(IPC.fs.createDirectory, async (_e, parent: string, name: string) => {
     const sess = getSession();
-    assertInsideVault(sess.vault, parent);
+    await assertInsideVaultOrLinkedWorkdir(sess, parent);
     return _createDirectory(parent, name);
   });
 }
