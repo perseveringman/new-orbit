@@ -45,7 +45,7 @@ describe('ProjectsNav inbox badge', () => {
     expect(html).toContain('More');
     expect(html).toContain('Vision');
     expect(html).toContain('Library');
-    expect(html).toContain('Agents');
+    expect(html).toContain('Role Templates');
     expect(html).not.toContain('Dashboard');
     expect(html).not.toContain('Resources');
   });

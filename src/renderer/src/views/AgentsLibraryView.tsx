@@ -39,7 +39,7 @@ export function AgentsLibraryView(): JSX.Element {
         return next.templates[0]?.id ?? null;
       });
     } catch (error) {
-      toast(`Load agents library failed: ${(error as Error).message}`);
+      toast(`Load role templates failed: ${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -130,10 +130,10 @@ export function AgentsLibrarySurface({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-500">
-              Role-first agent system
+              Role template system
             </p>
             <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-              Agents Library
+              Role Templates
             </h1>
             <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
               Manage reusable role templates, inspect version baselines, and understand how each

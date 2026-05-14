@@ -10,9 +10,9 @@ describe('top bar model', () => {
       'Dashboard',
       'Ask Anywhere',
       'Vision',
-      'Runtimes',
+      'AI Control',
       'Tools',
-      'Agents',
+      'Role Templates',
       'Console',
       'GitHub',
       'Inbox',
@@ -138,9 +138,9 @@ describe('top bar model', () => {
       })
     ).toEqual({
       eyebrow: 'Workspace',
-      title: 'Runtimes',
+      title: 'AI Control',
       detail:
-        'Orbit Vault · Observe local providers, runtime capabilities, and orchestration load.',
+        'Orbit Vault · Manage CLI runtimes, SDK endpoints, role routing, and orchestration health.',
       stateLabel: null
     });
   });

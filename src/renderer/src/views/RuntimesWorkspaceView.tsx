@@ -5,6 +5,7 @@ import type {
   RuntimeDescriptor,
   TaskLease
 } from '@shared/orchestration';
+import type { SDKEndpointRegistrySnapshot, SDKEndpointView } from '@shared/runtime';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
 import { useWorkspace } from '../store/workspace';
@@ -13,6 +14,7 @@ export interface RuntimesWorkspaceSurfaceProps {
   snapshot: DispatchSnapshot | null;
   loading: boolean;
   projects: Array<{ uid: string; name: string }>;
+  sdkSnapshot?: SDKEndpointRegistrySnapshot | null;
   selectedRuntimeId: string | null;
   onRefresh(): void;
   onSelectRuntime(runtimeId: string): void;
@@ -27,6 +29,7 @@ export function RuntimesWorkspaceView(): JSX.Element {
   const setActiveProjectUid = useWorkspace((s) => s.setActiveProjectUid);
   const setView = usePara((s) => s.setView);
   const [snapshot, setSnapshot] = useState<DispatchSnapshot | null>(null);
+  const [sdkSnapshot, setSdkSnapshot] = useState<SDKEndpointRegistrySnapshot | null>(null);
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -35,8 +38,12 @@ export function RuntimesWorkspaceView(): JSX.Element {
       setLoading(true);
       try {
         if (mode === 'refresh') await window.orbit.runtime.refresh();
-        const next = await window.orbit.dispatch.status();
+        const [next, nextSdkSnapshot] = await Promise.all([
+          window.orbit.dispatch.status(),
+          window.orbit.runtime.sdk.snapshot().catch(() => null)
+        ]);
         setSnapshot(next);
+        setSdkSnapshot(nextSdkSnapshot);
         setSelectedRuntimeId((current) => {
           if (current && next.runtimes.some((runtime) => runtime.runtimeId === current))
             return current;
@@ -81,6 +88,7 @@ export function RuntimesWorkspaceView(): JSX.Element {
       snapshot={snapshot}
       loading={loading}
       projects={projects}
+      sdkSnapshot={sdkSnapshot}
       selectedRuntimeId={selectedRuntimeId}
       onRefresh={() => void refresh('refresh')}
       onSelectRuntime={setSelectedRuntimeId}
@@ -93,12 +101,14 @@ export function RuntimesWorkspaceSurface({
   snapshot,
   loading,
   projects,
+  sdkSnapshot,
   selectedRuntimeId,
   onRefresh,
   onSelectRuntime,
   onOpenProjectRoles
 }: RuntimesWorkspaceSurfaceProps): JSX.Element {
   const runtimes = snapshot?.runtimes ?? [];
+  const sdkEndpoints = sdkSnapshot?.endpoints ?? [];
   const selectedRuntime =
     runtimes.find((runtime) => runtime.runtimeId === selectedRuntimeId) ?? runtimes[0] ?? null;
 
@@ -127,8 +137,8 @@ export function RuntimesWorkspaceSurface({
   const stats = {
     online: runtimes.filter((runtime) => runtime.status === 'online').length,
     degraded: runtimes.filter((runtime) => runtime.status === 'degraded').length,
-    activeLeases: activeLeases.length,
-    runningReports: (snapshot?.reports ?? []).filter((report) => report.status === 'running').length
+    sdkReady: sdkEndpoints.filter((endpoint) => endpoint.enabled && endpoint.keyConfigured).length,
+    roleBindings: (snapshot?.bindings ?? []).length
   };
 
   return (
@@ -137,14 +147,14 @@ export function RuntimesWorkspaceSurface({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-500">
-              Runtime control plane
+              Runtime and role routing
             </p>
             <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-              Workspace Runtimes
+              AI Control Plane
             </h1>
             <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
-              Observe local provider discovery, runtime capabilities, and the leases/reports that
-              are currently flowing through Orbit&apos;s orchestration layer.
+              Observe CLI runtimes, SDK endpoints, role bindings, and the leases/reports that are
+              currently flowing through Orbit&apos;s orchestration layer.
             </p>
           </div>
           <button
@@ -159,7 +169,7 @@ export function RuntimesWorkspaceSurface({
           <WorkspaceStat
             label="Online"
             value={String(stats.online)}
-            hint="Runtimes ready to claim work"
+            hint="CLI providers detected"
           />
           <WorkspaceStat
             label="Degraded"
@@ -167,14 +177,14 @@ export function RuntimesWorkspaceSurface({
             hint="Need review or recovery"
           />
           <WorkspaceStat
-            label="Active leases"
-            value={String(stats.activeLeases)}
-            hint="Claimed or running tasks"
+            label="SDK ready"
+            value={String(stats.sdkReady)}
+            hint="Enabled endpoints with keys"
           />
           <WorkspaceStat
-            label="Running reports"
-            value={String(stats.runningReports)}
-            hint="Live implementation streams"
+            label="Role bindings"
+            value={String(stats.roleBindings)}
+            hint="Project roles wired to templates"
           />
         </div>
       </header>
@@ -183,7 +193,7 @@ export function RuntimesWorkspaceSurface({
         <div className="flex h-full min-h-0">
           <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
             <div className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-              <h2 className="text-sm font-semibold">Runtime Registry</h2>
+              <h2 className="text-sm font-semibold">CLI Runtime Registry</h2>
               <p className="mt-1 text-xs text-neutral-500">Providers discovered on this machine.</p>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
@@ -384,6 +394,55 @@ export function RuntimesWorkspaceSurface({
                       </section>
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold">Runtime B SDK Endpoints</h3>
+                          <span className="text-xs text-neutral-500">{sdkEndpoints.length}</span>
+                        </div>
+                        {sdkEndpoints.length === 0 ? (
+                          <p className="mt-3 text-sm text-neutral-500">
+                            No SDK endpoints have been registered yet.
+                          </p>
+                        ) : (
+                          <ul className="mt-3 space-y-2">
+                            {sdkEndpoints.map((endpoint) => (
+                              <SDKEndpointItem
+                                key={endpoint.id}
+                                endpoint={endpoint}
+                                defaults={sdkSnapshot?.defaults ?? {}}
+                              />
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+
+                      <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
+                        <h3 className="text-sm font-semibold">Role routing</h3>
+                        <div className="mt-3 grid gap-2 text-sm">
+                          <InfoRow
+                            label="Bindings"
+                            value={String(snapshot?.bindings.length ?? 0)}
+                          />
+                          <InfoRow
+                            label="Autonomous"
+                            value={String(
+                              (snapshot?.bindings ?? []).filter(
+                                (binding) => binding.dispatchMode === 'autonomous'
+                              ).length
+                            )}
+                          />
+                          <InfoRow
+                            label="Paused / blocked"
+                            value={String(
+                              (snapshot?.bindings ?? []).filter(
+                                (binding) =>
+                                  binding.health === 'paused' || binding.health === 'blocked'
+                              ).length
+                            )}
+                          />
+                        </div>
+                      </section>
+
+                      <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <h3 className="text-sm font-semibold">Projects touched</h3>
                         <ul className="mt-3 space-y-2 text-sm">
                           {Array.from(
@@ -504,6 +563,56 @@ function ReportListItem({
         )}
       </div>
     </li>
+  );
+}
+
+function SDKEndpointItem({
+  endpoint,
+  defaults
+}: {
+  endpoint: SDKEndpointView;
+  defaults: SDKEndpointRegistrySnapshot['defaults'];
+}): JSX.Element {
+  const modes = (['ask', 'synthesis', 'background'] as const)
+    .filter((mode) => defaults[mode] === endpoint.id)
+    .join(', ');
+  const ready = endpoint.enabled && endpoint.keyConfigured;
+  return (
+    <li className="rounded-xl border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium">{endpoint.label}</span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${
+                ready
+                  ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                  : endpoint.enabled
+                    ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                    : 'bg-neutral-500/20 text-neutral-700 dark:text-neutral-300'
+              }`}
+            >
+              {ready ? 'ready' : endpoint.enabled ? 'missing key' : 'disabled'}
+            </span>
+          </div>
+          <div className="mt-1 break-all text-xs text-neutral-500">
+            {endpoint.provider} · {endpoint.defaultModel}
+          </div>
+          {modes && (
+            <div className="mt-2 text-[11px] text-neutral-500">Default for {modes}</div>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
+      <span className="text-neutral-500">{label}</span>
+      <span className="font-medium text-neutral-800 dark:text-neutral-100">{value}</span>
+    </div>
   );
 }
 

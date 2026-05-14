@@ -2,10 +2,29 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { DispatchSnapshot } from '../src/shared/orchestration';
+import type { SDKEndpointRegistrySnapshot } from '../src/shared/runtime';
 import { AgentsLibrarySurface } from '../src/renderer/src/views/AgentsLibraryView';
 import { RuntimesWorkspaceSurface } from '../src/renderer/src/views/RuntimesWorkspaceView';
 
 const noop = vi.fn();
+
+const sdkSnapshot: SDKEndpointRegistrySnapshot = {
+  defaults: { ask: 'anthropic' },
+  endpoints: [
+    {
+      id: 'anthropic',
+      label: 'Anthropic',
+      provider: 'anthropic',
+      protocol: 'anthropic-compatible',
+      baseURL: 'https://api.anthropic.com',
+      defaultModel: 'claude-3-5-sonnet-latest',
+      enabled: true,
+      builtIn: true,
+      keyConfigured: true,
+      keyMasked: 'sk••••test'
+    }
+  ]
+};
 
 const snapshot: DispatchSnapshot = {
   refreshedAt: '2026-04-25T02:00:00.000Z',
@@ -109,6 +128,7 @@ describe('orchestration workspace surfaces', () => {
     const html = renderToStaticMarkup(
       createElement(RuntimesWorkspaceSurface, {
         snapshot,
+        sdkSnapshot,
         loading: false,
         projects: [{ uid: 'project-1', name: 'Moonshot' }],
         selectedRuntimeId: 'claude:/usr/local/bin/claude',
@@ -118,8 +138,10 @@ describe('orchestration workspace surfaces', () => {
       })
     );
 
-    expect(html).toContain('Workspace Runtimes');
+    expect(html).toContain('AI Control Plane');
     expect(html).toContain('Runtime Registry');
+    expect(html).toContain('Runtime B SDK Endpoints');
+    expect(html).toContain('claude-3-5-sonnet-latest');
     expect(html).toContain('Implement runtime page');
     expect(html).toContain('claude local runtime');
   });
@@ -162,7 +184,7 @@ describe('orchestration workspace surfaces', () => {
     expect(html).toContain('missing executable referenced by CLI wrapper');
   });
 
-  it('renders the agents library with versions and project bindings', () => {
+  it('renders the role template library with versions and project bindings', () => {
     const html = renderToStaticMarkup(
       createElement(AgentsLibrarySurface, {
         snapshot,
@@ -175,7 +197,7 @@ describe('orchestration workspace surfaces', () => {
       })
     );
 
-    expect(html).toContain('Agents Library');
+    expect(html).toContain('Role Templates');
     expect(html).toContain('Template Baseline');
     expect(html).toContain('Project Bindings');
     expect(html).toContain('Moonshot');

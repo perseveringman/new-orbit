@@ -68,6 +68,14 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
     if (!selectedBinding) return null;
     return templates.find((t) => t.id === selectedBinding.templateId) ?? null;
   }, [selectedBinding, templates]);
+  const selectedTemplateVersion = useMemo(() => {
+    if (!selectedBinding) return null;
+    return (
+      snapshot?.templateVersions.find(
+        (version) => version.id === selectedBinding.templateVersionId
+      ) ?? null
+    );
+  }, [selectedBinding, snapshot]);
 
   useEffect(() => {
     if (!selectedBindingId) {
@@ -336,17 +344,57 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                         </div>
                       </div>
 
-                      {selectedBinding.runtimePreference && (
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
                             Runtime Preference
                           </label>
+                          <select
+                            value={selectedBinding.runtimePreference ?? ''}
+                            onChange={(e) =>
+                              void updateBinding(selectedBinding.id, {
+                                runtimePreference: e.target.value || undefined
+                              })
+                            }
+                            className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                          >
+                            <option value="">Auto from role/default</option>
+                            {(snapshot?.runtimes ?? []).map((runtime) => (
+                              <option key={runtime.runtimeId} value={runtime.runtimeId}>
+                                {runtimeOptionLabel(runtime)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                            Model Hint
+                          </label>
                           <input
                             type="text"
-                            value={selectedBinding.runtimePreference}
-                            readOnly
-                            className="w-full rounded border border-neutral-300 bg-neutral-50 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                            value={selectedBinding.modelPreference ?? ''}
+                            onChange={(e) =>
+                              void updateBinding(selectedBinding.id, {
+                                modelPreference: e.target.value.trim() || undefined
+                              })
+                            }
+                            placeholder={selectedTemplateVersion?.modelPreference ?? 'Provider default'}
+                            className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                           />
+                        </div>
+                      </div>
+
+                      {selectedTemplateVersion && (
+                        <div className="rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                          <div className="font-medium text-neutral-700 dark:text-neutral-200">
+                            Template routing defaults
+                          </div>
+                          <div className="mt-1">
+                            Providers:{' '}
+                            {selectedTemplateVersion.providerPreferences?.join(', ') || 'any'}
+                            {' · '}
+                            Model: {selectedTemplateVersion.modelPreference ?? 'provider default'}
+                          </div>
                         </div>
                       )}
 
@@ -447,11 +495,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                   {snapshot && (
                     <section>
                       <h4 className="mb-2 text-sm font-semibold">
-                        Available Runtimes ({snapshot.runtimes.filter((r) => r.status === 'online').length})
+                        Runtime Providers ({snapshot.runtimes.length})
                       </h4>
                       <ul className="space-y-2">
                         {snapshot.runtimes
-                          .filter((r) => r.status === 'online')
                           .map((runtime) => (
                             <li
                               key={runtime.runtimeId}
@@ -465,6 +512,8 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                                   </div>
                                   <div className="mt-1 text-[10px] text-neutral-500">
                                     {runtime.provider} · {runtime.version ?? 'unknown version'}
+                                    {' · '}
+                                    {runtimeTaskReadiness(runtime)}
                                     {runtime.activeRunIds && runtime.activeRunIds.length > 0 && (
                                       <> · {runtime.activeRunIds.length} active runs</>
                                     )}
@@ -484,6 +533,17 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
       </div>
     </div>
   );
+}
+
+function runtimeOptionLabel(runtime: RuntimeDescriptor): string {
+  return `${runtime.name} · ${runtime.status} · ${runtimeTaskReadiness(runtime)}`;
+}
+
+function runtimeTaskReadiness(runtime: RuntimeDescriptor): string {
+  if (runtime.status !== 'online') return 'needs attention';
+  if (!runtime.capabilities.supportsBackgroundRuns) return 'manual/session only';
+  if (runtime.provider !== 'claude') return 'task adapter pending';
+  return 'task runnable';
 }
 
 function HealthBadge({ health }: { health: BindingHealth }): JSX.Element {

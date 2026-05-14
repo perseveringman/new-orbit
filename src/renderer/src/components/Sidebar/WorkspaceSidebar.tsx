@@ -9,9 +9,9 @@ interface Item {
 
 const ITEMS: Item[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
-  { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: 'AI Control', view: { kind: 'runtimes' }, icon: '◫' },
   { label: 'Tools', view: { kind: 'tools' }, icon: '⌘' },
-  { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
+  { label: 'Role Templates', view: { kind: 'agents' }, icon: '◌' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
   { label: 'Conversations', view: { kind: 'conversations' }, icon: '💬' },
   { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }

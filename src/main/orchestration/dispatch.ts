@@ -250,7 +250,10 @@ export class DispatchService extends EventEmitter {
     });
   }
 
-  private chooseRuntime(binding: ProjectRoleBinding): RuntimeDescriptor | null {
+  private chooseRuntime(
+    binding: ProjectRoleBinding,
+    templateVersion?: { providerPreferences?: RuntimeDescriptor['provider'][] }
+  ): RuntimeDescriptor | null {
     const runtimes = getLocalRuntimeManager()
       .list()
       .filter((runtime) => runtime.status === 'online' && runtime.capabilities.supportsBackgroundRuns);
@@ -262,6 +265,10 @@ export class DispatchService extends EventEmitter {
             runtime.provider === binding.runtimePreference
         ) ?? null
       );
+    }
+    for (const provider of templateVersion?.providerPreferences ?? []) {
+      const match = runtimes.find((runtime) => runtime.provider === provider);
+      if (match) return match;
     }
     return runtimes[0] ?? null;
   }
@@ -278,7 +285,9 @@ export class DispatchService extends EventEmitter {
     const bindings = await this.availableBindings(task);
     const binding = bindings[0];
     if (!binding) return;
-    const runtime = this.chooseRuntime(binding);
+    const versions = await listRoleTemplateVersions(binding.templateId);
+    const version = versions.find((entry) => entry.id === binding.templateVersionId);
+    const runtime = this.chooseRuntime(binding, version);
     if (!runtime) {
       await updateProjectRoleBinding(vaultPath, binding.projectUid, binding.id, { health: 'blocked' });
       return;
@@ -307,9 +316,14 @@ export class DispatchService extends EventEmitter {
     });
     await refreshTaskFileInSession(task.filePath);
 
-    const versions = await listRoleTemplateVersions(binding.templateId);
-    const version = versions.find((entry) => entry.id === binding.templateVersionId);
-    const instructions = [version?.instructions, binding.overlayInstructions].filter(Boolean).join('\n\n');
+    const modelPreference = binding.modelPreference ?? version?.modelPreference;
+    const instructions = [
+      version?.instructions,
+      modelPreference ? `Runtime model preference: ${modelPreference}` : '',
+      binding.overlayInstructions
+    ]
+      .filter(Boolean)
+      .join('\n\n');
     const conversation = task.uid ? await getOrCreateConversation(vaultPath, task) : null;
     const vendorSessionId =
       conversation && runtime.capabilities.supportsResume
@@ -338,7 +352,10 @@ export class DispatchService extends EventEmitter {
       status: 'running',
       summary: `${binding.id} claimed ${task.title}`,
       direction: 'running',
-      details: [`Runtime ${runtime.name} started run ${startResult.runId}.`],
+      details: [
+        `Runtime ${runtime.name} started run ${startResult.runId}.`,
+        ...(modelPreference ? [`Model preference: ${modelPreference}.`] : [])
+      ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

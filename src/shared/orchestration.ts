@@ -115,6 +115,7 @@ export interface ProjectRoleBinding {
   enabledSkillRefs?: string[];
   disabledSkillRefs?: string[];
   runtimePreference?: string;
+  modelPreference?: string;
   concurrencyOverride?: number;
   dispatchMode: DispatchMode;
   health: BindingHealth;

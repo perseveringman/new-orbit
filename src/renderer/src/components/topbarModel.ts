@@ -11,9 +11,9 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
   { label: 'Ask Anywhere', view: { kind: 'askAnywhere' }, icon: '✦' },
   { label: 'Vision', view: { kind: 'vision' }, icon: '✦' },
-  { label: 'Runtimes', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: 'AI Control', view: { kind: 'runtimes' }, icon: '◫' },
   { label: 'Tools', view: { kind: 'tools' }, icon: '⌘' },
-  { label: 'Agents', view: { kind: 'agents' }, icon: '◌' },
+  { label: 'Role Templates', view: { kind: 'agents' }, icon: '◌' },
   { label: 'Console', view: { kind: 'developerConsole' }, icon: '⌁' },
   { label: 'GitHub', view: { kind: 'github' }, icon: '⌘' },
   { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
@@ -95,7 +95,7 @@ const WORKSPACE_DETAILS: Record<
   gateway: 'Configure remote channels into Ask-Anywhere and Capture.',
   journals: 'Review past daily notes and decisions.',
   kanban: 'Track task flow across active projects.',
-  runtimes: 'Observe local providers, runtime capabilities, and orchestration load.'
+  runtimes: 'Manage CLI runtimes, SDK endpoints, role routing, and orchestration health.'
 };
 
 export function deriveTopBarContext({
