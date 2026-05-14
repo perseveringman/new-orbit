@@ -37,6 +37,7 @@ import {
   listProjects,
   migrateProjectWorkdir,
   relinkProjectWorkdir,
+  resolveProjectReference,
   scaffoldNewProject
 } from '../project';
 import { probeProjectWorkdir } from '../project_workdir';
@@ -370,6 +371,12 @@ async function projectBySlugOrUid(slugOrUid: string) {
   return project;
 }
 
+async function normalizeProjectOwnerRef(value: string | undefined): Promise<string | undefined> {
+  if (!value) return undefined;
+  const project = await resolveProjectReference(openSession().vault, value);
+  return project?.uid ?? value;
+}
+
 async function spaceRootBySlugOrUid(slugOrUid: string): Promise<string> {
   const vault = openSession().vault;
   const project = (await listProjects(vault)).find(
@@ -597,7 +604,7 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
   registry.register('task.propose', async (params) => {
     const input = objectParams(params, 'task.propose');
     const title = stringParam(input, 'title');
-    const projectUid = optionalStringParam(input, 'project_uid');
+    const projectUid = await normalizeProjectOwnerRef(optionalStringParam(input, 'project_uid'));
     const areaUid = optionalStringParam(input, 'area_uid');
     const resourceUid = optionalStringParam(input, 'resource_uid');
     const ownerCount = [projectUid, areaUid, resourceUid].filter(Boolean).length;

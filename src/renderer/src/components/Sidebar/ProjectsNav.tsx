@@ -13,6 +13,7 @@ export const PRIMARY_WORKSPACE_KINDS: WorkspaceView['kind'][] = [
   'dashboard',
   'askAnywhere',
   'inbox',
+  'today',
   'timeline',
   'review'
 ];

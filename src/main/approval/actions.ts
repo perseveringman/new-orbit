@@ -1,5 +1,5 @@
 import { parseProposalPayload, type NewTaskProposalPayload, type Proposal } from './types';
-import { createTask, type CreateTaskResult } from '../project';
+import { createTask, resolveProjectReference, type CreateTaskResult } from '../project';
 import { normalizeTaskExecutionMode } from '@shared/schemas';
 import { ConversationStore } from '../conversation/store';
 
@@ -16,6 +16,9 @@ export async function createTaskFromApprovedProposal(
     throw new Error(`proposal ${proposal.id} is not a new_task proposal`);
   }
   const payload = parseProposalPayload(proposal.type, proposal.payload) as NewTaskProposalPayload;
+  const projectUid = payload.project_uid
+    ? await resolveApprovedProjectUid(vaultPath, payload.project_uid)
+    : undefined;
   const createdBy =
     proposal.submitted_by === 'agent' ? `agent_run:${proposal.submitted_by_agent_run}` : 'user';
   const executionMode =
@@ -48,7 +51,7 @@ export async function createTaskFromApprovedProposal(
     derived_from: proposal.submitted_during_task ?? payload.frontmatter?.['derived_from'] ?? null
   };
   const created = await createTask(vaultPath, {
-    project_uid: payload.project_uid,
+    project_uid: projectUid,
     area_uid: payload.area_uid,
     resource_uid: payload.resource_uid,
     title: payload.title,
@@ -64,6 +67,14 @@ export async function createTaskFromApprovedProposal(
     });
   }
   return { type: 'task_created', ...created };
+}
+
+async function resolveApprovedProjectUid(vaultPath: string, projectRef: string): Promise<string> {
+  const project = await resolveProjectReference(vaultPath, projectRef);
+  if (!project) {
+    throw new Error(`project reference not found for approved task proposal: ${projectRef}`);
+  }
+  return project.uid;
 }
 
 function uniqueStrings(values: string[]): string[] {

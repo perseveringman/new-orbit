@@ -40,6 +40,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [hits, setHits] = useState<DistillSuggestHit[] | null>(null);
   const mode = taskExecutionMode(task);
+  const canDispatchAgent = mode === 'agent';
 
   useEffect(() => {
     if (!expanded) return;
@@ -174,31 +175,35 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
         >
           {expanded ? '▾ experience' : '▸ experience'}
         </button>
-        <label
-          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
-          title="Run the agent in a fresh git worktree under .orbit/worktrees/"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            checked={useWorktree}
-            onChange={(e) => setUseWorktree(e.target.checked)}
-            className="h-3 w-3"
-          />
-          worktree
-        </label>
-        <button
-          onClick={(e) => void dispatch(e)}
-          disabled={detect ? !detect.available : false}
-          title={
-            detect?.available
-              ? 'Dispatch this task to the Claude Code agent'
-              : 'Claude Code CLI not detected'
-          }
-          className="opacity-0 group-hover:opacity-100 disabled:opacity-40 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-        >
-          ▶ Agent
-        </button>
+        {canDispatchAgent && (
+          <label
+            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
+            title="Run the agent in a fresh git worktree under .orbit/worktrees/"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={useWorktree}
+              onChange={(e) => setUseWorktree(e.target.checked)}
+              className="h-3 w-3"
+            />
+            worktree
+          </label>
+        )}
+        {canDispatchAgent && (
+          <button
+            onClick={(e) => void dispatch(e)}
+            disabled={detect ? !detect.available : false}
+            title={
+              detect?.available
+                ? 'Dispatch this task to the Claude Code agent'
+                : 'Claude Code CLI not detected'
+            }
+            className="opacity-0 group-hover:opacity-100 disabled:opacity-40 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            ▶ Agent
+          </button>
+        )}
         {onStatus && task.status !== 'done' && (
           <select
             value={task.status}

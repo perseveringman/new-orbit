@@ -104,4 +104,40 @@ describe('new_task approval materialization', () => {
       ])
     );
   });
+
+  it('materializes project-backed proposals that use a project slug', async () => {
+    const project = await createProject(vaultPath, {
+      slug: 'clean-shufang',
+      template: 'blank',
+      name: '收拾书房'
+    });
+    const service = createApprovalServiceForVault(vaultPath, {
+      id: () => 'prop_slug_task',
+      now: () => new Date('2026-05-14T03:45:43.000Z'),
+      emitActivity: () => undefined
+    });
+
+    const submitted = await service.submit({
+      type: 'new_task',
+      submitted_by: 'agent',
+      submitted_by_agent_run: 'run_slug',
+      subject: 'New task: QA conversation artifact task',
+      payload: {
+        project_uid: 'clean-shufang',
+        title: 'QA conversation artifact task',
+        execution_mode: 'assisted'
+      }
+    });
+
+    const resolved = await service.resolve(submitted.id, {
+      status: 'approved',
+      resolution_source: 'inbox'
+    });
+    const taskPath = (resolved.proposal.result as { taskPath: string }).taskPath;
+    const parsed = frontmatter.read(await fs.readFile(taskPath, 'utf8')).data;
+
+    expect(parsed['project_uid']).toBe(project.uid);
+    expect(parsed['execution_mode']).toBe('assisted');
+    expect(parsed['execution_strategy']).toBe('manual');
+  });
 });

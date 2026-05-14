@@ -943,6 +943,41 @@ export async function listProjects(vault: string): Promise<ProjectSummary[]> {
   return out;
 }
 
+export async function resolveProjectReference(
+  vault: string,
+  reference: string
+): Promise<ProjectSummary | null> {
+  const raw = reference.trim();
+  if (!raw) return null;
+  const projects = await listProjects(vault);
+  const exact = projects.find((project) => project.uid === raw);
+  if (exact) return exact;
+
+  const normalized = normalizeProjectReference(raw);
+  return (
+    projects.find((project) => {
+      const candidates = [
+        project.slug,
+        project.name,
+        project.relPath,
+        project.path,
+        path.basename(project.path),
+        path.basename(project.relPath)
+      ];
+      return candidates.some((candidate) => normalizeProjectReference(candidate) === normalized);
+    }) ?? null
+  );
+}
+
+function normalizeProjectReference(value: string): string {
+  return value
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/\/+$/g, '')
+    .replace(/^\.\//, '')
+    .toLowerCase();
+}
+
 function areaSlugsFromFrontmatter(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return [

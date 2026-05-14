@@ -30,6 +30,7 @@ export function InboxShell(): JSX.Element {
   const [activePrimary, setActivePrimary] = useState<InboxPrimaryTab>('messages');
   const [activeCapture, setActiveCapture] = useState<InboxCaptureTab>('library');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     init();
@@ -43,15 +44,25 @@ export function InboxShell(): JSX.Element {
     item: InboxItem,
     decision: 'approve' | 'reject' | 'done' | 'processed' = 'done'
   ): Promise<void> {
-    await window.orbit.inbox.resolve(item.id, { decision, source: 'inbox' });
-    setSelectedId(null);
-    await refresh();
+    setActionError(null);
+    try {
+      await window.orbit.inbox.resolve(item.id, { decision, source: 'inbox' });
+      setSelectedId(null);
+      await refresh();
+    } catch (caught) {
+      setActionError(messageFromError(caught));
+    }
   }
 
   async function dismissItem(item: InboxItem): Promise<void> {
-    await window.orbit.inbox.dismiss(item.id, { source: 'inbox' });
-    setSelectedId(null);
-    await refresh();
+    setActionError(null);
+    try {
+      await window.orbit.inbox.dismiss(item.id, { source: 'inbox' });
+      setSelectedId(null);
+      await refresh();
+    } catch (caught) {
+      setActionError(messageFromError(caught));
+    }
   }
 
   return (
@@ -59,7 +70,7 @@ export function InboxShell(): JSX.Element {
       items={items}
       counts={counts}
       loading={loading}
-      error={error}
+      error={error ?? actionError}
       activePrimary={activePrimary}
       activeCapture={activeCapture}
       selectedId={selectedId}
@@ -76,6 +87,10 @@ export function InboxShell(): JSX.Element {
       onDismiss={(item) => void dismissItem(item)}
     />
   );
+}
+
+function messageFromError(caught: unknown): string {
+  return caught instanceof Error ? caught.message : String(caught);
 }
 
 export function InboxShellContent({

@@ -38,7 +38,8 @@ export const PROPOSE_TOOL_DEFS: readonly AgentToolDef[] = [
         },
         project_uid: {
           type: 'string',
-          description: 'Project uid that owns the task. Mutually exclusive with area_uid.'
+          description:
+            'Project uid, slug, name, or vault-relative project path that owns the task. Mutually exclusive with area_uid.'
         },
         area_uid: {
           type: 'string',
