@@ -70,6 +70,52 @@ describe('sidebar store', () => {
     expect(useSidebar.getState().panel).toBe('inspector');
   });
 
+  it('tracks companion pane mode and clamps remembered panel widths', () => {
+    expect(useSidebar.getState().paneMode).toBe('expanded');
+    expect(useSidebar.getState().width).toBe(320);
+
+    useSidebar.getState().setSurface('project.terminal');
+    useSidebar.getState().selectIntent('execution');
+    useSidebar.getState().selectPanel('diff');
+    expect(useSidebar.getState().width).toBe(560);
+
+    useSidebar.getState().setWidth(900);
+    expect(useSidebar.getState().width).toBe(720);
+
+    useSidebar.getState().setSurface('editor');
+    useSidebar.getState().selectPanel('files');
+    expect(useSidebar.getState().width).toBe(320);
+
+    useSidebar.getState().setSurface('project.terminal');
+    useSidebar.getState().selectIntent('execution');
+    useSidebar.getState().selectPanel('diff');
+    expect(useSidebar.getState().width).toBe(720);
+
+    useSidebar.getState().setPaneMode('rail');
+    expect(useSidebar.getState().paneMode).toBe('rail');
+
+    useSidebar.getState().selectPanel('ask');
+    expect(useSidebar.getState().paneMode).toBe('expanded');
+  });
+
+  it('lets a pinned companion pane ignore automatic surface and panel changes', () => {
+    useSidebar.getState().setSurface('project.kanban');
+    useSidebar.getState().selectIntent('execution');
+    useSidebar.getState().selectPanel('diff');
+    useSidebar.getState().setPinned(true);
+
+    useSidebar.getState().setSurface('editor');
+    expect(useSidebar.getState().surface).toBe('project.kanban');
+    expect(useSidebar.getState().panel).toBe('diff');
+
+    useSidebar.getState().openPanel({ panel: 'task-detail', surface: 'project.kanban', origin: 'auto' });
+    expect(useSidebar.getState().panel).toBe('diff');
+
+    useSidebar.getState().openPanel({ panel: 'task-detail', surface: 'project.kanban' });
+    expect(useSidebar.getState().intent).toBe('focus');
+    expect(useSidebar.getState().panel).toBe('task-detail');
+  });
+
   it('keeps the selected session in sidebar focus for the project sessions surface', () => {
     useSidebar.getState().setSurface('project.sessions');
     useSidebar

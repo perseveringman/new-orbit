@@ -241,6 +241,7 @@ export function ProjectRoomView(): JSX.Element {
       openSidebarPanel({
         surface,
         panel,
+        origin: 'auto',
         focus: { projectUid: project.uid }
       });
       return;
@@ -256,6 +257,7 @@ export function ProjectRoomView(): JSX.Element {
       openSidebarPanel({
         surface: 'project.kanban',
         panel: 'task-detail',
+        origin: 'auto',
         focus: {
           task: selectedTask,
           projectUid: project.uid
@@ -267,6 +269,7 @@ export function ProjectRoomView(): JSX.Element {
     openSidebarPanel({
       surface: 'project.kanban',
       panel: 'task-tree',
+      origin: 'auto',
       focus: {
         task: null,
         projectUid: project.uid

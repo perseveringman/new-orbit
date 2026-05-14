@@ -65,6 +65,22 @@ export type SidebarSurfaceId =
   | 'project.github';
 
 export type SidebarIntentId = 'overview' | 'focus' | 'execution';
+export type SidebarPaneMode = 'hidden' | 'rail' | 'expanded';
+export type SidebarPanelWidthPreset = 'narrow' | 'normal' | 'wide';
+export type SidebarPanelIconId =
+  | 'inspector'
+  | 'files'
+  | 'area'
+  | 'backlinks'
+  | 'task'
+  | 'task-tree'
+  | 'agent'
+  | 'worktrees'
+  | 'review'
+  | 'runlog'
+  | 'diff'
+  | 'sessions'
+  | 'ask';
 
 export type SidebarPanelId =
   | 'inspector'
@@ -89,6 +105,9 @@ export interface SidebarIntentTab {
 export interface SidebarPanelTab {
   id: SidebarPanelId;
   title: string;
+  icon: SidebarPanelIconId;
+  widthPreset: SidebarPanelWidthPreset;
+  description: string;
 }
 
 interface SidebarIntentProfile extends SidebarIntentTab {
@@ -99,20 +118,94 @@ interface SidebarSurfaceProfile {
   intents: readonly SidebarIntentProfile[];
 }
 
-const PANEL_TITLES: Record<SidebarPanelId, string> = {
-  inspector: 'Inspector',
-  files: 'Files',
-  'area-config': 'Area',
-  backlinks: 'Backlinks',
-  'task-detail': 'Task Detail',
-  'task-tree': 'Task Tree',
-  agent: 'Agent',
-  worktrees: 'Worktrees',
-  review: 'Review',
-  runlog: 'Run Log',
-  diff: 'Diff',
-  sessions: 'Sessions',
-  ask: 'Ask'
+const PANEL_WIDTHS: Record<SidebarPanelWidthPreset, number> = {
+  narrow: 320,
+  normal: 400,
+  wide: 560
+};
+
+const PANEL_META: Record<
+  SidebarPanelId,
+  Omit<SidebarPanelTab, 'id'>
+> = {
+  inspector: {
+    title: 'Inspector',
+    icon: 'inspector',
+    widthPreset: 'normal',
+    description: 'Inspect files, changes, and workspace context.'
+  },
+  files: {
+    title: 'Files',
+    icon: 'files',
+    widthPreset: 'narrow',
+    description: 'Browse vault files without leaving the main workspace.'
+  },
+  'area-config': {
+    title: 'Area',
+    icon: 'area',
+    widthPreset: 'normal',
+    description: 'Tune the active area and its working context.'
+  },
+  backlinks: {
+    title: 'Backlinks',
+    icon: 'backlinks',
+    widthPreset: 'narrow',
+    description: 'See connected notes and references for the focused item.'
+  },
+  'task-detail': {
+    title: 'Task Detail',
+    icon: 'task',
+    widthPreset: 'normal',
+    description: 'Edit the selected task beside the current workspace.'
+  },
+  'task-tree': {
+    title: 'Task Tree',
+    icon: 'task-tree',
+    widthPreset: 'normal',
+    description: 'Scan project tasks while another project surface stays open.'
+  },
+  agent: {
+    title: 'Agent',
+    icon: 'agent',
+    widthPreset: 'normal',
+    description: 'Launch or monitor the execution agent for the active project.'
+  },
+  worktrees: {
+    title: 'Worktrees',
+    icon: 'worktrees',
+    widthPreset: 'normal',
+    description: 'Review isolated execution contexts and linked code workdirs.'
+  },
+  review: {
+    title: 'Review',
+    icon: 'review',
+    widthPreset: 'wide',
+    description: 'Approve, reject, or inspect pending human-review items.'
+  },
+  runlog: {
+    title: 'Run Log',
+    icon: 'runlog',
+    widthPreset: 'wide',
+    description: 'Follow execution events and terminal activity.'
+  },
+  diff: {
+    title: 'Diff',
+    icon: 'diff',
+    widthPreset: 'wide',
+    description: 'Review file changes as a second workspace pane.'
+  },
+  sessions: {
+    title: 'Sessions',
+    icon: 'sessions',
+    widthPreset: 'normal',
+    description: 'Inspect project or area sessions without leaving the flow.'
+  },
+  ask: {
+    title: 'Ask',
+    icon: 'ask',
+    widthPreset: 'wide',
+    description: 'Open a scoped Ask companion next to the current work.'
+  }
 };
 
 const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
@@ -291,7 +384,7 @@ export function getSidebarPanelTabs(
   const intent = SURFACE_PROFILES[surface].intents.find((entry) => entry.id === resolvedIntent);
   const panels = [...(intent?.panels ?? [])];
   if (!panels.includes('ask')) panels.push('ask');
-  return panels.map((id) => ({ id, title: PANEL_TITLES[id] }));
+  return panels.map((id) => ({ id, ...PANEL_META[id] }));
 }
 
 export function findSidebarIntentForPanel(
@@ -313,4 +406,8 @@ export function resolveSidebarPanelTab(
   if (!activePanelId) return fallback;
 
   return visiblePanels.some((panel) => panel.id === activePanelId) ? activePanelId : fallback;
+}
+
+export function getSidebarDefaultWidth(panelId: SidebarPanelId): number {
+  return PANEL_WIDTHS[PANEL_META[panelId].widthPreset];
 }

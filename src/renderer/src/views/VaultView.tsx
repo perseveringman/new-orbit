@@ -1,4 +1,27 @@
 import { useEffect, useState } from 'react';
+import {
+  Bot,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  FileDiff,
+  FileText,
+  Folder,
+  GitBranch,
+  GripVertical,
+  ListTree,
+  Maximize2,
+  MessageSquare,
+  Network,
+  PanelRight,
+  Pin,
+  ScrollText,
+  Search,
+  Settings,
+  Sparkles,
+  X
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
 import { usePara, type WorkspaceView } from '../store/para';
@@ -60,6 +83,7 @@ import {
   getSidebarIntentTabs,
   getSidebarPanelTabs,
   resolveSidebarSurface,
+  type SidebarPanelIconId,
   type SidebarPanelId
 } from './vaultRightSidebarModel';
 
@@ -81,6 +105,31 @@ function isSidebarPanelId(value: string): value is SidebarPanelId {
   );
 }
 
+const COMPANION_PANEL_ICONS: Record<SidebarPanelIconId, LucideIcon> = {
+  inspector: Search,
+  files: Folder,
+  area: Settings,
+  backlinks: Network,
+  task: FileText,
+  'task-tree': ListTree,
+  agent: Bot,
+  worktrees: GitBranch,
+  review: ClipboardCheck,
+  runlog: ScrollText,
+  diff: FileDiff,
+  sessions: MessageSquare,
+  ask: Sparkles
+};
+
+function getCompanionSurfaceLabel(surface: string): string {
+  if (surface.startsWith('project.')) return `Project ${surface.replace('project.', '')}`;
+  if (surface === 'areaRoom') return 'Area Room';
+  if (surface === 'askAnywhere') return 'Ask Anywhere';
+  if (surface === 'developerConsole') return 'Developer Console';
+  if (surface === 'knowledgeBase') return 'Knowledge Base';
+  return surface.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
+}
+
 export function VaultView(): JSX.Element {
   const { vault, settings } = useWorkspace();
   const activeProjectUid = useWorkspace((s) => s.activeProjectUid);
@@ -95,21 +144,31 @@ export function VaultView(): JSX.Element {
   const sidebarSurface = useSidebar((s) => s.surface);
   const sidebarIntent = useSidebar((s) => s.intent);
   const sidebarPanel = useSidebar((s) => s.panel);
+  const sidebarFocus = useSidebar((s) => s.focus);
+  const companionPaneMode = useSidebar((s) => s.paneMode);
+  const companionWidth = useSidebar((s) => s.width);
+  const companionPinned = useSidebar((s) => s.pinned);
   const setSidebarSurface = useSidebar((s) => s.setSurface);
   const selectSidebarIntent = useSidebar((s) => s.selectIntent);
   const selectSidebarPanel = useSidebar((s) => s.selectPanel);
+  const setCompanionPaneMode = useSidebar((s) => s.setPaneMode);
+  const setCompanionWidth = useSidebar((s) => s.setWidth);
+  const toggleCompanionPinned = useSidebar((s) => s.togglePinned);
   const setSidebarFocus = useSidebar((s) => s.setFocus);
   const openSidebarPanel = useSidebar((s) => s.openPanel);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [workspaceNavCollapsed, setWorkspaceNavCollapsed] = useState(false);
+  const [companionResizing, setCompanionResizing] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
 
   const sidebarProjectUid =
     view.kind === 'project' ? activeProjectUid : view.kind === 'kanban' ? view.projectUid : null;
   const sidebarIntentTabs = getSidebarIntentTabs(sidebarSurface);
   const sidebarPanelTabs = getSidebarPanelTabs(sidebarSurface, sidebarIntent);
+  const activeSidebarPanelTab =
+    sidebarPanelTabs.find((tab) => tab.id === sidebarPanel) ?? sidebarPanelTabs[0] ?? null;
 
   const vaultPath = vault?.path;
   useEffect(() => {
@@ -170,9 +229,12 @@ export function VaultView(): JSX.Element {
       } else if (mod && key === 'n') {
         e.preventDefault();
         setNewProjectOpen(true);
+      } else if (mod && e.shiftKey && key === 'b') {
+        e.preventDefault();
+        setCompanionPaneMode(companionPaneMode === 'expanded' ? 'rail' : 'expanded');
       } else if (mod && key === 'b') {
         e.preventDefault();
-        setSidebarCollapsed((v) => !v);
+        setWorkspaceNavCollapsed((v) => !v);
       } else if (mod && e.key === '`') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('orbit:focus-terminal'));
@@ -182,7 +244,33 @@ export function VaultView(): JSX.Element {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [view.kind]);
+  }, [companionPaneMode, setCompanionPaneMode, view.kind]);
+
+  useEffect(() => {
+    if (!companionResizing) return;
+
+    function onMouseMove(e: MouseEvent): void {
+      setCompanionWidth(window.innerWidth - e.clientX);
+    }
+
+    function onMouseUp(): void {
+      setCompanionResizing(false);
+    }
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [companionResizing, setCompanionWidth]);
 
   useEffect(() => {
     function onOpenRightTab(e: Event): void {
@@ -323,6 +411,57 @@ export function VaultView(): JSX.Element {
     return <WorktreesPanel />;
   }
 
+  function canPromoteSidebarPanel(panel: SidebarPanelId): boolean {
+    if (panel === 'ask' || panel === 'review' || panel === 'worktrees') return true;
+    if (panel === 'files' || panel === 'backlinks' || panel === 'inspector') return true;
+    if (panel === 'sessions') return Boolean(sidebarFocus.projectUid);
+    if (panel === 'task-detail' || panel === 'task-tree') return Boolean(sidebarFocus.projectUid);
+    if (panel === 'diff' || panel === 'runlog' || panel === 'agent')
+      return Boolean(sidebarFocus.projectUid ?? sidebarProjectUid);
+    if (panel === 'area-config') return Boolean(sidebarFocus.projectUid);
+    return false;
+  }
+
+  function promoteSidebarPanelToMain(panel: SidebarPanelId): void {
+    const projectUid = sidebarFocus.projectUid ?? sidebarProjectUid ?? activeProjectUid;
+
+    if (panel === 'ask') {
+      setView({ kind: 'askAnywhere' });
+      return;
+    }
+    if (panel === 'review') {
+      setView({ kind: 'review' });
+      return;
+    }
+    if (panel === 'worktrees') {
+      setView({ kind: 'github' });
+      return;
+    }
+    if (panel === 'files' || panel === 'backlinks' || panel === 'inspector') {
+      setView({ kind: 'editor' });
+      return;
+    }
+    if (panel === 'sessions' && projectUid) {
+      setView({ kind: 'project', projectUid, pane: 'sessions' });
+      return;
+    }
+    if ((panel === 'task-detail' || panel === 'task-tree') && projectUid) {
+      setView({ kind: 'project', projectUid, pane: 'task' });
+      return;
+    }
+    if (panel === 'diff' && projectUid) {
+      setView({ kind: 'project', projectUid, pane: 'github' });
+      return;
+    }
+    if ((panel === 'runlog' || panel === 'agent') && projectUid) {
+      setView({ kind: 'project', projectUid });
+      return;
+    }
+    if (panel === 'area-config' && sidebarFocus.projectUid) {
+      setView({ kind: 'areaRoom', areaUid: sidebarFocus.projectUid });
+    }
+  }
+
   if (!vault) return <></>;
 
   const isProject =
@@ -331,7 +470,7 @@ export function VaultView(): JSX.Element {
 
   return (
     <div className="flex flex-1 min-h-0">
-      {!sidebarCollapsed && (
+      {!workspaceNavCollapsed && (
         <aside className="w-56 shrink-0 overflow-y-auto border-r border-neutral-200 bg-white/40 p-2 dark:border-neutral-800 dark:bg-neutral-900/40">
           <ProjectsNav />
         </aside>
@@ -425,39 +564,151 @@ export function VaultView(): JSX.Element {
         )}
       </section>
 
-      {showRightSidebar ? (
-        <aside className="flex w-80 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-[color:color-mix(in_oklab,white_88%,transparent)] dark:border-neutral-800 dark:bg-[color:color-mix(in_oklab,#111827_86%,transparent)]">
-          <div className="flex shrink-0 overflow-x-auto border-b border-neutral-200 px-2 pt-2 text-[11px] uppercase tracking-[0.18em] text-neutral-500 dark:border-neutral-800">
-            {sidebarIntentTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => selectSidebarIntent(tab.id)}
-                className={
-                  'shrink-0 border-b px-3 py-2 transition-colors ' +
-                  (sidebarIntent === tab.id
-                    ? 'border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100'
-                    : 'border-transparent hover:text-neutral-700 dark:hover:text-neutral-300')
-                }
-              >
-                {tab.title}
-              </button>
-            ))}
+      {showRightSidebar && companionPaneMode === 'hidden' ? (
+        <aside className="flex w-8 shrink-0 flex-col items-center border-l border-neutral-200 bg-white/80 py-2 dark:border-neutral-800 dark:bg-neutral-950/80">
+          <button
+            onClick={() => setCompanionPaneMode('expanded')}
+            className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+            title="Show companion pane"
+          >
+            <ChevronLeft size={16} />
+          </button>
+        </aside>
+      ) : showRightSidebar && companionPaneMode === 'rail' ? (
+        <aside className="flex w-14 shrink-0 flex-col items-center gap-2 overflow-hidden border-l border-neutral-200 bg-white/80 px-2 py-2 dark:border-neutral-800 dark:bg-neutral-950/80">
+          <button
+            onClick={() => setCompanionPaneMode('expanded')}
+            className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+            title="Expand companion pane"
+          >
+            <PanelRight size={17} />
+          </button>
+          <div className="h-px w-full bg-neutral-200 dark:bg-neutral-800" />
+          <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">
+            {sidebarPanelTabs.map((tab) => {
+              const Icon = COMPANION_PANEL_ICONS[tab.icon];
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => selectSidebarPanel(tab.id)}
+                  className={
+                    'rounded p-2 transition-colors ' +
+                    (sidebarPanel === tab.id
+                      ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-950'
+                      : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100')
+                  }
+                  title={`${tab.title}: ${tab.description}`}
+                >
+                  <Icon size={16} />
+                </button>
+              );
+            })}
           </div>
-          <div className="flex shrink-0 flex-wrap gap-1 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-            {sidebarPanelTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => selectSidebarPanel(tab.id)}
-                className={
-                  'rounded-full border px-2.5 py-1 transition-colors ' +
-                  (sidebarPanel === tab.id
-                    ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
-                    : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800')
-                }
-              >
-                {tab.title}
-              </button>
-            ))}
+        </aside>
+      ) : showRightSidebar ? (
+        <aside
+          className="relative flex shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-[color:color-mix(in_oklab,white_90%,transparent)] dark:border-neutral-800 dark:bg-[color:color-mix(in_oklab,#0b1120_90%,transparent)]"
+          style={{ width: companionWidth }}
+        >
+          <button
+            onMouseDown={(event) => {
+              event.preventDefault();
+              setCompanionResizing(true);
+            }}
+            className="absolute left-0 top-0 z-10 flex h-full w-2 cursor-col-resize items-center justify-center text-transparent transition-colors hover:bg-neutral-200/60 hover:text-neutral-500 dark:hover:bg-neutral-800/70"
+            title="Resize companion pane"
+          >
+            <GripVertical size={14} />
+          </button>
+
+          <header className="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-200 pl-4 pr-2 dark:border-neutral-800">
+            <PanelRight size={17} className="shrink-0 text-neutral-500" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                Companion
+              </div>
+              <div className="truncate text-[11px] text-neutral-500">
+                {getCompanionSurfaceLabel(sidebarSurface)}
+                {activeSidebarPanelTab ? ` · ${activeSidebarPanelTab.title}` : ''}
+              </div>
+            </div>
+            <button
+              onClick={toggleCompanionPinned}
+              className={
+                'rounded p-1.5 transition-colors ' +
+                (companionPinned
+                  ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-950'
+                  : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100')
+              }
+              title={companionPinned ? 'Unpin companion pane' : 'Pin companion pane'}
+            >
+              <Pin size={15} />
+            </button>
+            <button
+              onClick={() => promoteSidebarPanelToMain(sidebarPanel)}
+              disabled={!canPromoteSidebarPanel(sidebarPanel)}
+              className="rounded p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+              title="Open this pane in the main workspace"
+            >
+              <Maximize2 size={15} />
+            </button>
+            <button
+              onClick={() => setCompanionPaneMode('rail')}
+              className="rounded p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+              title="Collapse to rail"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              onClick={() => setCompanionPaneMode('hidden')}
+              className="rounded p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+              title="Hide companion pane"
+            >
+              <X size={15} />
+            </button>
+          </header>
+
+          {sidebarIntentTabs.length > 1 ? (
+            <div className="flex shrink-0 border-b border-neutral-200 px-4 py-2 text-xs dark:border-neutral-800">
+              <div className="inline-flex rounded border border-neutral-200 bg-neutral-100/70 p-0.5 dark:border-neutral-800 dark:bg-neutral-900">
+                {sidebarIntentTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => selectSidebarIntent(tab.id)}
+                    className={
+                      'rounded px-2.5 py-1 transition-colors ' +
+                      (sidebarIntent === tab.id
+                        ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
+                        : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100')
+                    }
+                  >
+                    {tab.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-neutral-200 px-4 py-2 text-xs dark:border-neutral-800">
+            {sidebarPanelTabs.map((tab) => {
+              const Icon = COMPANION_PANEL_ICONS[tab.icon];
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => selectSidebarPanel(tab.id)}
+                  className={
+                    'flex shrink-0 items-center gap-1.5 rounded border px-2.5 py-1.5 transition-colors ' +
+                    (sidebarPanel === tab.id
+                      ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-950'
+                      : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800')
+                  }
+                  title={tab.description}
+                >
+                  <Icon size={14} />
+                  <span>{tab.title}</span>
+                </button>
+              );
+            })}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">{renderSidebarPanel()}</div>
         </aside>

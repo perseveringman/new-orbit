@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getSidebarDefaultWidth,
   getSidebarIntentTabs,
   getSidebarPanelTabs,
   resolveSidebarIntentTab,
@@ -58,6 +59,28 @@ describe('vault right sidebar model', () => {
       'inspector',
       'ask'
     ]);
+  });
+
+  it('describes companion pane candidates with icons and width presets', () => {
+    const terminalDiff = getSidebarPanelTabs('project.terminal', 'execution').find(
+      (tab) => tab.id === 'diff'
+    );
+    expect(terminalDiff).toMatchObject({
+      title: 'Diff',
+      icon: 'diff',
+      widthPreset: 'wide'
+    });
+
+    const taskDetail = getSidebarPanelTabs('project.kanban', 'focus').find(
+      (tab) => tab.id === 'task-detail'
+    );
+    expect(taskDetail).toMatchObject({
+      icon: 'task',
+      widthPreset: 'normal'
+    });
+
+    expect(getSidebarDefaultWidth('files')).toBeLessThan(getSidebarDefaultWidth('diff'));
+    expect(getSidebarDefaultWidth('diff')).toBe(560);
   });
 
   it('exposes Ask as a right sidebar panel on every intent', () => {

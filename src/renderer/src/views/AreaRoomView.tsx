@@ -178,6 +178,7 @@ export function AreaRoomView(): JSX.Element {
       openSidebarPanel({
         surface: 'areaRoom',
         panel: 'sessions',
+        origin: 'auto',
         focus: {
           projectUid: area.uid
         }
