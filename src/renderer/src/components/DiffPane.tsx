@@ -35,10 +35,10 @@ const STATUS_META: Record<
   LocalDiffFile['status'],
   { glyph: string; className: string; label: string }
 > = {
-  added: { glyph: 'A', className: 'text-emerald-400', label: 'Added' },
-  modified: { glyph: 'M', className: 'text-amber-400', label: 'Modified' },
-  deleted: { glyph: 'D', className: 'text-red-400', label: 'Deleted' },
-  renamed: { glyph: 'R', className: 'text-sky-400', label: 'Renamed' }
+  added: { glyph: 'A', className: 'text-emerald-600 dark:text-emerald-400', label: 'Added' },
+  modified: { glyph: 'M', className: 'text-amber-600 dark:text-amber-400', label: 'Modified' },
+  deleted: { glyph: 'D', className: 'text-red-600 dark:text-red-400', label: 'Deleted' },
+  renamed: { glyph: 'R', className: 'text-sky-600 dark:text-sky-400', label: 'Renamed' }
 };
 
 export { classifyPatch, formatShortSha };
@@ -237,7 +237,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
   );
 
   const rootClass = [
-    'flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-800 bg-[#111111] text-neutral-200',
+    'flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-200 bg-white text-neutral-900 dark:border-neutral-800 dark:bg-[#111111] dark:text-neutral-200',
     className ?? ''
   ]
     .filter(Boolean)
@@ -245,23 +245,23 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
 
   return (
     <div className={rootClass}>
-      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-neutral-800 px-3 text-xs">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-neutral-200 px-3 text-xs dark:border-neutral-800">
         <div className="flex min-w-0 items-center gap-2">
           <GitBranch size={14} className="shrink-0 text-neutral-500" />
           {branchControl ?? (
-            <span className="shrink-0 text-neutral-400">Branch</span>
+            <span className="shrink-0 text-neutral-500 dark:text-neutral-400">Branch</span>
           )}
-          <span className="font-mono text-emerald-400">+{formatNumber(totals.add)}</span>
-          <span className="font-mono text-rose-400">-{formatNumber(totals.del)}</span>
-          <span className="min-w-0 truncate font-mono text-neutral-500">
+          <span className="font-mono text-emerald-600 dark:text-emerald-400">+{formatNumber(totals.add)}</span>
+          <span className="font-mono text-rose-600 dark:text-rose-400">-{formatNumber(totals.del)}</span>
+          <span className="min-w-0 truncate font-mono text-neutral-500 dark:text-neutral-500">
             {effectiveBase}
-            <span className="px-1.5 text-neutral-700">→</span>
+            <span className="px-1.5 text-neutral-300 dark:text-neutral-700">→</span>
             {branchLabel || (result ? formatShortSha(result.head) : '…')}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {result && (
-            <span className="hidden font-mono text-[11px] text-neutral-600 xl:inline">
+            <span className="hidden font-mono text-[11px] text-neutral-400 dark:text-neutral-600 xl:inline">
               merge-base {formatShortSha(result.mergeBase)}
             </span>
           )}
@@ -269,7 +269,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
             type="button"
             onClick={() => setNonce((n) => n + 1)}
             disabled={loading}
-            className="rounded p-1.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100 disabled:opacity-50"
+            className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
             title="Refresh diff"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -278,12 +278,12 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
       </header>
 
       {error && (
-        <div className="flex items-center justify-between border-b border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+        <div className="flex items-center justify-between border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
           <span>{error}</span>
           <button
             type="button"
             onClick={() => setNonce((n) => n + 1)}
-            className="rounded border border-red-700 px-2 py-0.5 hover:bg-red-900/50"
+            className="rounded border border-red-300 px-2 py-0.5 hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900/50"
           >
             Retry
           </button>
@@ -292,7 +292,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
 
       {!error && result && result.files.length === 0 && !loading && (
         <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
-          No changes vs <span className="mx-1 font-mono text-neutral-300">{effectiveBase}</span>
+          No changes vs <span className="mx-1 font-mono text-neutral-700 dark:text-neutral-300">{effectiveBase}</span>
         </div>
       )}
 
@@ -305,7 +305,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
               const rows = rowsByFile.get(file.path) ?? [];
 
               return (
-                <section key={file.path} className="border-b border-neutral-900/80">
+                <section key={file.path} className="border-b border-neutral-200 dark:border-neutral-900/80">
                   <button
                     type="button"
                     onClick={() =>
@@ -314,21 +314,21 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
                         [file.path]: !collapsed
                       }))
                     }
-                    className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-neutral-900 bg-[#111111]/95 px-3 py-2 text-left backdrop-blur"
+                    className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-neutral-200 bg-white/95 px-3 py-2 text-left backdrop-blur dark:border-neutral-900 dark:bg-[#111111]/95"
                   >
-                    <span className="rounded bg-neutral-800 p-1 text-neutral-400">
+                    <span className="rounded bg-neutral-100 p-1 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                       {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                     </span>
                     <span className={`w-4 shrink-0 text-center text-[11px] font-semibold ${meta.className}`} title={meta.label}>
                       {meta.glyph}
                     </span>
-                    <span className="min-w-0 flex-1 truncate font-mono text-sm text-neutral-100">
+                    <span className="min-w-0 flex-1 truncate font-mono text-sm text-neutral-900 dark:text-neutral-100">
                       {file.path}
                     </span>
                     <span className="shrink-0 font-mono text-xs">
-                      <span className="text-emerald-400">+{formatNumber(file.additions)}</span>
-                      <span className="px-1 text-neutral-700"> </span>
-                      <span className="text-rose-400">-{formatNumber(file.deletions)}</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">+{formatNumber(file.additions)}</span>
+                      <span className="px-1 text-neutral-300 dark:text-neutral-700"> </span>
+                      <span className="text-rose-600 dark:text-rose-400">-{formatNumber(file.deletions)}</span>
                     </span>
                   </button>
 
@@ -348,7 +348,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
                             return (
                               <div key={row.key} className="flex items-center py-1">
                                 <span className="w-11 shrink-0" />
-                                <div className="mx-2 flex-1 rounded-md bg-neutral-800 px-3 py-1 text-[11px] text-neutral-500">
+                                <div className="mx-2 flex-1 rounded-md bg-neutral-100 px-3 py-1 text-[11px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500">
                                   {formatNumber(row.count)} unmodified lines
                                 </div>
                               </div>
@@ -359,19 +359,19 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
                           const isAdd = row.kind === 'add';
                           const isDel = row.kind === 'del';
                           const rowClass = isAdd
-                            ? 'border-l-2 border-emerald-400 bg-emerald-950/45 text-emerald-50'
+                            ? 'border-l-2 border-emerald-500 bg-emerald-50 text-emerald-950 dark:border-emerald-400 dark:bg-emerald-950/45 dark:text-emerald-50'
                             : isDel
-                              ? 'border-l-2 border-rose-400 bg-rose-950/35 text-rose-50'
-                              : 'border-l-2 border-transparent text-neutral-300';
+                              ? 'border-l-2 border-rose-500 bg-rose-50 text-rose-950 dark:border-rose-400 dark:bg-rose-950/35 dark:text-rose-50'
+                              : 'border-l-2 border-transparent text-neutral-700 dark:text-neutral-300';
                           const markerClass = isAdd
-                            ? 'text-emerald-300'
+                            ? 'text-emerald-700 dark:text-emerald-300'
                             : isDel
-                              ? 'text-rose-300'
-                              : 'text-neutral-600';
+                              ? 'text-rose-700 dark:text-rose-300'
+                              : 'text-neutral-400 dark:text-neutral-600';
 
                           return (
                             <div key={row.key} className={`flex min-w-max ${rowClass}`}>
-                              <span className="w-11 shrink-0 select-none px-2 text-right text-neutral-500">
+                              <span className="w-11 shrink-0 select-none px-2 text-right text-neutral-400 dark:text-neutral-500">
                                 {number ?? ''}
                               </span>
                               <span className={`w-5 shrink-0 select-none text-center ${markerClass}`}>
