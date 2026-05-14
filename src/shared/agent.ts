@@ -59,6 +59,7 @@ export interface StartTaskArgs {
   instructions?: string;
   worktreePath?: string;
   runtimeId?: string;
+  modelPreference?: string;
   vendorSessionId?: string;
 }
 

@@ -29,9 +29,9 @@ import { readLogForReattach } from './reattach';
 import { emitActivity } from '../activity';
 
 export interface SpawnOpts {
-  /** Absolute path to the `claude` binary. */
+  /** Absolute path to the runtime binary. The legacy name is kept for call-site compatibility. */
   claudePath: string;
-  /** Prompt text passed via `-p <prompt>`. */
+  /** Prompt text passed to the selected runtime. */
   prompt: string;
   /** Working directory — vault root or a worktree path. */
   cwd: string;
@@ -41,6 +41,8 @@ export interface SpawnOpts {
   runtimeProvider?: RuntimeProvider;
   runtimeId?: string;
   runtimeName?: string;
+  /** Optional runtime-specific model id passed to CLI flags when supported. */
+  modelPreference?: string;
   /** Extra env vars merged into the child process env. */
   extraEnv?: Record<string, string>;
   /** Optional hook server config for lifecycle callbacks. */
@@ -386,6 +388,88 @@ function extractText(r: RawEventShape): string {
 
 // --- runner ------------------------------------------------------------------
 
+type RuntimeStdinMode = 'ignore' | 'raw-prompt' | 'claude-stream-json';
+
+interface RuntimeLaunchCommand {
+  args: string[];
+  stdinMode: RuntimeStdinMode;
+}
+
+function appendModelArg(args: string[], provider: RuntimeProvider, modelPreference?: string): void {
+  const model = modelPreference?.trim();
+  if (!model) return;
+  if (provider === 'claude' || provider === 'copilot') {
+    args.push('--model', model);
+    return;
+  }
+  if (provider === 'codex' || provider === 'gemini' || provider === 'opencode') {
+    args.push('-m', model);
+  }
+}
+
+function buildRuntimeLaunchCommand(opts: SpawnOpts): RuntimeLaunchCommand {
+  const provider = opts.runtimeProvider ?? 'claude';
+  const inputMode = opts.inputMode ?? 'one-shot';
+  const prompt = opts.prompt;
+
+  if (provider === 'codex') {
+    const args = opts.vendorSessionId
+      ? ['exec', 'resume', '--skip-git-repo-check', '--json', '--dangerously-bypass-approvals-and-sandbox']
+      : ['exec', '--skip-git-repo-check', '--json', '--dangerously-bypass-approvals-and-sandbox'];
+    appendModelArg(args, provider, opts.modelPreference);
+    if (opts.vendorSessionId) args.push(opts.vendorSessionId);
+    args.push('-');
+    return { args, stdinMode: 'raw-prompt' };
+  }
+
+  if (provider === 'copilot') {
+    const args = [
+      '-p',
+      prompt,
+      '--allow-all',
+      '--no-color',
+      '--output-format',
+      'json',
+      '--stream',
+      'off'
+    ];
+    appendModelArg(args, provider, opts.modelPreference);
+    if (opts.vendorSessionId) args.push(`--resume=${opts.vendorSessionId}`);
+    return { args, stdinMode: 'ignore' };
+  }
+
+  if (provider === 'gemini') {
+    const args = ['--prompt', prompt, '--output-format', 'stream-json', '--yolo'];
+    appendModelArg(args, provider, opts.modelPreference);
+    if (opts.vendorSessionId) args.push('--resume', opts.vendorSessionId);
+    return { args, stdinMode: 'ignore' };
+  }
+
+  if (provider === 'opencode') {
+    const args = ['run', '--format', 'json'];
+    appendModelArg(args, provider, opts.modelPreference);
+    if (opts.vendorSessionId) args.push('--session', opts.vendorSessionId);
+    args.push(prompt);
+    return { args, stdinMode: 'ignore' };
+  }
+
+  const args =
+    inputMode === 'stream-json'
+      ? ['-p', '--output-format', 'stream-json', '--verbose']
+      : ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
+  appendModelArg(args, 'claude', opts.modelPreference);
+  if (opts.vendorSessionId) {
+    args.push('--resume', opts.vendorSessionId);
+  }
+  if (inputMode === 'stream-json') {
+    args.push('--input-format', 'stream-json');
+  }
+  return {
+    args: appendClaudeBypassPermissionsArgs(args),
+    stdinMode: inputMode === 'stream-json' ? 'claude-stream-json' : 'ignore'
+  };
+}
+
 export class AgentRunner extends EventEmitter {
   readonly runId: string;
   private readonly opts: SpawnOpts;
@@ -448,7 +532,6 @@ export class AgentRunner extends EventEmitter {
   async start(): Promise<void> {
     const spawner = this.opts.spawner ?? spawn;
     const env: NodeJS.ProcessEnv = { ...process.env };
-    const inputMode = this.opts.inputMode ?? 'one-shot';
     if (this.opts.apiKey) env['ANTHROPIC_API_KEY'] = this.opts.apiKey;
     if (this.opts.hookConfig) {
       await ensureClaudeHookFiles(this.opts.cwd, this.runId, this.opts.hookConfig);
@@ -468,22 +551,12 @@ export class AgentRunner extends EventEmitter {
     await this.openLog();
     this.logRaw(`# orbit runner start runId=${this.runId} task=${this.opts.taskId ?? ''}`);
 
-    const args =
-      inputMode === 'stream-json'
-        ? ['-p', '--output-format', 'stream-json', '--verbose']
-        : ['-p', this.opts.prompt, '--output-format', 'stream-json', '--verbose'];
-    if (this.opts.vendorSessionId) {
-      args.push('--resume', this.opts.vendorSessionId);
-    }
-    if (inputMode === 'stream-json') {
-      args.push('--input-format', 'stream-json');
-    }
-    const claudeArgs = appendClaudeBypassPermissionsArgs(args);
+    const launch = buildRuntimeLaunchCommand(this.opts);
     try {
-      this.child = spawner(this.opts.claudePath, claudeArgs, {
+      this.child = spawner(this.opts.claudePath, launch.args, {
         cwd: this.opts.cwd,
         env,
-        stdio: [inputMode === 'stream-json' ? 'pipe' : 'ignore', 'pipe', 'pipe']
+        stdio: [launch.stdinMode === 'ignore' ? 'ignore' : 'pipe', 'pipe', 'pipe']
       });
     } catch (e) {
       await this.finish('error', (e as Error).message, null);
@@ -511,12 +584,20 @@ export class AgentRunner extends EventEmitter {
       this.flushStderr();
       void this.finish(code === 0 ? 'done' : 'error', undefined, code);
     });
-    if (inputMode === 'stream-json' && !this.writeStdin(this.opts.prompt)) {
+    if (launch.stdinMode === 'claude-stream-json' && !this.writeClaudeStreamJsonStdin(this.opts.prompt)) {
       this.push({
         idx: this.eventIdx++,
         at: new Date().toISOString(),
         kind: 'error',
         text: 'failed to write initial stream-json prompt'
+      });
+    }
+    if (launch.stdinMode === 'raw-prompt' && !this.writeRawStdin(`${this.opts.prompt}\n`)) {
+      this.push({
+        idx: this.eventIdx++,
+        at: new Date().toISOString(),
+        kind: 'error',
+        text: 'failed to write initial prompt'
       });
     }
   }
@@ -583,7 +664,7 @@ export class AgentRunner extends EventEmitter {
     if (hyd && this.opts.hydrate) {
       void this.opts
         .hydrate(hyd.query)
-        .then((reply) => this.writeStdin(reply))
+        .then((reply) => this.writeClaudeStreamJsonStdin(reply))
         .catch((e: Error) => {
           this.push({
             idx: this.eventIdx++,
@@ -605,7 +686,7 @@ export class AgentRunner extends EventEmitter {
     if (inv && this.opts.onToolInvocation) {
       void this.opts
         .onToolInvocation(inv.name, inv.args)
-        .then((reply) => this.writeStdin(reply))
+        .then((reply) => this.writeClaudeStreamJsonStdin(reply))
         .catch((e: Error) => {
           this.push({
             idx: this.eventIdx++,
@@ -670,10 +751,28 @@ export class AgentRunner extends EventEmitter {
 
   sendMessage(text: string): boolean {
     if (this.status !== 'running') return false;
-    return this.writeStdin(text);
+    return this.writeClaudeStreamJsonStdin(text);
   }
 
-  private writeStdin(text: string): boolean {
+  private writeRawStdin(text: string): boolean {
+    if (!this.child?.stdin || this.child.stdin.destroyed) return false;
+    try {
+      this.child.stdin.write(text);
+      this.child.stdin.end();
+      this.logRaw(`# orbit stdin -> ${text}`);
+      return true;
+    } catch (e) {
+      this.push({
+        idx: this.eventIdx++,
+        at: new Date().toISOString(),
+        kind: 'error',
+        text: `stdin write failed: ${(e as Error).message}`
+      });
+      return false;
+    }
+  }
+
+  private writeClaudeStreamJsonStdin(text: string): boolean {
     if (!this.child?.stdin || this.child.stdin.destroyed) return false;
     const payload = `${JSON.stringify({
       type: 'user',

@@ -302,6 +302,12 @@ export function RuntimesWorkspaceSurface({
                         <div className="mt-4 text-xs text-neutral-500">
                           Max concurrent runs: {selectedRuntime.limits.maxConcurrentRuns}
                         </div>
+                        <div className="mt-2 text-xs text-neutral-500">
+                          Model default: {selectedRuntime.defaultModel ?? 'provider default'}
+                        </div>
+                        <div className="mt-2 text-xs text-neutral-500">
+                          Model choices: {runtimeModelChoicesLabel(selectedRuntime)}
+                        </div>
                       </section>
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
@@ -619,6 +625,12 @@ function InfoRow({ label, value }: { label: string; value: string }): JSX.Elemen
 function runtimeVersionLabel(runtime: RuntimeDescriptor): string {
   if (runtime.version) return runtime.version;
   return runtime.status === 'degraded' ? 'version unavailable' : 'unknown version';
+}
+
+function runtimeModelChoicesLabel(runtime: RuntimeDescriptor): string {
+  const options = runtime.modelOptions ?? [];
+  if (options.length === 0) return 'provider configured';
+  return options.map((option) => option.label).join(', ');
 }
 
 function WorkspaceStat({

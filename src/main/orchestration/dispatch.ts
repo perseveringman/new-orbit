@@ -319,7 +319,6 @@ export class DispatchService extends EventEmitter {
     const modelPreference = binding.modelPreference ?? version?.modelPreference;
     const instructions = [
       version?.instructions,
-      modelPreference ? `Runtime model preference: ${modelPreference}` : '',
       binding.overlayInstructions
     ]
       .filter(Boolean)
@@ -327,12 +326,13 @@ export class DispatchService extends EventEmitter {
     const conversation = task.uid ? await getOrCreateConversation(vaultPath, task) : null;
     const vendorSessionId =
       conversation && runtime.capabilities.supportsResume
-        ? getLatestVendorSessionId(conversation)
+        ? getLatestVendorSessionId(conversation, runtime.runtimeId)
         : undefined;
     const startResult = await startTask({
       taskId: task.id,
       instructions: instructions || undefined,
       runtimeId: runtime.runtimeId,
+      modelPreference,
       vendorSessionId
     });
     if (startResult.kind !== 'ok') {

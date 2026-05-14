@@ -4,6 +4,7 @@ import type {
   RoleTemplate,
   RoleTemplateVersion,
   RuntimeDescriptor,
+  RuntimeModelOption,
   DispatchSnapshot,
   TaskLease,
   ImplementationReport,
@@ -76,6 +77,17 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
       ) ?? null
     );
   }, [selectedBinding, snapshot]);
+  const selectedRuntime = useMemo(
+    () =>
+      selectedBinding
+        ? resolveBindingRuntime(selectedBinding, selectedTemplateVersion, snapshot?.runtimes ?? [])
+        : null,
+    [selectedBinding, selectedTemplateVersion, snapshot]
+  );
+  const selectedModelOptions = selectedRuntime?.modelOptions ?? [];
+  const selectedModelIsPreset = selectedModelOptions.some(
+    (option) => option.id === selectedBinding?.modelPreference
+  );
 
   useEffect(() => {
     if (!selectedBindingId) {
@@ -351,11 +363,28 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                           </label>
                           <select
                             value={selectedBinding.runtimePreference ?? ''}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const runtimePreference = e.target.value || undefined;
+                              const nextRuntime = runtimePreference
+                                ? (snapshot?.runtimes ?? []).find(
+                                    (runtime) => runtime.runtimeId === runtimePreference
+                                  ) ?? null
+                                : resolveBindingRuntime(
+                                    { ...selectedBinding, runtimePreference: undefined },
+                                    selectedTemplateVersion,
+                                    snapshot?.runtimes ?? []
+                                  );
+                              const keepModel =
+                                !selectedBinding.modelPreference ||
+                                !nextRuntime ||
+                                nextRuntime.modelOptions?.some(
+                                  (option) => option.id === selectedBinding.modelPreference
+                                );
                               void updateBinding(selectedBinding.id, {
-                                runtimePreference: e.target.value || undefined
-                              })
-                            }
+                                runtimePreference,
+                                ...(keepModel ? {} : { modelPreference: undefined })
+                              });
+                            }}
                             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                           >
                             <option value="">Auto from role/default</option>
@@ -368,19 +397,32 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                            Model Hint
+                            Model Preference
                           </label>
-                          <input
-                            type="text"
+                          <select
                             value={selectedBinding.modelPreference ?? ''}
                             onChange={(e) =>
                               void updateBinding(selectedBinding.id, {
-                                modelPreference: e.target.value.trim() || undefined
+                                modelPreference: e.target.value || undefined
                               })
                             }
-                            placeholder={selectedTemplateVersion?.modelPreference ?? 'Provider default'}
+                            disabled={!selectedRuntime}
                             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                          />
+                          >
+                            <option value="">
+                              {modelDefaultLabel(selectedRuntime, selectedTemplateVersion)}
+                            </option>
+                            {selectedModelOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {modelOptionLabel(option)}
+                              </option>
+                            ))}
+                            {selectedBinding.modelPreference && !selectedModelIsPreset ? (
+                              <option value={selectedBinding.modelPreference}>
+                                {selectedBinding.modelPreference} (current)
+                              </option>
+                            ) : null}
+                          </select>
                         </div>
                       </div>
 
@@ -542,8 +584,41 @@ function runtimeOptionLabel(runtime: RuntimeDescriptor): string {
 function runtimeTaskReadiness(runtime: RuntimeDescriptor): string {
   if (runtime.status !== 'online') return 'needs attention';
   if (!runtime.capabilities.supportsBackgroundRuns) return 'manual/session only';
-  if (runtime.provider !== 'claude') return 'task adapter pending';
   return 'task runnable';
+}
+
+function resolveBindingRuntime(
+  binding: ProjectRoleBinding,
+  templateVersion: RoleTemplateVersion | null,
+  runtimes: RuntimeDescriptor[]
+): RuntimeDescriptor | null {
+  if (binding.runtimePreference) {
+    return (
+      runtimes.find(
+        (runtime) =>
+          runtime.runtimeId === binding.runtimePreference ||
+          runtime.provider === binding.runtimePreference
+      ) ?? null
+    );
+  }
+  for (const provider of templateVersion?.providerPreferences ?? []) {
+    const match = runtimes.find((runtime) => runtime.provider === provider);
+    if (match) return match;
+  }
+  return runtimes.find((runtime) => runtime.status === 'online') ?? runtimes[0] ?? null;
+}
+
+function modelDefaultLabel(
+  runtime: RuntimeDescriptor | null,
+  templateVersion: RoleTemplateVersion | null
+): string {
+  if (templateVersion?.modelPreference) return `Role default (${templateVersion.modelPreference})`;
+  if (runtime?.defaultModel) return `Runtime default (${runtime.defaultModel})`;
+  return runtime ? 'Provider default' : 'Select a runtime first';
+}
+
+function modelOptionLabel(option: RuntimeModelOption): string {
+  return option.description ? `${option.label} · ${option.description}` : option.label;
 }
 
 function HealthBadge({ health }: { health: BindingHealth }): JSX.Element {

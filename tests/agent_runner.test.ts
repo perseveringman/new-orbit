@@ -263,6 +263,188 @@ describe('AgentRunner stream parsing', () => {
     }
   });
 
+  it('passes the selected Claude model to the CLI when provided', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-claude-model-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, lastArgs } = capturingSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/true',
+        prompt: 'plan the change',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000,
+        modelPreference: 'sonnet'
+      });
+
+      await runner.start();
+
+      expect(lastArgs()).toEqual(expect.arrayContaining(['--model', 'sonnet']));
+
+      await runner.stop('test');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('starts Codex exec with raw stdin and a runtime-specific model', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-codex-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, last, lastArgs, lastOptions } = capturingSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/codex',
+        prompt: 'implement the task',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000,
+        runtimeProvider: 'codex',
+        modelPreference: 'gpt-5.3-codex'
+      });
+
+      await runner.start();
+      const child = last();
+      const initial = child.stdin.read()?.toString('utf8') ?? '';
+
+      expect(lastArgs()).toEqual(
+        expect.arrayContaining([
+          'exec',
+          '--json',
+          '--dangerously-bypass-approvals-and-sandbox',
+          '-m',
+          'gpt-5.3-codex',
+          '-'
+        ])
+      );
+      expect(lastOptions()?.stdio).toEqual(['pipe', 'pipe', 'pipe']);
+      expect(initial).toBe('implement the task\n');
+
+      await runner.stop('test');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('starts Gemini in headless mode with its selected model', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-gemini-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, lastArgs, lastOptions } = capturingSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/gemini',
+        prompt: 'summarize the task',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000,
+        runtimeProvider: 'gemini',
+        modelPreference: 'gemini-2.5-pro'
+      });
+
+      await runner.start();
+
+      expect(lastArgs()).toEqual(
+        expect.arrayContaining([
+          '--prompt',
+          'summarize the task',
+          '--output-format',
+          'stream-json',
+          '--yolo',
+          '-m',
+          'gemini-2.5-pro'
+        ])
+      );
+      expect(lastOptions()?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+
+      await runner.stop('test');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('starts Copilot non-interactively with autonomous permissions and model', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-copilot-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, lastArgs, lastOptions } = capturingSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/copilot',
+        prompt: 'fix the test',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000,
+        runtimeProvider: 'copilot',
+        modelPreference: 'gpt-5.2'
+      });
+
+      await runner.start();
+
+      expect(lastArgs()).toEqual(
+        expect.arrayContaining([
+          '-p',
+          'fix the test',
+          '--allow-all',
+          '--model',
+          'gpt-5.2'
+        ])
+      );
+      expect(lastOptions()?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+
+      await runner.stop('test');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
+  it('starts OpenCode run with provider-qualified model ids', async () => {
+    const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-opencode-'));
+    try {
+      await fs.mkdir(path.join(vault, '.orbit', 'logs'), { recursive: true });
+      const { spawn, lastArgs, lastOptions } = capturingSpawner();
+
+      const runner = new AgentRunner({
+        claudePath: '/bin/opencode',
+        prompt: 'review the project',
+        cwd: vault,
+        taskId: null,
+        vaultPath: vault,
+        spawner: spawn,
+        idleTimeoutMs: 60_000,
+        runtimeProvider: 'opencode',
+        modelPreference: 'openai/gpt-5.3-codex'
+      });
+
+      await runner.start();
+
+      expect(lastArgs()).toEqual(
+        expect.arrayContaining([
+          'run',
+          '--format',
+          'json',
+          '-m',
+          'openai/gpt-5.3-codex',
+          'review the project'
+        ])
+      );
+      expect(lastOptions()?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+
+      await runner.stop('test');
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true });
+    }
+  });
+
   it('resumes Claude sessions and writes live messages in stream-json mode', async () => {
     const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-runner-resume-'));
     try {

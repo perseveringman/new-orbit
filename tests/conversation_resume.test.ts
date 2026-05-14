@@ -43,6 +43,36 @@ describe('task conversation vendor session binding', () => {
     expect(getLatestVendorSessionId(conversation)).toBe('session-latest');
   });
 
+  it('can scope the latest vendor session to a specific runtime', () => {
+    const conversation: Pick<TaskConversation, 'segments'> = {
+      segments: [
+        {
+          id: 'claude',
+          taskId: 'task_1',
+          runId: 'run_1',
+          runtimeId: 'claude:/bin/claude',
+          trigger: 'dispatch',
+          status: 'completed',
+          vendorSessionId: 'claude-session',
+          startedAt: '2026-04-27T00:00:00.000Z'
+        },
+        {
+          id: 'codex',
+          taskId: 'task_1',
+          runId: 'run_2',
+          runtimeId: 'codex:/bin/codex',
+          trigger: 'dispatch',
+          status: 'completed',
+          vendorSessionId: 'codex-session',
+          startedAt: '2026-04-27T00:01:00.000Z'
+        }
+      ]
+    };
+
+    expect(getLatestVendorSessionId(conversation, 'claude:/bin/claude')).toBe('claude-session');
+    expect(getLatestVendorSessionId(conversation, 'gemini:/bin/gemini')).toBeUndefined();
+  });
+
   it('keeps binding-owned follow-up runs on the existing auto session', () => {
     const task: Pick<TaskRecord, 'id' | 'owner_type' | 'owner_id' | 'role_binding_id'> = {
       id: 'task_1',

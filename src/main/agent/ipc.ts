@@ -571,14 +571,7 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       message: `Runtime not found: ${args.runtimeId}`
     };
   }
-  if (runtime && runtime.provider !== 'claude') {
-    return {
-      kind: 'error',
-      code: 'unsupported_runtime',
-      message: `${runtime.provider} adapter is available but task spawning is still gated to Claude in Phase 3.1.`
-    };
-  }
-
+  const runtimeProvider = runtime?.provider ?? 'claude';
   const detect = runtime
     ? { available: true, path: runtime.binaryPath, version: runtime.version ?? undefined }
     : await detectClaude();
@@ -588,7 +581,7 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       code: 'cli_missing',
       message:
         detect.error ??
-        'Claude Code CLI not found. Install it from https://docs.claude.com/claude-code'
+        `${runtime?.name ?? 'Claude Code CLI'} not found or not executable for ${runtimeProvider}.`
     };
   }
 
@@ -699,8 +692,10 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
 
   const settings = await getSettings();
   const apiKey =
-    (settings as unknown as { anthropicApiKey?: string }).anthropicApiKey ??
-    process.env['ANTHROPIC_API_KEY'];
+    runtimeProvider === 'claude'
+      ? ((settings as unknown as { anthropicApiKey?: string }).anthropicApiKey ??
+        process.env['ANTHROPIC_API_KEY'])
+      : undefined;
 
   const cwd = await resolveTaskCwd(sess.vault, task, args.worktreePath);
 
@@ -730,6 +725,7 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       Boolean(args.worktreePath) ||
       cwdResolved === vaultResolved ||
       cwdResolved.startsWith(vaultResolved + path.sep);
+    const supportsClaudeStreamResume = runtimeProvider === 'claude' && Boolean(args.vendorSessionId);
     const spawnOpts = {
       claudePath: detect.path,
       prompt,
@@ -737,13 +733,17 @@ export async function startTask(args: StartTaskArgs): Promise<StartTaskResult> {
       taskId: task.id,
       title: task.title,
       vaultPath: sess.vault,
-        runtimeProvider: runtime?.provider ?? 'claude',
-        runtimeId: runtime?.runtimeId,
-        runtimeName: runtime?.name,
-        vendorSessionId: args.vendorSessionId,
-        inputMode: args.vendorSessionId ? 'stream-json' : 'one-shot',
-        hookConfig: canWriteVendorHooks ? await getHookRuntimeConfig() : undefined,
-        extraEnv
+      runtimeProvider,
+      runtimeId: runtime?.runtimeId,
+      runtimeName: runtime?.name,
+      modelPreference: args.modelPreference,
+      vendorSessionId: args.vendorSessionId,
+      inputMode: supportsClaudeStreamResume ? 'stream-json' : 'one-shot',
+      hookConfig:
+        runtimeProvider === 'claude' && canWriteVendorHooks
+          ? await getHookRuntimeConfig()
+          : undefined,
+      extraEnv
     } as const;
     const opts = apiKey ? { ...spawnOpts, apiKey } : { ...spawnOpts };
     const runner = await getPool().spawn(opts);

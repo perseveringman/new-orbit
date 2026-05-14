@@ -3,7 +3,12 @@ import { execFile, spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { RuntimeDescriptor, RuntimeRegistrySnapshot } from '@shared/orchestration';
+import type {
+  RuntimeDescriptor,
+  RuntimeModelOption,
+  RuntimeProvider,
+  RuntimeRegistrySnapshot
+} from '@shared/orchestration';
 import { getSettings } from '../settings';
 import { readJsonFile, vaultRuntimeRegistryFile, writeJsonFile } from './storage';
 
@@ -92,6 +97,37 @@ export function probeVersion(
   });
 }
 
+const MODEL_OPTIONS_BY_PROVIDER: Record<RuntimeProvider, RuntimeModelOption[]> = {
+  claude: [
+    { id: 'sonnet', label: 'Sonnet' },
+    { id: 'opus', label: 'Opus' },
+    { id: 'haiku', label: 'Haiku' }
+  ],
+  codex: [
+    { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+    { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark' },
+    { id: 'gpt-5.4', label: 'GPT-5.4' },
+    { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+    { id: 'gpt-5.5', label: 'GPT-5.5' }
+  ],
+  copilot: [
+    { id: 'gpt-5.2', label: 'GPT-5.2' },
+    { id: 'gpt-5.1', label: 'GPT-5.1' },
+    { id: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' }
+  ],
+  gemini: [
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }
+  ],
+  opencode: [
+    { id: 'anthropic/claude-sonnet-4-5', label: 'Anthropic Claude Sonnet 4.5' },
+    { id: 'openai/gpt-5.3-codex', label: 'OpenAI GPT-5.3 Codex' },
+    { id: 'google/gemini-2.5-pro', label: 'Google Gemini 2.5 Pro' }
+  ],
+  custom: []
+};
+
 async function resolveBinary(
   command: string,
   fallbackPaths: string[] = [],
@@ -143,7 +179,7 @@ async function probeRuntimes(): Promise<RuntimeDescriptor[]> {
         supportsResume: true,
         supportsHooks: false,
         supportsWorktree: true,
-        supportsBackgroundRuns: false
+        supportsBackgroundRuns: true
       },
       maxConcurrentRuns: 1
     },
@@ -151,10 +187,10 @@ async function probeRuntimes(): Promise<RuntimeDescriptor[]> {
       provider: 'copilot',
       command: 'copilot',
       capabilities: {
-        supportsResume: false,
+        supportsResume: true,
         supportsHooks: false,
         supportsWorktree: true,
-        supportsBackgroundRuns: false
+        supportsBackgroundRuns: true
       },
       maxConcurrentRuns: 1
     },
@@ -162,10 +198,10 @@ async function probeRuntimes(): Promise<RuntimeDescriptor[]> {
       provider: 'gemini',
       command: 'gemini',
       capabilities: {
-        supportsResume: false,
+        supportsResume: true,
         supportsHooks: false,
         supportsWorktree: true,
-        supportsBackgroundRuns: false
+        supportsBackgroundRuns: true
       },
       maxConcurrentRuns: 1
     },
@@ -173,10 +209,10 @@ async function probeRuntimes(): Promise<RuntimeDescriptor[]> {
       provider: 'opencode',
       command: 'opencode',
       capabilities: {
-        supportsResume: false,
+        supportsResume: true,
         supportsHooks: false,
         supportsWorktree: true,
-        supportsBackgroundRuns: false
+        supportsBackgroundRuns: true
       },
       maxConcurrentRuns: 1
     }
@@ -206,11 +242,22 @@ async function probeRuntimes(): Promise<RuntimeDescriptor[]> {
         limits: {
           maxConcurrentRuns: provider.maxConcurrentRuns
         },
+        defaultModel: null,
+        modelOptions: MODEL_OPTIONS_BY_PROVIDER[provider.provider] ?? [],
         ...(versionProbe.error ? { metadata: { versionProbeError: versionProbe.error } } : {})
       } satisfies RuntimeDescriptor;
     })
   );
   return descriptors.filter((descriptor) => descriptor !== null) as RuntimeDescriptor[];
+}
+
+function shouldRefreshRuntimeSnapshot(snapshot: RuntimeRegistrySnapshot): boolean {
+  if (snapshot.runtimes.length === 0) return true;
+  return snapshot.runtimes.some((runtime) => {
+    if (!runtime.modelOptions) return true;
+    if (runtime.provider === 'custom') return false;
+    return !runtime.capabilities.supportsBackgroundRuns;
+  });
 }
 
 export class LocalRuntimeManager extends EventEmitter {
@@ -223,7 +270,7 @@ export class LocalRuntimeManager extends EventEmitter {
       refreshedAt: '',
       runtimes: []
     });
-    if (this.snapshot.runtimes.length === 0) {
+    if (shouldRefreshRuntimeSnapshot(this.snapshot)) {
       await this.refresh();
     }
   }

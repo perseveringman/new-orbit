@@ -196,11 +196,13 @@ export async function bindSegmentRunId(
 }
 
 export function getLatestVendorSessionId(
-  conversation: Pick<TaskConversation, 'segments'>
+  conversation: Pick<TaskConversation, 'segments'>,
+  runtimeId?: string
 ): string | undefined {
   for (let i = conversation.segments.length - 1; i >= 0; i -= 1) {
     const segment = conversation.segments[i];
     if (!segment || segment.status === 'cancelled') continue;
+    if (runtimeId && segment.runtimeId !== runtimeId) continue;
     if (segment.vendorSessionId?.trim()) return segment.vendorSessionId.trim();
   }
   return undefined;
