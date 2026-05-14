@@ -12,9 +12,47 @@ export type LibrarySourceKind = 'url' | 'feed' | 'manual' | 'quick_capture' | 's
 export interface LibrarySource {
   kind: LibrarySourceKind;
   url?: string;
+  canonical_url?: string;
+  provider?: string;
+  external_id?: string;
   feed_item_id?: string;
   feed_source_id?: string;
+  feed_fetch_run_id?: string;
+  source_title?: string;
+  channel_name?: string;
+  channel_id?: string;
+  duration_seconds?: number;
+  fetched_at?: string;
+  published_at?: string;
+  language?: string;
   note?: string;
+  preferred_transcript_track_id?: string;
+  preferred_bilingual_pair_id?: string;
+  transcript_tracks?: LibraryTranscriptTrackRef[];
+  bilingual_pairs?: LibraryBilingualPairRef[];
+}
+
+export interface LibraryTranscriptTrackRef {
+  id: string;
+  language: string;
+  label: string;
+  source: string;
+  source_kind: string;
+  status: string;
+  alignment: string;
+  segments_ref_path?: string;
+  markdown_ref_path?: string;
+  translation_of_track_id?: string;
+  generated_from_track_id?: string;
+  artifact_id?: string;
+}
+
+export interface LibraryBilingualPairRef {
+  id: string;
+  source_track_id: string;
+  translation_track_id: string;
+  mode: 'interleaved';
+  markdown_ref_path?: string;
 }
 
 export interface LibraryAnnotation {
@@ -43,6 +81,10 @@ export interface LibraryItemFrontmatter {
   reading_progress?: number;
   total_reading_seconds?: number;
   annotations?: LibraryAnnotation[];
+  source_snapshot_ref?: string;
+  promoted_enrichment_artifact_ids?: string[];
+  feed_collection_artifact_ids?: string[];
+  preferred_display_artifact_id?: string;
   distillation_artifact_ids?: string[];
   distilled_note_ids?: string[];
 }
@@ -72,6 +114,10 @@ export interface SaveLibraryItemInput {
   areas?: NoteAreaRef[];
   resource_refs?: string[];
   source?: LibrarySource;
+  source_snapshot_ref?: string;
+  promoted_enrichment_artifact_ids?: string[];
+  feed_collection_artifact_ids?: string[];
+  preferred_display_artifact_id?: string;
 }
 
 export interface UpdateLibraryItemInput extends Partial<Omit<LibraryItemFrontmatter, 'id' | 'created'>> {

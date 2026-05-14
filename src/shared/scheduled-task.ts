@@ -17,8 +17,22 @@ export type ScheduledTaskAction =
   | { kind: 'ask_anywhere'; prompt: string; skills?: string[] }
   | { kind: 'agent_run'; agent: string; prompt: string; runtime?: string }
   | { kind: 'shell'; command: string; cwd?: string }
-  | { kind: 'feed_refresh'; source_id?: string }
-  | { kind: 'synthesis'; synthesis_kind: 'summary.daily' | 'summary.weekly' | 'summary.monthly' | 'summary.yearly' | 'review.weekly' | 'memory.digest' | 'summary.entity'; scope?: string }
+  | { kind: 'feed_refresh'; source_id?: string; generate_digest?: boolean; generate_report?: boolean }
+  | {
+      kind: 'synthesis';
+      synthesis_kind:
+        | 'summary.daily'
+        | 'summary.weekly'
+        | 'summary.monthly'
+        | 'summary.yearly'
+        | 'review.weekly'
+        | 'memory.digest'
+        | 'summary.entity'
+        | 'feed.digest'
+        | 'feed.cluster'
+        | 'feed.report.daily';
+      scope?: string;
+    }
   | { kind: 'review'; review_kind: 'daily' | 'weekly' | 'monthly' | 'area' | 'resource'; scope_ref?: string }
   | { kind: 'memory_digest'; period?: string }
   | { kind: 'webhook'; url: string; method: 'GET' | 'POST'; body?: unknown };
@@ -56,7 +70,7 @@ export interface ScheduledTaskExecution {
   status: 'pending' | 'running' | 'success' | 'failure' | 'timeout';
   output?: unknown;
   error?: string;
-  artifacts?: Array<{ kind: 'note' | 'conversation' | 'library_item' | 'log'; ref: string }>;
+  artifacts?: Array<{ kind: 'note' | 'conversation' | 'library_item' | 'synthesis' | 'log'; ref: string }>;
   trace_id?: string;
 }
 

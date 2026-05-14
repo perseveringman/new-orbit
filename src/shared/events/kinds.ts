@@ -76,6 +76,7 @@ export const TRACEABLE_EVENT_KINDS = [
   'feed.item.ignored',
   'feed.items.fetched',
   'feed.item.saved_to_library',
+  'feed.youtube.subtitle.ai',
   'promote.feed_to_library',
   'feed.item.dismissed',
   'kb.imported',

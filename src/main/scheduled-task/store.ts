@@ -8,6 +8,7 @@ import type {
   ScheduledTaskExecution,
   ScheduledTaskFilter
 } from '@shared/scheduled-task';
+import { createFeedStore } from '../feed/store';
 
 interface ScheduledTaskFile {
   version: 1;
@@ -49,9 +50,9 @@ const SYSTEM_TASKS: CreateScheduledTaskInput[] = [
   },
   {
     name: 'Feed Daily Digest',
-    description: 'Generate a daily synthesis digest for saved feed signals.',
+    description: 'Refresh subscriptions and generate the daily Feed digest/report.',
     schedule: { kind: 'daily', time: '19:00', timezone: 'local' },
-    action: { kind: 'synthesis', synthesis_kind: 'summary.daily', scope: 'feed:digest:today' },
+    action: { kind: 'feed_refresh', generate_digest: true, generate_report: true },
     source: 'system',
     tags: ['feed', 'digest']
   },
@@ -78,13 +79,27 @@ export class ScheduledTaskStore {
 
   async ensureSystemTasks(): Promise<void> {
     const file = await this.readFile();
-    const existing = new Set(file.tasks.map((task) => task.system_key).filter(Boolean));
     let changed = false;
     for (const input of SYSTEM_TASKS) {
       const systemKey = slugify(input.name);
-      if (existing.has(systemKey)) continue;
-      file.tasks.push(this.fromInput(input, systemKey));
-      changed = true;
+      const existing = file.tasks.find((task) => task.system_key === systemKey);
+      if (!existing) {
+        file.tasks.push(this.fromInput(input, systemKey));
+        changed = true;
+        continue;
+      }
+      if (existing.source === 'system' && shouldRefreshSystemTask(existing, input)) {
+        Object.assign(existing, {
+          name: input.name,
+          description: input.description,
+          schedule: input.schedule,
+          action: input.action,
+          tags: input.tags,
+          updated_at: new Date().toISOString(),
+          next_run_at: existing.status === 'active' ? computeNextRun(input.schedule) : existing.next_run_at
+        });
+        changed = true;
+      }
     }
     if (changed) await this.writeFile(file);
   }
@@ -163,23 +178,46 @@ export class ScheduledTaskStore {
       });
       return execution;
     }
-    const execution: ScheduledTaskExecution = {
-      id: `exec-${randomUUID()}`,
-      task_id: taskId,
-      triggered_at: now,
-      started_at: now,
-      completed_at: now,
-      status: 'success',
-      output: outputForAction(task.action),
-      artifacts: []
-    };
-    await this.appendExecution(execution);
-    await this.update(taskId, {
-      last_run_at: now,
-      total_runs: task.total_runs + 1,
-      success_runs: task.success_runs + 1
-    });
-    return execution;
+    try {
+      const result = await executeAction(this.vaultPath, task.action);
+      const completedAt = new Date().toISOString();
+      const execution: ScheduledTaskExecution = {
+        id: `exec-${randomUUID()}`,
+        task_id: taskId,
+        triggered_at: now,
+        started_at: now,
+        completed_at: completedAt,
+        status: 'success',
+        output: result.output,
+        artifacts: result.artifacts ?? []
+      };
+      await this.appendExecution(execution);
+      await this.update(taskId, {
+        last_run_at: completedAt,
+        total_runs: task.total_runs + 1,
+        success_runs: task.success_runs + 1
+      });
+      return execution;
+    } catch (error) {
+      const completedAt = new Date().toISOString();
+      const message = error instanceof Error ? error.message : String(error);
+      const execution: ScheduledTaskExecution = {
+        id: `exec-${randomUUID()}`,
+        task_id: taskId,
+        triggered_at: now,
+        started_at: now,
+        completed_at: completedAt,
+        status: 'failure',
+        error: message
+      };
+      await this.appendExecution(execution);
+      await this.update(taskId, {
+        last_run_at: completedAt,
+        total_runs: task.total_runs + 1,
+        failure_runs: task.failure_runs + 1
+      });
+      return execution;
+    }
   }
 
   async executions(taskId: string, limit = 30, offset = 0): Promise<ScheduledTaskExecution[]> {
@@ -284,6 +322,72 @@ export function createScheduledTaskStore(vaultPath: string): ScheduledTaskStore 
   return new ScheduledTaskStore(vaultPath);
 }
 
+interface ActionExecutionResult {
+  output: unknown;
+  artifacts?: NonNullable<ScheduledTaskExecution['artifacts']>;
+}
+
+async function executeAction(vaultPath: string, action: ScheduledTask['action']): Promise<ActionExecutionResult> {
+  if (action.kind === 'feed_refresh') {
+    const feed = createFeedStore(vaultPath);
+    const results = await feed.fetch(action.source_id);
+    const date = localDateKey(new Date());
+    const artifacts: NonNullable<ScheduledTaskExecution['artifacts']> = results
+      .flatMap((result) => (result.run_id ? [{ kind: 'log' as const, ref: result.run_id }] : []));
+    let digestArtifactId: string | undefined;
+    let reportArtifactId: string | undefined;
+    if (action.generate_digest) {
+      const digest = await feed.digest(date);
+      digestArtifactId = digest.artifact.id;
+      artifacts.push({ kind: 'synthesis', ref: digest.artifact.id });
+    }
+    if (action.generate_report) {
+      const report = await feed.dailyReport(date, { digest_artifact_id: digestArtifactId });
+      reportArtifactId = report.artifact.id;
+      artifacts.push({ kind: 'synthesis', ref: report.artifact.id });
+    }
+    return {
+      output: {
+        message: 'Feed refresh completed.',
+        source_id: action.source_id ?? 'all',
+        results,
+        digest_artifact_id: digestArtifactId,
+        report_artifact_id: reportArtifactId
+      },
+      artifacts
+    };
+  }
+
+  if (action.kind === 'synthesis') {
+    const feed = createFeedStore(vaultPath);
+    if (action.synthesis_kind === 'feed.digest') {
+      const date = dateFromScope(action.scope);
+      const digest = await feed.digest(date);
+      return {
+        output: { artifact_kind: digest.artifact.kind, scope: digest.artifact.scope_key, artifact_id: digest.artifact.id },
+        artifacts: [{ kind: 'synthesis', ref: digest.artifact.id }]
+      };
+    }
+    if (action.synthesis_kind === 'feed.cluster') {
+      const cluster = await feed.cluster(action.scope ?? 'all');
+      return {
+        output: { artifact_kind: cluster.artifact.kind, scope: cluster.artifact.scope_key, artifact_id: cluster.artifact.id },
+        artifacts: [{ kind: 'synthesis', ref: cluster.artifact.id }]
+      };
+    }
+    if (action.synthesis_kind === 'feed.report.daily') {
+      const date = dateFromScope(action.scope);
+      const report = await feed.dailyReport(date);
+      return {
+        output: { artifact_kind: report.artifact.kind, scope: report.artifact.scope_key, artifact_id: report.artifact.id },
+        artifacts: [{ kind: 'synthesis', ref: report.artifact.id }]
+      };
+    }
+  }
+
+  return { output: outputForAction(action), artifacts: [] };
+}
+
 function computeNextRun(schedule: ScheduledTask['schedule']): string | undefined {
   const now = new Date();
   if (schedule.kind === 'once') return schedule.target_datetime;
@@ -309,6 +413,28 @@ function computeNextRun(schedule: ScheduledTask['schedule']): string | undefined
     if (next <= now) next.setMonth(next.getMonth() + 1);
   }
   return next.toISOString();
+}
+
+function shouldRefreshSystemTask(existing: ScheduledTask, input: CreateScheduledTaskInput): boolean {
+  return (
+    existing.name !== input.name ||
+    existing.description !== input.description ||
+    JSON.stringify(existing.schedule) !== JSON.stringify(input.schedule) ||
+    JSON.stringify(existing.action) !== JSON.stringify(input.action) ||
+    JSON.stringify(existing.tags ?? []) !== JSON.stringify(input.tags ?? [])
+  );
+}
+
+function dateFromScope(scope?: string): string {
+  const match = scope?.match(/\d{4}-\d{2}-\d{2}/);
+  return match?.[0] ?? localDateKey(new Date());
+}
+
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function outputForAction(action: ScheduledTask['action']): unknown {

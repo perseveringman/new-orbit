@@ -379,6 +379,7 @@ export interface TraceableEventPayloadMap {
   'feed.item.ignored': FeedEventPayload;
   'feed.items.fetched': FeedEventPayload;
   'feed.item.saved_to_library': FeedEventPayload;
+  'feed.youtube.subtitle.ai': FeedEventPayload;
   'promote.feed_to_library': FeedEventPayload;
   'feed.item.dismissed': FeedEventPayload;
   'kb.imported': KnowledgeBaseEventPayload;

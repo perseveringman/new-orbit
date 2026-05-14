@@ -485,14 +485,14 @@ export function VaultView(): JSX.Element {
   const showRightSidebar = shouldShowRightSidebar(view);
 
   return (
-    <div className="flex flex-1 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {!workspaceNavCollapsed && (
         <aside className="w-56 shrink-0 overflow-y-auto border-r border-neutral-200 bg-white/40 p-2 dark:border-neutral-800 dark:bg-neutral-900/40">
           <ProjectsNav />
         </aside>
       )}
 
-      <section className="flex flex-1 flex-col min-h-0">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {view.kind === 'editor' ? (
           <>
             <div className="flex h-8 shrink-0 items-center gap-3 border-b border-neutral-200 px-4 text-xs text-neutral-500 dark:border-neutral-800">

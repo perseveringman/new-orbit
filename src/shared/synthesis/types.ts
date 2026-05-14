@@ -13,7 +13,11 @@ export const SYNTHESIS_KINDS = [
   'search.answer',
   'review.weekly',
   'feed.digest',
-  'feed.cluster'
+  'feed.cluster',
+  'feed.report.daily',
+  'feed.item.translation',
+  'feed.youtube.subtitle.ai',
+  'feed.item.analysis'
 ] as const;
 
 export type SynthesisKind = (typeof SYNTHESIS_KINDS)[number];
@@ -135,4 +139,3 @@ export interface SynthesisDLQEntry {
   at: string;
   raw_output?: string;
 }
-

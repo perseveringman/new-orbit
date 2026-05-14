@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type {
   CreateFeedSourceInput,
+  FeedAiSubtitleTranslationInput,
   FeedItemFilter,
   SaveFeedToLibraryInput,
   UpdateFeedSourceInput
@@ -54,7 +55,9 @@ export function registerFeedIpc(getVaultPath: () => string | null): void {
     }
     return results;
   });
+  ipcMain.handle(IPC.feeds.runsList, (_event, sourceId?: string) => createFeedStore(vaultPath()).listFetchRuns(sourceId));
   ipcMain.handle(IPC.feeds.itemsList, (_event, filter?: FeedItemFilter) => createFeedStore(vaultPath()).listItems(filter));
+  ipcMain.handle(IPC.feeds.itemsContent, (_event, id: string) => createFeedStore(vaultPath()).getItemContent(id));
   ipcMain.handle(IPC.feeds.itemsMarkSeen, async (_event, id: string) => {
     const item = await createFeedStore(vaultPath()).markSeen(id);
     publishTraceableEvent({
@@ -103,6 +106,23 @@ export function registerFeedIpc(getVaultPath: () => string | null): void {
     });
     return result;
   });
+  ipcMain.handle(IPC.feeds.itemsAttachAiSubtitleTranslation, async (_event, id: string, input: FeedAiSubtitleTranslationInput) => {
+    const result = await createFeedStore(vaultPath()).attachAiSubtitleTranslation(id, input);
+    publishTraceableEvent({
+      source: 'activity',
+      kind: 'feed.youtube.subtitle.ai',
+      summary: `Attached AI subtitle translation: ${result.feed_item.title}`,
+      payload: {
+        item_id: result.feed_item.id,
+        source_id: result.feed_item.source_id,
+        artifact_id: result.artifact.id,
+        source_track_id: input.source_track_id,
+        target_language: input.target_language
+      }
+    });
+    return result;
+  });
   ipcMain.handle(IPC.feeds.digest, (_event, date: string) => createFeedStore(vaultPath()).digest(date));
   ipcMain.handle(IPC.feeds.cluster, (_event, scope?: string) => createFeedStore(vaultPath()).cluster(scope));
+  ipcMain.handle(IPC.feeds.report, (_event, date: string) => createFeedStore(vaultPath()).dailyReport(date));
 }

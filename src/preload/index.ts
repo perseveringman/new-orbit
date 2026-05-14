@@ -122,11 +122,16 @@ import type {
 } from '@shared/library';
 import type {
   CreateFeedSourceInput,
+  FeedAiSubtitleTranslationInput,
+  FeedAiSubtitleTranslationResult,
   FeedClusterPayload,
   FeedDigestPayload,
   FeedFetchResult,
+  FeedFetchRun,
   FeedItem,
+  FeedItemContent,
   FeedItemFilter,
+  FeedReportPayload,
   FeedSource,
   FeedSynthesisResult,
   SaveFeedToLibraryInput,
@@ -738,15 +743,23 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.feeds.sourcesUpdate, id, patch),
     deleteSource: (id: string): Promise<FeedSource | null> => ipcRenderer.invoke(IPC.feeds.sourcesDelete, id),
     fetch: (sourceId?: string): Promise<FeedFetchResult[]> => ipcRenderer.invoke(IPC.feeds.fetch, sourceId),
+    listRuns: (sourceId?: string): Promise<FeedFetchRun[]> => ipcRenderer.invoke(IPC.feeds.runsList, sourceId),
     listItems: (filter?: FeedItemFilter): Promise<FeedItem[]> => ipcRenderer.invoke(IPC.feeds.itemsList, filter),
+    getItemContent: (id: string): Promise<FeedItemContent> => ipcRenderer.invoke(IPC.feeds.itemsContent, id),
     markSeen: (id: string): Promise<FeedItem> => ipcRenderer.invoke(IPC.feeds.itemsMarkSeen, id),
     ignore: (id: string): Promise<FeedItem> => ipcRenderer.invoke(IPC.feeds.itemsIgnore, id),
     saveToLibrary: (id: string, input?: SaveFeedToLibraryInput): Promise<SaveFeedToLibraryResult> =>
       ipcRenderer.invoke(IPC.feeds.itemsSaveToLibrary, id, input),
+    attachAiSubtitleTranslation: (
+      id: string,
+      input: FeedAiSubtitleTranslationInput
+    ): Promise<FeedAiSubtitleTranslationResult> => ipcRenderer.invoke(IPC.feeds.itemsAttachAiSubtitleTranslation, id, input),
     digest: (date: string): Promise<FeedSynthesisResult<FeedDigestPayload>> =>
       ipcRenderer.invoke(IPC.feeds.digest, date),
     cluster: (scope?: string): Promise<FeedSynthesisResult<FeedClusterPayload>> =>
-      ipcRenderer.invoke(IPC.feeds.cluster, scope)
+      ipcRenderer.invoke(IPC.feeds.cluster, scope),
+    report: (date: string): Promise<FeedSynthesisResult<FeedReportPayload>> =>
+      ipcRenderer.invoke(IPC.feeds.report, date)
   },
   knowledgeBase: {
     list: (): Promise<KnowledgeBase[]> => ipcRenderer.invoke(IPC.knowledgeBase.list),

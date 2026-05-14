@@ -63,7 +63,13 @@ export class LibraryStore {
       source: input.source ?? (input.url ? { kind: 'url', url: input.url } : { kind: 'manual' }),
       reading_progress: 0,
       total_reading_seconds: 0,
-      annotations: []
+      annotations: [],
+      ...(input.source_snapshot_ref ? { source_snapshot_ref: input.source_snapshot_ref } : {}),
+      ...(input.promoted_enrichment_artifact_ids
+        ? { promoted_enrichment_artifact_ids: input.promoted_enrichment_artifact_ids }
+        : {}),
+      ...(input.feed_collection_artifact_ids ? { feed_collection_artifact_ids: input.feed_collection_artifact_ids } : {}),
+      ...(input.preferred_display_artifact_id ? { preferred_display_artifact_id: input.preferred_display_artifact_id } : {})
     });
     const relPath = await this.nextPath(kind, title);
     await writeLibraryFile(path.join(this.vaultPath, relPath), fm, body);
@@ -251,6 +257,10 @@ export class LibraryStore {
       reading_progress: numberValue(parsed.data['reading_progress']) ?? 0,
       total_reading_seconds: numberValue(parsed.data['total_reading_seconds']) ?? 0,
       annotations: Array.isArray(parsed.data['annotations']) ? (parsed.data['annotations'] as LibraryAnnotation[]) : [],
+      source_snapshot_ref: stringValue(parsed.data['source_snapshot_ref']),
+      promoted_enrichment_artifact_ids: arrayOfStrings(parsed.data['promoted_enrichment_artifact_ids']),
+      feed_collection_artifact_ids: arrayOfStrings(parsed.data['feed_collection_artifact_ids']),
+      preferred_display_artifact_id: stringValue(parsed.data['preferred_display_artifact_id']),
       distillation_artifact_ids: arrayOfStrings(parsed.data['distillation_artifact_ids']),
       distilled_note_ids: arrayOfStrings(parsed.data['distilled_note_ids'])
     });
@@ -301,6 +311,8 @@ function normalizeFrontmatter(value: LibraryItemFrontmatter): LibraryItemFrontma
     tags: normalizeTags(value.tags ?? []),
     resource_refs: normalizeRefs(value.resource_refs ?? []),
     annotations: value.annotations ?? [],
+    promoted_enrichment_artifact_ids: [...new Set(value.promoted_enrichment_artifact_ids ?? [])],
+    feed_collection_artifact_ids: [...new Set(value.feed_collection_artifact_ids ?? [])],
     distillation_artifact_ids: [...new Set(value.distillation_artifact_ids ?? [])],
     distilled_note_ids: [...new Set(value.distilled_note_ids ?? [])]
   };

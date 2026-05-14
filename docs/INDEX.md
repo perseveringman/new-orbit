@@ -81,6 +81,12 @@ Current forward-looking plans:
    - relation graph / Personal QA / reports
    - current gap analysis for Today, Dashboard, Review, Journal, Library, Notes, Search, and Memory
 
+5. `plans/2026-05-14-feed-subscription-data-flow.md`
+   - FeedSource as Layer 1 attention configuration
+   - FeedItem as Layer 0 signal
+   - feed enrichment / translation / reports as Layer 2 synthesis
+   - Save-to-Library promotion behavior for single-item and multi-item feed analysis
+
 Historical plans remain under `plans/2026-*` and should be treated as background unless referenced by current architecture docs.
 
 ---

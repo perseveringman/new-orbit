@@ -129,13 +129,18 @@ import type {
 } from './library';
 import type {
   CreateFeedSourceInput,
-  FeedFetchResult,
-  FeedItem,
-  FeedItemFilter,
-  FeedSource,
-  FeedSynthesisResult,
+  FeedAiSubtitleTranslationInput,
+  FeedAiSubtitleTranslationResult,
   FeedClusterPayload,
   FeedDigestPayload,
+  FeedFetchResult,
+  FeedFetchRun,
+  FeedItem,
+  FeedItemContent,
+  FeedItemFilter,
+  FeedReportPayload,
+  FeedSource,
+  FeedSynthesisResult,
   SaveFeedToLibraryInput,
   SaveFeedToLibraryResult,
   UpdateFeedSourceInput
@@ -595,12 +600,16 @@ export const IPC = {
     sourcesUpdate: 'feeds:sources:update',
     sourcesDelete: 'feeds:sources:delete',
     fetch: 'feeds:fetch',
+    runsList: 'feeds:runs:list',
     itemsList: 'feeds:items:list',
+    itemsContent: 'feeds:items:content',
     itemsMarkSeen: 'feeds:items:markSeen',
     itemsIgnore: 'feeds:items:ignore',
     itemsSaveToLibrary: 'feeds:items:saveToLibrary',
+    itemsAttachAiSubtitleTranslation: 'feeds:items:attachAiSubtitleTranslation',
     digest: 'feeds:digest',
-    cluster: 'feeds:cluster'
+    cluster: 'feeds:cluster',
+    report: 'feeds:report'
   },
   notes: {
     list: 'notes:list',
@@ -1695,12 +1704,16 @@ export interface OrbitApi {
     updateSource(id: string, patch: UpdateFeedSourceInput): Promise<FeedSource>;
     deleteSource(id: string): Promise<FeedSource | null>;
     fetch(sourceId?: string): Promise<FeedFetchResult[]>;
+    listRuns(sourceId?: string): Promise<FeedFetchRun[]>;
     listItems(filter?: FeedItemFilter): Promise<FeedItem[]>;
+    getItemContent(id: string): Promise<FeedItemContent>;
     markSeen(id: string): Promise<FeedItem>;
     ignore(id: string): Promise<FeedItem>;
     saveToLibrary(id: string, input?: SaveFeedToLibraryInput): Promise<SaveFeedToLibraryResult>;
+    attachAiSubtitleTranslation(id: string, input: FeedAiSubtitleTranslationInput): Promise<FeedAiSubtitleTranslationResult>;
     digest(date: string): Promise<FeedSynthesisResult<FeedDigestPayload>>;
     cluster(scope?: string): Promise<FeedSynthesisResult<FeedClusterPayload>>;
+    report(date: string): Promise<FeedSynthesisResult<FeedReportPayload>>;
   };
   knowledgeBase: {
     list(): Promise<KnowledgeBase[]>;
