@@ -59,6 +59,15 @@ describe('vault right sidebar model', () => {
       'inspector',
       'ask'
     ]);
+    expect(getSidebarIntentTabs('dashboard').map((tab) => tab.id)).toEqual([
+      'overview',
+      'execution'
+    ]);
+    expect(getSidebarPanelTabs('dashboard', 'overview').map((tab) => tab.id)).toEqual([
+      'dashboard-focus',
+      'dashboard-rhythm',
+      'ask'
+    ]);
   });
 
   it('describes companion pane candidates with icons and width presets', () => {
@@ -105,7 +114,7 @@ describe('vault right sidebar model', () => {
     expect(resolveSidebarPanelTab('project.terminal', 'focus', 'runlog')).toBe(
       'task-detail'
     );
-    expect(resolveSidebarPanelTab('dashboard', 'execution', 'sessions')).toBe('agent');
+    expect(resolveSidebarPanelTab('dashboard', 'execution', 'sessions')).toBe('review');
     expect(resolveSidebarPanelTab('dashboard', 'execution', 'ask')).toBe('ask');
   });
 });

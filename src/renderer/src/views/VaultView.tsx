@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Activity,
   Bot,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +20,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Target,
   X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -35,6 +37,10 @@ import { WorktreesPanel } from '../components/Sidebar/WorktreesPanel';
 import { TaskDetailPanel } from '../components/Sidebar/TaskDetailPanel';
 import { ProjectTaskTreePanel } from '../components/Sidebar/ProjectTaskTreePanel';
 import { SidebarAskPanel } from '../components/Sidebar/SidebarAskPanel';
+import {
+  DashboardFocusPanel,
+  DashboardRhythmPanel
+} from '../components/Sidebar/DashboardCompanionPanels';
 import { MarkdownEditor } from '../components/Editor/MarkdownEditor';
 import { CommandPalette } from '../components/CommandPalette';
 import { ProjectsNav } from '../components/Sidebar/ProjectsNav';
@@ -90,6 +96,8 @@ import {
 function isSidebarPanelId(value: string): value is SidebarPanelId {
   return (
     value === 'inspector' ||
+    value === 'dashboard-focus' ||
+    value === 'dashboard-rhythm' ||
     value === 'files' ||
     value === 'area-config' ||
     value === 'backlinks' ||
@@ -107,6 +115,8 @@ function isSidebarPanelId(value: string): value is SidebarPanelId {
 
 const COMPANION_PANEL_ICONS: Record<SidebarPanelIconId, LucideIcon> = {
   inspector: Search,
+  'dashboard-focus': Target,
+  'dashboard-rhythm': Activity,
   files: Folder,
   area: Settings,
   backlinks: Network,
@@ -390,6 +400,8 @@ export function VaultView(): JSX.Element {
 
   function renderSidebarPanel(): JSX.Element {
     if (sidebarPanel === 'inspector') return <WorkspaceInspectorPane />;
+    if (sidebarPanel === 'dashboard-focus') return <DashboardFocusPanel />;
+    if (sidebarPanel === 'dashboard-rhythm') return <DashboardRhythmPanel />;
     if (sidebarPanel === 'files') {
       return tree ? (
         <FileTree root={tree} />
@@ -412,6 +424,7 @@ export function VaultView(): JSX.Element {
   }
 
   function canPromoteSidebarPanel(panel: SidebarPanelId): boolean {
+    if (panel === 'dashboard-focus' || panel === 'dashboard-rhythm') return true;
     if (panel === 'ask' || panel === 'review' || panel === 'worktrees') return true;
     if (panel === 'files' || panel === 'backlinks' || panel === 'inspector') return true;
     if (panel === 'sessions') return Boolean(sidebarFocus.projectUid);
@@ -431,6 +444,10 @@ export function VaultView(): JSX.Element {
     }
     if (panel === 'review') {
       setView({ kind: 'review' });
+      return;
+    }
+    if (panel === 'dashboard-focus' || panel === 'dashboard-rhythm') {
+      setView({ kind: 'dashboard' });
       return;
     }
     if (panel === 'worktrees') {

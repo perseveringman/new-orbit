@@ -69,6 +69,8 @@ export type SidebarPaneMode = 'hidden' | 'rail' | 'expanded';
 export type SidebarPanelWidthPreset = 'narrow' | 'normal' | 'wide';
 export type SidebarPanelIconId =
   | 'inspector'
+  | 'dashboard-focus'
+  | 'dashboard-rhythm'
   | 'files'
   | 'area'
   | 'backlinks'
@@ -84,6 +86,8 @@ export type SidebarPanelIconId =
 
 export type SidebarPanelId =
   | 'inspector'
+  | 'dashboard-focus'
+  | 'dashboard-rhythm'
   | 'files'
   | 'area-config'
   | 'backlinks'
@@ -133,6 +137,18 @@ const PANEL_META: Record<
     icon: 'inspector',
     widthPreset: 'normal',
     description: 'Inspect files, changes, and workspace context.'
+  },
+  'dashboard-focus': {
+    title: 'Focus',
+    icon: 'dashboard-focus',
+    widthPreset: 'normal',
+    description: 'Choose the next dashboard action from inbox, blockers, tasks, and active projects.'
+  },
+  'dashboard-rhythm': {
+    title: 'Rhythm',
+    icon: 'dashboard-rhythm',
+    widthPreset: 'normal',
+    description: 'Review vision cadence, knowledge movement, recent activity, and system pulse.'
   },
   files: {
     title: 'Files',
@@ -265,8 +281,8 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   },
   dashboard: {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['review', 'worktrees'] },
-      { id: 'execution', title: 'Execution', panels: ['agent', 'runlog', 'diff'] }
+      { id: 'overview', title: 'Command', panels: ['dashboard-focus', 'dashboard-rhythm'] },
+      { id: 'execution', title: 'Ops', panels: ['review', 'agent', 'runlog'] }
     ]
   },
   vision: {
