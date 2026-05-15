@@ -298,6 +298,12 @@ import type {
   SemanticIndexStatus
 } from './semantic';
 import type {
+  EvidenceReadResult,
+  EvidenceSelector,
+  EvidenceSource,
+  EvidenceSourceFilter
+} from './evidence';
+import type {
   CreateMemoryInput,
   MemoryCluster,
   MemoryDigestResult,
@@ -714,6 +720,12 @@ export const IPC = {
     rebuildIndex: 'semantic:rebuildIndex',
     searchAndAnswer: 'semantic:searchAndAnswer',
     event: 'semantic:event'
+  },
+  evidence: {
+    list: 'evidence:list',
+    get: 'evidence:get',
+    read: 'evidence:read',
+    sync: 'evidence:sync'
   },
   memory: {
     list: 'memory:list',
@@ -1803,6 +1815,12 @@ export interface OrbitApi {
     rebuildIndex(): Promise<SemanticIndexStatus>;
     searchAndAnswer(query: SearchQuery): Promise<SearchAnswerResponse>;
     onEvent(cb: (event: { type: string; status?: SemanticIndexStatus }) => void): () => void;
+  };
+  evidence: {
+    list(filter?: EvidenceSourceFilter): Promise<EvidenceSource[]>;
+    get(sourceId: string): Promise<EvidenceSource | null>;
+    read(selector: EvidenceSelector): Promise<EvidenceReadResult>;
+    sync(options?: { includeExternalAISessions?: boolean; externalAISessionLimit?: number }): Promise<EvidenceSource[]>;
   };
   memory: {
     list(filter?: MemoryFilter): Promise<MemoryNode[]>;

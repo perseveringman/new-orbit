@@ -5,7 +5,7 @@ import path from 'node:path';
 export const DEFAULT_ORBIT_MOBILE_BUNDLE_ID = 'com.zhouyanbo.orbit.capture';
 
 export function iCloudContainerName(bundleId = DEFAULT_ORBIT_MOBILE_BUNDLE_ID): string {
-  return `iCloud~${bundleId}`;
+  return `iCloud~${bundleId.replace(/\./g, '~')}`;
 }
 
 export function getICloudDocumentsPath(bundleId = DEFAULT_ORBIT_MOBILE_BUNDLE_ID): string {

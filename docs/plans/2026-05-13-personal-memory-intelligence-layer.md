@@ -4,6 +4,12 @@
 > Date: 2026-05-13
 > Context: inspired by the "knowledge evolution / Wiki system" article discussed in product planning.
 > Related docs: `docs/VISION.md`, `docs/ROADMAP.md`, `docs/architecture/data-layering.md`, `docs/architecture/synthesis-layer.md`, `docs/architecture/entity-flow.md`, `docs/architecture/chat-conversation-surface.md`
+> Superseded by: `docs/plans/2026-05-15-personal-memory-intelligence-foundation.md`
+
+> Note: this document remains useful as broad product inventory and gap analysis.
+> The active foundation design is now evidence-first: Layer 1 truth includes
+> direct truth and reference truth, while summaries, memory, open loops, QA, and
+> reports remain Layer 2 synthesis.
 
 ---
 
@@ -1088,6 +1094,11 @@ Personal intelligence quality depends on rich Layer 1 inputs.
 
 Goal: materialize repeated distillation in a query-friendly form.
 
+Status (2026-05-15):
+
+- Foundation implemented: `qa.personal` kind, payload schema, deterministic evidence-chunk generator, Layer 2 semantic projection using the QA question as title, and ContextPacket synthesis injection.
+- Still missing: broad source-specific generation policies, hub/cluster-driven QA selection, accept/reject/edit UI, and explicit Search grouping for QA hits.
+
 Deliverables:
 
 - `qa.personal` synthesis kind
@@ -1218,4 +1229,3 @@ Orbit already has many foundation pieces: SynthesisArtifact, semantic search, Me
 - redesigned daily/review/search/memory surfaces
 
 The recommended strategy is to deepen the data pipeline before doing a broad UI redesign. Once reading ingestion, Personal QA, conversation distillation, and graph projection exist, Today, Dashboard, Review, Journal, Search, and Memory can be redesigned around real intelligence rather than placeholder metrics.
-

@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import type { ContextPacket } from '../src/shared/context';
 import type { RecallResult } from '../src/shared/memory';
 import type { SearchResult } from '../src/shared/semantic';
 import { SearchContent } from '../src/renderer/src/views/SearchView';
@@ -19,6 +20,7 @@ describe('SearchContent', () => {
         status: { total_docs: 0, indexed_docs: 0, stale_docs: 0, embedding_model: 'local', embedding_dimensions: 384 },
         results: [],
         memoryRecall: null,
+        contextPacket: null,
         answer: null,
         state: 'empty',
         error: null,
@@ -53,6 +55,7 @@ describe('SearchContent', () => {
         status: { total_docs: 1, indexed_docs: 0, stale_docs: 1, embedding_model: 'local', embedding_dimensions: 384 },
         results: [sampleResult()],
         memoryRecall: sampleRecall(),
+        contextPacket: sampleContextPacket(),
         answer: {
           id: 'synth-1',
           kind: 'search.answer',
@@ -81,6 +84,10 @@ describe('SearchContent', () => {
 
     expect(html).toContain('Stale');
     expect(html).toContain('AI synthesis answer');
+    expect(html).toContain('PMIL context packet');
+    expect(html).toContain('Personal QA');
+    expect(html).toContain('GraphRAG improves recall');
+    expect(html).toContain('查看证据');
     expect(html).toContain('Recalled memory');
     expect(html).toContain('Memory preference');
     expect(html).toContain('Helpful');
@@ -106,6 +113,42 @@ function sampleResult(): SearchResult {
     snippets: ['Stable memory recall'],
     entity_label: 'note · Layer 1',
     why: 'keyword 1.00 + semantic 0.80'
+  };
+}
+
+function sampleContextPacket(): ContextPacket {
+  return {
+    id: 'ctx-1',
+    purpose: 'ask',
+    scope: { kind: 'global' },
+    query: 'memory',
+    generated_at: '2026-04-30T00:00:00.000Z',
+    freshness: { evidence_until: '2026-04-30T00:00:00.000Z', stale_sources: [] },
+    budget: { max_tokens: 1800, estimated_tokens: 80 },
+    sections: [
+      {
+        kind: 'synthesis',
+        title: 'Personal QA',
+        content: 'GraphRAG improves recall by connecting evidence chunks, QA, and graph neighbors.',
+        citations: [
+          {
+            source_id: 'evidence:note:1',
+            kind: 'semantic_chunk',
+            content_view: 'safe_projection'
+          }
+        ],
+        priority: 25
+      }
+    ],
+    evidence: [
+      {
+        source_id: 'evidence:note:1',
+        kind: 'semantic_chunk',
+        content_view: 'safe_projection'
+      }
+    ],
+    synthesis_refs: ['synth-qa-1'],
+    memory_refs: []
   };
 }
 

@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { publishTraceableEvent, configureEventReplay, currentEventReplayStore } from '../src/main/events/bus';
+import { eventStoreFile } from '../src/main/events/store';
 
 describe('traceable event replay store', () => {
   let vault: string;
@@ -43,6 +44,22 @@ describe('traceable event replay store', () => {
 
     const bySource = await store!.query({ source: 'inbox' });
     expect(bySource.events[0]?.summary).toBe('Needs decision');
+  });
+
+  it('skips malformed event log lines while querying', async () => {
+    const event = publishTraceableEvent({
+      source: 'activity',
+      type: 'note.created',
+      traceId: 'trace-good',
+      summary: 'Valid note'
+    });
+    await waitForTrace('trace-good');
+    await appendFile(eventStoreFile(vault, event.at.slice(0, 10)), '{bad json\n', 'utf8');
+
+    const result = await currentEventReplayStore()!.query({ traceId: 'trace-good' });
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]?.id).toBe(event.id);
   });
 });
 

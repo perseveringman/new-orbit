@@ -3,6 +3,23 @@ import type { ReviewFinding, ReviewKind, ReviewRun, ReviewRunDetail } from '@sha
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
 
+interface ReviewPMILPayload {
+  current_focus: string;
+  active_threads: Array<{
+    title: string;
+    summary: string;
+    confidence?: number;
+    likely_next_steps?: string[];
+    blockers?: string[];
+  }>;
+  open_loops: Array<{
+    title: string;
+    kind: string;
+    severity: string;
+    rationale: string;
+  }>;
+}
+
 export function ReviewView(): JSX.Element {
   const [tab, setTab] = useState<ReviewKind>('weekly');
   const [runs, setRuns] = useState<ReviewRun[]>([]);
@@ -75,6 +92,7 @@ export function ReviewContent(props: {
   onExecute(id: string): void;
 }): JSX.Element {
   const findings = props.detail?.findings ?? [];
+  const pmil = readPMILPayload(props.detail);
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -114,6 +132,7 @@ export function ReviewContent(props: {
               <HealthCard label="Warnings" value={findings.filter((finding) => finding.severity === 'warning').length} detail="need attention" />
               <HealthCard label="Resolved" value={findings.filter((finding) => finding.resolved_at || finding.acknowledged).length} detail={props.detail?.run.status ?? 'unknown'} />
             </section>
+            {pmil ? <PMILReviewPanel payload={pmil} /> : null}
             <section className="grid gap-3">
               {findings.map((finding) => (
                 <FindingCard key={finding.id} finding={finding} onAcknowledge={props.onAcknowledge} onExecute={props.onExecute} />
@@ -124,6 +143,66 @@ export function ReviewContent(props: {
       </div>
     </main>
   );
+}
+
+function PMILReviewPanel({ payload }: { payload: ReviewPMILPayload }): JSX.Element {
+  return (
+    <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 shadow-sm dark:border-violet-900 dark:bg-violet-950/30">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">Personal Memory Intelligence</p>
+          <h2 className="mt-1 text-lg font-semibold">当前工作上下文</h2>
+        </div>
+        <span className="rounded-full border border-violet-300 px-2 py-1 text-xs text-violet-700 dark:border-violet-800 dark:text-violet-300">
+          {payload.open_loops.length} open loop(s)
+        </span>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-neutral-700 dark:text-neutral-200">
+        Focus: {payload.current_focus}
+      </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {payload.active_threads.slice(0, 4).map((thread) => (
+          <article key={thread.title} className="rounded-xl border border-violet-200 bg-white p-3 dark:border-violet-900 dark:bg-neutral-900">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">{thread.title}</h3>
+              {typeof thread.confidence === 'number' ? <span className="text-xs text-neutral-500">{Math.round(thread.confidence * 100)}%</span> : null}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-neutral-600 dark:text-neutral-300">{thread.summary}</p>
+            {thread.likely_next_steps?.length ? (
+              <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">Next: {thread.likely_next_steps[0]}</p>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      {payload.open_loops.length ? (
+        <div className="mt-4 flex flex-col gap-2">
+          {payload.open_loops.slice(0, 5).map((loop) => (
+            <div key={`${loop.kind}:${loop.title}`} className="rounded-xl border border-violet-200 bg-white px-3 py-2 dark:border-violet-900 dark:bg-neutral-900">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-violet-300 px-2 py-0.5 text-xs text-violet-700 dark:border-violet-800 dark:text-violet-300">{loop.kind}</span>
+                <span className="text-xs text-neutral-500">{loop.severity}</span>
+              </div>
+              <p className="mt-1 text-sm font-medium">{loop.title}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function readPMILPayload(detail: ReviewRunDetail | null): ReviewPMILPayload | null {
+  const payload = detail?.artifact?.payload;
+  if (!payload || typeof payload !== 'object' || !('pmil' in payload)) return null;
+  const pmil = (payload as { pmil?: unknown }).pmil;
+  if (!pmil || typeof pmil !== 'object') return null;
+  const record = pmil as Partial<ReviewPMILPayload>;
+  if (typeof record.current_focus !== 'string') return null;
+  return {
+    current_focus: record.current_focus,
+    active_threads: Array.isArray(record.active_threads) ? record.active_threads : [],
+    open_loops: Array.isArray(record.open_loops) ? record.open_loops : []
+  };
 }
 
 function FindingCard(props: { finding: ReviewFinding; onAcknowledge(id: string): void; onExecute(id: string): void }): JSX.Element {

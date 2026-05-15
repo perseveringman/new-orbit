@@ -1,16 +1,18 @@
+import type { ContextPacket } from '@shared/context';
 import type { SearchAnswerResponse, SearchQuery, SearchResult } from '@shared/semantic';
 import type { SynthesisSource } from '@shared/synthesis';
 import { createSynthesisJob, SynthesisRunner, type SynthesisRuntimeRouter } from '../synthesis/runner';
 import { createSynthesisStore } from '../synthesis/store';
-import { createSemanticIndexStore } from './index-store';
+import { searchWithContext } from './search-context';
 
 export async function searchAndAnswer(
   vaultPath: string,
   query: SearchQuery,
   options: { router?: SynthesisRuntimeRouter | null; maxBudgetUsd?: number } = {}
 ): Promise<SearchAnswerResponse> {
-  const index = createSemanticIndexStore(vaultPath);
-  const { results, total } = await index.search(query);
+  const { results, total, context_packet: contextPacket } = await searchWithContext(vaultPath, query, {
+    synthesisMode: 'ensure'
+  });
   const limitedResults = results.slice(0, Math.min(8, query.top_k ?? 8));
   const scopeKey = searchAnswerScopeKey(query, limitedResults);
   const store = createSynthesisStore(vaultPath);
@@ -19,13 +21,16 @@ export async function searchAndAnswer(
     createSynthesisJob({
       kind: 'search.answer',
       scope_key: scopeKey,
-      sources: limitedResults.map(resultToSource),
+      sources: [
+        ...limitedResults.map(resultToSource),
+        ...contextPacketToSources(contextPacket)
+      ],
       priority: 'interactive',
       reason: 'manual',
       force: true
     })
   );
-  return { results, total, answer: artifact };
+  return { results, total, answer: artifact, ...(contextPacket ? { context_packet: contextPacket } : {}) };
 }
 
 export function searchAnswerScopeKey(query: SearchQuery, results: SearchResult[]): string {
@@ -49,4 +54,21 @@ function sourceKind(kind: SearchResult['doc']['entity_kind']): SynthesisSource['
   if (kind === 'synthesis_artifact') return 'raw';
   if (kind === 'kb_doc') return 'kb';
   return kind;
+}
+
+function contextPacketToSources(packet: ContextPacket | undefined): SynthesisSource[] {
+  if (!packet) return [];
+  return packet.sections.slice(0, 5).map((section) => ({
+    kind: 'raw',
+    ref: `${packet.id}:${section.kind}`,
+    title: `Context Packet · ${section.title}`,
+    excerpt: section.content,
+    weight: 0.65,
+    metadata: {
+      context_packet_id: packet.id,
+      section_kind: section.kind,
+      citations: section.citations,
+      synthesis_refs: packet.synthesis_refs
+    }
+  }));
 }

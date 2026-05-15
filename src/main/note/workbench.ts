@@ -109,6 +109,10 @@ export async function buildNoteWorkbench(
   return workbenchFromArtifacts(note, artifact, relationArtifact);
 }
 
+export function noteWorkbenchEntityScope(note: Note): string {
+  return entityScope(note);
+}
+
 export async function acceptNoteSuggestion(
   vaultPath: string,
   input: NoteSuggestionAcceptInput
@@ -748,7 +752,7 @@ function extractSuggestedTags(note: Note): string[] {
 function keywords(text: string, tags: string[]): Set<string> {
   const words = text
     .toLowerCase()
-    .match(/[a-z0-9_\-]{3,}|[\u4e00-\u9fff]{2,}/g) ?? [];
+    .match(/[a-z0-9_-]{3,}|[\u4e00-\u9fff]{2,}/g) ?? [];
   return new Set(
     [...tags, ...words]
       .map((word) => word.toLowerCase().replace(/^#/, ''))

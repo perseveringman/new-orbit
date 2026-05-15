@@ -72,6 +72,7 @@ ADR 借鉴自 Michael Nygard 的 [Documenting Architecture Decisions](https://co
 | 020 | [Ask-Anywhere as universal agent surface](ADR-020-ask-anywhere-universal-agent-surface.md) | accepted | `ask-anywhere-universal-tool-layer` |
 | 021 | [Configurable agent authority and learnable grants](ADR-021-configurable-agent-authority.md) | accepted | `agent-authority` |
 | 022 | [Project coordination 与 code workdir 解耦](ADR-022-project-workdir-decoupling.md) | accepted | `2026-05-13-project-workdir-decoupling` |
+| 023 | [Evidence-first Personal Memory Intelligence Layer](ADR-023-personal-memory-intelligence-foundation.md) | proposed | `2026-05-15-personal-memory-intelligence-foundation` |
 
 ---
 

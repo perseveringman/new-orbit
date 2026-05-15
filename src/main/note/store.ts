@@ -60,16 +60,18 @@ export class NoteStore {
   async create(input: CreateNoteInput): Promise<Note> {
     await this.ensureDirs();
     const now = new Date().toISOString();
-    const id = `note-${randomUUID()}`;
+    const id = input.id?.trim() || `note-${randomUUID()}`;
+    const created = input.created ?? now;
+    const updated = input.updated ?? created;
     const title = input.title?.trim() || titleFromBody(input.body) || labelForType(input.type);
-    const relPath = await this.nextPath(input.type, title, now);
+    const relPath = await this.nextPath(input.type, title, created);
     const body = normalizeBody(input.body, title);
     const fm: NoteFrontmatter = normalizeFrontmatter({
       id,
       type: input.type,
       title,
-      created: now,
-      updated: now,
+      created,
+      updated,
       para_kind: input.para_kind ?? 'floating',
       ...(input.para_ref ? { para_ref: input.para_ref } : {}),
       tags: normalizeTags(input.tags ?? []),

@@ -5,6 +5,7 @@ import { ORBIT_DIR } from '@shared/constants';
 import type { ReviewAction, ReviewFilter, ReviewFinding, ReviewKind, ReviewRun, ReviewRunDetail } from '@shared/review';
 import { publishTraceableEvent } from '../events/bus';
 import { archiveProjectByUid, createTask } from '../project';
+import { createSynthesisStore } from '../synthesis/store';
 
 interface ReviewIndexFile {
   version: 1;
@@ -27,7 +28,14 @@ export class ReviewStore {
   async getRun(id: string): Promise<ReviewRunDetail | null> {
     const run = await this.getRunOnly(id);
     if (!run) return null;
-    return { run, findings: await this.getFindings(id) };
+    const artifact = run.artifact_id
+      ? await createSynthesisStore(this.vaultPath).get(run.artifact_id).catch(() => null)
+      : null;
+    return {
+      run,
+      findings: await this.getFindings(id),
+      ...(artifact ? { artifact } : {})
+    };
   }
 
   async start(kind: ReviewKind, period: ReviewRun['period'], scopeRef?: string): Promise<ReviewRun> {

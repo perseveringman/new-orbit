@@ -1,4 +1,6 @@
 import type { SynthesisArtifact } from '../synthesis';
+import type { EvidenceSelector } from '../evidence';
+import type { ContextPacket } from '../context';
 
 export const INDEXABLE_ENTITY_KINDS = [
   'note',
@@ -22,6 +24,8 @@ export interface SemanticDocument {
   id: string;
   entity_kind: IndexableEntityKind;
   entity_ref: string;
+  source_id?: string;
+  evidence_selectors?: EvidenceSelector[];
   title: string;
   content: string;
   tags?: string[];
@@ -86,6 +90,7 @@ export interface SearchResponse {
   results: SearchResult[];
   total: number;
   session?: SearchSession;
+  context_packet?: ContextPacket;
 }
 
 export interface SearchAnswerResponse extends SearchResponse {

@@ -1,3 +1,5 @@
+import type { SynthesisArtifact } from '../synthesis';
+
 export const REVIEW_KINDS = ['daily', 'weekly', 'monthly', 'quarterly', 'area', 'resource', 'project'] as const;
 export type ReviewKind = (typeof REVIEW_KINDS)[number];
 
@@ -65,6 +67,7 @@ export interface ReviewFilter {
 export interface ReviewRunDetail {
   run: ReviewRun;
   findings: ReviewFinding[];
+  artifact?: SynthesisArtifact;
 }
 
 export interface ReviewHealthOverview {

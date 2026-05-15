@@ -187,6 +187,7 @@ import type {
 } from '@shared/external-gateway';
 import type { ResourceChangeEvent } from '@shared/resource';
 import type { SearchQuery, SemanticIndexStatus } from '@shared/semantic';
+import type { EvidenceSelector, EvidenceSourceFilter } from '@shared/evidence';
 import type { CreateMemoryInput, MemoryFilter, RecallOptions, UpdateMemoryInput } from '@shared/memory';
 import type { ReviewFilter, ReviewKind } from '@shared/review';
 import type { CreateGoalInput, UpdateGoalInput, VisionHorizon } from '@shared/vision';
@@ -884,6 +885,13 @@ const api: OrbitApi = {
       ipcRenderer.on(IPC.semantic.event, listener);
       return () => ipcRenderer.removeListener(IPC.semantic.event, listener);
     }
+  },
+  evidence: {
+    list: (filter?: EvidenceSourceFilter) => ipcRenderer.invoke(IPC.evidence.list, filter),
+    get: (sourceId: string) => ipcRenderer.invoke(IPC.evidence.get, sourceId),
+    read: (selector: EvidenceSelector) => ipcRenderer.invoke(IPC.evidence.read, selector),
+    sync: (options?: { includeExternalAISessions?: boolean; externalAISessionLimit?: number }) =>
+      ipcRenderer.invoke(IPC.evidence.sync, options)
   },
   memory: {
     list: (filter?: MemoryFilter) => ipcRenderer.invoke(IPC.memory.list, filter),

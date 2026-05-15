@@ -2,11 +2,12 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { AreaConfig } from '@shared/area';
 import type { Conversation } from '@shared/conversation';
+import { evidenceSourceId, wholeSourceSelector, type EvidenceSourceKind } from '@shared/evidence';
 import type { LibraryItem } from '@shared/library';
 import type { Note } from '@shared/note';
 import type { Resource } from '@shared/resource';
 import type { SemanticDocument } from '@shared/semantic';
-import type { SynthesisArtifact } from '@shared/synthesis';
+import type { PersonalQAPayload, SynthesisArtifact } from '@shared/synthesis';
 import { KnowledgeBaseStore } from '../knowledge-base/store';
 import { createLibraryStore } from '../library/store';
 import { createNoteStore } from '../note/store';
@@ -53,6 +54,7 @@ export function projectNote(note: Note): SemanticDocument {
     id: `note:${note.frontmatter.id}`,
     entity_kind: 'note',
     entity_ref: note.frontmatter.id,
+    ...evidenceProjection('note', note.frontmatter.id),
     title: note.frontmatter.title ?? note.path,
     content: cleanMarkdown(note.body),
     tags: note.frontmatter.tags,
@@ -69,6 +71,7 @@ export function projectLibraryItem(item: LibraryItem): SemanticDocument {
     id: `library_item:${item.frontmatter.id}`,
     entity_kind: 'library_item',
     entity_ref: item.frontmatter.id,
+    ...evidenceProjection('library_item', item.frontmatter.id),
     title: item.frontmatter.title,
     content: cleanMarkdown([item.frontmatter.url, item.body, annotationsText(item)].filter(Boolean).join('\n\n')),
     tags: item.frontmatter.tags,
@@ -85,6 +88,7 @@ export function projectResource(resource: Resource): SemanticDocument {
     id: `resource:${resource.frontmatter.slug}`,
     entity_kind: 'resource',
     entity_ref: resource.frontmatter.slug,
+    ...evidenceProjection('resource', resource.frontmatter.slug),
     title: resource.frontmatter.title,
     content: cleanMarkdown([
       resource.body,
@@ -101,10 +105,12 @@ export function projectResource(resource: Resource): SemanticDocument {
 
 export async function projectProject(vaultPath: string, project: ProjectSummary): Promise<SemanticDocument> {
   const content = await fs.readFile(project.readmePath, 'utf8').catch(() => project.name);
+  const ref = project.uid || project.slug;
   return {
-    id: `project:${project.uid || project.slug}`,
+    id: `project:${ref}`,
     entity_kind: 'project',
-    entity_ref: project.uid || project.slug,
+    entity_ref: ref,
+    ...evidenceProjection('project', ref),
     title: project.name,
     content: cleanMarkdown(content),
     tags: project.tags,
@@ -120,6 +126,7 @@ export function projectArea(area: AreaConfig): SemanticDocument {
     id: `area:${area.slug}`,
     entity_kind: 'area',
     entity_ref: area.slug,
+    ...evidenceProjection('area', area.slug),
     title: area.name,
     content: cleanMarkdown([area.name, area.description, area.tags.join(' '), area.vision_refs?.join(' ')].filter(Boolean).join('\n\n')),
     tags: area.tags,
@@ -136,6 +143,7 @@ export function projectConversation(conversation: Conversation): SemanticDocumen
     id: `conversation:${conversation.id}`,
     entity_kind: 'conversation',
     entity_ref: conversation.id,
+    ...evidenceProjection('conversation', conversation.id),
     title: conversation.title ?? `Conversation ${conversation.id}`,
     content: cleanMarkdown([conversation.summary, scope, ...conversation.turns.map((turn) => `${turn.role}: ${turn.content}`)].filter(Boolean).join('\n\n')),
     tags: conversation.tags,
@@ -152,12 +160,31 @@ export function projectSynthesisArtifact(artifact: SynthesisArtifact): SemanticD
     id: `synthesis_artifact:${artifact.id}`,
     entity_kind: 'synthesis_artifact',
     entity_ref: artifact.id,
-    title: `${artifact.kind} ${artifact.scope_key}`,
-    content: cleanMarkdown(JSON.stringify({ kind: artifact.kind, scope: artifact.scope_key, payload: artifact.payload })),
+    title: synthesisArtifactTitle(artifact),
+    content: synthesisArtifactContent(artifact),
     layer: 2,
     layer_label: 'synthesis',
     updated_at: artifact.created_at
   };
+}
+
+function synthesisArtifactTitle(artifact: SynthesisArtifact): string {
+  if (artifact.kind === 'qa.personal' && isPersonalQAPayloadLike(artifact.payload)) {
+    return artifact.payload.question;
+  }
+  return `${artifact.kind} ${artifact.scope_key}`;
+}
+
+function synthesisArtifactContent(artifact: SynthesisArtifact): string {
+  if (artifact.kind === 'qa.personal' && isPersonalQAPayloadLike(artifact.payload)) {
+    return cleanMarkdown([
+      artifact.payload.question,
+      artifact.payload.answer,
+      artifact.payload.entities.join(' '),
+      artifact.payload.evidence.map((selector) => selector.source_id).join(' ')
+    ].filter(Boolean).join('\n\n'));
+  }
+  return cleanMarkdown(JSON.stringify({ kind: artifact.kind, scope: artifact.scope_key, payload: artifact.payload }));
 }
 
 export async function projectKnowledgeBaseDocs(vaultPath: string): Promise<SemanticDocument[]> {
@@ -171,6 +198,7 @@ export async function projectKnowledgeBaseDocs(vaultPath: string): Promise<Seman
         id: `kb_doc:${kb.id}:${rel}`,
         entity_kind: 'kb_doc',
         entity_ref: `${kb.id}/${rel.slice(kb.path.length + 1)}`,
+        ...evidenceProjection('kb_doc', `${kb.id}/${rel.slice(kb.path.length + 1)}`),
         title: titleFromMarkdown(raw, rel),
         content: cleanMarkdown(raw),
         tags: [],
@@ -181,6 +209,25 @@ export async function projectKnowledgeBaseDocs(vaultPath: string): Promise<Seman
     }
   }
   return docs;
+}
+
+function evidenceProjection(kind: EvidenceSourceKind, ref: string): Pick<SemanticDocument, 'source_id' | 'evidence_selectors'> {
+  const sourceId = evidenceSourceId(kind, ref);
+  return {
+    source_id: sourceId,
+    evidence_selectors: [wholeSourceSelector(sourceId, 'safe_projection', 'semantic projection')]
+  };
+}
+
+function isPersonalQAPayloadLike(payload: unknown): payload is PersonalQAPayload {
+  return Boolean(
+    payload &&
+      typeof payload === 'object' &&
+      typeof (payload as PersonalQAPayload).question === 'string' &&
+      typeof (payload as PersonalQAPayload).answer === 'string' &&
+      Array.isArray((payload as PersonalQAPayload).entities) &&
+      Array.isArray((payload as PersonalQAPayload).evidence)
+  );
 }
 
 function annotationsText(item: LibraryItem): string {

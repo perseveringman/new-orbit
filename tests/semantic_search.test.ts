@@ -8,6 +8,8 @@ import { embedText, LOCAL_EMBEDDING_DIMENSIONS } from '../src/main/semantic/embe
 import { hybridSearch } from '../src/main/semantic/hybrid-search';
 import { createSemanticIndexStore, type IndexedSemanticDocument } from '../src/main/semantic/index-store';
 import { searchAndAnswer } from '../src/main/semantic/search-answer';
+import { searchWithContext } from '../src/main/semantic/search-context';
+import { evidenceSourceId } from '../src/shared/evidence';
 import type { SemanticDocument } from '../src/shared/semantic';
 
 let vaultPath: string;
@@ -36,6 +38,15 @@ describe('Semantic Search', () => {
     expect(doc.id).toBe(`note:${note.frontmatter.id}`);
     expect(doc.layer).toBe(1);
     expect(doc.layer_label).toBe('truth');
+    expect(doc.source_id).toBe(evidenceSourceId('note', note.frontmatter.id));
+    expect(doc.evidence_selectors).toEqual([
+      {
+        source_id: evidenceSourceId('note', note.frontmatter.id),
+        kind: 'whole_source',
+        content_view: 'safe_projection',
+        reason: 'semantic projection'
+      }
+    ]);
     expect(doc.areas).toEqual(['learning']);
     expect(doc.resource_refs).toEqual(['second-brain']);
     expect(doc.content).toContain('Orbit should recall stable facts');
@@ -89,7 +100,39 @@ describe('Semantic Search', () => {
 
     expect(response.answer?.kind).toBe('search.answer');
     expect(response.answer?.sources[0].ref).toMatch(/^note:/);
+    expect(response.answer?.sources.some((source) => source.title?.startsWith('Context Packet'))).toBe(true);
+    expect(response.context_packet?.sections.length).toBeGreaterThan(0);
     expect(response.answer?.provenance.prompt_version).toBe('search.answer.v1');
+  });
+
+  it('attaches a PMIL context packet with Personal QA to search responses', async () => {
+    await createNoteStore(vaultPath).create({
+      type: 'thought',
+      title: 'GraphRAG recall',
+      body: '[[GraphRAG]] improves recall by connecting [[Evidence Chunk]] hits, [[Personal QA]], and graph neighbors.',
+      resource_refs: ['pmil']
+    });
+    await createSemanticIndexStore(vaultPath).rebuildIndex();
+
+    const response = await searchWithContext(
+      vaultPath,
+      {
+        text: 'GraphRAG recall',
+        match_mode: 'hybrid',
+        resources: ['pmil'],
+        top_k: 5
+      },
+      { synthesisMode: 'ensure' }
+    );
+
+    expect(response.results[0].doc.title).toBe('GraphRAG recall');
+    expect(response.context_packet?.scope).toEqual({ kind: 'resource', ref: 'pmil' });
+    expect(response.context_packet?.sections.map((section) => section.kind)).toEqual(
+      expect.arrayContaining(['relevant_evidence', 'synthesis'])
+    );
+    expect(response.context_packet?.sections.find((section) => section.kind === 'synthesis')?.content).toContain('GraphRAG');
+    expect(response.context_packet?.synthesis_refs.length).toBeGreaterThan(0);
+    expect(response.context_packet?.evidence.length).toBeGreaterThan(0);
   });
 
   it('returns an empty result set for unmatched filters', async () => {

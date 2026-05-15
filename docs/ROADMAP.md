@@ -61,6 +61,24 @@ Delivered:
 - Focused integration tests cover migration, external GitHub import, and
   external-workdir worktree launch.
 
+### 2026-05-16 — PMIL Ask / Evidence / Review loop
+
+Status: **implemented (foundation)**.
+
+Delivered:
+
+- Ask Anywhere now injects a PMIL ContextPacket into each user send, after the existing scoped Orbit context.
+- Evidence drill-down has a dedicated IPC/preload namespace (`evidence:list/get/read/sync`) so UI surfaces can read cited snippets by EvidenceSelector.
+- Search PMIL context sections now expose "查看证据" actions for citation drill-down.
+- Review runs generate `work.context` and `report.open_loops` synthesis artifacts, then materialize open-loop candidates as Review findings.
+- Review UI shows a Personal Memory Intelligence work-context panel with current focus, active threads, and open loops.
+
+Remaining gaps:
+
+- Ask Anywhere still consumes PMIL context invisibly; context chips / citation drawer are next.
+- Project Room and Memory Explorer still need the same evidence inspector.
+- Work Context / Open Loops are deterministic first-pass artifacts; LLM refinement and feedback loops remain future work.
+
 ---
 
 ## 1. 已完成里程碑
@@ -103,7 +121,7 @@ Delivered:
 | Activity Log infrastructure | completed |
 | Capture tri-partition | completed |
 | Quick Capture MVP | completed |
-| Orbit Mobile inbound ingest | completed |
+| Orbit Mobile inbound ingest | completed; materializes Notes + `note.created` Timeline |
 
 ### Phase 3 — Agent Observability & Resilience
 

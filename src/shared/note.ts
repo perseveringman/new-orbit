@@ -42,7 +42,16 @@ export interface SpecialMarker {
 }
 
 export interface NoteSource {
-  kind: 'library' | 'kb' | 'url' | 'conversation' | 'feed' | 'manual' | 'synthesis';
+  kind:
+    | 'library'
+    | 'kb'
+    | 'url'
+    | 'conversation'
+    | 'feed'
+    | 'manual'
+    | 'synthesis'
+    | 'quick_capture'
+    | 'mobile_capture';
   ref?: string;
   excerpt?: string;
 }
@@ -98,9 +107,12 @@ export interface NoteFilter {
 }
 
 export interface CreateNoteInput {
+  id?: string;
   type: NoteType;
   title?: string;
   body: string;
+  created?: string;
+  updated?: string;
   para_kind?: NotePARAKind;
   para_ref?: string;
   tags?: string[];

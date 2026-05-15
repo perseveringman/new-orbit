@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { MobileAckInfo, MobileFailedInfo } from './types';
+import type { MobileAckInfoV2, MobileFailedInfo } from './types';
 
 async function moveCaptureDir(captureDir: string, bucket: 'processed' | 'failed'): Promise<string> {
   const id = path.basename(captureDir);
@@ -10,17 +10,19 @@ async function moveCaptureDir(captureDir: string, bucket: 'processed' | 'failed'
   const targetDir = path.join(targetBase, id);
   await fs.mkdir(targetBase, { recursive: true });
   await fs.rm(targetDir, { recursive: true, force: true });
+  if (bucket === 'processed') {
+    await fs.rm(path.join(documentsDir, 'failed', id), { recursive: true, force: true });
+  }
   await fs.rename(captureDir, targetDir);
   return targetDir;
 }
 
 export async function moveToProcessed(
   captureDir: string,
-  info: Omit<MobileAckInfo, 'schema_version' | 'acked_at' | 'mac_identity'>
+  info: Omit<MobileAckInfoV2, 'acked_at' | 'mac_identity'>
 ): Promise<string> {
   const targetDir = await moveCaptureDir(captureDir, 'processed');
-  const ack: MobileAckInfo = {
-    schema_version: 1,
+  const ack: MobileAckInfoV2 = {
     acked_at: new Date().toISOString(),
     mac_identity: os.hostname(),
     ...info

@@ -25,6 +25,8 @@ import type {
 } from '@shared/conversation';
 import { conversationScopeKey } from '@shared/conversation';
 import type { RuntimeEvent } from '@shared/chat-protocol';
+import type { ContextPacket, ContextPacketScope, ContextSection } from '@shared/context';
+import type { EvidenceSelector } from '@shared/evidence';
 import type { SpaceContextBundle } from '@shared/space';
 import type { SDKEndpointRegistrySnapshot, SDKEndpointView, SDKInvocationMessage, SDKToolDef } from '@shared/runtime';
 import type { ConversationOrchestrator } from '../conversation/orchestrator';
@@ -42,6 +44,7 @@ import { generateConversationAutoTitle, shouldAutoTitleConversation } from '../c
 import { createStageStore, extractArtifactFences } from './stage-store';
 import { assertInsideVault, toPosix, vaultRel } from '../pathGuard';
 import { buildSpaceContext } from '../space/context';
+import { buildContextPacket } from '../context';
 
 export interface AskAnywhereDeps {
   conversations: ConversationOrchestrator;
@@ -211,7 +214,11 @@ export class AskAnywhereOrchestrator {
     // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
     const history = renderHistory(conv.turns);
     const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
-    const scopedContext = await buildConversationContext(vault, conv.scope ?? { kind: 'global' });
+    const scopedContext = await buildAskAnywhereContext(
+      vault,
+      conv.scope ?? { kind: 'global' },
+      trimmed
+    );
     const prompt = buildPrompt({ systemPrompt, scopedContext, history, userText: trimmed });
     const router = this.deps.getRuntimeRouter?.() ?? null;
     const agentTools = this.deps.getAgentTools?.() ?? null;
@@ -869,6 +876,99 @@ async function buildConversationContext(
     }
   } catch (error) {
     return `<current_orbit_context>\nScope: ${conversationScopeKey(scope)}\nContext lookup failed: ${(error as Error).message}\nUse the Orbit CLI to inspect this scope if needed.\n</current_orbit_context>`;
+  }
+}
+
+export async function buildAskAnywhereContext(
+  vaultPath: string,
+  scope: ConversationScope,
+  userText: string
+): Promise<string> {
+  const baseContext = await buildConversationContext(vaultPath, scope);
+  const pmilContext = await buildAskPMILContext(vaultPath, scope, userText);
+  return [baseContext, pmilContext].filter(Boolean).join('\n\n');
+}
+
+async function buildAskPMILContext(
+  vaultPath: string,
+  scope: ConversationScope,
+  userText: string
+): Promise<string> {
+  try {
+    const packet = await buildContextPacket(vaultPath, {
+      purpose: 'ask',
+      scope: conversationScopeToContextPacketScope(scope),
+      query: userText,
+      max_tokens: 2200,
+      evidence_limit: 8,
+      graph_limit: 12,
+      synthesis_mode: 'ensure'
+    });
+    return renderPMILContextPacket(packet);
+  } catch (error) {
+    return `<pmil_context_packet status="unavailable">\nContext packet lookup failed: ${(error as Error).message}\n</pmil_context_packet>`;
+  }
+}
+
+export function renderPMILContextPacket(packet: ContextPacket): string {
+  const sections = packet.sections.map(renderPMILContextSection).filter(Boolean);
+  if (sections.length === 0) return '';
+  const scopeLabel = packet.scope.kind === 'global' ? 'global' : `${packet.scope.kind}:${packet.scope.ref ?? ''}`;
+  const lines = [
+    `<pmil_context_packet id="${packet.id}" purpose="${packet.purpose}" scope="${scopeLabel}">`,
+    packet.query ? `Query: ${packet.query}` : '',
+    `Generated: ${packet.generated_at}`,
+    `Budget: ${packet.budget.estimated_tokens}/${packet.budget.max_tokens} estimated tokens`,
+    `Evidence selectors: ${packet.evidence.length}`,
+    packet.synthesis_refs.length ? `Synthesis refs: ${packet.synthesis_refs.join(', ')}` : '',
+    packet.freshness.stale_sources?.length
+      ? `Stale or missing evidence: ${packet.freshness.stale_sources.join(', ')}`
+      : '',
+    '',
+    ...sections,
+    '</pmil_context_packet>'
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+function renderPMILContextSection(section: ContextSection): string {
+  const citations = section.citations
+    .slice(0, 6)
+    .map(formatEvidenceSelector)
+    .join(', ');
+  return [
+    `## ${section.title} (${section.kind})`,
+    citations ? `Citations: ${citations}` : '',
+    clip(section.content, 1400)
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function formatEvidenceSelector(selector: EvidenceSelector): string {
+  const range = selector.range
+    ? `:${selector.range.from ?? ''}${selector.range.to !== undefined ? `-${selector.range.to}` : ''}`
+    : '';
+  return `${selector.source_id}#${selector.kind}${range}`;
+}
+
+function conversationScopeToContextPacketScope(scope: ConversationScope): ContextPacketScope {
+  switch (scope.kind) {
+    case 'project':
+      return { kind: 'project', ref: scope.project_id };
+    case 'task':
+      return { kind: 'task', ref: scope.task_id };
+    case 'area':
+      return { kind: 'area', ref: scope.area_slug };
+    case 'resource':
+      return { kind: 'resource', ref: scope.resource_slug };
+    case 'note':
+      return { kind: 'note', ref: scope.note_id };
+    case 'library':
+      return { kind: 'library', ref: scope.item_id };
+    case 'global':
+    case 'external':
+      return { kind: 'global' };
   }
 }
 

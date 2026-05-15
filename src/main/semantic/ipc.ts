@@ -5,6 +5,7 @@ import { eventReplayBus } from '../events/bus';
 import { getSDKRuntime } from '../runtime/sdk/ipc';
 import { createSemanticIndexStore, type SemanticIndexStore } from './index-store';
 import { searchAndAnswer } from './search-answer';
+import { searchWithContext } from './search-context';
 
 let current: { vaultPath: string; store: SemanticIndexStore } | null = null;
 let invalidatorRegistered = false;
@@ -24,7 +25,7 @@ export function registerSemanticIpc(getVaultPath: () => string | null): void {
 
   registerSemanticInvalidator(getVaultPath);
 
-  ipcMain.handle(IPC.semantic.search, async (_event, query: SearchQuery) => runtime().store.search(query));
+  ipcMain.handle(IPC.semantic.search, async (_event, query: SearchQuery) => searchWithContext(runtime().vaultPath, query));
   ipcMain.handle(IPC.semantic.getDocument, async (_event, docId: string) => runtime().store.getDocument(docId));
   ipcMain.handle(IPC.semantic.indexStatus, async () => runtime().store.status());
   ipcMain.handle(IPC.semantic.rebuildIndex, async () => {

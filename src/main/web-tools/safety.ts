@@ -91,7 +91,7 @@ export async function fetchTextWithLimit(
     const chunks: Uint8Array[] = [];
     let bytesRead = 0;
     let truncated = false;
-    while (true) {
+    for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (!value) continue;

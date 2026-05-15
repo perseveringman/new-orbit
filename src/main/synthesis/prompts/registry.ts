@@ -2,6 +2,7 @@ import type { SynthesisKind } from '@shared/synthesis';
 import { classifyAreaPrompt } from './classify.area.v1';
 import { distillLibraryPrompt } from './distill.library.v1';
 import { emergeResourcePrompt } from './emerge.resource.v1';
+import { personalQAPrompt } from './qa.personal.v1';
 import { relateNotesPrompt } from './relate.notes.v1';
 import { searchAnswerPrompt } from './search.answer.v1';
 import { summaryDailyPrompt } from './summary.daily.v1';
@@ -27,7 +28,8 @@ const PROMPTS = [
   emergeResourcePrompt,
   relateNotesPrompt,
   classifyAreaPrompt,
-  searchAnswerPrompt
+  searchAnswerPrompt,
+  personalQAPrompt
 ] satisfies SynthesisPromptTemplate[];
 
 export function getPromptTemplate(kind: SynthesisKind): SynthesisPromptTemplate {

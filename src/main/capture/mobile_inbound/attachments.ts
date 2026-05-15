@@ -1,18 +1,29 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { MobileCaptureManifest } from './types';
+import type { MobileCaptureAttachment, MobileCaptureManifest } from './types';
 
 export interface CopiedAttachment {
   filename: string;
   vaultRelativePath: string;
   uri: string;
-  type: string;
+  type: MobileCaptureAttachment['type'];
   mime: string;
+  byteSize: number;
+  durationMs?: number;
+  transcription?: string;
+  derivativeKind?: string;
+  schema?: string;
 }
 
-function assertSafeRelativePath(value: string): void {
+export function assertSafeRelativePath(value: string): void {
   const normalized = path.posix.normalize(value.replace(/\\/g, '/'));
-  if (normalized.startsWith('../') || normalized === '..' || path.isAbsolute(normalized)) {
+  if (
+    value.trim() === '' ||
+    normalized === '.' ||
+    normalized.startsWith('../') ||
+    normalized === '..' ||
+    path.isAbsolute(normalized)
+  ) {
     throw new Error(`unsafe attachment path: ${value}`);
   }
 }
@@ -39,7 +50,12 @@ export async function copyAttachments(
       vaultRelativePath,
       uri: `attachment://${manifest.id}/${attachment.filename}`,
       type: attachment.type,
-      mime: attachment.mime
+      mime: attachment.mime,
+      byteSize: attachment.byte_size,
+      durationMs: attachment.duration_ms,
+      transcription: attachment.transcription,
+      derivativeKind: attachment.derivative_kind,
+      schema: attachment.schema
     });
   }
   return copied;

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { ContextPacket, ContextSection } from '@shared/context';
+import type { EvidenceReadResult, EvidenceSelector } from '@shared/evidence';
 import type { MemoryNode, MemoryRecallMatch, RecallResult } from '@shared/memory';
-import type { IndexableEntityKind, SearchAnswerResponse, SearchMatchMode, SearchQuery, SearchResult, SemanticIndexStatus } from '@shared/semantic';
+import type { IndexableEntityKind, SearchAnswerResponse, SearchMatchMode, SearchQuery, SearchResponse, SearchResult, SemanticIndexStatus } from '@shared/semantic';
 import { INDEXABLE_ENTITY_KINDS } from '@shared/semantic';
 import { usePara } from '../store/para';
 
@@ -17,6 +19,7 @@ export function SearchView(): JSX.Element {
   const [status, setStatus] = useState<SemanticIndexStatus | null>(null);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [memoryRecall, setMemoryRecall] = useState<RecallResult | null>(null);
+  const [contextPacket, setContextPacket] = useState<SearchResponse['context_packet'] | null>(null);
   const [answer, setAnswer] = useState<SearchAnswerResponse['answer'] | null>(null);
   const [state, setState] = useState<SearchState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +56,7 @@ export function SearchView(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     const handle = window.setTimeout(() => {
-      void runSearch(query, setState, setError, setResults, setMemoryRecall, setAnswer, cancelled);
+      void runSearch(query, setState, setError, setResults, setMemoryRecall, setContextPacket, setAnswer, cancelled);
     }, 300);
     return () => {
       cancelled = true;
@@ -67,7 +70,7 @@ export function SearchView(): JSX.Element {
     try {
       const next = await window.orbit.semantic.rebuildIndex();
       setStatus(next);
-      await runSearch(query, setState, setError, setResults, setMemoryRecall, setAnswer, false);
+      await runSearch(query, setState, setError, setResults, setMemoryRecall, setContextPacket, setAnswer, false);
     } catch (err) {
       setError((err as Error).message);
       setState('error');
@@ -75,14 +78,15 @@ export function SearchView(): JSX.Element {
   }
 
   async function answerAcrossResults(): Promise<void> {
-    if (!results.length) return;
+    if (!results.length && !contextPacket?.sections.length) return;
     setState('loading');
     setError(null);
     try {
       const response = await window.orbit.semantic.searchAndAnswer(query);
       setResults(response.results);
+      setContextPacket(response.context_packet ?? null);
       setAnswer(response.answer ?? null);
-      setState(response.results.length ? 'success' : 'empty');
+      setState(response.results.length || response.context_packet?.sections.length ? 'success' : 'empty');
     } catch (err) {
       setError((err as Error).message);
       setState('error');
@@ -90,8 +94,12 @@ export function SearchView(): JSX.Element {
   }
 
   async function askAcrossResults(): Promise<void> {
-    if (!results.length && !memoryRecall?.memories.length) return;
+    if (!results.length && !memoryRecall?.memories.length && !contextPacket?.sections.length) return;
     const now = new Date().toISOString();
+    const artifactRefs = [
+      ...(answer ? [answer.id] : []),
+      ...(contextPacket?.synthesis_refs ?? [])
+    ];
     const conversation = await window.orbit.chat.createConversation({
       anchor: { kind: 'ask_anywhere_session', refId: `search:${now}`, addedAt: now },
       scope: { kind: 'global' },
@@ -102,9 +110,10 @@ export function SearchView(): JSX.Element {
       role: 'user',
       content: `Use these Orbit search results and recalled memories as context:\n\n${[
         results.slice(0, 8).map(formatResultForPrompt).join('\n\n'),
+        contextPacket ? formatContextPacketForPrompt(contextPacket) : '',
         memoryRecall?.memories.slice(0, 5).map((memory) => formatMemoryForPrompt(memory, memoryRecall.matches.find((match) => match.memory_id === memory.id))).join('\n\n')
       ].filter(Boolean).join('\n\n')}\n\nQuestion: ${query.text || 'What should I notice?'}`,
-      artifactRefs: answer ? [answer.id] : undefined
+      artifactRefs: artifactRefs.length ? artifactRefs : undefined
     });
     setView({ kind: 'askAnywhere', activeId: conversation.id });
   }
@@ -133,6 +142,7 @@ export function SearchView(): JSX.Element {
       status={status}
       results={results}
       memoryRecall={memoryRecall}
+      contextPacket={contextPacket}
       answer={answer}
       state={state}
       error={error}
@@ -162,6 +172,7 @@ export function SearchContent(props: {
   status: SemanticIndexStatus | null;
   results: SearchResult[];
   memoryRecall: RecallResult | null;
+  contextPacket: SearchResponse['context_packet'] | null;
   answer: SearchAnswerResponse['answer'] | null;
   state: SearchState;
   error: string | null;
@@ -179,6 +190,7 @@ export function SearchContent(props: {
 }): JSX.Element {
   const stale = (props.status?.stale_docs ?? 0) > 0;
   const memoryCount = props.memoryRecall?.memories.length ?? 0;
+  const contextCount = props.contextPacket?.sections.length ?? 0;
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -229,16 +241,32 @@ export function SearchContent(props: {
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-neutral-500">{props.results.length} result(s) · {memoryCount} memory hit(s)</p>
+          <p className="text-sm text-neutral-500">{props.results.length} result(s) · {contextCount} context section(s) · {memoryCount} memory hit(s)</p>
           <div className="flex gap-2">
-            <button onClick={props.onAnswer} disabled={!props.results.length} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm disabled:opacity-40 dark:border-neutral-700">
+            <button onClick={props.onAnswer} disabled={!props.results.length && !contextCount} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm disabled:opacity-40 dark:border-neutral-700">
               Generate answer
             </button>
-            <button onClick={props.onAsk} disabled={!props.results.length && !memoryCount} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-950">
+            <button onClick={props.onAsk} disabled={!props.results.length && !contextCount && !memoryCount} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-950">
               Ask across results
             </button>
           </div>
         </div>
+
+        {props.contextPacket?.sections.length ? (
+          <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-900 dark:bg-violet-950/30">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">PMIL context packet</h2>
+              <span className="text-xs text-violet-700 dark:text-violet-300">
+                {props.contextPacket.sections.length} section(s) · {props.contextPacket.evidence.length} citation(s)
+              </span>
+            </div>
+            <div className="mt-3 divide-y divide-violet-200/80 dark:divide-violet-900/80">
+              {props.contextPacket.sections.slice(0, 4).map((section) => (
+                <SearchContextSection key={`${section.kind}:${section.title}`} section={section} />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {props.memoryRecall?.memories.length ? (
           <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/30">
@@ -283,6 +311,7 @@ async function runSearch(
   setError: (error: string | null) => void,
   setResults: (results: SearchResult[]) => void,
   setMemoryRecall: (result: RecallResult | null) => void,
+  setContextPacket: (packet: SearchResponse['context_packet'] | null) => void,
   setAnswer: (answer: SearchAnswerResponse['answer'] | null) => void,
   cancelled: boolean
 ): Promise<void> {
@@ -304,12 +333,14 @@ async function runSearch(
     if (cancelled) return;
     setResults(response.results);
     setMemoryRecall(recall);
+    setContextPacket(response.context_packet ?? null);
     setAnswer(null);
-    setState(response.results.length || recall?.memories.length ? 'success' : 'empty');
+    setState(response.results.length || response.context_packet?.sections.length || recall?.memories.length ? 'success' : 'empty');
   } catch (err) {
     if (cancelled) return;
     setError((err as Error).message);
     setMemoryRecall(null);
+    setContextPacket(null);
     setState('error');
   }
 }
@@ -420,10 +451,90 @@ function SearchMemoryCard(props: {
   );
 }
 
+function SearchContextSection({ section }: { section: ContextSection }): JSX.Element {
+  const [readResult, setReadResult] = useState<EvidenceReadResult | null>(null);
+  const [loadingSelector, setLoadingSelector] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+
+  async function openEvidence(selector: EvidenceSelector): Promise<void> {
+    const key = evidenceSelectorKey(selector);
+    setLoadingSelector(key);
+    setReadError(null);
+    try {
+      setReadResult(await window.orbit.evidence.read(selector));
+    } catch (error) {
+      setReadResult(null);
+      setReadError((error as Error).message);
+    } finally {
+      setLoadingSelector(null);
+    }
+  }
+
+  return (
+    <article className="py-3 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-violet-300 px-2 py-1 text-xs text-violet-700 dark:border-violet-800 dark:text-violet-300">{section.kind}</span>
+        <span className="text-xs text-neutral-500">{section.citations.length} citation(s)</span>
+      </div>
+      <h3 className="mt-2 text-sm font-semibold">{section.title}</h3>
+      <p className="mt-2 whitespace-pre-line text-sm leading-6 text-neutral-600 dark:text-neutral-300">{section.content.slice(0, 520)}</p>
+      {section.citations.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {section.citations.slice(0, 4).map((selector) => {
+            const key = evidenceSelectorKey(selector);
+            return (
+              <button
+                key={key}
+                onClick={() => void openEvidence(selector)}
+                disabled={loadingSelector === key}
+                className="rounded-lg border border-violet-300 bg-white px-2 py-1 text-xs text-violet-700 disabled:opacity-50 dark:border-violet-800 dark:bg-neutral-900 dark:text-violet-300"
+              >
+                {loadingSelector === key ? '读取中' : `查看证据 ${shortEvidenceLabel(selector)}`}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {readError ? <p className="mt-3 text-xs text-red-600 dark:text-red-300">证据读取失败：{readError}</p> : null}
+      {readResult ? (
+        <div className="mt-3 rounded-xl border border-violet-200 bg-white p-3 text-sm dark:border-violet-900 dark:bg-neutral-950">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium">{readResult.source.title}</p>
+            <span className="text-xs text-neutral-500">{readResult.availability}</span>
+          </div>
+          <div className="mt-2 space-y-2">
+            {readResult.excerpts.slice(0, 2).map((excerpt, index) => (
+              <p key={`${excerpt.selector.source_id}:${index}`} className="whitespace-pre-line text-xs leading-5 text-neutral-600 dark:text-neutral-300">
+                {excerpt.text.slice(0, 900)}
+              </p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function evidenceSelectorKey(selector: EvidenceSelector): string {
+  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
+}
+
+function shortEvidenceLabel(selector: EvidenceSelector): string {
+  const id = selector.source_id.split(':').slice(-2).join(':') || selector.source_id;
+  return id.length > 24 ? `${id.slice(0, 24)}...` : id;
+}
+
 function formatResultForPrompt(result: SearchResult): string {
   return `- ${result.doc.title} (${result.entity_label}, score ${result.score}): ${result.snippets?.[0] ?? result.doc.content.slice(0, 300)}`;
 }
 
 function formatMemoryForPrompt(memory: MemoryNode, match?: MemoryRecallMatch): string {
   return `- Memory [${memory.layer}/${memory.kind}] ${memory.title}: ${memory.summary}${match ? `\n  Why recalled: ${match.reasons.join('; ')}` : ''}`;
+}
+
+function formatContextPacketForPrompt(packet: ContextPacket): string {
+  return [
+    `Context packet ${packet.id} (${packet.scope.kind}${packet.scope.ref ? `:${packet.scope.ref}` : ''})`,
+    ...packet.sections.slice(0, 6).map((section) => `- ${section.title} [${section.kind}]: ${section.content.slice(0, 700)}`)
+  ].join('\n');
 }

@@ -55,6 +55,7 @@ import { registerResourceIpc } from './resource/ipc';
 import { registerSDKRuntimeIpc } from './runtime/sdk/ipc';
 import { registerSynthesisIpc } from './synthesis/ipc';
 import { getSemanticRuntime, registerSemanticIpc } from './semantic/ipc';
+import { registerEvidenceIpc } from './evidence/ipc';
 import { registerMemoryIpc } from './memory/ipc';
 import { registerReviewSystemIpc } from './review/ipc';
 import { registerVisionSystemIpc } from './vision/ipc';
@@ -422,6 +423,7 @@ function registerIpc(): void {
   registerSDKRuntimeIpc(() => currentVault?.path ?? null);
   registerSynthesisIpc(() => currentVault?.path ?? null);
   registerSemanticIpc(() => currentVault?.path ?? null);
+  registerEvidenceIpc(() => currentVault?.path ?? null);
   registerMemoryIpc(() => currentVault?.path ?? null);
   registerReviewSystemIpc(() => currentVault?.path ?? null);
   registerVisionSystemIpc(() => currentVault?.path ?? null);

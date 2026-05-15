@@ -80,7 +80,7 @@ export function fallbackConversationTitle(conversation: Conversation): string | 
   const firstUser = conversation.turns.find((turn) => turn.role === 'user' && turn.content.trim());
   if (!firstUser) return null;
   const content = firstUser.content
-    .replace(/[`*_#>\[\]()]/g, '')
+    .replace(/[`*_#>[\]()]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!content) return null;

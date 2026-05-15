@@ -76,12 +76,18 @@ Current forward-looking plans:
    - gateway + Telegram
    - scheduled automation
 
-4. `plans/2026-05-13-personal-memory-intelligence-layer.md`
-   - personal memory intelligence proposal
-   - relation graph / Personal QA / reports
+4. `plans/2026-05-15-personal-memory-intelligence-foundation.md`
+   - evidence-first Personal Memory Intelligence foundation
+   - Layer 1 direct truth vs reference truth
+   - EvidenceSource / SourceProvider / ContextPacket contracts
+   - groundwork before local Agent session sources
+
+5. `plans/2026-05-13-personal-memory-intelligence-layer.md`
+   - superseded broad proposal and gap inventory
+   - still useful as background for relation graph / Personal QA / reports
    - current gap analysis for Today, Dashboard, Review, Journal, Library, Notes, Search, and Memory
 
-5. `plans/2026-05-14-feed-subscription-data-flow.md`
+6. `plans/2026-05-14-feed-subscription-data-flow.md`
    - FeedSource as Layer 1 attention configuration
    - FeedItem as Layer 0 signal
    - feed enrichment / translation / reports as Layer 2 synthesis
@@ -125,6 +131,7 @@ Important current ADR anchors:
 - `ADR-016-agent-onboarding-protocol.md`
 - `ADR-017-external-gateway-via-cc-connect.md`
 - `ADR-018-space-as-unified-data-primitive.md`
+- `ADR-023-personal-memory-intelligence-foundation.md`
 
 New ADRs should be created for:
 

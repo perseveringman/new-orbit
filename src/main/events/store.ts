@@ -39,7 +39,12 @@ export class TraceableEventStore {
       const raw = await fs.readFile(path.join(dir, file), 'utf8');
       for (const line of raw.split('\n')) {
         if (!line.trim()) continue;
-        const event = JSON.parse(line) as TraceableEvent;
+        let event: TraceableEvent;
+        try {
+          event = JSON.parse(line) as TraceableEvent;
+        } catch {
+          continue;
+        }
         if (matchesFilter(event, filter)) events.push(event);
       }
     }

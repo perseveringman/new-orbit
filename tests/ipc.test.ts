@@ -21,6 +21,7 @@ describe('IPC contract', () => {
         'env',
         'envExt',
         'events',
+        'evidence',
         'externalGateway',
         'feeds',
         'fs',
@@ -352,6 +353,12 @@ describe('IPC contract', () => {
       ].sort()
     );
     for (const v of Object.values(IPC.memory)) expect(v.startsWith('memory:')).toBe(true);
+  });
+
+  it('evidence namespace declares PMIL evidence drill-down channels', () => {
+    const keys = Object.keys(IPC.evidence).sort();
+    expect(keys).toEqual(['get', 'list', 'read', 'sync'].sort());
+    for (const v of Object.values(IPC.evidence)) expect(v.startsWith('evidence:')).toBe(true);
   });
 
   it('review namespace declares Phase 7 review-system channels while preserving daily journal channels', () => {

@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
 import type {
   DailySummaryPayload,
   EnsureSynthesisInput,
+  PersonalQAPayload,
   ResourceEmergencePayload,
   SynthesisArtifact,
   SynthesisJob,
@@ -153,6 +154,7 @@ function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknow
   if (kind === 'classify.area') return { suggestions: [] };
   if (kind === 'relate.notes') return { relations: localNoteRelations(sources) };
   if (kind === 'search.answer') return localSearchAnswer(sources);
+  if (kind === 'qa.personal') return localPersonalQA(sources);
   return {};
 }
 
@@ -217,4 +219,24 @@ function localSearchAnswer(sources: SynthesisSource[]): { answer: string; citati
   }));
   const answer = `I found ${top.length} relevant Orbit document(s). The strongest matches are ${citations.map((item) => item.title).join(', ')}.`;
   return { answer, citations, confidence: 0.55 };
+}
+
+function localPersonalQA(sources: SynthesisSource[]): PersonalQAPayload {
+  const top = sources.slice(0, 4);
+  const title = top[0]?.title ?? top[0]?.ref ?? 'this evidence';
+  const excerpts = top.map((source) => source.excerpt).filter((excerpt): excerpt is string => Boolean(excerpt));
+  return {
+    question: `What do I know about ${title}?`,
+    answer: excerpts.length
+      ? `Based on ${top.length} source(s): ${excerpts.map((excerpt, index) => `${index + 1}. ${excerpt.slice(0, 180)}`).join(' ')}`
+      : 'No source excerpts were provided.',
+    confidence: excerpts.length ? 0.45 : 0,
+    entities: [],
+    evidence: [],
+    source_chunk_ids: top
+      .map((source) => source.metadata?.['chunk_id'])
+      .filter((value): value is string => typeof value === 'string'),
+    source_hash: createHash('sha256').update(JSON.stringify(top.map((source) => [source.kind, source.ref, source.excerpt]))).digest('hex'),
+    useful_for: ['ask']
+  };
 }
