@@ -117,6 +117,7 @@ must be added there (or the test will fail typecheck).
 - Note frontmatter supports Layer 1 links (`areas`, `resource_refs`), origin (`source`), UI markers (`special_marker`), and Layer 2 provenance (`synthesis_ref`).
 - Notes Workbench APIs live under `notes.queue`, `notes.workbench`, `notes.acceptSuggestion`, and `notes.dismissSuggestion`; suggestions are stored as `summary.entity` / `relate.notes` SynthesisArtifacts and only mutate Layer 1 when accepted.
 - The Notes body editor uses `MarkdownLiveEditor`: Markdown text remains the source of truth, Live Preview hides common syntax on inactive lines, and Source mode disables the live decorations.
+- Notes editor autosave uses a short renderer-side debounce and blur flush. Autosave writes the Layer 1 Note only; users trigger Workbench recomputation explicitly with Analyze.
 - The CLI surface is `orbit note ...`; Ask-Anywhere agent tools should prefer `orbit_note_workbench` before accepting user-approved note suggestions.
 - KB import copies markdown folders into `<vault>/knowledge-base/<kb-name>` and writes registry metadata to `knowledge-base/.orbit-kb-meta/registry.json`.
 - KB activation must go through `knowledgeBase.activate`; it creates a Note, records activation metadata under `.orbit-kb-meta/annotations/`, and emits `kb.doc.activated`.

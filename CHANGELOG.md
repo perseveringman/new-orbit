@@ -6,6 +6,7 @@
 
 ### Added
 
+- **Notes autosave foundation**：Notes 编辑器新增 1s debounce 自动保存、失焦立即 flush、Saved/Unsaved/Saving/Error 状态提示；自动保存只写回 Note，不会触发 Workbench 强制分析。
 - **Notes Markdown Live Preview editor foundation**：Notes 正文编辑器切换到 CodeMirror 6 source-first 模型，默认 Live Preview 隐藏常见 Markdown 标记并在当前编辑行露出源码，同时保留 Source 模式查看/编辑完整 Markdown。
 - **Notes AI Workbench foundation**：把 Notes 从 Markdown CRUD 升级为 AI-native 处理队列，新增 inbox/connect/express/settled queue、`summary.entity` / `relate.notes` synthesis artifacts、可接受/驳回的 Area/Resource/tag/task/distill/relation suggestions、`orbit note ...` CLI、Ask-Anywhere agent note tools，以及 Notes 右侧 Workbench UI。
 - **cc-connect External Gateway 集成**：落地 ADR-017 的 Orbit 侧域层实现，新增 JSONL/Unix Socket 协议、External Orchestrator、session → Conversation 持久桥接、Capability Registry、Ask/Capture/Library/Task/Inbox/Synthesis/Memory/Delegate adapters、请求日志/限流/权限配置，以及 Settings → External Gateway 状态与绑定查看；现有 Telegram Gateway 保留为自建 channel 兜底。
@@ -51,6 +52,7 @@
 
 ### Fixed
 
+- **Notes Live Preview 光标抖动**：光标进入标题、引用、任务行等格式块时，现在只露出 Markdown 语法，不再移除块级排版样式，避免行高变化造成布局跳动。
 - **Task 对话续跑身份对齐**：当 Inbox 里的 B1 补充信息触发 task conversation 继续执行时，新的 run segment 现在会继承原有 binding / vendor session 语义，不再把同一条长期 agent 会话错误显示成新的 `MANUAL · SESSION`；输入框也会按 idle / running / waiting 状态切换为“发送消息启动 / 追加消息 / 继续对话”。
 - **Dispatch 求助状态对齐**：agent 首次执行如果只是要求补充信息，现在会落为 `needs_attention` 报告并保持 binding `healthy`，不再在 Recent Reports 里显示成 `FAILED`，也不会把 Executor 错误降级成 `DEGRADED`。
 - **Inbox 红点与详情滚动回归修复**：侧栏 Inbox 红点和 Inbox 页面现在共享同一份 renderer inbox state，收到新消息会先乐观增量再回读校准，避免列表已有 3 条而侧栏仍显示 2；同时 Stage View 与任务 Activity 面板补齐 `min-h-0/overflow` 约束，长对话和图片在 Inbox 详情里可以正常滚动查看。

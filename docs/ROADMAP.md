@@ -299,6 +299,7 @@ Implemented notes:
 - `orbit note ...` exposes queue/get/search/workbench/classify/relate/distill/propose-update/accept-suggestion/dismiss-suggestion for AI parity.
 - Ask-Anywhere tool registry exposes note workbench/read relation tools plus a user-approved accept-suggestion write tool.
 - Notes body editing now uses a source-first CodeMirror Live Preview editor: Markdown remains the stored Layer 1 truth, Live Preview hides common syntax outside the active editing line, and Source mode shows full Markdown.
+- Notes editing autosaves with debounce and blur flush, while Workbench analysis remains an explicit user action.
 
 Data structures:
 
@@ -313,6 +314,7 @@ UI:
 
 - Notes sidebar filters by type/tag/area/resource
 - CodeMirror Markdown editor with Live Preview / Source modes
+- autosave status: Saved / Unsaved / Saving / Error
 - note detail right panel: backlinks / resources / areas / synthesis summary
 - AI Workbench: summary, proposals, semantic relations, accept/dismiss actions
 - KB import wizard

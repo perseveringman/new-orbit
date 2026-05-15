@@ -45,6 +45,10 @@ type ReservedRange = {
   to: number;
 };
 
+type LineDecorationOptions = {
+  revealSyntax: boolean;
+};
+
 const hiddenToken = Decoration.replace({});
 const headingLine = (level: number): Decoration =>
   Decoration.line({ class: `cm-md-live-heading cm-md-live-heading-${level}` });
@@ -222,8 +226,8 @@ function buildLivePreviewDecorations(view: EditorView): DecorationSet {
         line.from >= frontmatter.from &&
         line.to <= frontmatter.to;
 
-      if (!active && !insideFoldedFrontmatter) {
-        addLineDecorations(builder, line.from, line.text);
+      if (!insideFoldedFrontmatter) {
+        addLineDecorations(builder, line.from, line.text, { revealSyntax: active });
       }
 
       if (line.to >= range.to || line.number >= view.state.doc.lines) break;
@@ -270,26 +274,34 @@ function frontmatterRange(state: EditorState): { from: number; to: number } | nu
   return null;
 }
 
-function addLineDecorations(builder: RangeSetBuilder<Decoration>, lineFrom: number, text: string): void {
+function addLineDecorations(
+  builder: RangeSetBuilder<Decoration>,
+  lineFrom: number,
+  text: string,
+  options: LineDecorationOptions
+): void {
   const inline: InlineDecoration[] = [];
   const reserved: ReservedRange[] = [];
+  const { revealSyntax } = options;
 
   const heading = /^(#{1,6})(\s+)/.exec(text);
   if (heading?.[1]) {
     const level = heading[1].length;
     builder.add(lineFrom, lineFrom, headingLine(level));
-    inline.push({
-      from: lineFrom,
-      to: lineFrom + heading[0].length,
-      decoration: hiddenToken
-    });
-    reserve(reserved, 0, heading[0].length);
+    if (!revealSyntax) {
+      inline.push({
+        from: lineFrom,
+        to: lineFrom + heading[0].length,
+        decoration: hiddenToken
+      });
+      reserve(reserved, 0, heading[0].length);
+    }
   }
 
   const quote = /^>\s?/.exec(text);
   if (quote) {
     builder.add(lineFrom, lineFrom, quoteLine);
-    if (tryReserve(reserved, 0, quote[0].length)) {
+    if (!revealSyntax && tryReserve(reserved, 0, quote[0].length)) {
       inline.push({
         from: lineFrom,
         to: lineFrom + quote[0].length,
@@ -302,7 +314,7 @@ function addLineDecorations(builder: RangeSetBuilder<Decoration>, lineFrom: numb
   if (task?.[1] && task[2]) {
     builder.add(lineFrom, lineFrom, taskLine);
     const checkboxFrom = task[1].length;
-    if (tryReserve(reserved, checkboxFrom, checkboxFrom + 3)) {
+    if (!revealSyntax && tryReserve(reserved, checkboxFrom, checkboxFrom + 3)) {
       inline.push({
         from: lineFrom + checkboxFrom,
         to: lineFrom + checkboxFrom + 3,
@@ -318,6 +330,9 @@ function addLineDecorations(builder: RangeSetBuilder<Decoration>, lineFrom: numb
     const end = start + match[0].length;
     const innerFrom = start + 1;
     const innerTo = end - 1;
+    if (revealSyntax) {
+      return [{ from: lineFrom + start, to: lineFrom + end, decoration: inlineCodeMark }];
+    }
     return [
       { from: lineFrom + start, to: lineFrom + innerFrom, decoration: hiddenToken },
       { from: lineFrom + innerFrom, to: lineFrom + innerTo, decoration: inlineCodeMark },
@@ -331,6 +346,18 @@ function addLineDecorations(builder: RangeSetBuilder<Decoration>, lineFrom: numb
     const label = match[1] ?? '';
     const labelFrom = start + 1;
     const labelTo = labelFrom + label.length;
+    if (revealSyntax) {
+      return [
+        {
+          from: lineFrom + start,
+          to: lineFrom + end,
+          decoration: Decoration.mark({
+            class: 'cm-md-live-link',
+            attributes: { 'data-md-target': match[2] ?? '' }
+          })
+        }
+      ];
+    }
     return [
       { from: lineFrom + start, to: lineFrom + labelFrom, decoration: hiddenToken },
       {
@@ -352,6 +379,18 @@ function addLineDecorations(builder: RangeSetBuilder<Decoration>, lineFrom: numb
     const pipe = inner.indexOf('|');
     const visibleStart = pipe === -1 ? start + 2 : start + 2 + pipe + 1;
     const visibleEnd = end - 2;
+    if (revealSyntax) {
+      return [
+        {
+          from: lineFrom + start,
+          to: lineFrom + end,
+          decoration: Decoration.mark({
+            class: 'cm-md-live-wikilink',
+            attributes: { 'data-md-target': pipe === -1 ? inner : inner.slice(0, pipe) }
+          })
+        }
+      ];
+    }
     return [
       { from: lineFrom + start, to: lineFrom + visibleStart, decoration: hiddenToken },
       {
@@ -370,6 +409,9 @@ function addLineDecorations(builder: RangeSetBuilder<Decoration>, lineFrom: numb
     const marker = match[1]?.length ?? 2;
     const start = match.index;
     const end = start + match[0].length;
+    if (revealSyntax) {
+      return [{ from: lineFrom + start + marker, to: lineFrom + end - marker, decoration: strongMark }];
+    }
     return [
       { from: lineFrom + start, to: lineFrom + start + marker, decoration: hiddenToken },
       { from: lineFrom + start + marker, to: lineFrom + end - marker, decoration: strongMark },
@@ -380,6 +422,9 @@ function addLineDecorations(builder: RangeSetBuilder<Decoration>, lineFrom: numb
   addRegexInline(inline, reserved, lineFrom, text, EMPHASIS_RE, (match) => {
     const start = match.index;
     const end = start + match[0].length;
+    if (revealSyntax) {
+      return [{ from: lineFrom + start + 1, to: lineFrom + end - 1, decoration: emphasisMark }];
+    }
     return [
       { from: lineFrom + start, to: lineFrom + start + 1, decoration: hiddenToken },
       { from: lineFrom + start + 1, to: lineFrom + end - 1, decoration: emphasisMark },

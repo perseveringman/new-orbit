@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   Note,
   NoteAreaRef,
@@ -15,6 +15,18 @@ import { useWorkspace } from '../store/workspace';
 
 const NOTE_TYPES: NoteType[] = ['thought', 'longform', 'capture', 'voice_log', 'daily_summary'];
 const QUEUE_BUCKETS: Array<NoteWorkbenchBucket | 'all'> = ['all', 'inbox', 'connect', 'express', 'settled'];
+const AUTOSAVE_DELAY_MS = 1000;
+
+type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
+
+type NoteDraft = {
+  title: string;
+  body: string;
+  tags: string;
+  areas: string;
+  resourceRefs: string;
+  synthesisRef: string;
+};
 
 export function NotesView(): JSX.Element {
   const [queue, setQueue] = useState<NoteQueueItem[]>([]);
@@ -33,12 +45,28 @@ export function NotesView(): JSX.Element {
   const [resourceRefs, setResourceRefs] = useState('');
   const [synthesisRef, setSynthesisRef] = useState('');
   const [editorMode, setEditorMode] = useState<MarkdownEditorMode>('live');
-  const [saving, setSaving] = useState(false);
+  const [formNoteId, setFormNoteId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [loadingWorkbench, setLoadingWorkbench] = useState(false);
   const [actingSuggestion, setActingSuggestion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dark = useWorkspace((state) => state.resolvedTheme === 'dark');
   const active = workbench?.note ?? null;
+  const activeRef = useRef<Note | null>(null);
+  const formNoteIdRef = useRef<string | null>(null);
+  const draftRef = useRef<NoteDraft | null>(null);
+  const savedSnapshotRef = useRef('');
+  const autosaveTimerRef = useRef<number | null>(null);
+  const savingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+
+  const currentDraft: NoteDraft | null = active && formNoteId === active.frontmatter.id
+    ? { title, body, tags, areas, resourceRefs, synthesisRef }
+    : null;
+  activeRef.current = active;
+  formNoteIdRef.current = formNoteId;
+  draftRef.current = currentDraft;
 
   const reloadQueue = useCallback(async (): Promise<void> => {
     setError(null);
@@ -89,16 +117,123 @@ export function NotesView(): JSX.Element {
   }, [activeId, loadWorkbench]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      setFormNoteId(null);
+      setSaveStatus('saved');
+      setSaveError(null);
+      savedSnapshotRef.current = '';
+      clearAutosaveTimer(autosaveTimerRef);
+      return;
+    }
+    const nextDraft = draftFromNote(active);
+    savedSnapshotRef.current = serializeDraft(active.frontmatter.id, nextDraft);
+    setFormNoteId(active.frontmatter.id);
     setBody(active.body);
     setTitle(active.frontmatter.title ?? '');
     setTags(active.frontmatter.tags.join(', '));
     setAreas((active.frontmatter.areas ?? []).map((area) => area.area_slug).join(', '));
     setResourceRefs((active.frontmatter.resource_refs ?? []).join(', '));
     setSynthesisRef(active.frontmatter.synthesis_ref ?? '');
+    setSaveStatus('saved');
+    setSaveError(null);
+    clearAutosaveTimer(autosaveTimerRef);
   }, [active?.frontmatter.id, active?.frontmatter.updated]);
 
+  const persistDraft = useCallback(async (): Promise<void> => {
+    const note = activeRef.current;
+    const draft = draftRef.current;
+    if (!note || !draft || formNoteIdRef.current !== note.frontmatter.id) return;
+
+    const snapshot = serializeDraft(note.frontmatter.id, draft);
+    if (snapshot === savedSnapshotRef.current) {
+      if (!savingRef.current) {
+        setSaveStatus('saved');
+        setSaveError(null);
+      }
+      return;
+    }
+
+    if (savingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+
+    clearAutosaveTimer(autosaveTimerRef);
+    savingRef.current = true;
+    pendingSaveRef.current = false;
+    setSaveStatus('saving');
+    setSaveError(null);
+
+    try {
+      const saved = await window.orbit.notes.update(note.frontmatter.id, draftToUpdate(draft, note));
+      savedSnapshotRef.current = snapshot;
+
+      const latestNote = activeRef.current;
+      const latestDraft = draftRef.current;
+      const latestSnapshot = latestNote && latestDraft && formNoteIdRef.current === latestNote.frontmatter.id
+        ? serializeDraft(latestNote.frontmatter.id, latestDraft)
+        : '';
+
+      if (latestSnapshot === snapshot) {
+        setSaveStatus('saved');
+        setSaveError(null);
+        setWorkbench((previous) =>
+          previous?.note.frontmatter.id === saved.frontmatter.id
+            ? { ...previous, note: saved }
+            : previous
+        );
+        void reloadQueue();
+      } else {
+        setSaveStatus('dirty');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSaveStatus('error');
+      setSaveError(message);
+      setError(message);
+    } finally {
+      savingRef.current = false;
+
+      const latestNote = activeRef.current;
+      const latestDraft = draftRef.current;
+      const latestSnapshot = latestNote && latestDraft && formNoteIdRef.current === latestNote.frontmatter.id
+        ? serializeDraft(latestNote.frontmatter.id, latestDraft)
+        : savedSnapshotRef.current;
+      if (pendingSaveRef.current || latestSnapshot !== savedSnapshotRef.current) {
+        pendingSaveRef.current = false;
+        autosaveTimerRef.current = window.setTimeout(() => void persistDraft(), AUTOSAVE_DELAY_MS);
+      }
+    }
+  }, [reloadQueue]);
+
+  useEffect(() => {
+    if (!active || formNoteId !== active.frontmatter.id || !currentDraft) return;
+    const snapshot = serializeDraft(active.frontmatter.id, currentDraft);
+    if (snapshot === savedSnapshotRef.current) {
+      if (!savingRef.current) {
+        setSaveStatus('saved');
+        setSaveError(null);
+      }
+      clearAutosaveTimer(autosaveTimerRef);
+      return;
+    }
+
+    if (!savingRef.current) {
+      setSaveStatus('dirty');
+    }
+    setSaveError(null);
+    clearAutosaveTimer(autosaveTimerRef);
+    autosaveTimerRef.current = window.setTimeout(() => void persistDraft(), AUTOSAVE_DELAY_MS);
+
+    return () => clearAutosaveTimer(autosaveTimerRef);
+  }, [active?.frontmatter.id, areas, body, formNoteId, persistDraft, resourceRefs, synthesisRef, tags, title]);
+
+  useEffect(() => {
+    return () => clearAutosaveTimer(autosaveTimerRef);
+  }, []);
+
   async function createNote(nextType: NoteType): Promise<void> {
+    await persistDraft();
     const note = await window.orbit.notes.create({
       type: nextType,
       title: `New ${nextType}`,
@@ -110,24 +245,13 @@ export function NotesView(): JSX.Element {
     await reloadQueue();
   }
 
+  async function selectNote(noteId: string): Promise<void> {
+    await persistDraft();
+    setActiveId(noteId);
+  }
+
   async function save(): Promise<void> {
-    if (!active) return;
-    setSaving(true);
-    try {
-      const saved = await window.orbit.notes.update(active.frontmatter.id, {
-        title,
-        body,
-        tags: splitCsv(tags),
-        areas: parseAreas(areas, active.frontmatter.areas),
-        resource_refs: splitCsv(resourceRefs),
-        synthesis_ref: synthesisRef.trim() || undefined
-      });
-      setActiveId(saved.frontmatter.id);
-      await reloadQueue();
-      await loadWorkbench(saved.frontmatter.id, true);
-    } finally {
-      setSaving(false);
-    }
+    await persistDraft();
   }
 
   async function archive(): Promise<void> {
@@ -246,7 +370,7 @@ export function NotesView(): JSX.Element {
           {queue.map((item) => (
             <button
               key={item.note_id}
-              onClick={() => setActiveId(item.note_id)}
+              onClick={() => void selectNote(item.note_id)}
               className={`block w-full rounded-md px-3 py-2.5 text-left text-sm ${
                 activeId === item.note_id ? 'bg-white shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-900 dark:ring-neutral-800' : 'hover:bg-white/80 dark:hover:bg-neutral-900'
               }`}
@@ -272,9 +396,11 @@ export function NotesView(): JSX.Element {
                 <input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
+                  onBlur={() => void persistDraft()}
                   className="min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
                 />
                 <QueueBadge bucket={workbench?.bucket ?? 'settled'} />
+                <SaveStatusPill status={saveStatus} error={saveError} />
                 <div className="flex shrink-0 rounded-md border border-neutral-200 bg-neutral-100 p-0.5 dark:border-neutral-800 dark:bg-neutral-900">
                   <EditorModeButton
                     active={editorMode === 'live'}
@@ -309,25 +435,28 @@ export function NotesView(): JSX.Element {
                   Archive
                 </button>
                 <button onClick={() => void save()} className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
-                  {saving ? 'Saving...' : 'Save'}
+                  {saveStatus === 'saving' ? 'Saving...' : 'Save'}
                 </button>
               </div>
               <div className="grid grid-cols-3 gap-2 border-b border-neutral-200 p-3 dark:border-neutral-800">
                 <input
                   value={tags}
                   onChange={(event) => setTags(event.target.value)}
+                  onBlur={() => void persistDraft()}
                   placeholder="tags"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
                 <input
                   value={areas}
                   onChange={(event) => setAreas(event.target.value)}
+                  onBlur={() => void persistDraft()}
                   placeholder="areas"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
                 <input
                   value={resourceRefs}
                   onChange={(event) => setResourceRefs(event.target.value)}
+                  onBlur={() => void persistDraft()}
                   placeholder="resources"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
@@ -338,6 +467,7 @@ export function NotesView(): JSX.Element {
                 mode={editorMode}
                 dark={dark}
                 placeholder="Start writing..."
+                onBlur={() => void persistDraft()}
                 className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-950"
               />
             </div>
@@ -416,6 +546,7 @@ export function NotesView(): JSX.Element {
                     <input
                       value={synthesisRef}
                       onChange={(event) => setSynthesisRef(event.target.value)}
+                      onBlur={() => void persistDraft()}
                       placeholder="artifact id"
                       className="mt-1 w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 normal-case tracking-normal dark:border-neutral-800 dark:bg-neutral-950"
                     />
@@ -453,6 +584,29 @@ function EditorModeButton({
     >
       {label}
     </button>
+  );
+}
+
+function SaveStatusPill({
+  status,
+  error
+}: {
+  status: SaveStatus;
+  error: string | null;
+}): JSX.Element {
+  const label = status === 'dirty' ? 'Unsaved' : status === 'saving' ? 'Saving' : status === 'error' ? 'Error' : 'Saved';
+  const tone =
+    status === 'dirty'
+      ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+      : status === 'saving'
+        ? 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-200'
+        : status === 'error'
+          ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200'
+          : 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200';
+  return (
+    <span title={error ?? undefined} className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${tone}`}>
+      {label}
+    </span>
   );
 }
 
@@ -598,6 +752,54 @@ function Meta({ label, value }: { label: string; value: string }): JSX.Element {
 
 function splitCsv(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function clearAutosaveTimer(timerRef: { current: number | null }): void {
+  if (timerRef.current) {
+    window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+}
+
+function draftFromNote(note: Note): NoteDraft {
+  return {
+    title: note.frontmatter.title ?? '',
+    body: note.body,
+    tags: note.frontmatter.tags.join(', '),
+    areas: (note.frontmatter.areas ?? []).map((area) => area.area_slug).join(', '),
+    resourceRefs: (note.frontmatter.resource_refs ?? []).join(', '),
+    synthesisRef: note.frontmatter.synthesis_ref ?? ''
+  };
+}
+
+function serializeDraft(noteId: string, draft: NoteDraft): string {
+  return JSON.stringify({
+    noteId,
+    title: draft.title,
+    body: draft.body,
+    tags: draft.tags,
+    areas: draft.areas,
+    resourceRefs: draft.resourceRefs,
+    synthesisRef: draft.synthesisRef
+  });
+}
+
+function draftToUpdate(draft: NoteDraft, note: Note): {
+  title: string;
+  body: string;
+  tags: string[];
+  areas: NoteAreaRef[];
+  resource_refs: string[];
+  synthesis_ref?: string;
+} {
+  return {
+    title: draft.title,
+    body: draft.body,
+    tags: splitCsv(draft.tags),
+    areas: parseAreas(draft.areas, note.frontmatter.areas),
+    resource_refs: splitCsv(draft.resourceRefs),
+    synthesis_ref: draft.synthesisRef.trim() || undefined
+  };
 }
 
 function parseAreas(value: string, existing: NoteAreaRef[] = []): NoteAreaRef[] {
