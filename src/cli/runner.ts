@@ -28,6 +28,7 @@ import {
   generateInboxHelp,
   generateLibraryHelp,
   generateMemoryHelp,
+  generateNoteHelp,
   generateProjectHelp,
   generateResourceHelp,
   generateRunHelp,
@@ -851,6 +852,79 @@ async function runResource(flags: ParsedGlobalFlags, options: CliRunOptions): Pr
   throw usageError(`Unknown resource subcommand: ${subcommand}`);
 }
 
+async function runNote(flags: ParsedGlobalFlags, options: CliRunOptions): Promise<string> {
+  if (flags.help || !flags.args[1]) return generateNoteHelp();
+  const subcommand = flags.args[1];
+  if (subcommand === 'queue') {
+    const params: Record<string, unknown> = {};
+    const args = flags.args.slice(2);
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--bucket') params['bucket'] = argvValue(args, ++i, '--bucket');
+      else if (arg === '--type') params['type'] = argvValue(args, ++i, '--type');
+      else if (arg === '--tag') params['tag'] = argvValue(args, ++i, '--tag');
+      else if (arg === '--query') params['query'] = argvValue(args, ++i, '--query');
+      else if (arg === '--include-archived') params['include_archived'] = true;
+      else throw usageError(`Unknown note queue option: ${arg}`);
+    }
+    return bridgeOutput(flags, options, 'note.queue', params, formatGeneric);
+  }
+  if (subcommand === 'get') {
+    const id = flags.args[2];
+    if (!id) throw usageError('Usage: orbit note get <id-or-path>');
+    return bridgeOutput(flags, options, 'note.get', { id }, formatGeneric);
+  }
+  if (subcommand === 'search') {
+    const query = flags.args[2];
+    if (!query) throw usageError('Usage: orbit note search <query> [--limit N]');
+    const { limit, rest } = parseLimit(flags.args.slice(3), 30);
+    if (rest.length > 0) throw usageError(`Unknown note search option: ${rest[0]}`);
+    return bridgeOutput(flags, options, 'note.search', { query, limit }, formatGeneric);
+  }
+  if (
+    subcommand === 'workbench' ||
+    subcommand === 'classify' ||
+    subcommand === 'relate' ||
+    subcommand === 'distill' ||
+    subcommand === 'propose-update'
+  ) {
+    const id = flags.args[2];
+    if (!id) throw usageError(`Usage: orbit note ${subcommand} <id-or-path> [--force]`);
+    const params: Record<string, unknown> = { id };
+    for (const arg of flags.args.slice(3)) {
+      if (arg === '--force') params['force'] = true;
+      else throw usageError(`Unknown note ${subcommand} option: ${arg}`);
+    }
+    const method =
+      subcommand === 'propose-update'
+        ? 'note.proposeUpdate'
+        : `note.${subcommand}`;
+    return bridgeOutput(flags, options, method, params, formatGeneric);
+  }
+  if (subcommand === 'accept-suggestion' || subcommand === 'dismiss-suggestion') {
+    const id = flags.args[2];
+    const suggestionId = flags.args[3];
+    if (!id || !suggestionId) {
+      throw usageError(`Usage: orbit note ${subcommand} <id-or-path> <suggestion-id> [--artifact ID]`);
+    }
+    const params: Record<string, unknown> = { id, suggestion_id: suggestionId };
+    const args = flags.args.slice(4);
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '--artifact') params['artifact_id'] = argvValue(args, ++i, '--artifact');
+      else throw usageError(`Unknown note ${subcommand} option: ${arg}`);
+    }
+    return bridgeOutput(
+      flags,
+      options,
+      subcommand === 'accept-suggestion' ? 'note.acceptSuggestion' : 'note.dismissSuggestion',
+      params,
+      formatGeneric
+    );
+  }
+  throw usageError(`Unknown note subcommand: ${subcommand}`);
+}
+
 function parseProjectScopedArgs(args: string[], options: CliRunOptions): { project: string; rest: string[] } {
   const rest: string[] = [];
   let project =
@@ -1342,6 +1416,7 @@ export async function runCli(argv: string[], options: CliRunOptions = {}): Promi
     else if (command === 'project') output = await runProject(flags, options);
     else if (command === 'space') output = await runSpace(flags, options);
     else if (command === 'resource') output = await runResource(flags, options);
+    else if (command === 'note') output = await runNote(flags, options);
     else if (command === 'assets') output = await runAssets(flags, options);
     else if (command === 'kanban') output = await runKanban(flags, options);
     else if (command === 'task') output = await runTask(flags, options);

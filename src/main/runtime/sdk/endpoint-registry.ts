@@ -29,6 +29,8 @@ export const BUILT_IN_SDK_ENDPOINTS: SDKEndpoint[] = [
     baseURL: 'https://api.anthropic.com',
     keyRef: 'sdk:endpoint:anthropic',
     defaultModel: 'claude-3-5-sonnet-latest',
+    fastModel: 'claude-3-5-haiku-latest',
+    heavyModel: 'claude-3-5-sonnet-latest',
     costProfile: { inputPerMTok: 3, outputPerMTok: 15, cacheReadPerMTok: 0.3 },
     enabled: false,
     builtIn: true
@@ -41,6 +43,8 @@ export const BUILT_IN_SDK_ENDPOINTS: SDKEndpoint[] = [
     baseURL: 'https://api.minimaxi.com/anthropic',
     keyRef: 'sdk:endpoint:minimax',
     defaultModel: 'MiniMax-M2.7',
+    fastModel: 'MiniMax-M2.7',
+    heavyModel: 'MiniMax-M2.7',
     modelAlias: {
       'claude-3-5-sonnet-latest': 'MiniMax-M2.7'
     },
@@ -55,6 +59,8 @@ export const BUILT_IN_SDK_ENDPOINTS: SDKEndpoint[] = [
     baseURL: 'https://api.deepseek.com/anthropic',
     keyRef: 'sdk:endpoint:deepseek',
     defaultModel: 'deepseek-v4-pro',
+    fastModel: 'deepseek-chat',
+    heavyModel: 'deepseek-v4-pro',
     modelAlias: {
       'claude-3-5-sonnet-latest': 'deepseek-v4-pro'
     },
@@ -111,6 +117,8 @@ export class SDKEndpointRegistry {
       protocol: input.protocol ?? 'anthropic-compatible',
       baseURL: normalizeBaseUrl(input.baseURL),
       defaultModel: input.defaultModel.trim(),
+      ...(input.fastModel?.trim() ? { fastModel: input.fastModel.trim() } : {}),
+      ...(input.heavyModel?.trim() ? { heavyModel: input.heavyModel.trim() } : {}),
       ...(input.modelAlias ? { modelAlias: cleanStringRecord(input.modelAlias) } : {}),
       ...(input.costProfile ? { costProfile: input.costProfile } : {}),
       enabled: input.enabled ?? existing?.enabled ?? false
@@ -169,8 +177,8 @@ export class SDKEndpointRegistry {
     return next;
   }
 
-  resolveModel(endpoint: SDKEndpoint, modelHint?: string): string {
-    return resolveModelAlias(endpoint, modelHint);
+  resolveModel(endpoint: SDKEndpoint, modelHint?: string, modelTier?: 'default' | 'fast' | 'heavy'): string {
+    return resolveModelAlias(endpoint, modelHint, modelTier);
   }
 
   async require(endpointId: string): Promise<SDKEndpoint> {
@@ -289,6 +297,8 @@ function normalizeEndpoint(endpoint: SDKEndpoint): SDKEndpoint {
     baseURL: normalizeBaseUrl(endpoint.baseURL),
     keyRef: endpoint.keyRef || `sdk:endpoint:${normalizeId(endpoint.id)}`,
     defaultModel: endpoint.defaultModel.trim(),
+    fastModel: endpoint.fastModel?.trim() || endpoint.defaultModel.trim(),
+    heavyModel: endpoint.heavyModel?.trim() || endpoint.defaultModel.trim(),
     provider: endpoint.provider as SDKEndpointProvider,
     protocol: 'anthropic-compatible',
     enabled: Boolean(endpoint.enabled)
@@ -324,4 +334,3 @@ function removeDefault(defaults: SDKEndpointDefaults, endpointId: string): SDKEn
 function isNotFound(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'ENOENT');
 }
-

@@ -156,6 +156,40 @@ export const READ_TOOL_DEFS: readonly AgentToolDef[] = [
     }
   },
   {
+    name: 'orbit_note_workbench',
+    description:
+      'Get the AI-native Workbench for a Note: processing bucket, summary, key points, proposed Area/Resource/tag/task/distillation actions, and relation suggestions. ' +
+      'Use this before changing or advising on a note so your response is grounded in Orbit proposals rather than ad hoc text edits.',
+    cliMethod: 'note.workbench',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Note id or vault-relative note path.' },
+        force: { type: 'boolean', description: 'Regenerate the synthesis artifact instead of using the fresh cached one.' }
+      }
+    }
+  },
+  {
+    name: 'orbit_note_relate',
+    description:
+      'List proposed semantic relations from one Note to other Notes, with relation kind, evidence, and confidence. ' +
+      'Use when the user asks what a note connects to or whether it duplicates/extends existing thinking.',
+    cliMethod: 'note.relate',
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Note id or vault-relative note path.' },
+        force: { type: 'boolean' }
+      }
+    }
+  },
+  {
     name: 'orbit_task_related',
     description:
       'List tasks textually related to a given task (keyword overlap on title/tags). ' +

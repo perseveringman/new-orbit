@@ -79,6 +79,26 @@ export const WRITE_TOOL_DEFS: readonly AgentToolDef[] = [
     }
   },
   {
+    name: 'orbit_note_accept_suggestion',
+    description:
+      'Accept a Note Workbench suggestion by id. ' +
+      'This may update note frontmatter, link a Resource, create a longform note, create a Resource seed, or submit a task proposal depending on the suggestion kind. ' +
+      'Only call after the user explicitly approves the proposed action.',
+    cliMethod: 'note.acceptSuggestion',
+    destructive: true,
+    timeoutMs: 30_000,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id', 'suggestion_id'],
+      properties: {
+        id: { type: 'string', description: 'Note id or vault-relative note path.' },
+        suggestion_id: { type: 'string', description: 'Suggestion id from orbit_note_workbench.' },
+        artifact_id: { type: 'string', description: 'Optional synthesis artifact id.' }
+      }
+    }
+  },
+  {
     name: 'orbit_assets_scope_add',
     description:
       "Pin an external folder/file/url as a project's asset scope. " +

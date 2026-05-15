@@ -112,17 +112,53 @@ export interface CaptureAttachment {
   size: number;
 }
 
+export type QuickCaptureSuggestionAction =
+  | 'save_to_library'
+  | 'bookmark'
+  | 'create_task'
+  | 'transcribe_voice'
+  | 'distill_later';
+
+export type QuickCaptureSuggestionRisk = 'low' | 'needs_confirm' | 'proposal';
+
+export interface QuickCaptureSuggestion {
+  id: string;
+  action: QuickCaptureSuggestionAction;
+  label: string;
+  detail?: string;
+  confidence: number;
+  risk: QuickCaptureSuggestionRisk;
+  params?: Record<string, unknown>;
+  source: 'heuristic' | 'gemini_flash';
+}
+
+export interface QuickCaptureSuggestDraftInput {
+  content: string;
+  hasAudio?: boolean;
+  attachmentNames?: string[];
+}
+
+export interface QuickCaptureSuggestDraftResult {
+  title?: string;
+  tags: string[];
+  suggestions: QuickCaptureSuggestion[];
+  model?: string;
+  source: 'heuristic' | 'gemini_flash' | 'mixed';
+}
+
 export interface CreateCaptureNoteInput {
   content: string;
   tags?: string[];
   specialKind?: string | null;
   attachments?: CaptureAttachmentInput[];
   audio?: CaptureAttachmentInput & { durationSec?: number };
+  sourceUrl?: string;
+  sourceTitle?: string;
+  acceptedSuggestionActions?: QuickCaptureSuggestionAction[];
 }
 
 export interface CreateCaptureNoteResult {
   note: Note;
-  inboxItem: InboxItem;
   attachments: CaptureAttachment[];
 }
 

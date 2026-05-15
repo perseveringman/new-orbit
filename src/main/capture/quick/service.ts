@@ -8,7 +8,10 @@ import type {
   CreateCaptureNoteInput,
   CreateCaptureNoteResult,
   CreateCaptureTaskInput,
-  CreateCaptureTaskResult
+  CreateCaptureTaskResult,
+  QuickCaptureSuggestDraftInput,
+  QuickCaptureSuggestDraftResult,
+  QuickCaptureSuggestion
 } from '@shared/capture';
 import type { SpecialMarkerKind } from '@shared/note';
 import { createInboxServiceForVault } from '../../inbox';
@@ -16,7 +19,6 @@ import { createLibraryStore } from '../../library/store';
 import { createNoteStore } from '../../note/store';
 import { assertInsideVault, toPosix } from '../../pathGuard';
 import { captureId, slugify, truncateText } from '../common';
-import { createThoughtService } from '../thoughts/service';
 
 export class QuickCaptureService {
   constructor(private readonly vaultPath: string) {}
@@ -48,13 +50,15 @@ export class QuickCaptureService {
     const allAttachments = audio ? [...attachments, audio] : attachments;
     if (!content && allAttachments.length === 0) throw new Error('capture note content or attachment is required');
 
-    const body = captureNoteBody(content, allAttachments);
+    const sourceUrl = input.sourceUrl ? normalizeUrl(input.sourceUrl) : firstUrl(content);
+    const body = captureNoteBody(content, allAttachments, sourceUrl, input.acceptedSuggestionActions ?? []);
     const tags = normalizeTags([...(input.tags ?? []), ...extractHashTags(content)]);
     const note = await createNoteStore(this.vaultPath).create({
       type: audio ? 'voice_log' : 'capture',
+      ...(input.sourceTitle ? { title: input.sourceTitle } : {}),
       body,
       tags,
-      source: { kind: 'manual', excerpt: 'quick_capture' },
+      source: sourceUrl ? { kind: 'url', ref: sourceUrl, excerpt: 'quick_capture' } : { kind: 'manual', excerpt: 'quick_capture' },
       ...(input.specialKind ? { special_marker: markerFor(input.specialKind) } : {}),
       ...(audio
         ? {
@@ -66,14 +70,20 @@ export class QuickCaptureService {
           }
         : {})
     });
-    const thoughtContent = content || `${audio ? 'Voice note' : 'Attachment capture'}: ${allAttachments.map((item) => item.name).join(', ')}`;
-    const inboxItem = await createThoughtService(this.vaultPath).create({
-      content: thoughtContent,
-      tags,
-      createdFrom: audio ? 'voice' : 'quick_capture',
-      actor: 'user'
-    });
-    return { note, inboxItem, attachments: allAttachments };
+    return { note, attachments: allAttachments };
+  }
+
+  async suggestDraft(input: QuickCaptureSuggestDraftInput): Promise<QuickCaptureSuggestDraftResult> {
+    const heuristic = heuristicSuggestions(input);
+    const gemini = await geminiFlashSuggestions(input).catch(() => null);
+    if (!gemini) return heuristic;
+    return {
+      title: gemini.title ?? heuristic.title,
+      tags: unique([...(gemini.tags ?? []), ...heuristic.tags]).slice(0, 6),
+      suggestions: mergeSuggestions(heuristic.suggestions, gemini.suggestions),
+      model: gemini.model,
+      source: heuristic.suggestions.length > 0 ? 'mixed' : 'gemini_flash'
+    };
   }
 
   async createLink(input: CreateCaptureLinkInput): Promise<CreateCaptureLinkResult> {
@@ -128,8 +138,14 @@ export function createQuickCaptureService(vaultPath: string): QuickCaptureServic
   return new QuickCaptureService(vaultPath);
 }
 
-function captureNoteBody(content: string, attachments: CaptureAttachment[]): string {
+function captureNoteBody(
+  content: string,
+  attachments: CaptureAttachment[],
+  sourceUrl?: string,
+  acceptedSuggestionActions: string[] = []
+): string {
   const sections = [content || 'Captured attachment.'];
+  if (sourceUrl) sections.push(['## Source', '', sourceUrl].join('\n'));
   if (attachments.length > 0) {
     sections.push(
       [
@@ -137,6 +153,9 @@ function captureNoteBody(content: string, attachments: CaptureAttachment[]): str
         ...attachments.map((attachment) => `- [${attachment.name}](${attachment.path})${attachment.kind === 'audio' ? ' _(voice)_' : ''}`)
       ].join('\n')
     );
+  }
+  if (acceptedSuggestionActions.length > 0) {
+    sections.push(['## Capture actions', '', ...acceptedSuggestionActions.map((action) => `- ${action}`)].join('\n'));
   }
   return sections.join('\n\n');
 }
@@ -181,6 +200,17 @@ function normalizeUrl(value: string): string {
   return parsed.toString();
 }
 
+function firstUrl(value: string): string | undefined {
+  const match = value.match(/https?:\/\/[^\s)]+|(?:^|\s)([a-z0-9.-]+\.[a-z]{2,})(?:\/[^\s)]*)?/i);
+  const raw = match?.[0]?.trim() || match?.[1]?.trim();
+  if (!raw) return undefined;
+  try {
+    return normalizeUrl(raw);
+  } catch {
+    return undefined;
+  }
+}
+
 function titleFromUrl(value: string): string {
   const url = new URL(value);
   const pathTitle = url.pathname.replace(/\/$/, '').split('/').pop()?.replace(/[-_]+/g, ' ').trim();
@@ -201,3 +231,228 @@ const SPECIAL_MARKERS: Record<string, { kind: SpecialMarkerKind; icon: string }>
   gratitude: { kind: 'gratitude', icon: '🙏' },
   reflection: { kind: 'reflection', icon: '🪞' }
 };
+
+function heuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptureSuggestDraftResult {
+  const content = input.content.trim();
+  const url = firstUrl(content);
+  const suggestions: QuickCaptureSuggestion[] = [];
+  const tags = normalizeTags(extractHashTags(content));
+  if (url) {
+    const parsed = new URL(url);
+    suggestions.push({
+      id: `save_to_library:${url}`,
+      action: 'save_to_library',
+      label: 'Save to Library',
+      detail: parsed.hostname,
+      confidence: 0.88,
+      risk: 'low',
+      params: { url },
+      source: 'heuristic'
+    });
+    suggestions.push({
+      id: `bookmark:${url}`,
+      action: 'bookmark',
+      label: 'Bookmark',
+      detail: 'Keep as a reusable reference',
+      confidence: 0.62,
+      risk: 'low',
+      params: { url },
+      source: 'heuristic'
+    });
+  }
+  if (looksActionable(content)) {
+    suggestions.push({
+      id: 'create_task',
+      action: 'create_task',
+      label: 'Create task',
+      detail: truncateText(firstLine(content), 80),
+      confidence: 0.76,
+      risk: 'proposal',
+      params: { title: taskTitle(content), details: content },
+      source: 'heuristic'
+    });
+  }
+  if (input.hasAudio) {
+    suggestions.push({
+      id: 'transcribe_voice',
+      action: 'transcribe_voice',
+      label: 'Transcribe voice',
+      detail: 'Attach transcript when a speech model is configured',
+      confidence: 0.72,
+      risk: 'needs_confirm',
+      source: 'heuristic'
+    });
+  }
+  if (content.length > 800) {
+    suggestions.push({
+      id: 'distill_later',
+      action: 'distill_later',
+      label: 'Distill later',
+      detail: 'Long capture with reusable signal',
+      confidence: 0.65,
+      risk: 'needs_confirm',
+      source: 'heuristic'
+    });
+  }
+  return {
+    title: titleSuggestion(content, url, input.attachmentNames ?? []),
+    tags,
+    suggestions,
+    source: 'heuristic'
+  };
+}
+
+async function geminiFlashSuggestions(input: QuickCaptureSuggestDraftInput): Promise<QuickCaptureSuggestDraftResult | null> {
+  const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];
+  if (!apiKey) return null;
+  const content = input.content.trim();
+  if (content.length < 8 && !input.hasAudio && !(input.attachmentNames?.length)) return null;
+  const model = process.env['ORBIT_CAPTURE_SUGGEST_MODEL'] ?? process.env['GEMINI_FLASH_MODEL'] ?? 'gemini-2.5-flash';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1600);
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 512,
+            responseMimeType: 'application/json'
+          },
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: captureSuggestionPrompt(input) }]
+            }
+          ]
+        })
+      }
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as GeminiGenerateContentResponse;
+    const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim();
+    if (!text) return null;
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    return {
+      title: typeof parsed['title'] === 'string' ? parsed['title'].slice(0, 90) : undefined,
+      tags: normalizeTags(Array.isArray(parsed['tags']) ? parsed['tags'].map(String) : []),
+      suggestions: parseGeminiSuggestions(parsed['suggestions']),
+      model,
+      source: 'gemini_flash'
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+interface GeminiGenerateContentResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+}
+
+function captureSuggestionPrompt(input: QuickCaptureSuggestDraftInput): string {
+  return [
+    'You are Orbit Quick Capture. Return strict JSON only.',
+    'Suggest lightweight next actions for a user capture. Do not require the user to process everything.',
+    'Allowed actions: save_to_library, bookmark, create_task, transcribe_voice, distill_later.',
+    'Schema: {"title":"short optional title","tags":["kebab tags"],"suggestions":[{"action":"save_to_library","label":"Save to Library","detail":"why","confidence":0.0,"risk":"low","params":{}}]}',
+    'Risk must be one of low, needs_confirm, proposal. Use proposal for task creation.',
+    `Has audio: ${Boolean(input.hasAudio)}`,
+    `Attachments: ${(input.attachmentNames ?? []).join(', ') || '(none)'}`,
+    'Capture:',
+    input.content.slice(0, 3000)
+  ].join('\n');
+}
+
+function parseGeminiSuggestions(value: unknown): QuickCaptureSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  const actions = new Set<QuickCaptureSuggestion['action']>([
+    'save_to_library',
+    'bookmark',
+    'create_task',
+    'transcribe_voice',
+    'distill_later'
+  ]);
+  const risks = new Set<QuickCaptureSuggestion['risk']>(['low', 'needs_confirm', 'proposal']);
+  return value.flatMap((item, index): QuickCaptureSuggestion[] => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    const action = typeof record['action'] === 'string' && actions.has(record['action'] as QuickCaptureSuggestion['action'])
+      ? (record['action'] as QuickCaptureSuggestion['action'])
+      : null;
+    if (!action) return [];
+    const risk = typeof record['risk'] === 'string' && risks.has(record['risk'] as QuickCaptureSuggestion['risk'])
+      ? (record['risk'] as QuickCaptureSuggestion['risk'])
+      : action === 'create_task'
+        ? 'proposal'
+        : 'low';
+    return [
+      {
+        id: `gemini:${action}:${index}`,
+        action,
+        label: typeof record['label'] === 'string' ? record['label'].slice(0, 40) : labelForAction(action),
+        detail: typeof record['detail'] === 'string' ? record['detail'].slice(0, 100) : undefined,
+        confidence: clamp(Number(record['confidence'] ?? 0.6), 0, 1),
+        risk,
+        params: typeof record['params'] === 'object' && record['params'] !== null ? (record['params'] as Record<string, unknown>) : undefined,
+        source: 'gemini_flash'
+      }
+    ];
+  });
+}
+
+function mergeSuggestions(base: QuickCaptureSuggestion[], extra: QuickCaptureSuggestion[]): QuickCaptureSuggestion[] {
+  const byAction = new Map<QuickCaptureSuggestion['action'], QuickCaptureSuggestion>();
+  for (const suggestion of [...base, ...extra]) {
+    const existing = byAction.get(suggestion.action);
+    if (!existing || suggestion.confidence >= existing.confidence || suggestion.source === 'gemini_flash') {
+      byAction.set(suggestion.action, suggestion);
+    }
+  }
+  return [...byAction.values()].slice(0, 5);
+}
+
+function looksActionable(value: string): boolean {
+  return /\b(todo|fix|ship|write|call|email|review|implement|follow up|remind|need to|should|must)\b/i.test(value)
+    || /(?:^|\s)(要|需要|记得|待办|修复|实现|跟进|提醒|创建|整理)(?:\s|$)/.test(value);
+}
+
+function firstLine(value: string): string {
+  return value.trim().split(/\r?\n/)[0]?.trim() ?? '';
+}
+
+function taskTitle(value: string): string {
+  const line = firstLine(value).replace(/^[-*]\s*/, '').replace(/^(todo|task|待办)[:：]\s*/i, '');
+  return truncateText(line || 'Captured task', 80);
+}
+
+function titleSuggestion(content: string, url: string | undefined, attachmentNames: string[]): string | undefined {
+  if (content) return truncateText(firstLine(content), 80);
+  if (url) return titleFromUrl(url);
+  if (attachmentNames.length > 0) return `Captured ${attachmentNames.length} file${attachmentNames.length === 1 ? '' : 's'}`;
+  return undefined;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (Number.isNaN(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function labelForAction(action: QuickCaptureSuggestion['action']): string {
+  if (action === 'save_to_library') return 'Save to Library';
+  if (action === 'bookmark') return 'Bookmark';
+  if (action === 'create_task') return 'Create task';
+  if (action === 'transcribe_voice') return 'Transcribe voice';
+  return 'Distill later';
+}

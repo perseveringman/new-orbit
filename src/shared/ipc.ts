@@ -111,11 +111,26 @@ import type {
   PromoteLibraryArticleInput,
   PromoteResult,
   PromoteThoughtInput,
+  QuickCaptureSuggestDraftInput,
+  QuickCaptureSuggestDraftResult,
   SaveFeedItemInput,
   SaveLibraryArticleInput,
   UpdateThoughtInput
 } from './capture';
-import type { CreateNoteInput, Note, NoteChangeEvent, NoteFilter, SearchOptions, UpdateNoteInput } from './note';
+import type {
+  CreateNoteInput,
+  Note,
+  NoteChangeEvent,
+  NoteFilter,
+  NoteQueueFilter,
+  NoteQueueItem,
+  NoteSuggestionAcceptInput,
+  NoteSuggestionAcceptResult,
+  NoteWorkbench,
+  NoteWorkbenchInput,
+  SearchOptions,
+  UpdateNoteInput
+} from './note';
 import type {
   AcceptLibraryDistillationInput,
   AddLibraryAnnotationInput,
@@ -590,6 +605,7 @@ export const IPC = {
     },
     quick: {
       saveAttachment: 'capture:quick:attachment:save',
+      suggestDraft: 'capture:quick:suggestDraft',
       createNote: 'capture:quick:note:create',
       createLink: 'capture:quick:link:create',
       createTask: 'capture:quick:task:create'
@@ -616,6 +632,10 @@ export const IPC = {
     list: 'notes:list',
     get: 'notes:get',
     getByPath: 'notes:getByPath',
+    queue: 'notes:queue',
+    workbench: 'notes:workbench',
+    acceptSuggestion: 'notes:suggestion:accept',
+    dismissSuggestion: 'notes:suggestion:dismiss',
     create: 'notes:create',
     update: 'notes:update',
     delete: 'notes:delete',
@@ -1674,6 +1694,7 @@ export interface OrbitApi {
     };
     quick: {
       saveAttachment(input: CaptureAttachmentInput): Promise<CaptureAttachment>;
+      suggestDraft(input: QuickCaptureSuggestDraftInput): Promise<QuickCaptureSuggestDraftResult>;
       createNote(input: CreateCaptureNoteInput): Promise<CreateCaptureNoteResult>;
       createLink(input: CreateCaptureLinkInput): Promise<CreateCaptureLinkResult>;
       createTask(input: CreateCaptureTaskInput): Promise<CreateCaptureTaskResult>;
@@ -1683,6 +1704,10 @@ export interface OrbitApi {
     list(filter?: NoteFilter): Promise<Note[]>;
     get(noteId: string): Promise<Note | null>;
     getByPath(path: string): Promise<Note | null>;
+    queue(filter?: NoteQueueFilter): Promise<NoteQueueItem[]>;
+    workbench(input: NoteWorkbenchInput): Promise<NoteWorkbench>;
+    acceptSuggestion(input: NoteSuggestionAcceptInput): Promise<NoteSuggestionAcceptResult>;
+    dismissSuggestion(input: NoteSuggestionAcceptInput): Promise<NoteSuggestionAcceptResult>;
     create(input: CreateNoteInput): Promise<Note>;
     update(noteId: string, patch: UpdateNoteInput): Promise<Note>;
     delete(noteId: string): Promise<void>;

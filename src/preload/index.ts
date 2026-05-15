@@ -104,11 +104,25 @@ import type {
   LinkThoughtInput,
   PromoteLibraryArticleInput,
   PromoteThoughtInput,
+  QuickCaptureSuggestDraftInput,
   SaveFeedItemInput,
   SaveLibraryArticleInput,
   UpdateThoughtInput
 } from '@shared/capture';
-import type { CreateNoteInput, Note, NoteChangeEvent, NoteFilter, SearchOptions, UpdateNoteInput } from '@shared/note';
+import type {
+  CreateNoteInput,
+  Note,
+  NoteChangeEvent,
+  NoteFilter,
+  NoteQueueFilter,
+  NoteQueueItem,
+  NoteSuggestionAcceptInput,
+  NoteSuggestionAcceptResult,
+  NoteWorkbench,
+  NoteWorkbenchInput,
+  SearchOptions,
+  UpdateNoteInput
+} from '@shared/note';
 import type {
   AcceptLibraryDistillationInput,
   AddLibraryAnnotationInput,
@@ -694,6 +708,8 @@ const api: OrbitApi = {
     quick: {
       saveAttachment: (input: CaptureAttachmentInput) =>
         ipcRenderer.invoke(IPC.capture.quick.saveAttachment, input),
+      suggestDraft: (input: QuickCaptureSuggestDraftInput) =>
+        ipcRenderer.invoke(IPC.capture.quick.suggestDraft, input),
       createNote: (input: CreateCaptureNoteInput) =>
         ipcRenderer.invoke(IPC.capture.quick.createNote, input),
       createLink: (input: CreateCaptureLinkInput) =>
@@ -707,6 +723,14 @@ const api: OrbitApi = {
     get: (noteId: string): Promise<Note | null> => ipcRenderer.invoke(IPC.notes.get, noteId),
     getByPath: (notePath: string): Promise<Note | null> =>
       ipcRenderer.invoke(IPC.notes.getByPath, notePath),
+    queue: (filter?: NoteQueueFilter): Promise<NoteQueueItem[]> =>
+      ipcRenderer.invoke(IPC.notes.queue, filter),
+    workbench: (input: NoteWorkbenchInput): Promise<NoteWorkbench> =>
+      ipcRenderer.invoke(IPC.notes.workbench, input),
+    acceptSuggestion: (input: NoteSuggestionAcceptInput): Promise<NoteSuggestionAcceptResult> =>
+      ipcRenderer.invoke(IPC.notes.acceptSuggestion, input),
+    dismissSuggestion: (input: NoteSuggestionAcceptInput): Promise<NoteSuggestionAcceptResult> =>
+      ipcRenderer.invoke(IPC.notes.dismissSuggestion, input),
     create: (input: CreateNoteInput): Promise<Note> => ipcRenderer.invoke(IPC.notes.create, input),
     update: (noteId: string, patch: UpdateNoteInput): Promise<Note> =>
       ipcRenderer.invoke(IPC.notes.update, noteId, patch),

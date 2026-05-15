@@ -2,6 +2,7 @@ export const SDK_ENDPOINT_PROVIDERS = ['anthropic', 'minimax', 'deepseek', 'cust
 export type SDKEndpointProvider = (typeof SDK_ENDPOINT_PROVIDERS)[number];
 
 export type SDKEndpointProtocol = 'anthropic-compatible';
+export type SDKModelTier = 'default' | 'fast' | 'heavy';
 
 export interface SDKCostProfile {
   inputPerMTok: number;
@@ -18,6 +19,8 @@ export interface SDKEndpoint {
   baseURL: string;
   keyRef: string;
   defaultModel: string;
+  fastModel?: string;
+  heavyModel?: string;
   modelAlias?: Record<string, string>;
   costProfile?: SDKCostProfile;
   enabled: boolean;
@@ -41,6 +44,8 @@ export interface SDKEndpointInput {
   protocol?: SDKEndpointProtocol;
   baseURL: string;
   defaultModel: string;
+  fastModel?: string;
+  heavyModel?: string;
   modelAlias?: Record<string, string>;
   costProfile?: SDKCostProfile;
   enabled?: boolean;
@@ -96,6 +101,7 @@ export interface SDKInvocationInput {
   messages: SDKInvocationMessage[];
   maxTokens?: number;
   temperature?: number;
+  modelTier?: SDKModelTier;
   traceId?: string;
   conversationId?: string;
   mode?: 'ask' | 'synthesis' | 'background';
@@ -152,7 +158,13 @@ export function endpointView(endpoint: SDKEndpoint, secret: SDKEndpointSecretSta
   };
 }
 
-export function resolveModelAlias(endpoint: SDKEndpoint, modelHint?: string): string {
-  const requested = modelHint?.trim() || endpoint.defaultModel;
+export function resolveModelAlias(endpoint: SDKEndpoint, modelHint?: string, modelTier: SDKModelTier = 'default'): string {
+  const tierModel =
+    modelTier === 'fast'
+      ? endpoint.fastModel
+      : modelTier === 'heavy'
+        ? endpoint.heavyModel
+        : undefined;
+  const requested = modelHint?.trim() || tierModel?.trim() || endpoint.defaultModel;
   return endpoint.modelAlias?.[requested] ?? requested;
 }

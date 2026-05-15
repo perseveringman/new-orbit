@@ -11,6 +11,7 @@ import type {
   LinkThoughtInput,
   PromoteLibraryArticleInput,
   PromoteThoughtInput,
+  QuickCaptureSuggestDraftInput,
   SaveFeedItemInput,
   SaveLibraryArticleInput,
   UpdateThoughtInput
@@ -151,6 +152,9 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.capture.quick.saveAttachment, (_event, input: CaptureAttachmentInput) =>
     createQuickCaptureService(vaultPath()).saveAttachment(input)
   );
+  ipcMain.handle(IPC.capture.quick.suggestDraft, (_event, input: QuickCaptureSuggestDraftInput) =>
+    createQuickCaptureService(vaultPath()).suggestDraft(input)
+  );
   ipcMain.handle(IPC.capture.quick.createNote, async (_event, input: CreateCaptureNoteInput) => {
     const result = await createQuickCaptureService(vaultPath()).createNote(input);
     publishTraceableEvent({
@@ -160,10 +164,14 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
       payload: {
         note_id: result.note.frontmatter.id,
         path: result.note.path,
+        type: result.note.frontmatter.type,
+        title: result.note.frontmatter.title,
+        source: result.note.frontmatter.source,
+        special_marker: result.note.frontmatter.special_marker,
+        accepted_suggestion_actions: input.acceptedSuggestionActions ?? [],
         attachment_count: result.attachments.length
       }
     });
-    broadcastInboxEvent({ type: 'created', item: result.inboxItem });
     return result;
   });
   ipcMain.handle(IPC.capture.quick.createLink, async (_event, input: CreateCaptureLinkInput) => {

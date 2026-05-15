@@ -17,6 +17,7 @@ export function registerSynthesisInvalidator(getVaultPath: () => string | null):
       const payload = (event.payload ?? {}) as Record<string, unknown>;
       const noteId = typeof payload['note_id'] === 'string' ? payload['note_id'] : undefined;
       if (noteId) void store.markStale(`entity:note:${noteId}`, kind);
+      if (noteId) void store.markStale(`relate:note:${noteId}`, kind);
       void markMatching(store, 'emerge.resource', kind);
     } else if (LIBRARY_EVENTS.has(kind)) {
       const payload = (event.payload ?? {}) as Record<string, unknown>;

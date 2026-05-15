@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DailyTimeline, MonthlyIndex, TimelineExportResult, WeeklyTimeline, YearlyIndex } from '@shared/timeline';
 import type { SynthesisArtifact } from '@shared/synthesis';
+import type { Note } from '@shared/note';
 import { SynthesisStatus } from '../components/synthesis';
 
 type TimelineMode = 'day' | 'week' | 'month' | 'year';
@@ -239,14 +240,86 @@ function YearPanel({ year }: { year: YearlyIndex }): JSX.Element {
 }
 
 function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.Element {
+  const notePath = entry.event_kind.startsWith('note.') ? entry.refs?.find((ref) => ref.kind === 'note')?.ref : undefined;
+  const [editing, setEditing] = useState(false);
+  const [note, setNote] = useState<Note | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftBody, setDraftBody] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function startEdit(): Promise<void> {
+    if (!notePath) return;
+    setError(null);
+    const loaded = await window.orbit.notes.getByPath(notePath);
+    if (!loaded) {
+      setError('Note not found.');
+      return;
+    }
+    setNote(loaded);
+    setDraftTitle(loaded.frontmatter.title ?? '');
+    setDraftBody(loaded.body);
+    setEditing(true);
+  }
+
+  async function saveEdit(): Promise<void> {
+    if (!note) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await window.orbit.notes.update(note.frontmatter.id, {
+        title: draftTitle.trim() || note.frontmatter.title,
+        body: draftBody
+      });
+      setNote(updated);
+      setEditing(false);
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <article className={`rounded-xl border p-3 text-sm ${entry.layer === 2 ? 'border-violet-200 bg-violet-50/50 dark:border-violet-900/50 dark:bg-violet-950/20' : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'}`}>
       <div className="flex gap-2">
         <span>{entry.icon}</span>
-        <div className="min-w-0">
-          <div className="font-medium">{entry.title}</div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="font-medium">{entry.title}</div>
+            {notePath ? (
+              <button type="button" onClick={() => void startEdit()} className="rounded border border-neutral-300 px-2 py-1 text-[11px] text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
+                Edit
+              </button>
+            ) : null}
+          </div>
           <div className="text-[11px] text-neutral-500">{new Date(entry.occurred_at).toLocaleTimeString()} · {entry.event_kind}{entry.layer === 2 ? ' · Layer 2' : ''}</div>
-          {entry.summary ? <p className="mt-1 text-neutral-600 dark:text-neutral-300">{entry.summary}</p> : null}
+          {editing ? (
+            <div className="mt-3 space-y-2">
+              <input
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                placeholder="Title"
+                className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
+              />
+              <textarea
+                value={draftBody}
+                onChange={(event) => setDraftBody(event.target.value)}
+                className="h-36 w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
+              />
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => void saveEdit()} disabled={saving} className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={() => setEditing(false)} className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : entry.summary ? (
+            <p className="mt-1 text-neutral-600 dark:text-neutral-300">{entry.summary}</p>
+          ) : null}
+          {error ? <p className="mt-1 text-[11px] text-red-600 dark:text-red-300">{error}</p> : null}
           {entry.refs?.length ? <p className="mt-1 text-[11px] text-neutral-500">Refs: {entry.refs.map((ref) => ref.label ?? ref.ref).join(', ')}</p> : null}
           {entry.derived_from?.length ? <p className="mt-1 text-[11px] text-neutral-500">↳ related events: {entry.derived_from.length}</p> : null}
         </div>

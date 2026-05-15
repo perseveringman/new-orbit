@@ -51,6 +51,13 @@ import type { CliHandlerRegistry } from './registry';
 import { createAssetStore } from '../assets/store';
 import { buildSpaceContext, getSpace, listSpaces } from '../space/context';
 import { createResourceStore } from '../resource/store';
+import { createNoteStore } from '../note/store';
+import {
+  acceptNoteSuggestion,
+  buildNoteWorkbench,
+  dismissNoteSuggestion,
+  listNoteQueue
+} from '../note/workbench';
 import type { SpaceContextOptions } from '@shared/space';
 import { runWebFetch } from '../web-tools/fetch';
 import { runWebSearch, type WebSearchProvider } from '../web-tools/search';
@@ -872,6 +879,88 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
   registry.register('resource.archive', async (params) => {
     const input = objectParams(params, 'resource.archive');
     return createResourceStore(openSession().vault).archive(stringParam(input, 'id'));
+  });
+
+  registry.register('note.queue', async (params) => {
+    const input = isRecord(params) ? params : {};
+    return listNoteQueue(openSession().vault, {
+      ...(typeof input.bucket === 'string' ? { bucket: input.bucket as never } : {}),
+      ...(typeof input.type === 'string' ? { type: input.type as never } : {}),
+      ...(typeof input.tag === 'string' ? { tag: input.tag } : {}),
+      ...(typeof input.query === 'string' ? { query: input.query } : {}),
+      ...(input.include_archived === true ? { include_archived: true } : {})
+    });
+  });
+
+  registry.register('note.get', async (params) => {
+    const input = objectParams(params, 'note.get');
+    const target = stringParam(input, 'id');
+    const store = createNoteStore(openSession().vault);
+    return (await store.get(target)) ?? store.getByPath(target);
+  });
+
+  registry.register('note.search', async (params) => {
+    const input = objectParams(params, 'note.search');
+    return createNoteStore(openSession().vault).search(stringParam(input, 'query'), {
+      ...(typeof input.limit === 'number' ? { limit: input.limit } : {})
+    });
+  });
+
+  registry.register('note.workbench', async (params) => {
+    const input = objectParams(params, 'note.workbench');
+    return buildNoteWorkbench(openSession().vault, stringParam(input, 'id'), {
+      force: input.force === true
+    });
+  });
+
+  registry.register('note.classify', async (params) => {
+    const input = objectParams(params, 'note.classify');
+    const workbench = await buildNoteWorkbench(openSession().vault, stringParam(input, 'id'), {
+      force: input.force === true
+    });
+    return workbench.payload.suggestions.filter((item) => item.kind === 'classify_area');
+  });
+
+  registry.register('note.relate', async (params) => {
+    const input = objectParams(params, 'note.relate');
+    const workbench = await buildNoteWorkbench(openSession().vault, stringParam(input, 'id'), {
+      force: input.force === true
+    });
+    return workbench.payload.relations;
+  });
+
+  registry.register('note.distill', async (params) => {
+    const input = objectParams(params, 'note.distill');
+    const workbench = await buildNoteWorkbench(openSession().vault, stringParam(input, 'id'), {
+      force: input.force === true
+    });
+    return workbench.payload.suggestions.filter((item) => item.kind === 'distill_longform');
+  });
+
+  registry.register('note.proposeUpdate', async (params) => {
+    const input = objectParams(params, 'note.proposeUpdate');
+    const workbench = await buildNoteWorkbench(openSession().vault, stringParam(input, 'id'), {
+      force: input.force === true
+    });
+    return workbench.payload.suggestions;
+  });
+
+  registry.register('note.acceptSuggestion', async (params) => {
+    const input = objectParams(params, 'note.acceptSuggestion');
+    return acceptNoteSuggestion(openSession().vault, {
+      noteId: stringParam(input, 'id'),
+      suggestionId: stringParam(input, 'suggestion_id'),
+      ...(typeof input.artifact_id === 'string' ? { artifactId: input.artifact_id } : {})
+    });
+  });
+
+  registry.register('note.dismissSuggestion', async (params) => {
+    const input = objectParams(params, 'note.dismissSuggestion');
+    return dismissNoteSuggestion(openSession().vault, {
+      noteId: stringParam(input, 'id'),
+      suggestionId: stringParam(input, 'suggestion_id'),
+      ...(typeof input.artifact_id === 'string' ? { artifactId: input.artifact_id } : {})
+    });
   });
 
   registry.register('assets.manifest.get', async (params) => {

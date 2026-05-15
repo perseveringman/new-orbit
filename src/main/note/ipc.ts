@@ -1,7 +1,18 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { CreateNoteInput, Note, NoteChangeEvent, NoteFilter, SearchOptions, UpdateNoteInput } from '@shared/note';
+import type {
+  CreateNoteInput,
+  Note,
+  NoteChangeEvent,
+  NoteFilter,
+  NoteQueueFilter,
+  NoteSuggestionAcceptInput,
+  NoteWorkbenchInput,
+  SearchOptions,
+  UpdateNoteInput
+} from '@shared/note';
 import { createNoteStore } from './store';
+import { acceptNoteSuggestion, buildNoteWorkbench, dismissNoteSuggestion, listNoteQueue } from './workbench';
 import { publishTraceableEvent } from '../events/bus';
 
 export function registerNoteIpc(getVaultPath: () => string | null): void {
@@ -14,6 +25,22 @@ export function registerNoteIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.notes.list, (_event, filter?: NoteFilter) => createNoteStore(vaultPath()).list(filter));
   ipcMain.handle(IPC.notes.get, (_event, noteId: string) => createNoteStore(vaultPath()).get(noteId));
   ipcMain.handle(IPC.notes.getByPath, (_event, notePath: string) => createNoteStore(vaultPath()).getByPath(notePath));
+  ipcMain.handle(IPC.notes.queue, (_event, filter?: NoteQueueFilter) => listNoteQueue(vaultPath(), filter));
+  ipcMain.handle(IPC.notes.workbench, (_event, input: NoteWorkbenchInput) =>
+    buildNoteWorkbench(vaultPath(), input.noteId, { force: input.force })
+  );
+  ipcMain.handle(IPC.notes.acceptSuggestion, async (_event, input: NoteSuggestionAcceptInput) => {
+    const result = await acceptNoteSuggestion(vaultPath(), input);
+    if (result.note) broadcast({ type: 'updated', noteId: result.note.frontmatter.id, note: result.note });
+    if (result.created?.kind === 'note') {
+      const created = await createNoteStore(vaultPath()).get(result.created.id);
+      if (created) broadcast({ type: 'created', noteId: created.frontmatter.id, note: created });
+    }
+    return result;
+  });
+  ipcMain.handle(IPC.notes.dismissSuggestion, (_event, input: NoteSuggestionAcceptInput) =>
+    dismissNoteSuggestion(vaultPath(), input)
+  );
   ipcMain.handle(IPC.notes.search, (_event, query: string, options?: SearchOptions) =>
     createNoteStore(vaultPath()).search(query, options)
   );

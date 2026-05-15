@@ -1,11 +1,13 @@
 export type RuntimeRouteMode = 'task' | 'ask' | 'synthesis' | 'background';
 
 export type RuntimeRouteTrack = 'cli' | 'sdk' | 'sdk_agent';
+export type RuntimeRouteModelTier = 'default' | 'fast' | 'heavy';
 
 export interface RuntimeRouteInput {
   mode: RuntimeRouteMode;
   endpointHint?: string;
   modelHint?: string;
+  modelTier?: RuntimeRouteModelTier;
   budgetHintUsd?: number;
   /**
    * 旧字段：表示请求方需要 LLM 调用 tool（仅 CLI 路径能给）。
@@ -32,4 +34,3 @@ export interface RuntimeRouteDecision {
 export function defaultTrackForMode(mode: RuntimeRouteMode): RuntimeRouteTrack {
   return mode === 'task' ? 'cli' : 'sdk';
 }
-

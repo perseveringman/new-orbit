@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
 import type {
   DailySummaryPayload,
+  NoteWorkbenchPayload,
   EnsureSynthesisInput,
   ResourceEmergencePayload,
   SynthesisArtifact,
@@ -135,6 +136,7 @@ export function createSynthesisJob(input: EnsureSynthesisInput): SynthesisJob {
 
 function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknown {
   if (kind === 'summary.daily') return localDailySummary(sources);
+  if (kind === 'summary.entity') return localEntitySummary(sources);
   if (kind === 'emerge.resource') return localResourceEmergence(sources);
   if (kind === 'distill.library') {
     const first = sources[0];
@@ -148,6 +150,7 @@ function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknow
     };
   }
   if (kind === 'classify.area') return { suggestions: [] };
+  if (kind === 'relate.notes') return { relations: localNoteRelations(sources) };
   if (kind === 'search.answer') return localSearchAnswer(sources);
   return {};
 }
@@ -173,6 +176,29 @@ function localResourceEmergence(sources: SynthesisSource[]): ResourceEmergencePa
   const raw = sources.find((source) => source.kind === 'raw')?.metadata;
   const suggestions = Array.isArray(raw?.['suggestions']) ? raw['suggestions'] : [];
   return { suggestions: suggestions as ResourceEmergencePayload['suggestions'] };
+}
+
+function localEntitySummary(sources: SynthesisSource[]): NoteWorkbenchPayload {
+  const raw = sources.find((source) => source.kind === 'raw')?.metadata;
+  if (raw && typeof raw === 'object') {
+    const payload = raw['payload'];
+    if (payload && typeof payload === 'object') return payload as NoteWorkbenchPayload;
+  }
+  const first = sources[0];
+  const excerpt = String(first?.excerpt ?? first?.metadata?.['content'] ?? '');
+  return {
+    summary: excerpt.slice(0, 420) || 'No entity content available.',
+    key_points: excerpt ? [excerpt.slice(0, 160)] : [],
+    suggested_tags: [],
+    suggestions: [],
+    relations: []
+  };
+}
+
+function localNoteRelations(sources: SynthesisSource[]): NoteWorkbenchPayload['relations'] {
+  const raw = sources.find((source) => source.kind === 'raw')?.metadata;
+  const relations = raw && typeof raw === 'object' ? raw['relations'] : undefined;
+  return Array.isArray(relations) ? (relations as NoteWorkbenchPayload['relations']) : [];
 }
 
 function localSearchAnswer(sources: SynthesisSource[]): { answer: string; citations: Array<{ doc_id: string; title: string }>; confidence: number } {

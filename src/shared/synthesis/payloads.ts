@@ -1,5 +1,6 @@
 import type { ResourceSuggestion } from '../resource';
 import type { FeedClusterPayload, FeedDigestPayload } from '../feed';
+import type { NoteRelationSuggestion, NoteWorkbenchPayload } from '../note';
 import type { SynthesisSource } from './types';
 
 export interface DailySummaryPayload {
@@ -40,8 +41,10 @@ export interface ResourceEmergenceItemPayload {
 
 export interface SynthesisPayloadMap {
   'summary.daily': DailySummaryPayload;
+  'summary.entity': NoteWorkbenchPayload;
   'distill.library': LibraryDistillPayload;
   'emerge.resource': ResourceEmergencePayload;
+  'relate.notes': { relations: NoteRelationSuggestion[] };
   'classify.area': AreaClassificationPayload;
   'feed.digest': FeedDigestPayload;
   'feed.cluster': FeedClusterPayload;

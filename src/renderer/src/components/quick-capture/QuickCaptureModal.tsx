@@ -1,108 +1,101 @@
-import { useEffect, useRef, useState } from 'react';
-import type { CaptureLinkKind } from '@shared/capture';
-
-export type QuickCaptureMode = 'note' | 'link' | 'task';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  QuickCaptureSuggestDraftInput,
+  QuickCaptureSuggestDraftResult,
+  QuickCaptureSuggestion
+} from '@shared/capture';
 
 export interface QuickCapturePayload {
-  mode: QuickCaptureMode;
   content: string;
-  tags: string[];
-  specialKind: string | null;
   files: File[];
   audioFile: File | null;
   audioDurationSec: number;
-  link: {
-    url: string;
-    title: string;
-    kind: CaptureLinkKind;
-    notes: string;
-  };
-  task: {
-    title: string;
-    details: string;
-  };
+  acceptedSuggestions: QuickCaptureSuggestion[];
+  suggestionResult: QuickCaptureSuggestDraftResult | null;
 }
 
 interface QuickCaptureModalProps {
   open: boolean;
   saving?: boolean;
+  suggesting?: boolean;
   error?: string | null;
+  suggestionResult?: QuickCaptureSuggestDraftResult | null;
+  onDraftChange?(input: QuickCaptureSuggestDraftInput): void;
   onSave(payload: QuickCapturePayload): void;
   onClose(): void;
 }
 
-export function QuickCaptureModal({ open, saving = false, error = null, onSave, onClose }: QuickCaptureModalProps): JSX.Element | null {
-  const [mode, setMode] = useState<QuickCaptureMode>('note');
+export function QuickCaptureModal({
+  open,
+  saving = false,
+  suggesting = false,
+  error = null,
+  suggestionResult = null,
+  onDraftChange,
+  onSave,
+  onClose
+}: QuickCaptureModalProps): JSX.Element | null {
   const [content, setContent] = useState('');
-  const [tags, setTags] = useState('');
-  const [specialKind, setSpecialKind] = useState<string>('none');
   const [files, setFiles] = useState<File[]>([]);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkTitle, setLinkTitle] = useState('');
-  const [linkKind, setLinkKind] = useState<CaptureLinkKind>('read_later');
-  const [linkNotes, setLinkNotes] = useState('');
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskDetails, setTaskDetails] = useState('');
   const [recording, setRecording] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioDurationSec, setAudioDurationSec] = useState(0);
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordingStartedAtRef = useRef<number>(0);
 
   useEffect(() => {
     if (!open) return;
-    setMode('note');
     setContent('');
-    setTags('');
-    setSpecialKind('none');
     setFiles([]);
-    setLinkUrl('');
-    setLinkTitle('');
-    setLinkKind('read_later');
-    setLinkNotes('');
-    setTaskTitle('');
-    setTaskDetails('');
     setRecording(false);
     setRecordingError(null);
     setAudioFile(null);
     setAudioDurationSec(0);
+    setSelectedSuggestionIds([]);
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    onDraftChange?.({
+      content,
+      hasAudio: Boolean(audioFile),
+      attachmentNames: files.map((file) => file.name)
+    });
+  }, [audioFile, content, files, onDraftChange, open]);
+
+  useEffect(() => {
+    if (!suggestionResult) return;
+    const valid = new Set(suggestionResult.suggestions.map((suggestion) => suggestion.id));
+    setSelectedSuggestionIds((current) => current.filter((id) => valid.has(id)));
+  }, [suggestionResult]);
+
   if (!open) return null;
 
-  const tagList = parseTags(tags);
-  const canSave =
-    mode === 'note'
-      ? Boolean(content.trim() || files.length > 0 || audioFile)
-      : mode === 'link'
-        ? Boolean(linkUrl.trim())
-        : Boolean(taskTitle.trim());
+  const suggestions = suggestionResult?.suggestions ?? [];
+  const acceptedSuggestions = suggestions.filter((suggestion) => selectedSuggestionIds.includes(suggestion.id));
+  const canSave = Boolean(content.trim() || files.length > 0 || audioFile);
 
   function save(): void {
     if (!canSave || saving) return;
     onSave({
-      mode,
       content: content.trim(),
-      tags: tagList,
-      specialKind: specialKind === 'none' ? null : specialKind,
       files,
       audioFile,
       audioDurationSec,
-      link: {
-        url: linkUrl.trim(),
-        title: linkTitle.trim(),
-        kind: linkKind,
-        notes: linkNotes.trim()
-      },
-      task: {
-        title: taskTitle.trim(),
-        details: taskDetails.trim()
-      }
+      acceptedSuggestions,
+      suggestionResult
     });
+  }
+
+  function addFiles(nextFiles: File[]): void {
+    if (nextFiles.length === 0) return;
+    setFiles((current) => [...current, ...nextFiles]);
   }
 
   async function startRecording(): Promise<void> {
@@ -139,151 +132,92 @@ export function QuickCaptureModal({ open, saving = false, error = null, onSave, 
     if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
   }
 
+  function toggleSuggestion(id: string): void {
+    setSelectedSuggestionIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-950/30 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950">
+      <div
+        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950"
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          addFiles(Array.from(event.dataTransfer.files ?? []));
+        }}
+      >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
           <div>
             <h2 className="text-sm font-semibold">Quick Capture</h2>
-            <p className="text-xs text-neutral-500">Capture notes, links, tasks, files, and voice · ⌘⇧I</p>
+            <p className="text-xs text-neutral-500">Type, paste, drop files, or record voice · ⌘⇧I</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900">
             Esc
           </button>
         </div>
+
         <div className="space-y-4 p-4">
-          <div className="flex rounded-xl bg-neutral-100 p-1 text-xs font-medium dark:bg-neutral-900">
-            <ModeButton label="Note" active={mode === 'note'} onClick={() => setMode('note')} />
-            <ModeButton label="Link" active={mode === 'link'} onClick={() => setMode('link')} />
-            <ModeButton label="Task" active={mode === 'task'} onClick={() => setMode('task')} />
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            onKeyDown={(event) => {
+              const mod = event.metaKey || event.ctrlKey;
+              if (mod && event.key === 'Enter') {
+                event.preventDefault();
+                save();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+              }
+            }}
+            placeholder="Write what happened, paste a link, or leave this blank and attach files/voice."
+            className="h-44 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
+          />
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => addFiles(Array.from(event.currentTarget.files ?? []))}
+            />
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-lg border border-neutral-300 px-3 py-1.5 font-medium dark:border-neutral-700">
+              Attach files
+            </button>
+            {!recording ? (
+              <button type="button" onClick={() => void startRecording()} className="rounded-lg border border-rose-200 px-3 py-1.5 font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-200 dark:hover:bg-rose-950/30">
+                Record voice
+              </button>
+            ) : (
+              <button type="button" onClick={stopRecording} className="rounded-lg bg-rose-600 px-3 py-1.5 font-medium text-white hover:bg-rose-500">
+                Stop recording
+              </button>
+            )}
+            {files.length > 0 ? <span className="text-neutral-500">{files.length} file(s)</span> : null}
+            {audioFile ? <span className="text-neutral-500">{audioDurationSec}s voice</span> : null}
+            {recordingError ? <span className="text-red-600 dark:text-red-300">{recordingError}</span> : null}
           </div>
 
-          {mode === 'note' && (
-            <div className="space-y-3">
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={(event) => setContent(event.target.value)}
-                onKeyDown={(event) => {
-                  const mod = event.metaKey || event.ctrlKey;
-                  if (mod && event.key === 'Enter') {
-                    event.preventDefault();
-                    save();
-                  } else if (event.key === 'Escape') {
-                    event.preventDefault();
-                    onClose();
-                  }
-                }}
-                placeholder="Capture a note like a memo. Use #tags in the note or tag field, attach files, or record voice."
-                className="h-40 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
-              />
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
-                  <span className="font-medium">Upload files</span>
-                  <input
-                    type="file"
-                    multiple
-                    className="mt-2 block w-full text-xs"
-                    onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
-                  />
-                  {files.length > 0 && <span className="mt-1 block text-neutral-500">{files.length} file(s) ready</span>}
-                </label>
-                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
-                  <div className="font-medium">Voice note</div>
-                  <div className="mt-2 flex items-center gap-2">
-                    {!recording ? (
-                      <button type="button" onClick={() => void startRecording()} className="rounded-lg bg-rose-600 px-3 py-1.5 font-medium text-white hover:bg-rose-500">
-                        Record voice
-                      </button>
-                    ) : (
-                      <button type="button" onClick={stopRecording} className="rounded-lg bg-neutral-900 px-3 py-1.5 font-medium text-white dark:bg-neutral-100 dark:text-neutral-950">
-                        Stop recording
-                      </button>
-                    )}
-                    {audioFile && <span className="text-neutral-500">{audioDurationSec}s recorded</span>}
-                  </div>
-                  {recordingError && <p className="mt-2 text-red-600 dark:text-red-300">{recordingError}</p>}
-                </div>
-              </div>
-              <select
-                value={specialKind}
-                onChange={(event) => setSpecialKind(event.target.value)}
-                className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
-              >
-                <option value="none">No special marker</option>
-                <option value="insight">💡 Insight</option>
-                <option value="breakthrough">🌟 Breakthrough</option>
-                <option value="setback">💔 Setback</option>
-                <option value="milestone">🏁 Milestone</option>
-                <option value="gratitude">🙏 Gratitude</option>
-                <option value="reflection">🪞 Reflection</option>
-              </select>
-            </div>
-          )}
-
-          {mode === 'link' && (
-            <div className="space-y-3">
-              <input
-                value={linkUrl}
-                onChange={(event) => setLinkUrl(event.target.value)}
-                placeholder="https://example.com"
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
-              />
-              <input
-                value={linkTitle}
-                onChange={(event) => setLinkTitle(event.target.value)}
-                placeholder="Optional title"
-                className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
-              />
-              <div className="grid gap-2 md:grid-cols-2">
-                <label className={`rounded-xl border p-3 text-xs ${linkKind === 'bookmark' ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/30' : 'border-neutral-200 dark:border-neutral-800'}`}>
-                  <input type="radio" checked={linkKind === 'bookmark'} onChange={() => setLinkKind('bookmark')} className="mr-2" />
-                  <span className="font-medium">Bookmark</span>
-                  <p className="mt-1 text-neutral-500">Tool/site collection for repeated use.</p>
-                </label>
-                <label className={`rounded-xl border p-3 text-xs ${linkKind === 'read_later' ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/30' : 'border-neutral-200 dark:border-neutral-800'}`}>
-                  <input type="radio" checked={linkKind === 'read_later'} onChange={() => setLinkKind('read_later')} className="mr-2" />
-                  <span className="font-medium">Read later</span>
-                  <p className="mt-1 text-neutral-500">Convert directly into Library for reading/distilling.</p>
-                </label>
-              </div>
-              <textarea
-                value={linkNotes}
-                onChange={(event) => setLinkNotes(event.target.value)}
-                placeholder="Why is this useful?"
-                className="h-24 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
-              />
-            </div>
-          )}
-
-          {mode === 'task' && (
-            <div className="space-y-3">
-              <input
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-                placeholder="Task title"
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
-              />
-              <textarea
-                value={taskDetails}
-                onChange={(event) => setTaskDetails(event.target.value)}
-                placeholder="Details, acceptance notes, or context. This goes to Inbox for project assignment."
-                className="h-28 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
-              />
-            </div>
-          )}
-
-          <input
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            placeholder="tags, comma separated"
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
+          <SuggestionStrip
+            suggestions={suggestions}
+            selectedIds={selectedSuggestionIds}
+            suggesting={suggesting}
+            tags={suggestionResult?.tags ?? []}
+            onToggle={toggleSuggestion}
           />
-          {error && <p className="text-xs text-red-600 dark:text-red-300">{error}</p>}
+          {error ? <p className="text-xs text-red-600 dark:text-red-300">{error}</p> : null}
         </div>
+
         <div className="flex items-center justify-between border-t border-neutral-200 px-4 py-3 dark:border-neutral-800">
           <span className="text-xs text-neutral-500">
-            {mode === 'task' ? 'Tasks enter Inbox first.' : mode === 'link' ? 'Bookmarks/read-later save to Library.' : 'Notes save with attachments and tags.'}
+            Saves to Notes and appears on Timeline. Suggestions are optional.
           </span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">
@@ -295,7 +229,7 @@ export function QuickCaptureModal({ open, saving = false, error = null, onSave, 
               disabled={!canSave || saving}
               className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? 'Saving…' : mode === 'task' ? 'Send to Inbox' : mode === 'link' ? 'Save Link' : 'Save Note'}
+              {saving ? 'Saving…' : acceptedSuggestions.length > 0 ? `Save Note + ${acceptedSuggestions.length}` : 'Save Note'}
             </button>
           </div>
         </div>
@@ -304,25 +238,55 @@ export function QuickCaptureModal({ open, saving = false, error = null, onSave, 
   );
 }
 
-function ModeButton({ label, active, onClick }: { label: string; active: boolean; onClick(): void }): JSX.Element {
+function SuggestionStrip({
+  suggestions,
+  selectedIds,
+  suggesting,
+  tags,
+  onToggle
+}: {
+  suggestions: QuickCaptureSuggestion[];
+  selectedIds: string[];
+  suggesting: boolean;
+  tags: string[];
+  onToggle(id: string): void;
+}): JSX.Element {
+  const visibleTags = useMemo(() => tags.slice(0, 4), [tags]);
+  if (suggestions.length === 0 && !suggesting && visibleTags.length === 0) {
+    return <div className="text-xs text-neutral-500">AI suggestions will appear here as you type.</div>;
+  }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex-1 rounded-lg px-3 py-1.5 ${
-        active
-          ? 'bg-white text-neutral-950 shadow-sm dark:bg-neutral-800 dark:text-neutral-50'
-          : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
-      }`}
-    >
-      {label}
-    </button>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-xs text-neutral-500">
+        <span>Suggestions</span>
+        {suggesting ? <span>thinking…</span> : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {suggestions.map((suggestion) => {
+          const active = selectedIds.includes(suggestion.id);
+          return (
+            <button
+              key={suggestion.id}
+              type="button"
+              onClick={() => onToggle(suggestion.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                active
+                  ? 'border-sky-400 bg-sky-50 text-sky-800 dark:border-sky-700 dark:bg-sky-950/40 dark:text-sky-100'
+                  : 'border-neutral-200 bg-white text-neutral-700 hover:border-sky-300 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200'
+              }`}
+              title={suggestion.detail ?? suggestion.label}
+            >
+              {suggestion.label}
+              {suggestion.risk === 'proposal' ? ' · proposal' : ''}
+            </button>
+          );
+        })}
+        {visibleTags.map((tag) => (
+          <span key={tag} className="rounded-full bg-neutral-100 px-3 py-1.5 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
+            #{tag}
+          </span>
+        ))}
+      </div>
+    </div>
   );
-}
-
-function parseTags(value: string): string[] {
-  return value
-    .split(',')
-    .map((tag) => tag.trim().replace(/^#/, ''))
-    .filter(Boolean);
 }

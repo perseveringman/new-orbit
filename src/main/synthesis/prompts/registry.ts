@@ -2,8 +2,10 @@ import type { SynthesisKind } from '@shared/synthesis';
 import { classifyAreaPrompt } from './classify.area.v1';
 import { distillLibraryPrompt } from './distill.library.v1';
 import { emergeResourcePrompt } from './emerge.resource.v1';
+import { relateNotesPrompt } from './relate.notes.v1';
 import { searchAnswerPrompt } from './search.answer.v1';
 import { summaryDailyPrompt } from './summary.daily.v1';
+import { summaryEntityPrompt } from './summary.entity.v1';
 
 export interface RenderedPrompt {
   system: string;
@@ -20,8 +22,10 @@ export interface SynthesisPromptTemplate<TOutput = unknown> {
 
 const PROMPTS = [
   summaryDailyPrompt,
+  summaryEntityPrompt,
   distillLibraryPrompt,
   emergeResourcePrompt,
+  relateNotesPrompt,
   classifyAreaPrompt,
   searchAnswerPrompt
 ] satisfies SynthesisPromptTemplate[];

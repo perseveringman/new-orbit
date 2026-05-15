@@ -65,7 +65,19 @@ describe('quick capture save', () => {
     expect(result.attachments).toHaveLength(2);
     await expect(fs.readFile(path.join(vaultPath, result.attachments[0].path), 'utf8')).resolves.toBe('image-data');
     await expect(fs.readFile(path.join(vaultPath, result.attachments[1].path), 'utf8')).resolves.toBe('voice-data');
-    expect((result.inboxItem.payload as ThoughtPayload).created_from).toBe('voice');
+    const inboxDir = path.join(vaultPath, '.orbit', 'inbox');
+    await expect(fs.stat(inboxDir)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('suggests lightweight actions while drafting', async () => {
+    const service = createQuickCaptureService(vaultPath);
+    const result = await service.suggestDraft({
+      content: 'todo: review https://example.com/essay for the Orbit capture redesign'
+    });
+
+    expect(result.suggestions.map((suggestion) => suggestion.action)).toContain('save_to_library');
+    expect(result.suggestions.map((suggestion) => suggestion.action)).toContain('create_task');
+    expect(result.source).toBe('heuristic');
   });
 
   it('captures bookmarks, read-later links, and tasks into the correct stores', async () => {
@@ -99,20 +111,35 @@ describe('quick capture save', () => {
     expect((task.item.payload as { requested_action?: string }).requested_action).toBe('assign_to_project');
   });
 
-  it('renders a complete multi-mode Capture modal instead of the thought-only MVP', () => {
+  it('renders a single-composer Capture modal with realtime suggestion affordances', () => {
     const html = renderToStaticMarkup(
       createElement(QuickCaptureModal, {
         open: true,
+        suggestionResult: {
+          source: 'heuristic',
+          tags: ['capture'],
+          suggestions: [
+            {
+              id: 'save_to_library:https://example.com',
+              action: 'save_to_library',
+              label: 'Save to Library',
+              confidence: 0.9,
+              risk: 'low',
+              source: 'heuristic'
+            }
+          ]
+        },
         onSave: () => undefined,
         onClose: () => undefined
       })
     );
 
-    expect(html).toContain('Capture notes, links, tasks, files, and voice');
-    expect(html).toContain('Note');
-    expect(html).toContain('Link');
-    expect(html).toContain('Task');
-    expect(html).toContain('Upload files');
+    expect(html).toContain('Type, paste, drop files, or record voice');
+    expect(html).toContain('Save to Library');
+    expect(html).toContain('Save Note');
+    expect(html).not.toContain('Link');
+    expect(html).not.toContain('Task title');
+    expect(html).toContain('Attach files');
     expect(html).toContain('Record voice');
     expect(html).not.toContain('Thought-only MVP');
   });

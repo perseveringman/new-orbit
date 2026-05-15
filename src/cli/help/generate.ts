@@ -14,6 +14,7 @@ Available commands:
   project     Project commands: link, scaffold, relink, migrate-workdir, workdir, overview, graph, list, get, archive
   space       Space commands: list, show, context
   resource    Resource commands: list, get, create, archive
+  note        Note commands: queue, get, search, workbench, classify, relate, distill, propose-update, accept-suggestion
   assets      Project materials commands: list, show, scan, stat, read, add-scope, pin, unpin
   kanban      Kanban commands: list
   task        Task commands: list, get, update, propose, related, transcript, switch-runtime, propose-scope, propose-split, deps, delete
@@ -131,6 +132,34 @@ Examples:
   orbit resource list --json
   orbit resource create --title "Egypt history"
   orbit resource archive egypt-history
+`;
+}
+
+export function generateNoteHelp(): string {
+  return `Usage: orbit note <subcommand> [args]
+
+Available subcommands:
+  queue [--bucket inbox|connect|express|settled|all] [--type thought|capture|longform|voice_log|daily_summary] [--tag T] [--query Q]
+                              List the AI-native note processing queue
+  get <id-or-path>             Show one Note
+  search <query> [--limit N]   Search Notes
+  workbench <id-or-path> [--force]
+                              Generate or read the Note AI Workbench artifact
+  classify <id-or-path> [--force]
+                              Suggest Area assignments
+  relate <id-or-path> [--force]
+                              Suggest semantic note relations
+  distill <id-or-path> [--force]
+                              Suggest longform distillation actions
+  propose-update <id-or-path> [--force]
+                              Return all Note Workbench suggestions
+  accept-suggestion <id-or-path> <suggestion-id> [--artifact ID]
+  dismiss-suggestion <id-or-path> <suggestion-id> [--artifact ID]
+
+Examples:
+  orbit note queue --bucket inbox --json
+  orbit note workbench note-123 --force --json
+  orbit note accept-suggestion note-123 classify-area-writing --json
 `;
 }
 
