@@ -39,6 +39,8 @@ export function registerMemoryIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.memory.recall, (_event, query: string, options?: RecallOptions) => recallContext(runtime().vaultPath, query, options));
   ipcMain.handle(IPC.memory.recallStats, (_event, id: string) => runtime().store.getRecallStats(id));
   ipcMain.handle(IPC.memory.clusters, () => runtime().store.listClusters());
+  ipcMain.handle(IPC.memory.graph, (_event, filter?: MemoryFilter) => runtime().store.graph(filter));
+  ipcMain.handle(IPC.memory.feedback, (_event, id: string, helpful: boolean) => runtime().store.recordFeedback(id, helpful));
   ipcMain.handle(IPC.memory.generateDigest, () => generateMemoryDigest(runtime().vaultPath));
 }
 

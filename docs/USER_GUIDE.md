@@ -208,8 +208,9 @@ Search 页面支持：
 - natural-language query，输入后 300ms debounce 搜索。
 - filters：entity kind、Layer 1/2、Area slug、时间范围，以及 semantic / keyword / hybrid mode。
 - index status：如果 TraceableEvent 标记索引 stale，页面会显示 stale badge 和 Refresh 按钮。
+- memory recall：搜索时会同步召回相关 Memory，显示 semantic / episodic / procedural layer、召回原因，并支持 Helpful / Not relevant 反馈。
 - **Generate answer**：生成 `search.answer` synthesis artifact，带 provenance 和引用来源，不会写入 Notes/Library/Resources。
-- **Ask across results**：创建 Ask-Anywhere conversation，并把当前搜索结果作为上下文注入。
+- **Ask across results**：创建 Ask-Anywhere conversation，并把当前搜索结果和召回的 Memory 一起作为上下文注入。
 
 ## 5.10 Memory Explorer
 
@@ -221,6 +222,7 @@ Memory 页面支持：
 - filter by kind：interest / preference / pattern / lesson / entity memory / goal。
 - stability：volatile / stable / core，会根据 evidence、confidence、recall count 和用户确认自动演化。
 - actions：Confirm、Archive、Promote to Resource、Promote to Project。
+- **Memory graph**：按 shared entity、shared source 和 theme overlap 显示记忆之间的关系，用来解释为什么旧想法会一起浮现。
 - **Generate digest**：生成 `memory.digest` synthesis artifact，汇总新增、增强、可能衰退的记忆和 clusters。
 - Ask-Anywhere：有相关记忆被唤回时，会在对话顶部显示 memory chips、memory layer 和召回原因，并可隐藏。
 

@@ -38,6 +38,25 @@ export interface MemoryCluster {
   coherence: number;
 }
 
+export const MEMORY_RELATION_KINDS = ['shared_entity', 'shared_source', 'theme_overlap'] as const;
+export type MemoryRelationKind = (typeof MEMORY_RELATION_KINDS)[number];
+
+export interface MemoryRelation {
+  id: string;
+  from_id: string;
+  to_id: string;
+  kind: MemoryRelationKind;
+  label: string;
+  strength: number;
+  evidence: string[];
+}
+
+export interface MemoryGraph {
+  nodes: MemoryNode[];
+  relations: MemoryRelation[];
+  generated_at: string;
+}
+
 export interface RecallEvent {
   id: string;
   memory_id: string;
@@ -47,6 +66,9 @@ export interface RecallEvent {
   };
   used_in: 'context_injection' | 'suggestion' | 'question_answer';
   was_helpful?: boolean;
+  score?: number;
+  matched_terms?: string[];
+  reasons?: string[];
   occurred_at: string;
 }
 
@@ -120,6 +142,7 @@ export interface MemoryRecallSignals {
 
 export interface MemoryRecallMatch {
   memory_id: string;
+  recall_event_id?: string;
   score: number;
   matched_terms: string[];
   signals: MemoryRecallSignals;
@@ -129,6 +152,7 @@ export interface MemoryRecallMatch {
 export interface RecallStats {
   total: number;
   by_kind: Record<string, number>;
+  recent: RecallEvent[];
 }
 
 export interface MemoryDigestPayload {

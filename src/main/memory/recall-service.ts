@@ -35,17 +35,22 @@ export async function recallWithStore(
     .sort((a, b) => b.score - a.score)
     .slice(0, max);
 
+  const recallEventIds = new Map<string, string>();
   for (const item of scored) {
-    await store.recordRecall(item.memory.id, {
+    const event = await store.recordRecall(item.memory.id, {
       triggered_by: options.triggered_by ?? { kind: 'manual' },
-      used_in: options.used_in ?? 'context_injection'
+      used_in: options.used_in ?? 'context_injection',
+      score: item.score,
+      matched_terms: item.matchedTerms,
+      reasons: item.reasons
     });
+    recallEventIds.set(item.memory.id, event.id);
   }
 
   const memories = await Promise.all(scored.map((item) => store.get(item.memory.id))).then((items) =>
     items.filter((item): item is MemoryNode => Boolean(item))
   );
-  const matches = scored.map(memoryMatch);
+  const matches = scored.map((item) => memoryMatch(item, recallEventIds.get(item.memory.id)));
   return {
     memories,
     matches,
@@ -85,9 +90,10 @@ function hasRetrievalSignal(item: ScoredMemory, queryTokens: string[]): boolean 
   return item.signals.keyword_overlap > 0 || item.signals.entity_overlap > 0 || item.signals.layer_boost > 0;
 }
 
-function memoryMatch(item: ScoredMemory): MemoryRecallMatch {
+function memoryMatch(item: ScoredMemory, recallEventId?: string): MemoryRecallMatch {
   return {
     memory_id: item.memory.id,
+    ...(recallEventId ? { recall_event_id: recallEventId } : {}),
     score: item.score,
     matched_terms: item.matchedTerms,
     signals: item.signals,

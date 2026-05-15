@@ -6,7 +6,9 @@ import type {
   CreateMemoryInput,
   MemoryCluster,
   MemoryFilter,
+  MemoryGraph,
   MemoryNode,
+  MemoryRelation,
   PromoteMemoryToProjectResult,
   PromoteMemoryToResourceResult,
   RecallEvent,
@@ -184,6 +186,9 @@ export class MemoryStore {
       triggered_by: event.triggered_by,
       used_in: event.used_in,
       ...(event.was_helpful !== undefined ? { was_helpful: event.was_helpful } : {}),
+      ...(event.score !== undefined ? { score: event.score } : {}),
+      ...(event.matched_terms?.length ? { matched_terms: event.matched_terms } : {}),
+      ...(event.reasons?.length ? { reasons: event.reasons } : {}),
       occurred_at: occurredAt
     };
     await fs.mkdir(this.recallsDir(), { recursive: true });
@@ -205,7 +210,27 @@ export class MemoryStore {
     const mine = events.filter((event) => event.memory_id === memoryId);
     const byKind: Record<string, number> = {};
     for (const event of mine) byKind[event.triggered_by.kind] = (byKind[event.triggered_by.kind] ?? 0) + 1;
-    return { total: mine.length, by_kind: byKind };
+    return { total: mine.length, by_kind: byKind, recent: mine.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)).slice(0, 10) };
+  }
+
+  async recordFeedback(memoryId: string, helpful: boolean): Promise<MemoryNode> {
+    const current = await this.requireMemory(memoryId);
+    await this.recordRecall(memoryId, {
+      triggered_by: { kind: 'manual' },
+      used_in: 'suggestion',
+      was_helpful: helpful,
+      reasons: [helpful ? 'user marked memory helpful' : 'user marked memory not relevant']
+    });
+    const next = await this.requireMemory(memoryId);
+    const confidenceDelta = helpful ? 0.06 : -0.12;
+    const evidenceDelta = helpful ? 1 : 0;
+    const updated = await this.update(memoryId, {
+      confidence: clamp01(next.confidence + confidenceDelta),
+      evidence_count: Math.max(0, next.evidence_count + evidenceDelta),
+      user_confirmed: helpful ? true : current.user_confirmed
+    });
+    publishMemoryEvent(helpful ? 'memory.feedback.helpful' : 'memory.feedback.not_relevant', updated);
+    return updated;
   }
 
   async listClusters(): Promise<MemoryCluster[]> {
@@ -219,6 +244,21 @@ export class MemoryStore {
       memories: memories.map((memory) => memory.id),
       coherence: Math.min(1, 0.4 + memories.length * 0.1)
     }));
+  }
+
+  async graph(filter: MemoryFilter = {}): Promise<MemoryGraph> {
+    const nodes = await this.list(filter);
+    const relations: MemoryRelation[] = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        relations.push(...memoryRelations(nodes[i], nodes[j]));
+      }
+    }
+    return {
+      nodes,
+      relations: relations.sort((a, b) => b.strength - a.strength).slice(0, 100),
+      generated_at: new Date().toISOString()
+    };
   }
 
   private async findReusableMemory(input: CreateMemoryInput): Promise<MemoryNode | null> {
@@ -362,6 +402,82 @@ function clusterKey(node: MemoryNode): string {
   return `${node.layer}:${node.kind}`;
 }
 
+function memoryRelations(a: MemoryNode, b: MemoryNode): MemoryRelation[] {
+  const relations: MemoryRelation[] = [];
+  const sharedEntities = intersect(a.related_entities ?? [], b.related_entities ?? []);
+  if (sharedEntities.length) {
+    relations.push({
+      id: relationId(a, b, 'shared_entity'),
+      from_id: a.id,
+      to_id: b.id,
+      kind: 'shared_entity',
+      label: `Shared entity: ${sharedEntities.slice(0, 3).join(', ')}`,
+      strength: Math.min(1, 0.7 + sharedEntities.length * 0.08),
+      evidence: sharedEntities
+    });
+  }
+
+  const sharedSources = intersect(a.sources.map(sourceKey), b.sources.map(sourceKey));
+  if (sharedSources.length) {
+    relations.push({
+      id: relationId(a, b, 'shared_source'),
+      from_id: a.id,
+      to_id: b.id,
+      kind: 'shared_source',
+      label: 'Same source material',
+      strength: Math.min(1, 0.62 + sharedSources.length * 0.08),
+      evidence: sharedSources
+    });
+  }
+
+  const overlap = thematicOverlap(a, b);
+  if (overlap.terms.length >= 2) {
+    relations.push({
+      id: relationId(a, b, 'theme_overlap'),
+      from_id: a.id,
+      to_id: b.id,
+      kind: 'theme_overlap',
+      label: `${a.layer}/${a.kind} theme overlap`,
+      strength: Math.min(0.85, 0.35 + overlap.score * 0.5),
+      evidence: overlap.terms.slice(0, 6)
+    });
+  }
+
+  return relations;
+}
+
+function relationId(a: MemoryNode, b: MemoryNode, kind: MemoryRelation['kind']): string {
+  return `rel-${kind}-${[a.id, b.id].sort().join('-')}`;
+}
+
+function sourceKey(source: SynthesisSource): string {
+  return `${source.kind}:${source.ref ?? source.title ?? ''}`;
+}
+
+function thematicOverlap(a: MemoryNode, b: MemoryNode): { terms: string[]; score: number } {
+  if (a.layer !== b.layer && a.kind !== b.kind) return { terms: [], score: 0 };
+  const aTokens = textTokens([a.title, a.summary, a.detail].filter(Boolean).join(' '));
+  const bTokens = textTokens([b.title, b.summary, b.detail].filter(Boolean).join(' '));
+  const terms = intersect(Array.from(aTokens), Array.from(bTokens));
+  const denominator = Math.max(1, Math.min(aTokens.size, bTokens.size));
+  return { terms, score: terms.length / denominator };
+}
+
+function textTokens(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9\u4e00-\u9fff]+/u)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3 && !STOP_WORDS.has(token))
+  );
+}
+
+function intersect(a: string[], b: string[]): string[] {
+  const other = new Set(b);
+  return unique(a.filter((value) => other.has(value)));
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -371,6 +487,27 @@ function slugify(value: string): string {
     .replace(/--+/g, '-')
     .slice(0, 48) || 'memory-project';
 }
+
+const STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'this',
+  'that',
+  'from',
+  'user',
+  'memory',
+  'should',
+  'would',
+  'could',
+  'about',
+  'into',
+  'before',
+  'after',
+  'next',
+  'time'
+]);
 
 function publishMemoryEvent(type: string, memory: MemoryNode, extra: Record<string, unknown> = {}): void {
   publishTraceableEvent({

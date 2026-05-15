@@ -17,6 +17,7 @@ describe('MemoryContent', () => {
 
     expect(html).toContain('Transparent long-term memory');
     expect(html).toContain('Read source first');
+    expect(html).toContain('Memory graph');
     expect(html).toContain('Promote to Resource');
     expect(html).toContain('semantic');
     expect(html).toContain('Stable');
@@ -28,6 +29,11 @@ function baseElement(overrides: Partial<Parameters<typeof MemoryContent>[0]> = {
     kind: 'all',
     layer: 'all',
     nodes: [],
+    graph: {
+      nodes: [],
+      relations: [],
+      generated_at: '2026-04-30T00:00:00.000Z'
+    },
     state: 'success',
     error: null,
     digest: null,

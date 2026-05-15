@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { MemoryDigestResult, MemoryKind, MemoryLayer, MemoryNode } from '@shared/memory';
+import type { FormEvent } from 'react';
+import type { MemoryDigestResult, MemoryGraph, MemoryKind, MemoryLayer, MemoryNode } from '@shared/memory';
 import { MEMORY_KINDS, MEMORY_LAYERS } from '@shared/memory';
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
+interface ManualMemoryDraft {
+  title: string;
+  summary: string;
+}
 
 export function MemoryView(): JSX.Element {
   const [layer, setLayer] = useState<MemoryLayer | 'all'>('all');
   const [kind, setKind] = useState<MemoryKind | 'all'>('all');
   const [nodes, setNodes] = useState<MemoryNode[]>([]);
+  const [graph, setGraph] = useState<MemoryGraph | null>(null);
   const [state, setState] = useState<LoadState>('loading');
   const [error, setError] = useState<string | null>(null);
   const [digest, setDigest] = useState<MemoryDigestResult | null>(null);
@@ -16,8 +22,13 @@ export function MemoryView(): JSX.Element {
     setState('loading');
     setError(null);
     try {
-      const next = await window.orbit.memory.list({ layer, kind });
+      const filter = { layer, kind };
+      const [next, nextGraph] = await Promise.all([
+        window.orbit.memory.list(filter),
+        window.orbit.memory.graph(filter)
+      ]);
       setNodes(next);
+      setGraph(nextGraph);
       setState(next.length ? 'success' : 'empty');
     } catch (err) {
       setError((err as Error).message);
@@ -31,11 +42,10 @@ export function MemoryView(): JSX.Element {
     return off;
   }, [layer, kind]);
 
-  async function createManual(): Promise<void> {
-    const title = window.prompt('Memory title');
-    if (!title) return;
-    const summary = window.prompt('Memory summary');
-    if (!summary) return;
+  async function createManual(input: ManualMemoryDraft): Promise<void> {
+    const title = input.title.trim();
+    const summary = input.summary.trim();
+    if (!title || !summary) return;
     await window.orbit.memory.create({ kind: 'preference', title, summary, user_confirmed: true, confidence: 0.7 });
     await load();
   }
@@ -67,13 +77,14 @@ export function MemoryView(): JSX.Element {
       kind={kind}
       layer={layer}
       nodes={nodes}
+      graph={graph}
       state={state}
       error={error}
       digest={digest}
       onLayerChange={setLayer}
       onKindChange={setKind}
       onReload={() => void load()}
-      onCreate={() => void createManual()}
+      onCreate={(input) => void createManual(input)}
       onArchive={(id) => void archive(id)}
       onConfirm={(node) => void confirmMemory(node)}
       onDigest={() => void generateDigest()}
@@ -86,19 +97,48 @@ export function MemoryContent(props: {
   layer: MemoryLayer | 'all';
   kind: MemoryKind | 'all';
   nodes: MemoryNode[];
+  graph: MemoryGraph | null;
   state: LoadState;
   error: string | null;
   digest: MemoryDigestResult | null;
   onLayerChange(layer: MemoryLayer | 'all'): void;
   onKindChange(kind: MemoryKind | 'all'): void;
   onReload(): void;
-  onCreate(): void;
+  onCreate(input: ManualMemoryDraft): Promise<void> | void;
   onArchive(id: string): void;
   onConfirm(node: MemoryNode): void;
   onDigest(): void;
   onPromote(id: string, target: 'resource' | 'project'): void;
 }): JSX.Element {
   const stats = useMemo(() => summarize(props.nodes), [props.nodes]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualSummary, setManualSummary] = useState('');
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [savingManual, setSavingManual] = useState(false);
+
+  async function submitManual(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const title = manualTitle.trim();
+    const summary = manualSummary.trim();
+    if (!title || !summary) {
+      setManualError('Title and summary are required.');
+      return;
+    }
+    setManualError(null);
+    setSavingManual(true);
+    try {
+      await props.onCreate({ title, summary });
+      setManualTitle('');
+      setManualSummary('');
+      setCreateOpen(false);
+    } catch (err) {
+      setManualError((err as Error).message);
+    } finally {
+      setSavingManual(false);
+    }
+  }
+
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -113,7 +153,7 @@ export function MemoryContent(props: {
             </div>
             <div className="flex gap-2">
               <button onClick={props.onDigest} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">Generate digest</button>
-              <button onClick={props.onCreate} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">+ Memory</button>
+              <button onClick={() => setCreateOpen(true)} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">+ Memory</button>
             </div>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-4">
@@ -151,6 +191,43 @@ export function MemoryContent(props: {
           </div>
         </section>
 
+        {createOpen ? (
+          <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+            <form className="grid gap-3" onSubmit={(event) => void submitManual(event)}>
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">Create memory</h2>
+                <p className="mt-1 text-sm text-neutral-500">Add a user-confirmed preference, lesson, goal, or pattern to the transparent memory layer.</p>
+              </div>
+              <label className="grid gap-1 text-sm font-medium">
+                Title
+                <input
+                  value={manualTitle}
+                  onChange={(event) => setManualTitle(event.currentTarget.value)}
+                  placeholder="e.g. Read source first"
+                  className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-950"
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Summary
+                <textarea
+                  value={manualSummary}
+                  onChange={(event) => setManualSummary(event.currentTarget.value)}
+                  placeholder="Describe what Orbit should remember and why it matters."
+                  rows={3}
+                  className="resize-none rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-950"
+                />
+              </label>
+              {manualError ? <p className="text-sm text-red-600 dark:text-red-300">{manualError}</p> : null}
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" disabled={savingManual} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-950">
+                  {savingManual ? 'Creating...' : 'Create memory'}
+                </button>
+                <button type="button" onClick={() => setCreateOpen(false)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">Cancel</button>
+              </div>
+            </form>
+          </section>
+        ) : null}
+
         {props.digest && (
           <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 text-sm dark:border-violet-900 dark:bg-violet-950/40">
             <strong>Memory digest generated</strong>
@@ -163,12 +240,14 @@ export function MemoryContent(props: {
           </section>
         )}
 
+        {props.graph ? <MemoryGraphPanel graph={props.graph} /> : null}
+
         {props.state === 'loading' ? (
           <MemorySkeleton />
         ) : props.state === 'error' ? (
           <StateCard title="Memory failed to load" body={props.error ?? 'Unknown memory error.'} actionLabel="Retry" onAction={props.onReload} />
         ) : props.state === 'empty' ? (
-          <StateCard title="No memories yet" body="Start an Ask-Anywhere conversation or create a memory manually. Orbit will extract preferences, lessons, goals, and patterns transparently." actionLabel="Create memory" onAction={props.onCreate} />
+          <StateCard title="No memories yet" body="Start an Ask-Anywhere conversation or create a memory manually. Orbit will extract preferences, lessons, goals, and patterns transparently." actionLabel="Create memory" onAction={() => setCreateOpen(true)} />
         ) : (
           <section className="grid gap-3">
             {props.nodes.map((node) => (
@@ -178,6 +257,38 @@ export function MemoryContent(props: {
         )}
       </div>
     </main>
+  );
+}
+
+function MemoryGraphPanel({ graph }: { graph: MemoryGraph }): JSX.Element {
+  return (
+    <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/30">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Memory graph</h2>
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+            {graph.nodes.length} node(s), {graph.relations.length} relation(s)
+          </p>
+        </div>
+        <span className="text-xs text-neutral-500">generated {graph.generated_at.slice(0, 10)}</span>
+      </div>
+      {graph.relations.length ? (
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          {graph.relations.slice(0, 6).map((relation) => (
+            <div key={relation.id} className="rounded-xl border border-emerald-200 bg-white p-3 text-sm dark:border-emerald-900 dark:bg-neutral-900">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{relation.kind}</span>
+                <span className="text-xs text-neutral-500">strength {relation.strength.toFixed(2)}</span>
+              </div>
+              <p className="mt-2 text-neutral-700 dark:text-neutral-200">{relation.label}</p>
+              <p className="mt-1 text-xs text-neutral-500">{relation.evidence.slice(0, 4).join(' · ')}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-neutral-500">No memory relations yet. Shared entities, sources, and overlapping themes will appear here.</p>
+      )}
+    </section>
   );
 }
 

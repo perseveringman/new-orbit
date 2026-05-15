@@ -287,6 +287,7 @@ import type {
   MemoryCluster,
   MemoryDigestResult,
   MemoryFilter,
+  MemoryGraph,
   MemoryNode,
   PromoteMemoryToProjectResult,
   PromoteMemoryToResourceResult,
@@ -706,6 +707,8 @@ export const IPC = {
     recall: 'memory:recall',
     recallStats: 'memory:recallStats',
     clusters: 'memory:clusters',
+    graph: 'memory:graph',
+    feedback: 'memory:feedback',
     generateDigest: 'memory:generateDigest',
     event: 'memory:event'
   },
@@ -1788,6 +1791,8 @@ export interface OrbitApi {
     recall(query: string, options?: RecallOptions): Promise<RecallResult>;
     recallStats(id: string): Promise<RecallStats>;
     clusters(): Promise<MemoryCluster[]>;
+    graph(filter?: MemoryFilter): Promise<MemoryGraph>;
+    feedback(id: string, helpful: boolean): Promise<MemoryNode>;
     generateDigest(): Promise<MemoryDigestResult>;
     onEvent(cb: (event: { type: string; count?: number }) => void): () => void;
   };

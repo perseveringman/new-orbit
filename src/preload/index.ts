@@ -873,6 +873,8 @@ const api: OrbitApi = {
     recall: (query: string, options?: RecallOptions) => ipcRenderer.invoke(IPC.memory.recall, query, options),
     recallStats: (id: string) => ipcRenderer.invoke(IPC.memory.recallStats, id),
     clusters: () => ipcRenderer.invoke(IPC.memory.clusters),
+    graph: (filter?: MemoryFilter) => ipcRenderer.invoke(IPC.memory.graph, filter),
+    feedback: (id: string, helpful: boolean) => ipcRenderer.invoke(IPC.memory.feedback, id, helpful),
     generateDigest: () => ipcRenderer.invoke(IPC.memory.generateDigest),
     onEvent: (cb: (event: { type: string; count?: number }) => void) => {
       const listener = (_: unknown, event: { type: string; count?: number }): void => cb(event);

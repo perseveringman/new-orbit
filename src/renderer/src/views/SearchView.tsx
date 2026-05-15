@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { IndexableEntityKind, SearchAnswerResponse, SearchMatchMode, SearchQuery, SearchResponse, SearchResult, SemanticIndexStatus } from '@shared/semantic';
+import type { MemoryNode, MemoryRecallMatch, RecallResult } from '@shared/memory';
+import type { IndexableEntityKind, SearchAnswerResponse, SearchMatchMode, SearchQuery, SearchResult, SemanticIndexStatus } from '@shared/semantic';
 import { INDEXABLE_ENTITY_KINDS } from '@shared/semantic';
 import { usePara } from '../store/para';
 
@@ -15,6 +16,7 @@ export function SearchView(): JSX.Element {
   const [dateTo, setDateTo] = useState('');
   const [status, setStatus] = useState<SemanticIndexStatus | null>(null);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [memoryRecall, setMemoryRecall] = useState<RecallResult | null>(null);
   const [answer, setAnswer] = useState<SearchAnswerResponse['answer'] | null>(null);
   const [state, setState] = useState<SearchState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function SearchView(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     const handle = window.setTimeout(() => {
-      void runSearch(query, setState, setError, setResults, setAnswer, cancelled);
+      void runSearch(query, setState, setError, setResults, setMemoryRecall, setAnswer, cancelled);
     }, 300);
     return () => {
       cancelled = true;
@@ -65,7 +67,7 @@ export function SearchView(): JSX.Element {
     try {
       const next = await window.orbit.semantic.rebuildIndex();
       setStatus(next);
-      await runSearch(query, setState, setError, setResults, setAnswer, false);
+      await runSearch(query, setState, setError, setResults, setMemoryRecall, setAnswer, false);
     } catch (err) {
       setError((err as Error).message);
       setState('error');
@@ -88,7 +90,7 @@ export function SearchView(): JSX.Element {
   }
 
   async function askAcrossResults(): Promise<void> {
-    if (!results.length) return;
+    if (!results.length && !memoryRecall?.memories.length) return;
     const now = new Date().toISOString();
     const conversation = await window.orbit.chat.createConversation({
       anchor: { kind: 'ask_anywhere_session', refId: `search:${now}`, addedAt: now },
@@ -98,10 +100,25 @@ export function SearchView(): JSX.Element {
     await window.orbit.chat.appendTurn({
       conversationId: conversation.id,
       role: 'user',
-      content: `Use these Orbit search results as context:\n\n${results.slice(0, 8).map(formatResultForPrompt).join('\n\n')}\n\nQuestion: ${query.text || 'What should I notice?'}`,
+      content: `Use these Orbit search results and recalled memories as context:\n\n${[
+        results.slice(0, 8).map(formatResultForPrompt).join('\n\n'),
+        memoryRecall?.memories.slice(0, 5).map((memory) => formatMemoryForPrompt(memory, memoryRecall.matches.find((match) => match.memory_id === memory.id))).join('\n\n')
+      ].filter(Boolean).join('\n\n')}\n\nQuestion: ${query.text || 'What should I notice?'}`,
       artifactRefs: answer ? [answer.id] : undefined
     });
     setView({ kind: 'askAnywhere', activeId: conversation.id });
+  }
+
+  async function markMemory(id: string, helpful: boolean): Promise<void> {
+    const updated = await window.orbit.memory.feedback(id, helpful);
+    setMemoryRecall((current) =>
+      current
+        ? {
+            ...current,
+            memories: current.memories.map((memory) => (memory.id === updated.id ? updated : memory))
+          }
+        : current
+    );
   }
 
   return (
@@ -115,6 +132,7 @@ export function SearchView(): JSX.Element {
       dateTo={dateTo}
       status={status}
       results={results}
+      memoryRecall={memoryRecall}
       answer={answer}
       state={state}
       error={error}
@@ -128,6 +146,7 @@ export function SearchView(): JSX.Element {
       onRebuild={() => void rebuild()}
       onAnswer={() => void answerAcrossResults()}
       onAsk={() => void askAcrossResults()}
+      onMemoryFeedback={(id, helpful) => void markMemory(id, helpful)}
     />
   );
 }
@@ -142,6 +161,7 @@ export function SearchContent(props: {
   dateTo: string;
   status: SemanticIndexStatus | null;
   results: SearchResult[];
+  memoryRecall: RecallResult | null;
   answer: SearchAnswerResponse['answer'] | null;
   state: SearchState;
   error: string | null;
@@ -155,8 +175,10 @@ export function SearchContent(props: {
   onRebuild(): void;
   onAnswer(): void;
   onAsk(): void;
+  onMemoryFeedback(id: string, helpful: boolean): void;
 }): JSX.Element {
   const stale = (props.status?.stale_docs ?? 0) > 0;
+  const memoryCount = props.memoryRecall?.memories.length ?? 0;
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -207,16 +229,35 @@ export function SearchContent(props: {
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-neutral-500">{props.results.length} result(s)</p>
+          <p className="text-sm text-neutral-500">{props.results.length} result(s) · {memoryCount} memory hit(s)</p>
           <div className="flex gap-2">
             <button onClick={props.onAnswer} disabled={!props.results.length} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm disabled:opacity-40 dark:border-neutral-700">
               Generate answer
             </button>
-            <button onClick={props.onAsk} disabled={!props.results.length} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-950">
+            <button onClick={props.onAsk} disabled={!props.results.length && !memoryCount} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-950">
               Ask across results
             </button>
           </div>
         </div>
+
+        {props.memoryRecall?.memories.length ? (
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Recalled memory</h2>
+              <span className="text-xs text-emerald-700 dark:text-emerald-300">{props.memoryRecall.explanation}</span>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {props.memoryRecall.memories.map((memory) => (
+                <SearchMemoryCard
+                  key={memory.id}
+                  memory={memory}
+                  match={props.memoryRecall?.matches.find((item) => item.memory_id === memory.id)}
+                  onFeedback={props.onMemoryFeedback}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {props.state === 'loading' ? (
           <SearchSkeleton />
@@ -241,6 +282,7 @@ async function runSearch(
   setState: (state: SearchState) => void,
   setError: (error: string | null) => void,
   setResults: (results: SearchResult[]) => void,
+  setMemoryRecall: (result: RecallResult | null) => void,
   setAnswer: (answer: SearchAnswerResponse['answer'] | null) => void,
   cancelled: boolean
 ): Promise<void> {
@@ -248,14 +290,26 @@ async function runSearch(
   setState('loading');
   setError(null);
   try {
-    const response: SearchResponse = await window.orbit.semantic.search(query);
+    const [response, recall] = await Promise.all([
+      window.orbit.semantic.search(query),
+      query.text.trim()
+        ? window.orbit.memory.recall(query.text, {
+            max_memories: 5,
+            min_confidence: 0.45,
+            triggered_by: { kind: 'search', ref: query.text.slice(0, 120) },
+            used_in: 'question_answer'
+          }).catch(() => null)
+        : Promise.resolve(null)
+    ]);
     if (cancelled) return;
     setResults(response.results);
+    setMemoryRecall(recall);
     setAnswer(null);
-    setState(response.results.length ? 'success' : 'empty');
+    setState(response.results.length || recall?.memories.length ? 'success' : 'empty');
   } catch (err) {
     if (cancelled) return;
     setError((err as Error).message);
+    setMemoryRecall(null);
     setState('error');
   }
 }
@@ -341,6 +395,35 @@ function ResultCard({ result }: { result: SearchResult }): JSX.Element {
   );
 }
 
+function SearchMemoryCard(props: {
+  memory: MemoryNode;
+  match?: MemoryRecallMatch;
+  onFeedback(id: string, helpful: boolean): void;
+}): JSX.Element {
+  return (
+    <article className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm dark:border-emerald-900 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{props.memory.layer}</span>
+        <span className="rounded-full border border-emerald-300 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-800 dark:text-emerald-300">{props.memory.kind}</span>
+        {props.match ? <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">score {props.match.score.toFixed(2)}</span> : null}
+      </div>
+      <h3 className="mt-3 text-sm font-semibold">{props.memory.title}</h3>
+      <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-300">{props.memory.summary}</p>
+      <p className="mt-3 text-xs text-neutral-500">
+        {props.match?.reasons.slice(0, 2).join(' · ') ?? 'recalled from memory'}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button onClick={() => props.onFeedback(props.memory.id, true)} className="rounded-lg border border-emerald-300 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-800 dark:text-emerald-300">Helpful</button>
+        <button onClick={() => props.onFeedback(props.memory.id, false)} className="rounded-lg border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">Not relevant</button>
+      </div>
+    </article>
+  );
+}
+
 function formatResultForPrompt(result: SearchResult): string {
   return `- ${result.doc.title} (${result.entity_label}, score ${result.score}): ${result.snippets?.[0] ?? result.doc.content.slice(0, 300)}`;
+}
+
+function formatMemoryForPrompt(memory: MemoryNode, match?: MemoryRecallMatch): string {
+  return `- Memory [${memory.layer}/${memory.kind}] ${memory.title}: ${memory.summary}${match ? `\n  Why recalled: ${match.reasons.join('; ')}` : ''}`;
 }

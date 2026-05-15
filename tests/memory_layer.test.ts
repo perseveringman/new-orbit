@@ -68,6 +68,32 @@ describe('Memory Layer', () => {
     expect(result.matches[0].reasons.join(' ')).toContain('matched terms');
     expect(stats.total).toBe(1);
     expect(stats.by_kind.ask).toBe(1);
+    expect(stats.recent[0].reasons?.join(' ')).toContain('matched terms');
+  });
+
+  it('builds memory graph relations and applies feedback to confidence', async () => {
+    const store = createMemoryStore(vaultPath);
+    const first = await store.create({
+      kind: 'entity_memory',
+      title: 'Orbit memory graph',
+      summary: 'resource:memory connects graph-based personal context.',
+      confidence: 0.6,
+      related_entities: ['resource:memory']
+    });
+    const second = await store.create({
+      kind: 'interest',
+      title: 'Memory graph interest',
+      summary: 'User is interested in resource:memory graph context.',
+      confidence: 0.6,
+      related_entities: ['resource:memory']
+    });
+
+    const graph = await store.graph();
+    const feedback = await store.recordFeedback(first.id, true);
+
+    expect(graph.relations.some((relation) => new Set([relation.from_id, relation.to_id]).has(first.id) && new Set([relation.from_id, relation.to_id]).has(second.id) && relation.kind === 'shared_entity')).toBe(true);
+    expect(feedback.confidence).toBeGreaterThan(first.confidence);
+    expect((await store.getRecallStats(first.id)).recent[0].was_helpful).toBe(true);
   });
 
   it('promotes memories to Resource and Project truth only through explicit calls', async () => {
