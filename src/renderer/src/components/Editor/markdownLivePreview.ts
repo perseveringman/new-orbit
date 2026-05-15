@@ -17,6 +17,15 @@ type ReservedRange = {
   to: number;
 };
 
+type BlockDecoration = {
+  from: number;
+  to: number;
+  endLine: number;
+  decoration: Decoration;
+  activeDecoration?: Decoration;
+  renderWhenActive?: boolean;
+};
+
 type LineDecorationOptions = {
   revealSyntax: boolean;
   context: MarkdownLivePreviewContext;
@@ -211,6 +220,7 @@ function collectBlockDecorations(
       parseMathBlock(view, lineNo) ??
       parseCalloutBlock(view, lineNo) ??
       parseTableBlock(view, lineNo) ??
+      parseAttachmentMediaBlock(view, lineNo, context) ??
       parseMediaBlock(view, lineNo, context) ??
       parseHorizontalRuleBlock(view, lineNo) ??
       parseFootnoteBlock(view, lineNo) ??
@@ -218,7 +228,10 @@ function collectBlockDecorations(
       parseHtmlBlock(view, lineNo);
 
     if (!block) continue;
-    if (!rangeTouchesActiveLine(view, block.from, block.to, activeLines)) {
+    const active = rangeTouchesActiveLine(view, block.from, block.to, activeLines);
+    if (active && block.activeDecoration) {
+      decorations.push({ from: block.to, to: block.to, decoration: block.activeDecoration });
+    } else if (block.renderWhenActive || !active) {
       decorations.push({ from: block.from, to: block.to, decoration: block.decoration });
       skippedRanges.push({ from: block.from, to: block.to });
     }
@@ -229,7 +242,7 @@ function collectBlockDecorations(
 function parseFencedCodeBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
   const opening = /^ {0,3}(`{3,}|~{3,})\s*([^`]*)$/.exec(line.text);
@@ -266,7 +279,7 @@ function parseFencedCodeBlock(
 function parseMathBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
   if (line.text.trim() !== '$$') return null;
@@ -294,7 +307,7 @@ function parseMathBlock(
 function parseCalloutBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
   const match = /^>\s*\[!([A-Za-z][\w-]*)\]([+-])?\s*(.*)$/.exec(line.text);
@@ -324,7 +337,7 @@ function parseCalloutBlock(
 function parseTableBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const doc = view.state.doc;
   if (lineNo >= doc.lines) return null;
   const headerLine = doc.line(lineNo);
@@ -354,11 +367,43 @@ function parseTableBlock(
   };
 }
 
+function parseAttachmentMediaBlock(
+  view: EditorView,
+  lineNo: number,
+  context: MarkdownLivePreviewContext
+): BlockDecoration | null {
+  const line = view.state.doc.line(lineNo);
+  const list = /^(\s*(?:[-*+]|\d+[.)])\s+)(.+)$/.exec(line.text);
+  if (!list?.[2]) return null;
+
+  const content = list[2].trim();
+  const embeds = mediaEmbedsFromText(content, context).filter((embed) =>
+    embed.kind === 'image' || embed.kind === 'audio' || embed.kind === 'video' || embed.kind === 'pdf'
+  );
+  if (embeds.length === 0) return null;
+
+  const caption = contentWithoutMediaSyntax(content).replace(/^[：:]\s*/, '').trim();
+  return {
+    from: line.from,
+    to: line.to,
+    endLine: lineNo,
+    decoration: Decoration.replace({
+      block: true,
+      widget: new AttachmentMediaWidget(embeds, caption)
+    }),
+    activeDecoration: Decoration.widget({
+      block: true,
+      side: 1,
+      widget: new AttachmentMediaWidget(embeds, caption)
+    })
+  };
+}
+
 function parseMediaBlock(
   view: EditorView,
   lineNo: number,
   context: MarkdownLivePreviewContext
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const line = view.state.doc.line(lineNo);
   const embeds = parseOnlyMediaEmbeds(line.text.trim(), context);
   if (!embeds.length) return null;
@@ -366,14 +411,19 @@ function parseMediaBlock(
     from: line.from,
     to: line.to,
     endLine: lineNo,
-    decoration: Decoration.replace({ block: true, widget: new MediaGroupWidget(embeds) })
+    decoration: Decoration.replace({ block: true, widget: new MediaGroupWidget(embeds) }),
+    activeDecoration: Decoration.widget({
+      block: true,
+      side: 1,
+      widget: new MediaGroupWidget(embeds)
+    })
   };
 }
 
 function parseHorizontalRuleBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const line = view.state.doc.line(lineNo);
   if (!/^ {0,3}(([-*_])\s*){3,}$/.test(line.text)) return null;
   if (lineNo > 1 && view.state.doc.line(lineNo - 1).text.trim()) return null;
@@ -388,7 +438,7 @@ function parseHorizontalRuleBlock(
 function parseFootnoteBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
   const match = /^\[\^([^\]\n]+)\]:\s*(.*)$/.exec(line.text);
@@ -418,7 +468,7 @@ function parseFootnoteBlock(
 function parseObsidianCommentBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
   const start = line.text.indexOf('%%');
@@ -462,7 +512,7 @@ function parseObsidianCommentBlock(
 function parseHtmlBlock(
   view: EditorView,
   lineNo: number
-): { from: number; to: number; endLine: number; decoration: Decoration } | null {
+): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
   if (!/^ {0,3}<\/?[A-Za-z][^>]*>\s*$/.test(line.text)) return null;
@@ -850,6 +900,44 @@ function parseOnlyMediaEmbeds(text: string, context: MarkdownLivePreviewContext)
   }
 
   return embeds;
+}
+
+function mediaEmbedsFromText(text: string, context: MarkdownLivePreviewContext): MediaEmbed[] {
+  const embeds: MediaEmbed[] = [];
+
+  IMAGE_RE.lastIndex = 0;
+  let image: RegExpExecArray | null;
+  while ((image = IMAGE_RE.exec(text))) {
+    const embed = mediaFromMarkdownImage(image[0], image[1] ?? '', image[2] ?? '', context);
+    if (embed) embeds.push(embed);
+  }
+
+  OBSIDIAN_EMBED_RE.lastIndex = 0;
+  let obsidian: RegExpExecArray | null;
+  while ((obsidian = OBSIDIAN_EMBED_RE.exec(text))) {
+    const embed = mediaFromObsidianEmbed(obsidian[0], obsidian[1] ?? '', context);
+    if (embed) embeds.push(embed);
+  }
+
+  LINK_RE.lastIndex = 0;
+  let link: RegExpExecArray | null;
+  while ((link = LINK_RE.exec(text))) {
+    if (link.index > 0 && text[link.index - 1] === '!') continue;
+    const embed = mediaFromMarkdownLink(link[0], link[1] ?? '', link[2] ?? '', context);
+    if (embed) embeds.push(embed);
+  }
+
+  return embeds;
+}
+
+function contentWithoutMediaSyntax(text: string): string {
+  return text
+    .replace(IMAGE_RE, '')
+    .replace(OBSIDIAN_EMBED_RE, '')
+    .replace(LINK_RE, '')
+    .replace(/\s+·\s+/g, ' · ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function mediaFromMarkdownImage(
@@ -1287,6 +1375,39 @@ class MediaGroupWidget extends WidgetType {
   }
 }
 
+class AttachmentMediaWidget extends WidgetType {
+  constructor(
+    private readonly embeds: MediaEmbed[],
+    private readonly caption: string
+  ) {
+    super();
+  }
+
+  eq(other: AttachmentMediaWidget): boolean {
+    return JSON.stringify(other.embeds) === JSON.stringify(this.embeds) && other.caption === this.caption;
+  }
+
+  toDOM(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cm-md-attachment-media';
+    if (this.caption) {
+      const label = document.createElement('div');
+      label.className = 'cm-md-attachment-media-label';
+      label.textContent = this.caption;
+      wrapper.appendChild(label);
+    }
+    const media = document.createElement('div');
+    media.className = 'cm-md-attachment-media-body';
+    this.embeds.forEach((embed) => media.appendChild(renderMedia(embed, 'block')));
+    wrapper.appendChild(media);
+    return wrapper;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
 class InlineMediaWidget extends WidgetType {
   constructor(private readonly embed: MediaEmbed) {
     super();
@@ -1602,6 +1723,24 @@ export const livePreviewTheme = EditorView.baseTheme({
     gap: '10px',
     margin: '8px 0 14px'
   },
+  '.cm-md-attachment-media': {
+    display: 'grid',
+    gap: '8px',
+    margin: '8px 0 14px',
+    border: '1px solid #e5e5e5',
+    borderRadius: '6px',
+    backgroundColor: '#fafafa',
+    padding: '10px 12px'
+  },
+  '.cm-md-attachment-media-label': {
+    color: '#525252',
+    fontSize: '12px',
+    fontWeight: '600'
+  },
+  '.cm-md-attachment-media-body': {
+    display: 'grid',
+    gap: '10px'
+  },
   '.cm-md-media': {
     maxWidth: '100%'
   },
@@ -1730,6 +1869,13 @@ export const livePreviewTheme = EditorView.baseTheme({
   },
   '.dark & .cm-md-table-wrap th': {
     backgroundColor: '#171717'
+  },
+  '.dark & .cm-md-attachment-media': {
+    borderColor: '#262626',
+    backgroundColor: '#171717'
+  },
+  '.dark & .cm-md-attachment-media-label': {
+    color: '#d4d4d4'
   },
   '.dark & .cm-md-media img, .dark & .cm-md-media video, .dark & .cm-md-media iframe': {
     borderColor: '#262626'
