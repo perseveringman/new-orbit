@@ -392,7 +392,6 @@ function parseAttachmentMediaBlock(
       widget: new AttachmentMediaWidget(embeds, caption)
     }),
     activeDecoration: Decoration.widget({
-      block: true,
       side: 1,
       widget: new AttachmentMediaWidget(embeds, caption)
     })
@@ -413,7 +412,6 @@ function parseMediaBlock(
     endLine: lineNo,
     decoration: Decoration.replace({ block: true, widget: new MediaGroupWidget(embeds) }),
     activeDecoration: Decoration.widget({
-      block: true,
       side: 1,
       widget: new MediaGroupWidget(embeds)
     })
