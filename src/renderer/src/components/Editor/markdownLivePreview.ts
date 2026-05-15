@@ -80,6 +80,18 @@ const INLINE_COMMENT_RE = /%%([^%\n]|%(?!%))*%%/g;
 const IMAGE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'tif', 'tiff', 'webp']);
 const AUDIO_EXTENSIONS = new Set(['aac', 'aiff', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'weba', 'webm']);
 const VIDEO_EXTENSIONS = new Set(['m4v', 'mov', 'mp4', 'mpeg', 'ogv', 'webm']);
+const VAULT_RELATIVE_ROOTS = new Set([
+  '.orbit',
+  '01_Projects',
+  '02_Areas',
+  '03_Resources',
+  '04_Archives',
+  'feeds',
+  'knowledge-base',
+  'library',
+  'notes',
+  'resources'
+]);
 
 export function buildLivePreviewDecorations(
   view: EditorView,
@@ -950,14 +962,54 @@ function stripTargetFragment(target: string): string {
 function resolveAssetUrl(target: string, context: MarkdownLivePreviewContext): string | null {
   const clean = target.trim();
   if (!clean) return null;
-  if (/^(https?:|data:|blob:|file:)/i.test(clean)) return clean;
+  if (/^file:/i.test(clean)) {
+    const vaultRelative = vaultRelativeFromFileUrl(clean, context);
+    return vaultRelative ? vaultMediaUrl(vaultRelative) : clean;
+  }
+  if (/^(https?:|data:|blob:|orbit-media:)/i.test(clean)) return clean;
   if (/^[A-Za-z][A-Za-z0-9+.-]*:/i.test(clean)) return null;
-  if (clean.startsWith('/')) return pathToFileUrl(clean);
   if (!context.vaultRoot) return null;
 
+  if (clean.startsWith('/')) {
+    const vaultRelative = vaultRelativeFromAbsolutePath(clean, context.vaultRoot);
+    return vaultRelative ? vaultMediaUrl(vaultRelative) : pathToFileUrl(clean);
+  }
+
   const noteDir = context.notePath ? dirnamePosix(context.notePath) : '';
-  const relative = normalizePosixPath(joinPosix(noteDir, clean));
-  return pathToFileUrl(joinFileSystemPath(context.vaultRoot, relative));
+  const relative = normalizePosixPath(isVaultRelativePath(clean) ? clean : joinPosix(noteDir, clean));
+  return vaultMediaUrl(relative);
+}
+
+function isVaultRelativePath(value: string): boolean {
+  const normalized = normalizePosixPath(value);
+  const root = normalized.split('/')[0] ?? '';
+  return VAULT_RELATIVE_ROOTS.has(root);
+}
+
+function vaultMediaUrl(relativePath: string): string {
+  const encoded = normalizePosixPath(relativePath)
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  return `orbit-media://vault/${encoded}`;
+}
+
+function vaultRelativeFromFileUrl(value: string, context: MarkdownLivePreviewContext): string | null {
+  if (!context.vaultRoot) return null;
+  try {
+    const url = new URL(value);
+    return vaultRelativeFromAbsolutePath(decodeURIComponent(url.pathname), context.vaultRoot);
+  } catch {
+    return null;
+  }
+}
+
+function vaultRelativeFromAbsolutePath(filePath: string, vaultRoot: string): string | null {
+  const normalizedRoot = vaultRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  if (normalizedPath === normalizedRoot) return '';
+  if (!normalizedPath.startsWith(`${normalizedRoot}/`)) return null;
+  return normalizePosixPath(normalizedPath.slice(normalizedRoot.length + 1));
 }
 
 function pathToFileUrl(filePath: string): string {
@@ -984,11 +1036,6 @@ function normalizePosixPath(input: string): string {
     else output.push(part);
   }
   return output.join('/');
-}
-
-function joinFileSystemPath(root: string, relative: string): string {
-  const cleanRoot = root.replace(/[\\/]+$/, '');
-  return `${cleanRoot}/${relative}`;
 }
 
 function basename(target: string): string {

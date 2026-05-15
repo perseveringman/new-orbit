@@ -71,6 +71,7 @@ import {
 } from './crash';
 import { detectClaude, resetDetectCache } from './agent/cli';
 import { startCliServerForVault, stopCliServer } from './cli_server';
+import { registerOrbitMediaProtocol, registerOrbitMediaScheme } from './media_protocol';
 
 // --- userData override (for e2e + isolation) ---
 // If ORBIT_USER_DATA is set before app is ready, point Electron's userData
@@ -89,6 +90,8 @@ let mainWindow: BrowserWindow | null = null;
 let currentVault: VaultInfo | null = null;
 let mobileInboundWatcher: MobileInboundWatcher | null = null;
 const DEFAULT_ZOOM_FACTOR = 1;
+
+registerOrbitMediaScheme();
 
 // Install crash handlers as early as possible.
 installMainCrashHandlers({
@@ -441,6 +444,7 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
+  registerOrbitMediaProtocol(() => currentVault?.path ?? null);
   registerIpc();
   // attempt to auto-open last vault unless the user opted out.
   try {
