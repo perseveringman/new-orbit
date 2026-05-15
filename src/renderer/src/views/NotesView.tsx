@@ -52,6 +52,7 @@ export function NotesView(): JSX.Element {
   const [actingSuggestion, setActingSuggestion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dark = useWorkspace((state) => state.resolvedTheme === 'dark');
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
   const active = workbench?.note ?? null;
   const activeRef = useRef<Note | null>(null);
   const formNoteIdRef = useRef<string | null>(null);
@@ -466,6 +467,8 @@ export function NotesView(): JSX.Element {
                 onChange={setBody}
                 mode={editorMode}
                 dark={dark}
+                vaultRoot={vaultRoot}
+                notePath={active.path}
                 placeholder="Start writing..."
                 onBlur={() => void persistDraft()}
                 className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-950"
