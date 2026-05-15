@@ -74,6 +74,7 @@ import type {
   ConversationMeta as ChatConversationMeta,
   ConversationTurn as ChatConversationTurn
 } from '@shared/conversation';
+import type { BuildContextPacketInput, BuildWorkContextInput } from '@shared/context';
 import type { ChatAppendTurnInput, ChatCreateConversationInput } from '@shared/ipc';
 import type { AgentToolRegistrySnapshot } from '@shared/agent-tools';
 import type {
@@ -885,6 +886,10 @@ const api: OrbitApi = {
       ipcRenderer.on(IPC.semantic.event, listener);
       return () => ipcRenderer.removeListener(IPC.semantic.event, listener);
     }
+  },
+  context: {
+    buildPacket: (input: BuildContextPacketInput) => ipcRenderer.invoke(IPC.context.buildPacket, input),
+    workContext: (input?: BuildWorkContextInput) => ipcRenderer.invoke(IPC.context.workContext, input)
   },
   evidence: {
     list: (filter?: EvidenceSourceFilter) => ipcRenderer.invoke(IPC.evidence.list, filter),

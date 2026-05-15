@@ -2,6 +2,7 @@ import type { SidebarPanelId, SidebarSurfaceId } from './vaultRightSidebarModel'
 
 export type ProjectRoomHeaderAction = 'archive-project';
 export type ProjectRoomOuterTab =
+  | 'context'
   | 'kanban'
   | 'terminal'
   | 'sessions'
@@ -49,6 +50,7 @@ export function resolveProjectRoomSidebarSurface(outerTab: ProjectRoomOuterTab):
   if (outerTab === 'terminal') return 'project.terminal';
   if (outerTab === 'sessions') return 'project.sessions';
   if (outerTab === 'github') return 'project.github';
+  if (outerTab === 'context') return 'project.kanban';
   if (outerTab === 'materials') return 'project.kanban';
   if (outerTab === 'outputs') return 'project.kanban';
   if (outerTab === 'planner') return 'project.kanban';
@@ -65,12 +67,13 @@ export function resolveProjectRoomSidebarPanel(
 
 export function resolveProjectRoomPaneHint(pane?: 'task'): 'task' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | 'readme' | 'agent'
-): 'task' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | null;
+  pane?: 'task' | 'context' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | 'readme' | 'agent'
+): 'task' | 'context' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | null;
 export function resolveProjectRoomPaneHint(
-  pane?: 'task' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | 'readme' | 'agent'
-): 'task' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | null {
+  pane?: 'task' | 'context' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | 'readme' | 'agent'
+): 'task' | 'context' | 'sessions' | 'github' | 'materials' | 'outputs' | 'planner' | 'roles' | null {
   if (pane === 'task') return 'task';
+  if (pane === 'context') return 'context';
   if (pane === 'sessions') return 'sessions';
   if (pane === 'github') return 'github';
   if (pane === 'materials') return 'materials';

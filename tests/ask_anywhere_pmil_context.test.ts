@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildAskAnywhereContext, renderPMILContextPacket } from '../src/main/ask-anywhere/orchestrator';
+import { buildAskAnywhereContext, contextPacketToStageArtifact, renderPMILContextPacket } from '../src/main/ask-anywhere/orchestrator';
 import { createEvidenceChunkIndexStore } from '../src/main/evidence';
 import { createNoteStore } from '../src/main/note/store';
 import type { ContextPacket } from '../src/shared/context';
@@ -19,13 +19,17 @@ afterEach(async () => {
 
 describe('Ask Anywhere PMIL context', () => {
   it('renders context packets with evidence and synthesis references for prompt injection', () => {
-    const rendered = renderPMILContextPacket(samplePacket());
+    const packet = samplePacket();
+    const rendered = renderPMILContextPacket(packet);
+    const artifact = contextPacketToStageArtifact(packet);
 
     expect(rendered).toContain('<pmil_context_packet');
     expect(rendered).toContain('Evidence selectors: 1');
     expect(rendered).toContain('Synthesis refs: synth-qa-1');
     expect(rendered).toContain('PMIL should use cited evidence.');
     expect(rendered).toContain('evidence:note:pmil#semantic_chunk');
+    expect(artifact.kind).toBe('pmil.context_packet');
+    expect(artifact.summary).toContain('1 section');
   });
 
   it('adds PMIL evidence context to the existing Ask scope context', async () => {

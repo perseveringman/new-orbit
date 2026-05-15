@@ -1,4 +1,5 @@
 import type { EvidenceScopeRef, EvidenceSelector } from '../evidence';
+import type { OpenLoopPayload, WorkContextPayload } from '../synthesis/payloads';
 
 export type ContextPacketPurpose = 'ask' | 'task' | 'review' | 'project' | 'area' | 'resource';
 
@@ -58,4 +59,17 @@ export interface BuildContextPacketInput {
   evidence_limit?: number;
   graph_limit?: number;
   synthesis_mode?: 'lookup' | 'ensure' | 'off';
+}
+
+export interface BuildWorkContextInput {
+  scope?: ContextPacketScope;
+  period?: { from: string; to: string };
+  query?: string;
+  limit?: number;
+}
+
+export interface WorkContextReport {
+  work_context: WorkContextPayload;
+  open_loops: OpenLoopPayload;
+  evidence: EvidenceSelector[];
 }

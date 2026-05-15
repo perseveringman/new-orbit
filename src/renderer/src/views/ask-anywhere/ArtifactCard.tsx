@@ -1,6 +1,20 @@
 import type { Artifact } from '@shared/stage';
+import { PMILContextArtifactCard, PMIL_CONTEXT_ARTIFACT_KIND } from '../../components/conversation/PMILContextPanel';
 
 export function ArtifactCard({
+  artifact,
+  onAction
+}: {
+  artifact: Artifact;
+  onAction?(artifactId: string, actionId: string): void;
+}): JSX.Element {
+  if (artifact.kind === PMIL_CONTEXT_ARTIFACT_KIND) {
+    return <PMILContextArtifactCard artifact={artifact} />;
+  }
+  return <DefaultArtifactCard artifact={artifact} onAction={onAction} />;
+}
+
+function DefaultArtifactCard({
   artifact,
   onAction
 }: {
@@ -58,4 +72,3 @@ function colorClass(kind: string, status: Artifact['status']): string {
   if (kind.includes('retrieved')) return 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900';
   return 'border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100';
 }
-

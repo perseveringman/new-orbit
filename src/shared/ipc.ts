@@ -53,6 +53,7 @@ import type {
   ConversationTurn as ChatConversationTurn,
   ConversationTurnRole as ChatConversationTurnRole
 } from './conversation';
+import type { BuildContextPacketInput, BuildWorkContextInput, ContextPacket, WorkContextReport } from './context';
 
 export interface ChatCreateConversationInput {
   anchor: ChatConversationAnchor;
@@ -720,6 +721,10 @@ export const IPC = {
     rebuildIndex: 'semantic:rebuildIndex',
     searchAndAnswer: 'semantic:searchAndAnswer',
     event: 'semantic:event'
+  },
+  context: {
+    buildPacket: 'context:buildPacket',
+    workContext: 'context:workContext'
   },
   evidence: {
     list: 'evidence:list',
@@ -1815,6 +1820,10 @@ export interface OrbitApi {
     rebuildIndex(): Promise<SemanticIndexStatus>;
     searchAndAnswer(query: SearchQuery): Promise<SearchAnswerResponse>;
     onEvent(cb: (event: { type: string; status?: SemanticIndexStatus }) => void): () => void;
+  };
+  context: {
+    buildPacket(input: BuildContextPacketInput): Promise<ContextPacket>;
+    workContext(input?: BuildWorkContextInput): Promise<WorkContextReport>;
   };
   evidence: {
     list(filter?: EvidenceSourceFilter): Promise<EvidenceSource[]>;

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { WorkContextReport } from '@shared/context';
+import type { EvidenceReadResult, EvidenceSelector } from '@shared/evidence';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import type { ProjectSummaryDTO } from '@shared/ipc';
 import type { GitHubProjectState } from '@shared/github';
@@ -68,20 +70,24 @@ export function ProjectRoomView(): JSX.Element {
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [migrateOpen, setMigrateOpen] = useState(false);
   const [workdirBusy, setWorkdirBusy] = useState(false);
+  const [pmilContext, setPMILContext] = useState<WorkContextReport | null>(null);
+  const [pmilLoading, setPMILLoading] = useState(false);
+  const [pmilError, setPMILError] = useState<string | null>(null);
 
   // Outer tab: persisted per project
   const outerTabKey = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
   const [outerTab, setOuterTabRaw] = useState<ProjectRoomOuterTab>(() => {
     try {
       const v = localStorage.getItem(outerTabKey);
-      return v === 'terminal' ||
+      return v === 'context' ||
+        v === 'terminal' ||
         v === 'sessions' ||
         v === 'github' ||
         v === 'materials' ||
         v === 'outputs' ||
         v === 'planner' ||
         v === 'roles'
-        ? v
+        ? (v as ProjectRoomOuterTab)
         : 'kanban';
     } catch {
       return 'kanban';
@@ -106,6 +112,7 @@ export function ProjectRoomView(): JSX.Element {
       const key = `orbit.projectRoom.outerTab.${activeProjectUid ?? '__none__'}`;
       const v = localStorage.getItem(key);
       setOuterTabRaw(
+        v === 'context' ||
         v === 'terminal' ||
         v === 'sessions' ||
         v === 'github' ||
@@ -113,7 +120,7 @@ export function ProjectRoomView(): JSX.Element {
         v === 'outputs' ||
         v === 'planner' ||
         v === 'roles'
-          ? v
+          ? (v as ProjectRoomOuterTab)
           : 'kanban'
       );
     } catch {
@@ -164,6 +171,45 @@ export function ProjectRoomView(): JSX.Element {
     void refreshGitHubState();
   }, [refreshGitHubState]);
 
+  const refreshPMILContext = useCallback(async () => {
+    if (!project) {
+      setPMILContext(null);
+      return;
+    }
+    setPMILLoading(true);
+    setPMILError(null);
+    try {
+      const contextApi = window.orbit.context;
+      if (!contextApi?.workContext) {
+        throw new Error('上下文桥接还未加载，请重启 Orbit 后再刷新。');
+      }
+      const now = new Date();
+      const from = new Date(now.getTime() - 1000 * 60 * 60 * 24 * 30);
+      const report = await withPMILTimeout(
+        contextApi.workContext({
+          scope: { kind: 'project', ref: project.uid },
+          period: { from: from.toISOString(), to: now.toISOString() },
+          query: `${project.name} current focus open loops blockers decisions next steps`,
+          limit: 36
+        })
+      );
+      setPMILContext(report);
+    } catch (error) {
+      setPMILContext(null);
+      setPMILError((error as Error).message);
+    } finally {
+      setPMILLoading(false);
+    }
+  }, [project]);
+
+  useEffect(() => {
+    if (outerTab === 'context') {
+      void refreshPMILContext();
+    } else if (!project) {
+      setPMILContext(null);
+    }
+  }, [outerTab, project, refreshPMILContext]);
+
   // Respond to fs events so drag-drops/external writes reflect promptly.
   useEffect(() => {
     const off = window.orbit.fs.onEvent(() => {
@@ -179,6 +225,7 @@ export function ProjectRoomView(): JSX.Element {
     const hint = resolveProjectRoomPaneHint(
       view.pane as
         | 'task'
+        | 'context'
         | 'sessions'
         | 'github'
         | 'materials'
@@ -191,6 +238,8 @@ export function ProjectRoomView(): JSX.Element {
     );
     if (hint === 'task') {
       setOuterTab('kanban');
+    } else if (hint === 'context') {
+      setOuterTab('context');
     } else if (hint === 'sessions') {
       setOuterTab('sessions');
     } else if (hint === 'github') {
@@ -465,20 +514,23 @@ export function ProjectRoomView(): JSX.Element {
         setOuterTab('kanban');
       } else if (e.key === '2') {
         e.preventDefault();
-        setOuterTab('terminal');
+        setOuterTab('context');
       } else if (e.key === '3') {
         e.preventDefault();
-        setOuterTab('github');
+        setOuterTab('terminal');
       } else if (e.key === '4') {
         e.preventDefault();
-        setOuterTab('sessions');
+        setOuterTab('github');
       } else if (e.key === '5') {
         e.preventDefault();
-        setOuterTab('materials');
+        setOuterTab('sessions');
       } else if (e.key === '6') {
         e.preventDefault();
-        setOuterTab('planner');
+        setOuterTab('materials');
       } else if (e.key === '7') {
+        e.preventDefault();
+        setOuterTab('planner');
+      } else if (e.key === '8') {
         e.preventDefault();
         setOuterTab('roles');
       }
@@ -640,6 +692,9 @@ export function ProjectRoomView(): JSX.Element {
         <OuterTabButton active={outerTab === 'kanban'} onClick={() => setOuterTab('kanban')}>
           Kanban
         </OuterTabButton>
+        <OuterTabButton active={outerTab === 'context'} onClick={() => setOuterTab('context')}>
+          上下文
+        </OuterTabButton>
         <OuterTabButton active={outerTab === 'terminal'} onClick={() => setOuterTab('terminal')}>
           Terminal
         </OuterTabButton>
@@ -661,6 +716,16 @@ export function ProjectRoomView(): JSX.Element {
         <OuterTabButton active={outerTab === 'roles'} onClick={() => setOuterTab('roles')}>
           Roles
         </OuterTabButton>
+      </div>
+
+      <div className={`min-h-0 flex-1 ${outerTab === 'context' ? 'flex' : 'hidden'}`}>
+        <ProjectPMILContextPanel
+          report={pmilContext}
+          loading={pmilLoading}
+          error={pmilError}
+          projectName={project.name}
+          onRefresh={() => void refreshPMILContext()}
+        />
       </div>
 
       {/* Kanban tab content */}
@@ -794,6 +859,190 @@ export function ProjectRoomView(): JSX.Element {
       />
     </div>
   );
+}
+
+export function ProjectPMILContextPanel({
+  report,
+  loading,
+  error,
+  projectName,
+  onRefresh
+}: {
+  report: WorkContextReport | null;
+  loading: boolean;
+  error: string | null;
+  projectName: string;
+  onRefresh(): void;
+}): JSX.Element {
+  const work = report?.work_context;
+  const loops = report?.open_loops.loops ?? [];
+  const threads = work?.active_threads ?? [];
+  return (
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-neutral-50 p-5 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">Personal Memory Intelligence</p>
+            <h2 className="mt-1 text-xl font-semibold">项目上下文 · {projectName}</h2>
+            <p className="mt-1 max-w-3xl text-sm text-neutral-500">
+              基于证据片段、图谱邻居、Personal QA 和开放回路启发式组装当前项目背景。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={loading}
+            className="rounded-lg border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-neutral-700"
+          >
+            {loading ? '刷新中' : '刷新上下文'}
+          </button>
+        </div>
+
+        {error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+            {error}
+          </div>
+        ) : null}
+
+        {!work && !loading ? (
+          <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900">
+            还没有足够的项目上下文。刷新后 Orbit 会从项目 evidence 中构建第一版 Work Context。
+          </div>
+        ) : null}
+
+        {work ? (
+          <>
+            <div className="grid gap-3 md:grid-cols-4">
+              <ProjectContextMetric label="当前焦点" value={work.current_focus} />
+              <ProjectContextMetric label="活跃线索" value={String(threads.length)} />
+              <ProjectContextMetric label="开放回路" value={String(loops.length)} />
+              <ProjectContextMetric label="决策" value={String(work.decisions.length)} />
+            </div>
+
+            <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">活跃线索</h3>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {threads.slice(0, 8).map((thread) => (
+                  <article key={`${thread.title}:${thread.confidence}`} className="rounded-xl border border-violet-200 bg-white p-3 dark:border-violet-900 dark:bg-neutral-900">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-semibold">{thread.title}</h4>
+                      <span className="text-xs text-neutral-500">{Math.round(thread.confidence * 100)}%</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-neutral-600 dark:text-neutral-300">{thread.summary}</p>
+                    {thread.likely_next_steps.length ? (
+                      <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">下一步：{thread.likely_next_steps[0]}</p>
+                    ) : null}
+                    <ProjectEvidenceButtons selectors={thread.evidence} />
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-neutral-500">开放回路</h3>
+                <div className="mt-3 space-y-2">
+                  {loops.length ? loops.slice(0, 8).map((loop) => (
+                    <div key={loop.id} className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">{loop.kind}</span>
+                        <span className={loop.severity === 'warning' ? 'text-xs text-amber-700 dark:text-amber-300' : 'text-xs text-neutral-500'}>{loop.severity}</span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium">{loop.title}</p>
+                      <p className="mt-1 text-xs leading-5 text-neutral-500">{loop.rationale}</p>
+                      <ProjectEvidenceButtons selectors={loop.evidence} />
+                    </div>
+                  )) : <p className="text-sm text-neutral-500">当前证据窗口中没有检测到开放回路。</p>}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-neutral-500">决策</h3>
+                <div className="mt-3 space-y-2">
+                  {work.decisions.length ? work.decisions.slice(0, 8).map((decision) => (
+                    <div key={`${decision.status}:${decision.title}`} className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">{decision.status}</span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium">{decision.title}</p>
+                      <ProjectEvidenceButtons selectors={decision.evidence} />
+                    </div>
+                  )) : <p className="text-sm text-neutral-500">还没有检测到明确的项目决策。</p>}
+                </div>
+              </div>
+            </section>
+          </>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ProjectContextMetric({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-2 line-clamp-2 text-lg font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function ProjectEvidenceButtons({ selectors }: { selectors: EvidenceSelector[] }): JSX.Element | null {
+  if (!selectors.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {selectors.slice(0, 3).map((selector) => (
+        <ProjectEvidenceButton key={projectEvidenceSelectorKey(selector)} selector={selector} />
+      ))}
+    </div>
+  );
+}
+
+function ProjectEvidenceButton({ selector }: { selector: EvidenceSelector }): JSX.Element {
+  const [result, setResult] = useState<EvidenceReadResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function readEvidence(): Promise<void> {
+    setLoading(true);
+    try {
+      setResult(await window.orbit.evidence.read(selector));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex max-w-full flex-col gap-1">
+      <button
+        type="button"
+        onClick={() => void readEvidence()}
+        disabled={loading}
+        className="rounded-md border border-violet-300 px-2 py-0.5 text-[11px] text-violet-700 disabled:opacity-60 dark:border-violet-800 dark:text-violet-200"
+      >
+        {loading ? '读取中' : '查看证据'}
+      </button>
+      {result ? (
+        <span className="rounded-md border border-neutral-200 bg-white p-2 text-[11px] leading-5 text-neutral-600 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
+          <span className="block font-medium text-neutral-800 dark:text-neutral-100">{result.source.title}</span>
+          {result.excerpts[0]?.text.slice(0, 520) ?? '没有可用摘录。'}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function projectEvidenceSelectorKey(selector: EvidenceSelector): string {
+  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
+}
+
+function withPMILTimeout<T>(promise: Promise<T>, ms = 15000): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timer = new Promise<T>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error('项目上下文构建超时，请稍后重试或先刷新 evidence index。')), ms);
+  });
+  return Promise.race([promise, timer]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
 }
 
 function joinFsPath(parent: string, child: string): string {

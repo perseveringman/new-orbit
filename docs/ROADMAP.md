@@ -61,7 +61,7 @@ Delivered:
 - Focused integration tests cover migration, external GitHub import, and
   external-workdir worktree launch.
 
-### 2026-05-16 — PMIL Ask / Evidence / Review loop
+### 2026-05-16 — PMIL Ask / Evidence / Review / Project Context loop
 
 Status: **implemented (foundation)**.
 
@@ -70,14 +70,17 @@ Delivered:
 - Ask Anywhere now injects a PMIL ContextPacket into each user send, after the existing scoped Orbit context.
 - Evidence drill-down has a dedicated IPC/preload namespace (`evidence:list/get/read/sync`) so UI surfaces can read cited snippets by EvidenceSelector.
 - Search PMIL context sections now expose "查看证据" actions for citation drill-down.
+- Ask Anywhere now materializes each injected ContextPacket as a Stage artifact and shows PMIL context chips above the conversation, so prompt context is visible and inspectable.
 - Review runs generate `work.context` and `report.open_loops` synthesis artifacts, then materialize open-loop candidates as Review findings.
 - Review UI shows a Personal Memory Intelligence work-context panel with current focus, active threads, and open loops.
+- `context:*` IPC/preload APIs expose reusable ContextPacket and Work Context builders for surfaces beyond Search/Review.
+- Project Room now has a PMIL context tab that summarizes current focus, active threads, open loops, decisions, and cited evidence for the active project.
 
 Remaining gaps:
 
-- Ask Anywhere still consumes PMIL context invisibly; context chips / citation drawer are next.
-- Project Room and Memory Explorer still need the same evidence inspector.
+- Memory Explorer still needs the same evidence inspector and recall feedback surface.
 - Work Context / Open Loops are deterministic first-pass artifacts; LLM refinement and feedback loops remain future work.
+- Local Agent session providers are registered as reference truth, but still need user-facing settings, filtering, and session-specific synthesis views.
 
 ---
 

@@ -90,6 +90,43 @@ describe('mobile inbound ingest', () => {
     );
   });
 
+  it('shows compressed photos in notes while preserving hidden original image files', async () => {
+    const vault = path.join(tmp, 'vault');
+    const files = {
+      'photo-1.jpg': 'compressed-image-bytes',
+      'original-photo-1.heic': 'original-image-bytes'
+    };
+    const captureDir = await createCapture(
+      'mob_cap_photo',
+      {
+        kind: 'photo',
+        content: 'Whiteboard snapshot',
+        attachments: [
+          attachment('image', 'photo-1.jpg', files['photo-1.jpg'], 'image/jpeg', {
+            width: 1280,
+            height: 960
+          }),
+          attachment('file', 'original-photo-1.heic', files['original-photo-1.heic'], 'image/heic')
+        ]
+      },
+      files
+    );
+
+    const result = await ingestCapture(vault, captureDir, {
+      emitActivity: () => undefined
+    });
+
+    const note = await createNoteStore(vault).get(result.noteId!);
+    expect(note?.frontmatter.type).toBe('capture');
+    expect(note?.body).toContain(
+      '![photo-1.jpg](.orbit/capture/attachments/mob_cap_photo/photo-1.jpg)'
+    );
+    expect(note?.body).not.toContain('original-photo-1.heic');
+    await expect(
+      readFile(path.join(vault, '.orbit', 'capture', 'attachments', 'mob_cap_photo', 'original-photo-1.heic'), 'utf8')
+    ).resolves.toBe(files['original-photo-1.heic']);
+  });
+
   it('moves bad hashes to failed with retryable sha256_mismatch', async () => {
     const vault = path.join(tmp, 'vault');
     const captureDir = await createCapture('mob_cap_bad_hash', { content: 'Corrupted' });
@@ -115,6 +152,7 @@ describe('mobile inbound ingest', () => {
     configureEventReplay(vault);
     const files = {
       'audio.m4a': 'audio-bytes',
+      'partial-transcript.ndjson': '{"ts":"2026-05-15T00:00:00.000Z","text":"今天讨论移动同步。","isFinal":true}\n',
       'final-transcript.json': JSON.stringify({
         schema: 'orbit.transcript@1',
         segments: [
@@ -143,6 +181,12 @@ describe('mobile inbound ingest', () => {
         content: '产品会议\n\n今天讨论移动同步。Ryan 需要调通链路。',
         attachments: [
           attachment('audio', 'audio.m4a', files['audio.m4a'], 'audio/m4a', { duration_ms: 7600 }),
+          attachment(
+            'transcript-partial',
+            'partial-transcript.ndjson',
+            files['partial-transcript.ndjson'],
+            'application/x-ndjson'
+          ),
           attachment('transcript', 'final-transcript.json', files['final-transcript.json'], 'application/json'),
           attachment('derivative', 'summary.json', files['summary.json'], 'application/json', {
             derivative_kind: 'summary'
@@ -184,6 +228,8 @@ describe('mobile inbound ingest', () => {
     expect(note?.body).toContain(
       'Recording source: [audio.m4a](.orbit/capture/attachments/mob_cap_recording/audio.m4a)'
     );
+    expect(note?.body).not.toContain('partial-transcript.ndjson');
+    expect(note?.body).not.toContain('final-transcript.json');
     expect(note?.body).not.toContain('## AI 总结');
     expect(note?.body).not.toContain('确认了手机到 Mac 的 iCloud ingest 链路');
     expect(note?.body).not.toContain('Ryan - 调通链路');
@@ -191,6 +237,12 @@ describe('mobile inbound ingest', () => {
     await expect(
       readFile(path.join(vault, '.orbit', 'capture', 'attachments', 'mob_cap_recording', 'todos.json'), 'utf8')
     ).resolves.toBe(files['todos.json']);
+    await expect(
+      readFile(
+        path.join(vault, '.orbit', 'capture', 'attachments', 'mob_cap_recording', 'final-transcript.json'),
+        'utf8'
+      )
+    ).resolves.toBe(files['final-transcript.json']);
 
     const workbench = await buildNoteWorkbench(vault, result.noteId!);
     expect(workbench.payload.summary).toContain('确认了手机到 Mac 的 iCloud ingest 链路');
@@ -198,6 +250,77 @@ describe('mobile inbound ingest', () => {
       expect.arrayContaining(['summarize', 'propose_task'])
     );
     expect(workbench.payload.suggestions.find((item) => item.kind === 'propose_task')?.summary).toContain('调通链路');
+  });
+
+  it('keeps recording transcript source files but hides unavailable placeholder transcript from note body', async () => {
+    const vault = path.join(tmp, 'vault');
+    configureEventReplay(vault);
+    const files = {
+      'audio.m4a': 'audio-bytes',
+      'partial-transcript.ndjson':
+        '{"ts":"2026-05-15T00:00:00.000Z","text":"语音录制 0 分 4 秒，暂无可用实时转写。","isFinal":true}\n',
+      'final-transcript.json': JSON.stringify({
+        schema: 'orbit.transcript@1',
+        segments: [
+          {
+            speaker: 'S1',
+            start_ms: 0,
+            end_ms: 4000,
+            text: '语音录制 0 分 4 秒，暂无可用实时转写。'
+          }
+        ]
+      })
+    };
+    const captureDir = await createCapture(
+      'mob_cap_no_transcript',
+      {
+        kind: 'recording',
+        content: '新会议 · 现在\n\n语音录制 0 分 4 秒，暂无可用实时转写。',
+        attachments: [
+          attachment('audio', 'audio.m4a', files['audio.m4a'], 'audio/m4a', { duration_ms: 4000 }),
+          attachment(
+            'transcript-partial',
+            'partial-transcript.ndjson',
+            files['partial-transcript.ndjson'],
+            'application/x-ndjson'
+          ),
+          attachment('transcript', 'final-transcript.json', files['final-transcript.json'], 'application/json')
+        ],
+        recording: {
+          duration_ms: 4000,
+          language_hints: ['zh-CN'],
+          speakers: [{ id: 'S1', label: '说话人' }],
+          partial_provider: 'ios-speech',
+          final_provider: 'local-live-transcript',
+          diarization_provider: null
+        }
+      },
+      files
+    );
+
+    const result = await ingestCapture(vault, captureDir, {
+      emitActivity: () => undefined
+    });
+
+    const note = await createNoteStore(vault).get(result.noteId!);
+    expect(note?.frontmatter.audio).toMatchObject({
+      path: '.orbit/capture/attachments/mob_cap_no_transcript/audio.m4a',
+      duration_sec: 4,
+      transcribed: false
+    });
+    expect(note?.body).toContain(
+      'Recording source: [audio.m4a](.orbit/capture/attachments/mob_cap_no_transcript/audio.m4a)'
+    );
+    expect(note?.body).not.toContain('暂无可用实时转写');
+    expect(note?.body).not.toContain('## Transcript excerpt');
+    expect(note?.body).not.toContain('partial-transcript.ndjson');
+    expect(note?.body).not.toContain('final-transcript.json');
+    await expect(
+      readFile(
+        path.join(vault, '.orbit', 'capture', 'attachments', 'mob_cap_no_transcript', 'final-transcript.json'),
+        'utf8'
+      )
+    ).resolves.toBe(files['final-transcript.json']);
   });
 
   it('moves attachment hash mismatches to failed before creating a Note', async () => {

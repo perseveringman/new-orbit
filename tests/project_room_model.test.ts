@@ -32,9 +32,15 @@ describe('project room model', () => {
   });
 
   it('resolves planner and roles deep links to the matching outer tabs', () => {
+    expect(resolveProjectRoomPaneHint('context')).toBe('context');
     expect(resolveProjectRoomPaneHint('materials')).toBe('materials');
     expect(resolveProjectRoomPaneHint('planner')).toBe('planner');
     expect(resolveProjectRoomPaneHint('roles')).toBe('roles');
+  });
+
+  it('keeps the PMIL context tab on the project kanban sidebar surface', () => {
+    const outerTab: ProjectRoomOuterTab = 'context';
+    expect(resolveProjectRoomSidebarSurface(outerTab)).toBe('project.kanban');
   });
 
   it('derives a distinct room instance key for each active project', () => {

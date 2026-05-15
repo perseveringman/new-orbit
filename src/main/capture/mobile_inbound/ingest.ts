@@ -214,7 +214,7 @@ export function buildNoteContent(
   attachments: CopiedAttachment[] = [],
   artifacts: MobileCaptureArtifacts = { derivatives: [] }
 ): string {
-  const sections = [manifest.content.trim()];
+  const sections = [formatManifestBody(manifest, artifacts.transcript)];
   const transcript = formatTranscript(artifacts.transcript);
   if (transcript) sections.push(transcript);
 
@@ -287,7 +287,7 @@ function createNoteInput(
           audio: {
             path: audio.path,
             duration_sec: audio.durationSec,
-            transcribed: Boolean(artifacts.transcript)
+            transcribed: hasUsableTranscript(artifacts.transcript)
           }
         }
       : {})
@@ -597,7 +597,7 @@ function isSupportedAttachmentType(value: string): value is MobileCaptureAttachm
 }
 
 function formatTranscript(transcript: FinalTranscriptArtifact | undefined): string | null {
-  const segments = transcript?.segments?.filter((segment) => segment.text?.trim()) ?? [];
+  const segments = usableTranscriptSegments(transcript);
   if (segments.length === 0) return null;
   return [
     '## Transcript excerpt',
@@ -611,7 +611,10 @@ function formatTranscript(transcript: FinalTranscriptArtifact | undefined): stri
 }
 
 function formatNoteAttachmentLink(attachment: CopiedAttachment): string | null {
-  if (attachment.type === 'derivative') return null;
+  if (attachment.type === 'derivative' || attachment.type === 'transcript' || attachment.type === 'transcript-partial') {
+    return null;
+  }
+  if (isOriginalImageSource(attachment)) return null;
   if (attachment.type === 'image') {
     return `- ![${attachment.filename}](${attachment.vaultRelativePath})`;
   }
@@ -619,10 +622,82 @@ function formatNoteAttachmentLink(attachment: CopiedAttachment): string | null {
     const duration = attachment.durationMs ? ` · ${formatDuration(attachment.durationMs)}` : '';
     return `- Recording source: [${attachment.filename}](${attachment.vaultRelativePath})${duration}`;
   }
-  if (attachment.type === 'transcript') {
-    return `- Transcript file: [${attachment.filename}](${attachment.vaultRelativePath})`;
-  }
   return `- [${attachment.filename}](${attachment.vaultRelativePath})`;
+}
+
+function isOriginalImageSource(attachment: CopiedAttachment): boolean {
+  return attachment.type === 'file' && attachment.mime.startsWith('image/') && /^original-photo-\d+\./.test(attachment.filename);
+}
+
+function formatManifestBody(
+  manifest: MobileCaptureManifest,
+  transcript: FinalTranscriptArtifact | undefined
+): string {
+  const content = manifest.content.trim();
+  if (manifest.kind !== 'recording') return content;
+
+  const withoutTitle = removeLeadingDerivedTitle(content, titleForManifest(manifest));
+  const transcriptLines = new Set(
+    usableTranscriptSegments(transcript)
+      .map((segment) => normalizeComparableText(segment.text ?? ''))
+      .filter(Boolean)
+  );
+  const transcriptText = normalizeDenseText(
+    usableTranscriptSegments(transcript)
+      .map((segment) => segment.text ?? '')
+      .join('')
+  );
+  const visibleLines = withoutTitle
+    .split(/\r?\n/)
+    .filter((line) => {
+      const normalized = normalizeComparableText(line);
+      if (!normalized) return true;
+      if (isUnavailableTranscriptText(normalized)) return false;
+      if (transcriptText && normalizeDenseText(normalized) === transcriptText) return false;
+      return !transcriptLines.has(normalized);
+    })
+    .join('\n')
+    .trim();
+
+  return visibleLines;
+}
+
+function removeLeadingDerivedTitle(content: string, title: string): string {
+  const lines = content.split(/\r?\n/);
+  const firstContentLine = lines.findIndex((line) => line.trim());
+  if (firstContentLine < 0) return '';
+  const normalizedLine = normalizeComparableText(lines[firstContentLine].replace(/^#+\s*/, ''));
+  if (normalizedLine !== normalizeComparableText(title)) return content;
+  lines.splice(firstContentLine, 1);
+  while (lines[firstContentLine]?.trim() === '') {
+    lines.splice(firstContentLine, 1);
+  }
+  return lines.join('\n').trim();
+}
+
+function hasUsableTranscript(transcript: FinalTranscriptArtifact | undefined): boolean {
+  return usableTranscriptSegments(transcript).length > 0;
+}
+
+function usableTranscriptSegments(transcript: FinalTranscriptArtifact | undefined): TranscriptSegment[] {
+  return (
+    transcript?.segments?.filter((segment) => {
+      const text = segment.text?.trim();
+      return Boolean(text && !isUnavailableTranscriptText(text));
+    }) ?? []
+  );
+}
+
+function isUnavailableTranscriptText(value: string): boolean {
+  return /暂无可用实时转写/.test(value);
+}
+
+function normalizeComparableText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeDenseText(value: string): string {
+  return value.replace(/\s+/g, '').trim();
 }
 
 function formatTimestamp(ms: number): string {

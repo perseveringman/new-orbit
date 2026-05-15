@@ -29,6 +29,7 @@ import type { ContextPacket, ContextPacketScope, ContextSection } from '@shared/
 import type { EvidenceSelector } from '@shared/evidence';
 import type { SpaceContextBundle } from '@shared/space';
 import type { SDKEndpointRegistrySnapshot, SDKEndpointView, SDKInvocationMessage, SDKToolDef } from '@shared/runtime';
+import type { Artifact, ConversationStage } from '@shared/stage';
 import type { ConversationOrchestrator } from '../conversation/orchestrator';
 import type { RunnerPool } from '../agent/pool';
 import type { AgentEvent } from '@shared/agent';
@@ -214,11 +215,17 @@ export class AskAnywhereOrchestrator {
     // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
     const history = renderHistory(conv.turns);
     const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
-    const scopedContext = await buildAskAnywhereContext(
+    const contextBundle = await buildAskAnywhereContextBundle(
       vault,
       conv.scope ?? { kind: 'global' },
       trimmed
     );
+    const scopedContext = contextBundle.text;
+    if (contextBundle.packet) {
+      await addContextPacketArtifact(vault, conversationId, contextBundle.packet).catch((error) =>
+        console.warn('[ask-anywhere] failed to add PMIL context packet artifact', error)
+      );
+    }
     const prompt = buildPrompt({ systemPrompt, scopedContext, history, userText: trimmed });
     const router = this.deps.getRuntimeRouter?.() ?? null;
     const agentTools = this.deps.getAgentTools?.() ?? null;
@@ -884,16 +891,27 @@ export async function buildAskAnywhereContext(
   scope: ConversationScope,
   userText: string
 ): Promise<string> {
+  return (await buildAskAnywhereContextBundle(vaultPath, scope, userText)).text;
+}
+
+export async function buildAskAnywhereContextBundle(
+  vaultPath: string,
+  scope: ConversationScope,
+  userText: string
+): Promise<{ text: string; packet?: ContextPacket }> {
   const baseContext = await buildConversationContext(vaultPath, scope);
   const pmilContext = await buildAskPMILContext(vaultPath, scope, userText);
-  return [baseContext, pmilContext].filter(Boolean).join('\n\n');
+  return {
+    text: [baseContext, pmilContext.text].filter(Boolean).join('\n\n'),
+    ...(pmilContext.packet ? { packet: pmilContext.packet } : {})
+  };
 }
 
 async function buildAskPMILContext(
   vaultPath: string,
   scope: ConversationScope,
   userText: string
-): Promise<string> {
+): Promise<{ text: string; packet?: ContextPacket }> {
   try {
     const packet = await buildContextPacket(vaultPath, {
       purpose: 'ask',
@@ -904,9 +922,42 @@ async function buildAskPMILContext(
       graph_limit: 12,
       synthesis_mode: 'ensure'
     });
-    return renderPMILContextPacket(packet);
+    return { text: renderPMILContextPacket(packet), packet };
   } catch (error) {
-    return `<pmil_context_packet status="unavailable">\nContext packet lookup failed: ${(error as Error).message}\n</pmil_context_packet>`;
+    return {
+      text: `<pmil_context_packet status="unavailable">\nContext packet lookup failed: ${(error as Error).message}\n</pmil_context_packet>`
+    };
+  }
+}
+
+async function addContextPacketArtifact(
+  vaultPath: string,
+  conversationId: string,
+  packet: ContextPacket
+): Promise<void> {
+  const stage = createStageStore(vaultPath);
+  await stage.add(conversationId, contextPacketToStageArtifact(packet));
+  await broadcastStage(vaultPath, conversationId);
+}
+
+export function contextPacketToStageArtifact(
+  packet: ContextPacket
+): Omit<Artifact, 'id' | 'conversation_id' | 'created_at'> & Partial<Pick<Artifact, 'id' | 'created_at'>> {
+  const suffix = `${packet.generated_at}:${packet.query ?? ''}`;
+  return {
+    id: `pmil-context-${hashText(`${packet.id}:${suffix}`)}`,
+    kind: 'pmil.context_packet',
+    title: 'PMIL Context Packet',
+    summary: `${packet.sections.length} section(s), ${packet.evidence.length} evidence selector(s), ${packet.synthesis_refs.length} synthesis ref(s)`,
+    payload: packet,
+    status: 'confirmed'
+  };
+}
+
+async function broadcastStage(vaultPath: string, conversationId: string): Promise<void> {
+  const stage: ConversationStage = await createStageStore(vaultPath).get(conversationId);
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(IPC.stage.event, stage);
   }
 }
 
@@ -1013,6 +1064,15 @@ ${clip(raw, 4000)}
 function clip(value: string, limit: number): string {
   const trimmed = value.trim();
   return trimmed.length > limit ? `${trimmed.slice(0, limit)}\n…` : trimmed;
+}
+
+function hashText(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 /**

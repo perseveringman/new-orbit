@@ -14,6 +14,7 @@ export type ArtifactKind =
   | 'proposal.create_project'
   | 'proposal.update_para'
   | 'proposal.run_task'
+  | 'pmil.context_packet'
   | 'analysis.result'
   | 'welcome_analysis.result';
 
@@ -50,4 +51,3 @@ export interface ConversationStage {
   artifacts: Artifact[];
   last_updated: string;
 }
-

@@ -14,6 +14,7 @@ describe('IPC contract', () => {
         'autoRunner',
         'capture',
         'chat',
+        'context',
         'conversation',
         'dashboard',
         'dispatch',
@@ -92,6 +93,12 @@ describe('IPC contract', () => {
       ].sort()
     );
     for (const v of Object.values(IPC.chat)) expect(v.startsWith('chat:')).toBe(true);
+  });
+
+  it('context namespace declares PMIL context channels', () => {
+    const keys = Object.keys(IPC.context).sort();
+    expect(keys).toEqual(['buildPacket', 'workContext'].sort());
+    for (const v of Object.values(IPC.context)) expect(v.startsWith('context:')).toBe(true);
   });
 
   it('agent namespace declares the M4 + M5 + M6 channels', () => {

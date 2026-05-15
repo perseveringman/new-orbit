@@ -17,7 +17,7 @@ related:
 
 > 目标：先建立一套稳定的个人记忆与上下文基础设施，再接入本地 Agent 会话源。这样 Codex / Claude Code / Amp / Copilot 等会话只是新的 truth source provider，不会迫使 Search、Memory、Synthesis、Review、Ask Anywhere 返工。
 
-Implementation status (2026-05-16): Phase A foundation 已落地。代码包含 shared evidence contracts、`.orbit/evidence/sources.json` registry、Orbit-owned Layer 1 provider shim、SemanticDocument evidence provenance，以及 registry/source projection 单元测试。第二轮 recall foundation 已补上 evidence chunk index、deterministic graph skeleton、minimal ContextPacket builder。第三轮已补上 `qa.personal` 最小闭环和本地 Agent session reference-truth provider foundation。第四轮已把 ContextPacket 接入 Semantic Search / Search UI / `search.answer` sources；普通搜索只 lookup 既有 synthesis，显式生成回答才 ensure QA，避免输入搜索时隐性写入大量 artifacts。第五轮已接入 Ask Anywhere prompt context、Evidence drill-down IPC/UI，以及 Review 的 `work.context` / `report.open_loops` artifacts 与 open-loop findings。剩余重点是 Project Room / Memory Explorer evidence inspector、MemoryNode v2 feedback、entity profile 与更强的本地 Agent session UI/settings。
+Implementation status (2026-05-16): Phase A foundation 已落地。代码包含 shared evidence contracts、`.orbit/evidence/sources.json` registry、Orbit-owned Layer 1 provider shim、SemanticDocument evidence provenance，以及 registry/source projection 单元测试。第二轮 recall foundation 已补上 evidence chunk index、deterministic graph skeleton、minimal ContextPacket builder。第三轮已补上 `qa.personal` 最小闭环和本地 Agent session reference-truth provider foundation。第四轮已把 ContextPacket 接入 Semantic Search / Search UI / `search.answer` sources；普通搜索只 lookup 既有 synthesis，显式生成回答才 ensure QA，避免输入搜索时隐性写入大量 artifacts。第五轮已接入 Ask Anywhere prompt context、Evidence drill-down IPC/UI，以及 Review 的 `work.context` / `report.open_loops` artifacts 与 open-loop findings。第六轮已把 Ask ContextPacket 物化为 Stage artifact / PMIL context chips，并新增 `context:*` IPC 与 Project Room PMIL 上下文 tab，让项目级 current focus、active threads、open loops、decisions 与 evidence drill-down 可见。剩余重点是 Memory Explorer evidence inspector、MemoryNode v2 feedback、entity profile、LLM refinement/feedback loop，以及更强的本地 Agent session UI/settings。
 
 ---
 
@@ -980,21 +980,21 @@ Status: partially implemented (Personal QA + deterministic Work Context/Open Loo
 
 ### Phase E: Surfaces
 
-Status: partially implemented (Search + Ask + Review foundation), 2026-05-16.
+Status: partially implemented (Search + Ask + Review + Project Room foundation), 2026-05-16.
 
 范围：
 
-- Ask Anywhere context injection：已接入 prompt；context chips 尚未在 Chat UI 显示
+- Ask Anywhere context injection：已接入 prompt，并以 PMIL context chips + Stage `pmil.context_packet` artifact 显示可解释区
 - Review workspace open-loop queue：已通过 `report.open_loops` artifact + Review findings 显示第一版
-- Project Room recent work context panel
+- Project Room recent work context panel：已新增 PMIL 上下文 tab，调用 `context.workContext` 展示 current focus / active threads / open loops / decisions / evidence drill-down
 - Memory Explorer evidence inspector
 - Search PMIL context section：已实现，Search response 可附带 ContextPacket，UI 展示 context sections / citations / Personal QA 命中，并支持 evidence drill-down
 
 验收：
 
-- 用户能看到“Orbit 为什么认为我在做 X”：Search 与 Review foundation 已支持；Ask 已实际消费但 UI 可解释区待补
+- 用户能看到“Orbit 为什么认为我在做 X”：Search / Ask / Review / Project Room foundation 已支持
 - 用户能接受/驳回建议
-- 用户能从任何 synthesis 回到证据片段：Search ContextPacket drill-down 已实现，Review/Memory/Project Room 待补齐
+- 用户能从任何 synthesis 回到证据片段：Search / Ask ContextPacket / Project Room drill-down 已实现；Review 深层 citation drawer 与 Memory Explorer 待补齐
 
 ### Phase F: Local Agent Session Source
 
@@ -1012,7 +1012,7 @@ Status: implemented (provider foundation), 2026-05-15.
 
 - Orbit 能列出本地 Codex / Claude sessions：provider foundation 已支持，尚未接入 UI / settings
 - 不导入全文也能生成 EvidenceSource：已实现 reference-truth registry entry
-- Ask / Review / Project Room 能按需读取相关会话片段：chunk index 可消费，surface 尚未接入
+- Ask / Review / Project Room 能按需读取相关会话片段：chunk index 可消费，Ask/Project Room 已有通用 evidence read 入口；session-specific surface 仍待补齐
 - 所有提炼结果都引用 session selector：EvidenceChunk / ContextPacket path 已支持，session-specific distillation 尚未接入
 
 ---

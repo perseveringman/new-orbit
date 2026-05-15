@@ -1,26 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { ContextPacketScope } from '@shared/context';
+import type { BuildWorkContextInput, ContextPacketScope, WorkContextReport } from '@shared/context';
 import type { EvidenceChunk, EvidenceScopeRef, EvidenceSelector } from '@shared/evidence';
 import type { OpenLoopPayload, WorkContextPayload } from '@shared/synthesis';
 import { createEvidenceChunkIndexStore } from '../evidence/chunk-index';
 import { buildContextPacket } from './packet-builder';
 
-export interface GenerateWorkContextInput {
-  scope?: ContextPacketScope;
-  period: { from: string; to: string };
-  query?: string;
-  limit?: number;
-}
-
-export interface WorkContextReport {
-  work_context: WorkContextPayload;
-  open_loops: OpenLoopPayload;
-  evidence: EvidenceSelector[];
-}
-
 export async function generateWorkContextReport(
   vaultPath: string,
-  input: GenerateWorkContextInput
+  input: BuildWorkContextInput & { period: { from: string; to: string } }
 ): Promise<WorkContextReport> {
   const scope = normalizeWorkScope(input.scope ?? { kind: 'global' });
   const evidenceScope = contextScopeToEvidenceScope(scope);

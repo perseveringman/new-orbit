@@ -45,8 +45,15 @@ type MediaEmbed = {
   title?: string;
   width?: number;
   height?: number;
+  pdfPage?: string;
   kind: MediaKind;
   url: string | null;
+};
+
+type FrontmatterProperty = {
+  key: string;
+  values: string[];
+  type: 'text' | 'list' | 'number' | 'checkbox' | 'date' | 'datetime' | 'tags' | 'empty';
 };
 
 type TableAlignment = 'left' | 'center' | 'right' | null;
@@ -72,6 +79,8 @@ const inlineCodeMark = Decoration.mark({ class: 'cm-md-live-inline-code' });
 const inlineMathMark = Decoration.mark({ class: 'cm-md-live-inline-math' });
 const tagMark = Decoration.mark({ class: 'cm-md-live-tag' });
 const footnoteRefMark = Decoration.mark({ class: 'cm-md-live-footnote-ref' });
+const inlineFootnoteMark = Decoration.mark({ class: 'cm-md-live-inline-footnote' });
+const blockIdMark = Decoration.mark({ class: 'cm-md-live-block-id' });
 const htmlMark = Decoration.mark({ class: 'cm-md-live-html' });
 
 const STRONG_RE = /(\*\*|__)([^*_][\s\S]*?)\1/g;
@@ -87,13 +96,15 @@ const WIKILINK_RE = /\[\[([^\]\n]+?)\]\]/g;
 const AUTOLINK_RE = /<((?:https?:\/\/|mailto:)[^>\s]+)>/g;
 const BARE_URL_RE = /\bhttps?:\/\/[^\s<>()]+/g;
 const FOOTNOTE_REF_RE = /\[\^([^\]\n]+?)\]/g;
+const INLINE_FOOTNOTE_RE = /\^\[([^\]\n]+?)\]/g;
+const BLOCK_ID_RE = /(^|\s)(\^[A-Za-z0-9-]+)\s*$/g;
 const TAG_RE = /(^|[\s([{])#([A-Za-z0-9_\-/\u4e00-\u9fff]+)\b/g;
 const HTML_INLINE_RE = /<\/?[A-Za-z][^>\n]*>/g;
 const INLINE_COMMENT_RE = /%%([^%\n]|%(?!%))*%%/g;
 
 const IMAGE_EXTENSIONS = new Set(['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'tif', 'tiff', 'webp']);
-const AUDIO_EXTENSIONS = new Set(['aac', 'aiff', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'weba', 'webm']);
-const VIDEO_EXTENSIONS = new Set(['m4v', 'mov', 'mp4', 'mpeg', 'ogv', 'webm']);
+const AUDIO_EXTENSIONS = new Set(['aac', 'aiff', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'wav', 'weba', 'webm', '3gp']);
+const VIDEO_EXTENSIONS = new Set(['m4v', 'mkv', 'mov', 'mp4', 'mpeg', 'ogv', 'webm']);
 const VAULT_RELATIVE_ROOTS = new Set([
   '.orbit',
   '01_Projects',
@@ -117,11 +128,11 @@ export function buildLivePreviewDecorations(
   const frontmatter = frontmatterRange(view.state);
 
   if (frontmatter && !rangeTouchesActiveLine(view, frontmatter.from, frontmatter.to, activeLines)) {
-    const lines = view.state.doc.lineAt(frontmatter.to).number - view.state.doc.lineAt(frontmatter.from).number + 1;
+    const raw = view.state.sliceDoc(frontmatter.from, frontmatter.to);
     decorations.push({
       from: frontmatter.from,
       to: frontmatter.to,
-      decoration: Decoration.replace({ block: true, widget: new FrontmatterWidget(lines) })
+      decoration: Decoration.replace({ block: true, widget: new FrontmatterWidget(raw) })
     });
     skippedRanges.push(frontmatter);
   }
@@ -223,12 +234,12 @@ function collectBlockDecorations(
     const block =
       parseFencedCodeBlock(view, lineNo) ??
       parseMathBlock(view, lineNo) ??
-      parseCalloutBlock(view, lineNo) ??
-      parseTableBlock(view, lineNo) ??
+      parseCalloutBlock(view, lineNo, context) ??
+      parseTableBlock(view, lineNo, context) ??
       parseAttachmentMediaBlock(view, lineNo, context) ??
       parseMediaBlock(view, lineNo, context) ??
       parseHorizontalRuleBlock(view, lineNo) ??
-      parseFootnoteBlock(view, lineNo) ??
+      parseFootnoteBlock(view, lineNo, context) ??
       parseObsidianCommentBlock(view, lineNo) ??
       parseHtmlBlock(view, lineNo);
 
@@ -287,6 +298,15 @@ function parseMathBlock(
 ): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
+  const singleLine = /^ {0,3}\$\$\s*(.+?)\s*\$\$\s*$/.exec(line.text);
+  if (singleLine) {
+    return {
+      from: line.from,
+      to: line.to,
+      endLine: lineNo,
+      decoration: Decoration.replace({ block: true, widget: new MathBlockWidget(singleLine[1] ?? '') })
+    };
+  }
   if (line.text.trim() !== '$$') return null;
 
   const math: string[] = [];
@@ -311,7 +331,8 @@ function parseMathBlock(
 
 function parseCalloutBlock(
   view: PreviewDocument,
-  lineNo: number
+  lineNo: number,
+  context: MarkdownLivePreviewContext
 ): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
@@ -334,14 +355,15 @@ function parseCalloutBlock(
     endLine,
     decoration: Decoration.replace({
       block: true,
-      widget: new CalloutWidget(match[1] ?? 'note', match[3] ?? '', body.join('\n'))
+      widget: new CalloutWidget(match[1] ?? 'note', match[3] ?? '', body.join('\n'), match[2] as '+' | '-' | undefined, context)
     })
   };
 }
 
 function parseTableBlock(
   view: PreviewDocument,
-  lineNo: number
+  lineNo: number,
+  context: MarkdownLivePreviewContext
 ): BlockDecoration | null {
   const doc = view.state.doc;
   if (lineNo >= doc.lines) return null;
@@ -368,7 +390,7 @@ function parseTableBlock(
     from: headerLine.from,
     to: end.to,
     endLine,
-    decoration: Decoration.replace({ block: true, widget: new TableWidget(table) })
+    decoration: Decoration.replace({ block: true, widget: new TableWidget(table, context) })
   };
 }
 
@@ -440,7 +462,8 @@ function parseHorizontalRuleBlock(
 
 function parseFootnoteBlock(
   view: PreviewDocument,
-  lineNo: number
+  lineNo: number,
+  context: MarkdownLivePreviewContext
 ): BlockDecoration | null {
   const doc = view.state.doc;
   const line = doc.line(lineNo);
@@ -463,7 +486,7 @@ function parseFootnoteBlock(
     endLine,
     decoration: Decoration.replace({
       block: true,
-      widget: new FootnoteWidget(match[1] ?? '', lines.join('\n'))
+      widget: new FootnoteWidget(match[1] ?? '', lines.join('\n'), context)
     })
   };
 }
@@ -575,7 +598,7 @@ function addLineDecorations(
     }
   }
 
-  const task = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/.exec(text);
+  const task = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([^\]])\]/.exec(text);
   if (task?.[1] && task[2]) {
     decorations.push({ from: lineFrom, to: lineFrom, decoration: taskLine });
     const checkboxFrom = task[1].length;
@@ -584,7 +607,7 @@ function addLineDecorations(
         from: lineFrom + checkboxFrom,
         to: lineFrom + checkboxFrom + 3,
         decoration: Decoration.replace({
-          widget: new TaskCheckboxWidget(task[2].toLowerCase() === 'x', lineFrom + checkboxFrom)
+          widget: new TaskCheckboxWidget(task[2] !== ' ', lineFrom + checkboxFrom, task[2])
         })
       });
     }
@@ -744,6 +767,8 @@ function addLineDecorations(
   addPairedInline(inline, reserved, lineFrom, text, INLINE_MATH_RE, revealSyntax, 1, inlineMathMark);
 
   addSimpleSyntaxMark(inline, reserved, lineFrom, text, FOOTNOTE_REF_RE, 'cm-md-live-footnote-ref', footnoteRefMark);
+  addPairedInline(inline, reserved, lineFrom, text, INLINE_FOOTNOTE_RE, revealSyntax, 2, inlineFootnoteMark);
+  addBlockIdMarks(inline, reserved, lineFrom, text);
   addTagMarks(inline, reserved, lineFrom, text);
   addSimpleSyntaxMark(inline, reserved, lineFrom, text, HTML_INLINE_RE, 'cm-md-live-html', htmlMark);
 
@@ -818,6 +843,24 @@ function addTagMarks(
   }
 }
 
+function addBlockIdMarks(
+  inline: InlineDecoration[],
+  reserved: ReservedRange[],
+  lineFrom: number,
+  text: string
+): void {
+  BLOCK_ID_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = BLOCK_ID_RE.exec(text))) {
+    const prefix = match[1] ?? '';
+    const id = match[2] ?? '';
+    const localFrom = match.index + prefix.length;
+    const localTo = localFrom + id.length;
+    if (!tryReserve(reserved, localFrom, localTo)) continue;
+    inline.push({ from: lineFrom + localFrom, to: lineFrom + localTo, decoration: blockIdMark });
+  }
+}
+
 function addRegexInline(
   inline: InlineDecoration[],
   reserved: ReservedRange[],
@@ -855,20 +898,36 @@ function lineOverlapsRanges(from: number, to: number, ranges: ReservedRange[]): 
 
 function looksLikeTableRow(text: string): boolean {
   const trimmed = text.trim();
-  return trimmed.includes('|') && !/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(trimmed);
+  return hasUnescapedPipe(trimmed) && !/^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test(trimmed);
 }
 
 function isTableSeparator(text: string): boolean {
-  return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(text.trim());
+  return /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(text.trim());
 }
 
 function splitTableRow(text: string): string[] {
-  return text
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => cell.trim());
+  let row = text.trim();
+  if (row.startsWith('|')) row = row.slice(1);
+  if (row.endsWith('|') && !isEscapedAt(row, row.length - 1)) row = row.slice(0, -1);
+
+  const cells: string[] = [];
+  let current = '';
+  for (let index = 0; index < row.length; index += 1) {
+    const char = row[index];
+    if (char === '\\' && row[index + 1] === '|') {
+      current += '|';
+      index += 1;
+      continue;
+    }
+    if (char === '|') {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim());
+  return cells;
 }
 
 function parseTableAlignments(text: string): TableAlignment[] {
@@ -880,6 +939,21 @@ function parseTableAlignments(text: string): TableAlignment[] {
     if (left) return 'left';
     return null;
   });
+}
+
+function hasUnescapedPipe(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '|' && !isEscapedAt(value, index)) return true;
+  }
+  return false;
+}
+
+function isEscapedAt(value: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function parseOnlyMediaEmbeds(text: string, context: MarkdownLivePreviewContext): MediaEmbed[] {
@@ -951,16 +1025,18 @@ function mediaFromMarkdownImage(
 ): MediaEmbed | null {
   const parsed = markdownDestination(destination);
   const dimensions = parseDimensionHint(parsed.title ?? alt);
-  const target = stripTargetFragment(parsed.target);
+  const options = parseEmbedOptions(parsed.target, dimensions);
+  const target = options.pathTarget;
   return {
     raw,
     label: alt || basename(target) || target,
-    target,
+    target: parsed.target,
     title: parsed.title,
-    width: dimensions.width,
-    height: dimensions.height,
+    width: options.width,
+    height: options.height,
+    pdfPage: options.pdfPage,
     kind: mediaKindForTarget(target),
-    url: resolveAssetUrl(target, context)
+    url: resolveAssetUrl(options.urlTarget, context)
   };
 }
 
@@ -971,14 +1047,18 @@ function mediaFromMarkdownLink(
   context: MarkdownLivePreviewContext
 ): MediaEmbed | null {
   const parsed = markdownDestination(destination);
-  const target = stripTargetFragment(parsed.target);
+  const options = parseEmbedOptions(parsed.target);
+  const target = options.pathTarget;
   return {
     raw,
     label: label || basename(target) || target,
-    target,
+    target: parsed.target,
     title: parsed.title,
+    width: options.width,
+    height: options.height,
+    pdfPage: options.pdfPage,
     kind: mediaKindForTarget(target),
-    url: resolveAssetUrl(target, context)
+    url: resolveAssetUrl(options.urlTarget, context)
   };
 }
 
@@ -989,15 +1069,17 @@ function mediaFromObsidianEmbed(
 ): MediaEmbed | null {
   const parsed = parseObsidianTarget(inner);
   const dimensions = parseDimensionHint(parsed.alias);
-  const target = stripTargetFragment(parsed.target);
+  const options = parseEmbedOptions(parsed.target, dimensions);
+  const target = options.pathTarget;
   return {
     raw,
     label: parsed.alias && !dimensions.width ? parsed.alias : basename(target) || target,
-    target,
-    width: dimensions.width,
-    height: dimensions.height,
+    target: parsed.target,
+    width: options.width,
+    height: options.height,
+    pdfPage: options.pdfPage,
     kind: mediaKindForTarget(target),
-    url: resolveAssetUrl(target, context)
+    url: resolveAssetUrl(options.urlTarget, context)
   };
 }
 
@@ -1010,11 +1092,11 @@ function markdownDestination(input: string): { target: string; title?: string } 
 }
 
 function parseObsidianTarget(input: string): { target: string; alias?: string } {
-  const pipe = input.indexOf('|');
+  const pipe = firstUnescapedPipe(input);
   if (pipe === -1) return { target: input.trim() };
   return {
-    target: input.slice(0, pipe).trim(),
-    alias: input.slice(pipe + 1).trim()
+    target: unescapeObsidianPipes(input.slice(0, pipe).trim()),
+    alias: unescapeObsidianPipes(input.slice(pipe + 1).trim())
   };
 }
 
@@ -1025,6 +1107,38 @@ function parseDimensionHint(value?: string): { width?: number; height?: number }
   return {
     width: Number(match[1]),
     ...(match[2] ? { height: Number(match[2]) } : {})
+  };
+}
+
+function firstUnescapedPipe(value: string): number {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '|' && !isEscapedAt(value, index)) return index;
+  }
+  return -1;
+}
+
+function unescapeObsidianPipes(value: string): string {
+  return value.replace(/\\\|/g, '|');
+}
+
+function parseEmbedOptions(
+  target: string,
+  dimensions: { width?: number; height?: number } = {}
+): { pathTarget: string; urlTarget: string; width?: number; height?: number; pdfPage?: string } {
+  const parts = splitTargetReference(target);
+  const rawHash = parts.hash?.replace(/^#/, '') ?? '';
+  const params = rawHash.includes('=') ? new URLSearchParams(rawHash) : null;
+  const heightParam = params?.get('height') ?? null;
+  const pageParam = params?.get('page') ?? null;
+  if (heightParam) params?.delete('height');
+  const nextHash = params ? params.toString() : rawHash;
+  const urlTarget = `${parts.path}${parts.query ?? ''}${nextHash ? `#${nextHash}` : ''}`;
+  return {
+    pathTarget: parts.path,
+    urlTarget,
+    width: dimensions.width,
+    height: dimensions.height ?? (heightParam && /^\d{2,5}$/.test(heightParam) ? Number(heightParam) : undefined),
+    pdfPage: pageParam ?? undefined
   };
 }
 
@@ -1041,34 +1155,50 @@ function mediaKindForTarget(target: string): MediaKind {
 }
 
 function extensionForTarget(target: string): string | null {
-  const clean = stripTargetFragment(target).split('?')[0] ?? target;
+  const clean = splitTargetReference(target).path;
   const match = /\.([A-Za-z0-9]+)$/.exec(clean);
   return match?.[1]?.toLowerCase() ?? null;
 }
 
 function stripTargetFragment(target: string): string {
-  return target.replace(/[#^].*$/, '').trim();
+  return splitTargetReference(target).path.trim();
 }
 
 function resolveAssetUrl(target: string, context: MarkdownLivePreviewContext): string | null {
   const clean = target.trim();
   if (!clean) return null;
+  const parts = splitTargetReference(clean);
+  const pathPart = parts.path;
+  const suffix = `${parts.query ?? ''}${parts.hash ?? ''}`;
   if (/^file:/i.test(clean)) {
     const vaultRelative = vaultRelativeFromFileUrl(clean, context);
-    return vaultRelative ? vaultMediaUrl(vaultRelative) : clean;
+    return vaultRelative ? `${vaultMediaUrl(vaultRelative)}${suffix}` : clean;
   }
   if (/^(https?:|data:|blob:|orbit-media:)/i.test(clean)) return clean;
   if (/^[A-Za-z][A-Za-z0-9+.-]*:/i.test(clean)) return null;
   if (!context.vaultRoot) return null;
 
-  if (clean.startsWith('/')) {
-    const vaultRelative = vaultRelativeFromAbsolutePath(clean, context.vaultRoot);
-    return vaultRelative ? vaultMediaUrl(vaultRelative) : pathToFileUrl(clean);
+  if (pathPart.startsWith('/')) {
+    const vaultRelative = vaultRelativeFromAbsolutePath(pathPart, context.vaultRoot);
+    return vaultRelative ? `${vaultMediaUrl(vaultRelative)}${suffix}` : `${pathToFileUrl(pathPart)}${suffix}`;
   }
 
   const noteDir = context.notePath ? dirnamePosix(context.notePath) : '';
-  const relative = normalizePosixPath(isVaultRelativePath(clean) ? clean : joinPosix(noteDir, clean));
-  return vaultMediaUrl(relative);
+  const relative = normalizePosixPath(isVaultRelativePath(pathPart) ? pathPart : joinPosix(noteDir, pathPart));
+  return `${vaultMediaUrl(relative)}${suffix}`;
+}
+
+function splitTargetReference(target: string): { path: string; query?: string; hash?: string } {
+  const hashIndex = target.indexOf('#');
+  const beforeHash = hashIndex === -1 ? target : target.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? undefined : target.slice(hashIndex);
+  const queryIndex = beforeHash.indexOf('?');
+  if (queryIndex === -1) return { path: beforeHash, hash };
+  return {
+    path: beforeHash.slice(0, queryIndex),
+    query: beforeHash.slice(queryIndex),
+    hash
+  };
 }
 
 function isVaultRelativePath(value: string): boolean {
@@ -1162,25 +1292,225 @@ function mediaLabel(kind: MediaKind): string {
   }
 }
 
-function appendTextBlock(parent: HTMLElement, text: string): void {
+function titleCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(' ');
+}
+
+function appendTextBlock(parent: HTMLElement, text: string, context: MarkdownLivePreviewContext = {}): void {
   const lines = text.split('\n');
   for (const line of lines) {
     const paragraph = document.createElement('p');
-    paragraph.textContent = line || ' ';
+    appendInlineMarkdown(paragraph, line || ' ', context);
     parent.appendChild(paragraph);
   }
+}
+
+function appendInlineMarkdown(parent: HTMLElement, text: string, context: MarkdownLivePreviewContext): void {
+  const tokenRe =
+    /(!\[\[[^\]\n]+?\]\]|!\[[^\]\n]*?\]\([^)]+?\)|\[\[[^\]\n]+?\]\]|\[[^\]\n]+?\]\([^)]+?\)|`[^`\n]+?`|\*\*[^*\n]+?\*\*|__[^_\n]+?__|~~[^~\n]+?~~|==[^=\n]+?==|\^\[[^\]\n]+?\]|\[\^[^\]\n]+?\]|%%(?:[^%\n]|%(?!%))*%%|(?:^|[\s([{])#[A-Za-z0-9_\-/\u4e00-\u9fff]+\b|https?:\/\/[^\s<>()]+)/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tokenRe.exec(text))) {
+    if (match.index > cursor) parent.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+    appendInlineToken(parent, match[0], context);
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) parent.appendChild(document.createTextNode(text.slice(cursor)));
+}
+
+function appendInlineToken(parent: HTMLElement, token: string, context: MarkdownLivePreviewContext): void {
+  if (token.startsWith('%%')) return;
+
+  const markdownImage = /^!\[([^\]\n]*?)\]\(([^)]+?)\)$/.exec(token);
+  if (markdownImage) {
+    const embed = mediaFromMarkdownImage(token, markdownImage[1] ?? '', markdownImage[2] ?? '', context);
+    if (embed) {
+      parent.appendChild(renderMedia(embed, 'inline'));
+      return;
+    }
+  }
+
+  const obsidianEmbed = /^!\[\[([^\]\n]+?)\]\]$/.exec(token);
+  if (obsidianEmbed) {
+    const embed = mediaFromObsidianEmbed(token, obsidianEmbed[1] ?? '', context);
+    if (embed) {
+      parent.appendChild(renderMedia(embed, 'inline'));
+      return;
+    }
+  }
+
+  const wikilink = /^\[\[([^\]\n]+?)\]\]$/.exec(token);
+  if (wikilink) {
+    const parsed = parseObsidianTarget(wikilink[1] ?? '');
+    const link = document.createElement('span');
+    link.className = 'cm-md-rendered-link cm-md-rendered-wikilink';
+    link.dataset.mdTarget = parsed.target;
+    link.textContent = parsed.alias || parsed.target;
+    parent.appendChild(link);
+    return;
+  }
+
+  const markdownLink = /^\[([^\]\n]+?)\]\(([^)]+?)\)$/.exec(token);
+  if (markdownLink) {
+    const link = document.createElement('span');
+    link.className = 'cm-md-rendered-link';
+    link.dataset.mdTarget = markdownDestination(markdownLink[2] ?? '').target;
+    appendInlineMarkdown(link, markdownLink[1] ?? '', context);
+    parent.appendChild(link);
+    return;
+  }
+
+  const paired = /^(\*\*|__|~~|==)([\s\S]+)\1$/.exec(token);
+  if (paired) {
+    const span = document.createElement('span');
+    const marker = paired[1] ?? '';
+    span.className =
+      marker === '~~'
+        ? 'cm-md-rendered-strike'
+        : marker === '=='
+          ? 'cm-md-rendered-highlight'
+          : 'cm-md-rendered-strong';
+    appendInlineMarkdown(span, paired[2] ?? '', context);
+    parent.appendChild(span);
+    return;
+  }
+
+  if (token.startsWith('`') && token.endsWith('`')) {
+    const code = document.createElement('code');
+    code.className = 'cm-md-rendered-code';
+    code.textContent = token.slice(1, -1);
+    parent.appendChild(code);
+    return;
+  }
+
+  if (token.startsWith('^[') && token.endsWith(']')) {
+    const footnote = document.createElement('span');
+    footnote.className = 'cm-md-rendered-inline-footnote';
+    footnote.textContent = token.slice(2, -1);
+    parent.appendChild(footnote);
+    return;
+  }
+
+  const span = document.createElement('span');
+  if (/^\[\^[^\]\n]+?\]$/.test(token)) {
+    span.className = 'cm-md-rendered-footnote-ref';
+  } else if (/(^|[\s([{])#[A-Za-z0-9_\-/\u4e00-\u9fff]+\b/.test(token)) {
+    span.className = 'cm-md-rendered-tag';
+  } else if (/^https?:\/\//.test(token)) {
+    span.className = 'cm-md-rendered-link';
+  }
+  span.textContent = token;
+  parent.appendChild(span);
+}
+
+function parseFrontmatterProperties(raw: string): FrontmatterProperty[] {
+  const body = raw
+    .replace(/^---\s*\n?/, '')
+    .replace(/\n?---\s*$/, '')
+    .trim();
+  if (!body) return [];
+
+  if (body.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      return Object.entries(parsed).map(([key, value]) => propertyFromUnknown(key, value));
+    } catch {
+      return [];
+    }
+  }
+
+  const lines = body.split('\n');
+  const properties: FrontmatterProperty[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (/^\s/.test(line) || !line.includes(':')) continue;
+    const [rawKey, ...rest] = line.split(':');
+    const key = rawKey?.trim();
+    if (!key) continue;
+    const firstValue = rest.join(':').trim();
+    const values: string[] = [];
+    if (firstValue) {
+      values.push(unquoteYamlValue(firstValue));
+    } else {
+      for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+        const next = lines[cursor] ?? '';
+        const listMatch = /^\s*-\s*(.*)$/.exec(next);
+        if (!listMatch) break;
+        values.push(unquoteYamlValue(listMatch[1] ?? ''));
+        index = cursor;
+      }
+    }
+    properties.push({ key, values, type: inferPropertyType(key, values) });
+  }
+  return properties;
+}
+
+function propertyFromUnknown(key: string, value: unknown): FrontmatterProperty {
+  const values = Array.isArray(value)
+    ? value.map((item) => String(item))
+    : value === null || value === undefined
+      ? []
+      : [String(value)];
+  return { key, values, type: inferPropertyType(key, values) };
+}
+
+function inferPropertyType(key: string, values: string[]): FrontmatterProperty['type'] {
+  if (!values.length) return 'empty';
+  if (key === 'tags' || key === 'tag') return 'tags';
+  if (values.every((value) => /^(true|false)$/i.test(value))) return 'checkbox';
+  if (values.every((value) => /^-?\d+(?:\.\d+)?$/.test(value))) return 'number';
+  if (values.every((value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value))) return 'datetime';
+  if (values.every((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))) return 'date';
+  if (values.length > 1 || key === 'aliases' || key === 'alias' || key === 'cssclasses' || key === 'cssclass') return 'list';
+  return 'text';
+}
+
+function unquoteYamlValue(value: string): string {
+  const trimmed = value.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function renderPropertyValue(parent: HTMLElement, property: FrontmatterProperty): void {
+  if (!property.values.length) {
+    parent.textContent = '空';
+    return;
+  }
+
+  if (property.type === 'checkbox') {
+    const box = document.createElement('span');
+    box.className = `cm-md-property-checkbox ${property.values[0]?.toLowerCase() === 'true' ? 'cm-md-property-checkbox-checked' : ''}`;
+    box.textContent = property.values[0]?.toLowerCase() === 'true' ? '✓' : '';
+    parent.appendChild(box);
+    return;
+  }
+
+  property.values.forEach((value, index) => {
+    if (index > 0) parent.appendChild(document.createTextNode(' '));
+    const chip = document.createElement('span');
+    chip.className = property.type === 'text' ? 'cm-md-property-text' : `cm-md-property-chip cm-md-property-chip-${property.type}`;
+    appendInlineMarkdown(chip, value, {});
+    parent.appendChild(chip);
+  });
 }
 
 class TaskCheckboxWidget extends WidgetType {
   constructor(
     private readonly checked: boolean,
-    private readonly pos: number
+    private readonly pos: number,
+    private readonly marker: string = checked ? 'x' : ' '
   ) {
     super();
   }
 
   eq(other: TaskCheckboxWidget): boolean {
-    return other.checked === this.checked && other.pos === this.pos;
+    return other.checked === this.checked && other.pos === this.pos && other.marker === this.marker;
   }
 
   toDOM(): HTMLElement {
@@ -1189,7 +1519,7 @@ class TaskCheckboxWidget extends WidgetType {
     box.dataset.pos = String(this.pos);
     box.setAttribute('role', 'checkbox');
     box.setAttribute('aria-checked', String(this.checked));
-    box.textContent = this.checked ? 'x' : '';
+    box.textContent = this.checked ? (this.marker.trim() || 'x') : '';
     return box;
   }
 
@@ -1219,18 +1549,46 @@ class ListMarkerWidget extends WidgetType {
 }
 
 class FrontmatterWidget extends WidgetType {
-  constructor(private readonly lines: number) {
+  constructor(private readonly raw: string) {
     super();
   }
 
   eq(other: FrontmatterWidget): boolean {
-    return other.lines === this.lines;
+    return other.raw === this.raw;
   }
 
   toDOM(): HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = 'cm-md-frontmatter';
-    wrapper.textContent = `元数据 ${this.lines} 行`;
+    const properties = parseFrontmatterProperties(this.raw);
+    if (!properties.length) {
+      wrapper.textContent = '属性';
+      return wrapper;
+    }
+
+    const title = document.createElement('div');
+    title.className = 'cm-md-frontmatter-title';
+    title.textContent = '属性';
+    wrapper.appendChild(title);
+
+    const table = document.createElement('div');
+    table.className = 'cm-md-frontmatter-table';
+    properties.forEach((property) => {
+      const row = document.createElement('div');
+      row.className = `cm-md-frontmatter-row cm-md-frontmatter-row-${property.type}`;
+
+      const key = document.createElement('span');
+      key.className = 'cm-md-frontmatter-key';
+      key.textContent = property.key;
+      row.appendChild(key);
+
+      const value = document.createElement('span');
+      value.className = 'cm-md-frontmatter-value';
+      renderPropertyValue(value, property);
+      row.appendChild(value);
+      table.appendChild(row);
+    });
+    wrapper.appendChild(table);
     return wrapper;
   }
 }
@@ -1286,26 +1644,37 @@ class CalloutWidget extends WidgetType {
   constructor(
     private readonly kind: string,
     private readonly title: string,
-    private readonly body: string
+    private readonly body: string,
+    private readonly fold?: '+' | '-',
+    private readonly context: MarkdownLivePreviewContext = {}
   ) {
     super();
   }
 
   eq(other: CalloutWidget): boolean {
-    return other.kind === this.kind && other.title === this.title && other.body === this.body;
+    return (
+      other.kind === this.kind &&
+      other.title === this.title &&
+      other.body === this.body &&
+      other.fold === this.fold &&
+      other.context.notePath === this.context.notePath &&
+      other.context.vaultRoot === this.context.vaultRoot
+    );
   }
 
   toDOM(): HTMLElement {
-    const wrapper = document.createElement('div');
+    const wrapper = document.createElement(this.fold ? 'details' : 'div');
     wrapper.className = `cm-md-callout cm-md-callout-${this.kind.toLowerCase()}`;
-    const title = document.createElement('div');
+    if (wrapper instanceof HTMLDetailsElement && this.fold === '+') wrapper.open = true;
+    if (this.fold) wrapper.dataset.fold = this.fold;
+    const title = document.createElement(this.fold ? 'summary' : 'div');
     title.className = 'cm-md-callout-title';
-    title.textContent = this.title || this.kind.toUpperCase();
+    title.textContent = this.title || titleCase(this.kind);
     wrapper.appendChild(title);
     if (this.body.trim()) {
       const body = document.createElement('div');
       body.className = 'cm-md-callout-body';
-      appendTextBlock(body, this.body);
+      appendTextBlock(body, this.body, this.context);
       wrapper.appendChild(body);
     }
     return wrapper;
@@ -1313,12 +1682,19 @@ class CalloutWidget extends WidgetType {
 }
 
 class TableWidget extends WidgetType {
-  constructor(private readonly table: TableBlock) {
+  constructor(
+    private readonly table: TableBlock,
+    private readonly context: MarkdownLivePreviewContext = {}
+  ) {
     super();
   }
 
   eq(other: TableWidget): boolean {
-    return JSON.stringify(other.table) === JSON.stringify(this.table);
+    return (
+      JSON.stringify(other.table) === JSON.stringify(this.table) &&
+      other.context.notePath === this.context.notePath &&
+      other.context.vaultRoot === this.context.vaultRoot
+    );
   }
 
   toDOM(): HTMLElement {
@@ -1329,7 +1705,7 @@ class TableWidget extends WidgetType {
     const headRow = document.createElement('tr');
     this.table.headers.forEach((header, index) => {
       const th = document.createElement('th');
-      th.textContent = header;
+      appendInlineMarkdown(th, header, this.context);
       applyAlignment(th, this.table.alignments[index] ?? null);
       headRow.appendChild(th);
     });
@@ -1341,7 +1717,7 @@ class TableWidget extends WidgetType {
       const tr = document.createElement('tr');
       row.forEach((cell, index) => {
         const td = document.createElement('td');
-        td.textContent = cell;
+        appendInlineMarkdown(td, cell, this.context);
         applyAlignment(td, this.table.alignments[index] ?? null);
         tr.appendChild(td);
       });
@@ -1459,6 +1835,8 @@ function renderMedia(embed: MediaEmbed, mode: 'block' | 'inline'): HTMLElement {
     const frame = document.createElement('iframe');
     frame.src = embed.url;
     frame.title = embed.label;
+    if (embed.height) frame.style.height = `${embed.height}px`;
+    if (embed.pdfPage) frame.dataset.page = embed.pdfPage;
     wrapper.appendChild(frame);
   } else {
     const link = document.createElement(embed.url ? 'a' : 'span');
@@ -1491,13 +1869,19 @@ class HorizontalRuleWidget extends WidgetType {
 class FootnoteWidget extends WidgetType {
   constructor(
     private readonly id: string,
-    private readonly content: string
+    private readonly content: string,
+    private readonly context: MarkdownLivePreviewContext = {}
   ) {
     super();
   }
 
   eq(other: FootnoteWidget): boolean {
-    return other.id === this.id && other.content === this.content;
+    return (
+      other.id === this.id &&
+      other.content === this.content &&
+      other.context.notePath === this.context.notePath &&
+      other.context.vaultRoot === this.context.vaultRoot
+    );
   }
 
   toDOM(): HTMLElement {
@@ -1507,7 +1891,7 @@ class FootnoteWidget extends WidgetType {
     id.className = 'cm-md-footnote-id';
     id.textContent = `[^${this.id}]`;
     const content = document.createElement('span');
-    content.textContent = this.content;
+    appendInlineMarkdown(content, this.content, this.context);
     wrapper.append(id, content);
     return wrapper;
   }
@@ -1621,6 +2005,13 @@ export const livePreviewTheme = EditorView.baseTheme({
     fontSize: '0.92em',
     padding: '1px 6px'
   },
+  '.cm-md-live-inline-footnote, .cm-md-live-block-id': {
+    borderRadius: '999px',
+    backgroundColor: '#f5f5f5',
+    color: '#525252',
+    fontSize: '0.85em',
+    padding: '1px 6px'
+  },
   '.cm-md-live-html, .cm-md-live-comment': {
     color: '#737373',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -1658,10 +2049,86 @@ export const livePreviewTheme = EditorView.baseTheme({
     border: '1px solid #e5e5e5',
     borderRadius: '6px',
     backgroundColor: '#fafafa',
-    color: '#737373',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    color: '#525252',
     fontSize: '12px',
-    padding: '7px 9px'
+    padding: '9px 10px'
+  },
+  '.cm-md-frontmatter-title': {
+    marginBottom: '6px',
+    color: '#737373',
+    fontSize: '11px',
+    fontWeight: '700',
+    textTransform: 'uppercase'
+  },
+  '.cm-md-frontmatter-table': {
+    display: 'grid',
+    gap: '5px'
+  },
+  '.cm-md-frontmatter-row': {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(88px, 0.34fr) minmax(0, 1fr)',
+    alignItems: 'start',
+    gap: '8px'
+  },
+  '.cm-md-frontmatter-key': {
+    color: '#737373',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+  },
+  '.cm-md-frontmatter-value': {
+    minWidth: '0'
+  },
+  '.cm-md-property-chip, .cm-md-rendered-tag, .cm-md-rendered-footnote-ref, .cm-md-rendered-inline-footnote': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    maxWidth: '100%',
+    borderRadius: '999px',
+    backgroundColor: '#eef2ff',
+    color: '#4338ca',
+    padding: '1px 7px',
+    verticalAlign: 'baseline'
+  },
+  '.cm-md-property-text': {
+    overflowWrap: 'anywhere'
+  },
+  '.cm-md-property-checkbox': {
+    display: 'inline-flex',
+    width: '14px',
+    height: '14px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid #a3a3a3',
+    borderRadius: '3px',
+    color: '#ffffff',
+    fontSize: '10px'
+  },
+  '.cm-md-property-checkbox-checked': {
+    borderColor: '#059669',
+    backgroundColor: '#059669'
+  },
+  '.cm-md-rendered-link, .cm-md-rendered-wikilink': {
+    color: '#2563eb',
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px'
+  },
+  '.cm-md-rendered-strong': {
+    fontWeight: '700'
+  },
+  '.cm-md-rendered-strike': {
+    textDecoration: 'line-through'
+  },
+  '.cm-md-rendered-highlight': {
+    borderRadius: '3px',
+    backgroundColor: '#fef08a',
+    padding: '0 2px'
+  },
+  '.cm-md-rendered-code': {
+    border: '1px solid #e5e5e5',
+    borderRadius: '4px',
+    backgroundColor: '#f5f5f5',
+    color: '#262626',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontSize: '0.92em',
+    padding: '1px 4px'
   },
   '.cm-md-codeblock, .cm-md-mathblock, .cm-md-htmlblock': {
     overflow: 'auto',
@@ -1694,6 +2161,9 @@ export const livePreviewTheme = EditorView.baseTheme({
     color: '#1d4ed8',
     fontSize: '13px',
     fontWeight: '700'
+  },
+  'summary.cm-md-callout-title': {
+    cursor: 'pointer'
   },
   '.cm-md-callout-body': {
     marginTop: '6px',
@@ -1847,10 +2317,33 @@ export const livePreviewTheme = EditorView.baseTheme({
     backgroundColor: '#1e1b4b',
     color: '#c7d2fe'
   },
+  '.dark & .cm-md-live-inline-footnote, .dark & .cm-md-live-block-id': {
+    backgroundColor: '#262626',
+    color: '#d4d4d4'
+  },
   '.dark & .cm-md-frontmatter, .dark & .cm-md-codeblock, .dark & .cm-md-mathblock, .dark & .cm-md-htmlblock': {
     borderColor: '#262626',
     backgroundColor: '#171717',
     color: '#d4d4d4'
+  },
+  '.dark & .cm-md-frontmatter-title, .dark & .cm-md-frontmatter-key': {
+    color: '#a3a3a3'
+  },
+  '.dark & .cm-md-property-chip, .dark & .cm-md-rendered-tag, .dark & .cm-md-rendered-footnote-ref, .dark & .cm-md-rendered-inline-footnote': {
+    backgroundColor: '#1e1b4b',
+    color: '#c7d2fe'
+  },
+  '.dark & .cm-md-rendered-link, .dark & .cm-md-rendered-wikilink': {
+    color: '#93c5fd'
+  },
+  '.dark & .cm-md-rendered-highlight': {
+    backgroundColor: '#713f12',
+    color: '#fef3c7'
+  },
+  '.dark & .cm-md-rendered-code': {
+    borderColor: '#404040',
+    backgroundColor: '#171717',
+    color: '#e5e5e5'
   },
   '.dark & .cm-md-codeblock-language': {
     borderBottomColor: '#262626',

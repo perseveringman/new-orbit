@@ -8,6 +8,7 @@ import { ConversationHeader } from './ConversationHeader';
 import { RuntimeStatusBar } from './RuntimeStatusBar';
 import { MessageTimeline } from './MessageTimeline';
 import { ArtifactStage } from './ArtifactStage';
+import { PMILContextChips } from './PMILContextPanel';
 
 export function ConversationShell({
   conversations,
@@ -58,6 +59,7 @@ export function ConversationShell({
       />
       <RuntimeStatusBar conversation={activeConversation} isLoading={isLoading} />
       {activeConversation ? <MemoryRecallChips conversation={activeConversation} /> : null}
+      {activeConversation ? <PMILContextChips stage={stage} /> : null}
       {activeId ? (
         <div
           className={

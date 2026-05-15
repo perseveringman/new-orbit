@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '../src/shared/conversation';
+import type { ContextPacket } from '../src/shared/context';
 import type { ConversationStage } from '../src/shared/stage';
 import { ContextBar } from '../src/renderer/src/views/ask-anywhere/ContextBar';
 import { StageDrawer } from '../src/renderer/src/views/ask-anywhere/StageDrawer';
@@ -117,6 +118,44 @@ describe('Ask Anywhere UX revamp components', () => {
     expect(html).toContain('UX direction summary');
   });
 
+  it('renders PMIL context chips and context packet artifact details', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConversationShell, {
+        conversations: [conversation],
+        activeId: conversation.id,
+        activeConversation: conversation,
+        events: [],
+        stage: {
+          ...stage,
+          artifacts: [
+            ...stage.artifacts,
+            {
+              id: 'pmil-context-1',
+              conversation_id: conversation.id,
+              kind: 'pmil.context_packet',
+              created_at: '2026-05-16T00:00:00Z',
+              title: 'PMIL Context Packet',
+              summary: '1 section, 1 evidence selector',
+              payload: sampleContextPacket(),
+              status: 'confirmed'
+            }
+          ]
+        },
+        isLoading: false,
+        onSelect: vi.fn(),
+        onNew: vi.fn(),
+        onArchive: vi.fn(),
+        onAction: vi.fn(),
+        onArtifactAction: vi.fn()
+      })
+    );
+
+    expect(html).toContain('PMIL 上下文');
+    expect(html).toContain('Personal QA');
+    expect(html).toContain('查看证据');
+    expect(html).toContain('PMIL should use cited evidence');
+  });
+
   it('derives scoped sidebar Ask context from the active workspace view', () => {
     const projectContext = deriveSidebarAskContext({
       view: { kind: 'project', projectUid: 'project-1' },
@@ -147,3 +186,39 @@ describe('Ask Anywhere UX revamp components', () => {
     expect(noteContext.scope).toEqual({ kind: 'note', note_id: '02_Areas/vision/README.md' });
   });
 });
+
+function sampleContextPacket(): ContextPacket {
+  return {
+    id: 'ctx-1',
+    purpose: 'ask',
+    scope: { kind: 'global' },
+    query: 'PMIL',
+    generated_at: '2026-05-16T00:00:00.000Z',
+    freshness: { evidence_until: '2026-05-16T00:00:00.000Z', stale_sources: [] },
+    budget: { max_tokens: 2200, estimated_tokens: 90 },
+    sections: [
+      {
+        kind: 'synthesis',
+        title: 'Personal QA',
+        content: 'PMIL should use cited evidence and graph neighbors.',
+        citations: [
+          {
+            source_id: 'evidence:note:pmil',
+            kind: 'semantic_chunk',
+            content_view: 'safe_projection'
+          }
+        ],
+        priority: 25
+      }
+    ],
+    evidence: [
+      {
+        source_id: 'evidence:note:pmil',
+        kind: 'semantic_chunk',
+        content_view: 'safe_projection'
+      }
+    ],
+    synthesis_refs: ['synth-qa-1'],
+    memory_refs: []
+  };
+}

@@ -23,7 +23,7 @@ The iCloud path `Documents/inbox/<capture_id>/` remains a transport queue name o
 5. Publishes a deterministic `note.created` event, currently `mobile-capture-note:<capture_id>`.
 6. Moves the iCloud directory to `processed/<capture_id>/` and writes ACK schema v2 with `artifact_kind: "note"`, `note_id`, `note_path`, and `timeline_event_id`.
 
-Recording captures may include transcript and AI derivative artifacts. Transcript excerpts and source attachment links can be written into the Note body. DeepSeek-generated summaries, decisions, risks, todos, and custom derivatives are **not** written into the Note body by default. They are converted into a `summary.entity` Synthesis artifact scoped to the Note, so Note Workbench can display and explicitly accept them.
+Recording captures may include transcript and AI derivative artifacts. Usable transcript excerpts and human-facing source attachment links can be written into the Note body, but technical transcript files such as `partial-transcript.ndjson` / `final-transcript.json` and original image source files such as `original-photo-1.heic` are copied for provenance rather than exposed by default. DeepSeek-generated summaries, decisions, risks, todos, and custom derivatives are **not** written into the Note body by default. They are converted into a `summary.entity` Synthesis artifact scoped to the Note, so Note Workbench can display and explicitly accept them.
 
 Failures move the directory to `failed/<capture_id>/` with `.failed.json` so Orbit Mobile can surface retryable versus conflicted states.
 
