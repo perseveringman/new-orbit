@@ -26,6 +26,11 @@ type BlockDecoration = {
   renderWhenActive?: boolean;
 };
 
+type PreviewDocument = {
+  state: EditorState;
+  visibleRanges: readonly { from: number; to: number }[];
+};
+
 type LineDecorationOptions = {
   revealSyntax: boolean;
   context: MarkdownLivePreviewContext;
@@ -103,7 +108,7 @@ const VAULT_RELATIVE_ROOTS = new Set([
 ]);
 
 export function buildLivePreviewDecorations(
-  view: EditorView,
+  view: PreviewDocument,
   context: MarkdownLivePreviewContext = {}
 ): DecorationSet {
   const decorations: InlineDecoration[] = [];
@@ -144,7 +149,7 @@ export function buildLivePreviewDecorations(
   return builder.finish();
 }
 
-function selectedLineNumbers(view: EditorView): Set<number> {
+function selectedLineNumbers(view: PreviewDocument): Set<number> {
   const lines = new Set<number>();
   for (const range of view.state.selection.ranges) {
     const start = view.state.doc.lineAt(range.from).number;
@@ -156,7 +161,7 @@ function selectedLineNumbers(view: EditorView): Set<number> {
   return lines;
 }
 
-function rangeTouchesActiveLine(view: EditorView, from: number, to: number, activeLines: Set<number>): boolean {
+function rangeTouchesActiveLine(view: PreviewDocument, from: number, to: number, activeLines: Set<number>): boolean {
   const start = view.state.doc.lineAt(from).number;
   const end = view.state.doc.lineAt(to).number;
   for (let line = start; line <= end; line += 1) {
@@ -181,7 +186,7 @@ function frontmatterRange(state: EditorState): { from: number; to: number } | nu
 }
 
 function collectSetextHeadingDecorations(
-  view: EditorView,
+  view: PreviewDocument,
   activeLines: Set<number>,
   decorations: InlineDecoration[],
   skippedRanges: ReservedRange[]
@@ -204,7 +209,7 @@ function collectSetextHeadingDecorations(
 }
 
 function collectBlockDecorations(
-  view: EditorView,
+  view: PreviewDocument,
   context: MarkdownLivePreviewContext,
   activeLines: Set<number>,
   decorations: InlineDecoration[],
@@ -240,7 +245,7 @@ function collectBlockDecorations(
 }
 
 function parseFencedCodeBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const doc = view.state.doc;
@@ -277,7 +282,7 @@ function parseFencedCodeBlock(
 }
 
 function parseMathBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const doc = view.state.doc;
@@ -305,7 +310,7 @@ function parseMathBlock(
 }
 
 function parseCalloutBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const doc = view.state.doc;
@@ -335,7 +340,7 @@ function parseCalloutBlock(
 }
 
 function parseTableBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const doc = view.state.doc;
@@ -368,7 +373,7 @@ function parseTableBlock(
 }
 
 function parseAttachmentMediaBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number,
   context: MarkdownLivePreviewContext
 ): BlockDecoration | null {
@@ -399,7 +404,7 @@ function parseAttachmentMediaBlock(
 }
 
 function parseMediaBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number,
   context: MarkdownLivePreviewContext
 ): BlockDecoration | null {
@@ -419,7 +424,7 @@ function parseMediaBlock(
 }
 
 function parseHorizontalRuleBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const line = view.state.doc.line(lineNo);
@@ -434,7 +439,7 @@ function parseHorizontalRuleBlock(
 }
 
 function parseFootnoteBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const doc = view.state.doc;
@@ -464,7 +469,7 @@ function parseFootnoteBlock(
 }
 
 function parseObsidianCommentBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const doc = view.state.doc;
@@ -508,7 +513,7 @@ function parseObsidianCommentBlock(
 }
 
 function parseHtmlBlock(
-  view: EditorView,
+  view: PreviewDocument,
   lineNo: number
 ): BlockDecoration | null {
   const doc = view.state.doc;

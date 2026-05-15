@@ -6,15 +6,14 @@ import {
   defaultHighlightStyle,
   syntaxHighlighting
 } from '@codemirror/language';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, StateField, type Extension } from '@codemirror/state';
 import {
   EditorView,
   highlightActiveLine,
   keymap,
   placeholder as editorPlaceholder,
   type DecorationSet,
-  ViewPlugin,
-  type ViewUpdate
+  ViewPlugin
 } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import {
@@ -140,22 +139,8 @@ export function MarkdownLiveEditor({
 
 function livePreviewExtension(context: MarkdownLivePreviewContext): Extension {
   return [
-    ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet;
-
-      constructor(view: EditorView) {
-        this.decorations = buildLivePreviewDecorations(view, context);
-      }
-
-      update(update: ViewUpdate): void {
-        if (update.docChanged || update.viewportChanged || update.selectionSet) {
-          this.decorations = buildLivePreviewDecorations(update.view, context);
-        }
-      }
-    },
-    {
-      decorations: (plugin) => plugin.decorations,
+    livePreviewDecorationField(context),
+    ViewPlugin.fromClass(class {}, {
       eventHandlers: {
         mousedown(event, view) {
           const target = event.target instanceof HTMLElement ? event.target : null;
@@ -177,6 +162,26 @@ function livePreviewExtension(context: MarkdownLivePreviewContext): Extension {
     ),
     livePreviewTheme
   ];
+}
+
+function livePreviewDecorationField(context: MarkdownLivePreviewContext): StateField<DecorationSet> {
+  return StateField.define<DecorationSet>({
+    create(state) {
+      return buildLivePreviewDecorations(previewDocument(state), context);
+    },
+    update(decorations, transaction) {
+      if (!transaction.docChanged && !transaction.selection) return decorations;
+      return buildLivePreviewDecorations(previewDocument(transaction.state), context);
+    },
+    provide: (field) => EditorView.decorations.from(field)
+  });
+}
+
+function previewDocument(state: EditorState): { state: EditorState; visibleRanges: readonly { from: number; to: number }[] } {
+  return {
+    state,
+    visibleRanges: [{ from: 0, to: state.doc.length }]
+  };
 }
 
 function editorTheme(dark: boolean, mode: MarkdownEditorMode, minHeight: number): Extension {
