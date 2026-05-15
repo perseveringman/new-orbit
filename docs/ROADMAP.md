@@ -67,7 +67,7 @@ Status: **implemented (foundation)**.
 
 Delivered:
 
-- Ask Anywhere now injects a PMIL ContextPacket into each user send, after the existing scoped Orbit context.
+- Ask Anywhere now injects a PMIL ContextPacket into each user send, after the existing scoped Orbit context, including evidence chunks, graph neighbors, Personal QA, and recalled MemoryNode entries.
 - Evidence drill-down has a dedicated IPC/preload namespace (`evidence:list/get/read/sync`) so UI surfaces can read cited snippets by EvidenceSelector.
 - Search PMIL context sections now expose "查看证据" actions for citation drill-down.
 - Ask Anywhere now materializes each injected ContextPacket as a Stage artifact and shows PMIL context chips above the conversation, so prompt context is visible and inspectable.
@@ -75,12 +75,13 @@ Delivered:
 - Review UI shows a Personal Memory Intelligence work-context panel with current focus, active threads, and open loops.
 - `context:*` IPC/preload APIs expose reusable ContextPacket and Work Context builders for surfaces beyond Search/Review.
 - Project Room now has a PMIL context tab that summarizes current focus, active threads, open loops, decisions, and cited evidence for the active project.
+- Memory Explorer now exposes source evidence drill-down and recall feedback controls, so MemoryNode entries can be inspected and tuned.
+- Registered local Agent sessions are retained in the default evidence chunk index, keeping `external_ai_session` truth sources available to normal recall/search rebuilds.
 
 Remaining gaps:
 
-- Memory Explorer still needs the same evidence inspector and recall feedback surface.
 - Work Context / Open Loops are deterministic first-pass artifacts; LLM refinement and feedback loops remain future work.
-- Local Agent session providers are registered as reference truth, but still need user-facing settings, filtering, and session-specific synthesis views.
+- Local Agent session providers are registered as reference truth and indexable by default after sync, but still need user-facing settings, filtering, and session-specific synthesis views.
 
 ---
 

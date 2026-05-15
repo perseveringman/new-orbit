@@ -9,6 +9,7 @@ import {
   entityNodeId,
   sourceNodeId
 } from '../src/main/evidence';
+import { createMemoryStore } from '../src/main/memory/store';
 import { createNoteStore } from '../src/main/note/store';
 import { projectSynthesisArtifact } from '../src/main/semantic/document-projectors';
 import { evidenceSourceId } from '../src/shared/evidence';
@@ -151,6 +152,44 @@ describe('PMIL recall foundation', () => {
     expect(synthesisSection?.content).toContain('GraphRAG');
     expect(packet.synthesis_refs.some((ref) => artifacts.some((artifact) => artifact.id === ref))).toBe(true);
     expect(packet.evidence.length).toBeGreaterThan(0);
+  });
+
+  it('injects recalled MemoryNode entries into context packets with source evidence', async () => {
+    const note = await createNoteStore(vaultPath).create({
+      type: 'thought',
+      title: 'PMIL memory preference',
+      body: 'User prefers PMIL answers that cite evidence before making recommendations.',
+      resource_refs: ['pmil']
+    });
+    const memory = await createMemoryStore(vaultPath).create({
+      kind: 'preference',
+      title: 'PMIL answers should cite evidence',
+      summary: 'User prefers PMIL recommendations to cite evidence before giving advice.',
+      confidence: 0.72,
+      user_confirmed: true,
+      sources: [
+        {
+          kind: 'note',
+          ref: note.frontmatter.id,
+          title: note.frontmatter.title
+        }
+      ]
+    });
+
+    await createEvidenceChunkIndexStore(vaultPath).rebuild({ includeActivities: false });
+    const packet = await buildContextPacket(vaultPath, {
+      purpose: 'ask',
+      scope: { kind: 'resource', ref: 'pmil' },
+      query: 'How should PMIL recommendations use evidence?',
+      max_tokens: 1200,
+      synthesis_mode: 'lookup'
+    });
+    const memorySection = packet.sections.find((section) => section.kind === 'memories');
+
+    expect(memorySection?.title).toBe('Memories');
+    expect(memorySection?.content).toContain('PMIL answers should cite evidence');
+    expect(memorySection?.citations[0]?.source_id).toBe(evidenceSourceId('note', note.frontmatter.id));
+    expect(packet.memory_refs).toContain(memory.id);
   });
 
   it('derives work context and open loops from evidence chunks', async () => {

@@ -12,7 +12,10 @@ import {
   type EvidenceScopeRef,
   type EvidenceSource
 } from '@shared/evidence';
-import type { ExternalAISessionRoot } from './external-ai-sessions';
+import {
+  EXTERNAL_AI_SESSION_PROVIDER_ID,
+  type ExternalAISessionRoot
+} from './external-ai-sessions';
 import { createOrbitEvidenceProvider, syncOrbitEvidenceSources } from './providers';
 import { createEvidenceStore } from './store';
 
@@ -40,7 +43,10 @@ export class EvidenceChunkIndexStore {
 
   async rebuild(options: EvidenceIndexBuildOptions = {}): Promise<EvidenceChunkIndexFile> {
     const buildOptions = { ...this.defaultOptions, ...options };
-    const sources = await syncOrbitEvidenceSources(this.vaultPath, buildOptions);
+    const sources = await includeRegisteredExternalAISessions(
+      this.vaultPath,
+      await syncOrbitEvidenceSources(this.vaultPath, buildOptions)
+    );
     const provider = createOrbitEvidenceProvider(this.vaultPath);
     const chunks: Record<string, EvidenceChunk> = {};
     const sourceFingerprints: Record<string, string> = {};
@@ -129,10 +135,13 @@ export class EvidenceChunkIndexStore {
 
   private async readOrRebuild(): Promise<EvidenceChunkIndexFile> {
     const current = await this.readIndex();
-    const sources = await syncOrbitEvidenceSources(this.vaultPath, {
-      ...this.defaultOptions,
-      includeActivities: false
-    });
+    const sources = await includeRegisteredExternalAISessions(
+      this.vaultPath,
+      await syncOrbitEvidenceSources(this.vaultPath, {
+        ...this.defaultOptions,
+        includeActivities: false
+      })
+    );
     const fingerprints = Object.fromEntries(
       sources.filter(isIndexableSource).map((source) => [source.id, source.fingerprint.value])
     );
@@ -202,6 +211,30 @@ export function extractEntities(text: string): string[] {
 
 function isIndexableSource(source: EvidenceSource): boolean {
   return source.availability !== 'missing' && source.privacy.index_level !== 'metadata_only';
+}
+
+async function includeRegisteredExternalAISessions(
+  vaultPath: string,
+  sources: EvidenceSource[]
+): Promise<EvidenceSource[]> {
+  if (sources.some((source) => source.provider_id === EXTERNAL_AI_SESSION_PROVIDER_ID || source.kind === 'external_ai_session')) {
+    return uniqueSources(sources);
+  }
+  const registered = await createEvidenceStore(vaultPath).list({
+    provider_id: EXTERNAL_AI_SESSION_PROVIDER_ID,
+    include_unavailable: true,
+    limit: 5000
+  });
+  return uniqueSources([...sources, ...registered]);
+}
+
+function uniqueSources(sources: EvidenceSource[]): EvidenceSource[] {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    if (seen.has(source.id)) return false;
+    seen.add(source.id);
+    return true;
+  });
 }
 
 function contentViewForSource(source: EvidenceSource): EvidenceContentView {

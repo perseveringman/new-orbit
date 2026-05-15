@@ -1,10 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import type { BuildContextPacketInput, ContextPacket, ContextPacketScope, ContextSection } from '@shared/context';
-import type { EvidenceChunk, EvidenceChunkSearchResult, EvidenceScopeRef, EvidenceSelector, EvidenceSource } from '@shared/evidence';
+import {
+  evidenceSourceId,
+  type EvidenceChunk,
+  type EvidenceChunkSearchResult,
+  type EvidenceScopeRef,
+  type EvidenceSelector,
+  type EvidenceSource,
+  type EvidenceSourceKind
+} from '@shared/evidence';
 import type { GraphNeighbor } from '@shared/graph';
+import type { MemoryNode, RecallResult } from '@shared/memory';
+import type { SynthesisSource } from '@shared/synthesis';
 import { createEvidenceChunkIndexStore } from '../evidence/chunk-index';
 import { createEvidenceGraphStore } from '../evidence/graph-store';
 import { ensurePersonalQA, listPersonalQAHits, type PersonalQAHitsResult } from './personal-qa';
+import { recallContext } from '../memory/recall-service';
 
 const DEFAULT_MAX_TOKENS = 2400;
 const DEFAULT_EVIDENCE_LIMIT = 8;
@@ -40,9 +51,11 @@ export async function buildContextPacket(vaultPath: string, input: BuildContextP
     ? []
     : await listPersonalQAHits(vaultPath, { scope, query: input.query, limit: 4 });
   const personalQASection = buildPersonalQASection(personalQAHits);
+  const memoryRecall = await buildMemoryRecall(vaultPath, input);
+  const memorySection = buildMemorySection(memoryRecall);
   const graphSection = await buildGraphSection(graphStore, evidenceResults.map((result) => result.chunk), input.graph_limit ?? DEFAULT_GRAPH_LIMIT);
   const maxTokens = input.max_tokens ?? DEFAULT_MAX_TOKENS;
-  const sections = [buildScopeSection(scope), evidenceSection, personalQASection, graphSection]
+  const sections = [buildScopeSection(scope), evidenceSection, personalQASection, memorySection, graphSection]
     .filter((section): section is ContextSection => Boolean(section))
     .sort((a, b) => a.priority - b.priority);
   const fittedSections = fitSections(sections, maxTokens);
@@ -75,7 +88,9 @@ export async function buildContextPacket(vaultPath: string, input: BuildContextP
     synthesis_refs: personalQASection && fittedSections.includes(personalQASection)
       ? personalQAHits.map((hit) => hit.artifact.id)
       : [],
-    memory_refs: []
+    memory_refs: memorySection && fittedSections.includes(memorySection)
+      ? memoryRecall.memories.map((memory) => memory.id)
+      : []
   };
 }
 
@@ -124,6 +139,88 @@ function buildPersonalQASection(hits: PersonalQAHitsResult[]): ContextSection | 
     citations: dedupeSelectors(hits.flatMap((hit) => hit.artifact.payload.evidence)),
     priority: 25
   };
+}
+
+async function buildMemoryRecall(
+  vaultPath: string,
+  input: BuildContextPacketInput
+): Promise<RecallResult> {
+  if (!input.query?.trim()) {
+    return { memories: [], matches: [], explanation: 'No memory query provided.' };
+  }
+  try {
+    return await recallContext(vaultPath, input.query, {
+      max_memories: 4,
+      min_confidence: 0.4,
+      triggered_by: { kind: contextPurposeToRecallTrigger(input.purpose), ref: input.scope?.ref },
+      used_in: 'context_injection'
+    });
+  } catch {
+    return { memories: [], matches: [], explanation: 'Memory recall unavailable.' };
+  }
+}
+
+function buildMemorySection(recall: RecallResult): ContextSection | null {
+  if (!recall.memories.length) return null;
+  const lines = recall.memories.map((memory, index) => {
+    const match = recall.matches.find((item) => item.memory_id === memory.id);
+    const score = match ? ` score=${match.score}` : '';
+    const reasons = match?.reasons.length ? ` (${match.reasons.slice(0, 2).join('; ')})` : '';
+    return `${index + 1}. ${memory.title}${score}${reasons}\n${snippet(memory.summary)}`;
+  });
+  return {
+    kind: 'memories',
+    title: 'Memories',
+    content: lines.join('\n\n'),
+    citations: dedupeSelectors(recall.memories.flatMap(evidenceSelectorsFromMemory)),
+    priority: 27
+  };
+}
+
+function contextPurposeToRecallTrigger(purpose: BuildContextPacketInput['purpose']): 'ask' | 'task' | 'review' | 'manual' {
+  if (purpose === 'ask') return 'ask';
+  if (purpose === 'task' || purpose === 'project' || purpose === 'area' || purpose === 'resource') return 'task';
+  if (purpose === 'review') return 'review';
+  return 'manual';
+}
+
+function evidenceSelectorsFromMemory(memory: MemoryNode): EvidenceSelector[] {
+  return memory.sources.flatMap(evidenceSelectorsFromSource);
+}
+
+function evidenceSelectorsFromSource(source: SynthesisSource): EvidenceSelector[] {
+  const direct = evidenceSelectorFromMetadata(source.metadata);
+  if (direct) return [direct];
+  const kind = synthesisSourceToEvidenceKind(source.kind);
+  if (!kind || !source.ref) return [];
+  return [
+    {
+      source_id: evidenceSourceId(kind, source.ref),
+      kind: 'whole_source',
+      content_view: 'safe_projection',
+      reason: 'memory source'
+    }
+  ];
+}
+
+function evidenceSelectorFromMetadata(metadata?: Record<string, unknown>): EvidenceSelector | null {
+  const selector = metadata?.['selector'];
+  if (!selector || typeof selector !== 'object') return null;
+  const candidate = selector as Partial<EvidenceSelector>;
+  if (typeof candidate.source_id !== 'string' || typeof candidate.kind !== 'string' || typeof candidate.content_view !== 'string') {
+    return null;
+  }
+  return candidate as EvidenceSelector;
+}
+
+function synthesisSourceToEvidenceKind(kind: SynthesisSource['kind']): EvidenceSourceKind | null {
+  if (kind === 'library') return 'library_item';
+  if (kind === 'event') return 'activity_event';
+  if (kind === 'kb') return 'kb_doc';
+  if (kind === 'note' || kind === 'resource' || kind === 'project' || kind === 'area' || kind === 'task' || kind === 'conversation') {
+    return kind;
+  }
+  return null;
 }
 
 async function buildGraphSection(

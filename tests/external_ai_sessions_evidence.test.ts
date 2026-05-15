@@ -71,4 +71,34 @@ describe('external AI session evidence source', () => {
     expect(read.excerpts[0].text).not.toContain('large hidden tool output');
     expect(results[0].chunk.source_id).toBe(source.id);
   });
+
+  it('keeps registered external sessions in the default chunk index', async () => {
+    const projectDir = path.join(sessionsRoot, '-Users-ryan-Developer-new-orbit');
+    await fs.mkdir(projectDir, { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, 'session.jsonl'),
+      [
+        JSON.stringify({
+          type: 'user',
+          timestamp: '2026-05-15T09:00:00.000Z',
+          message: { role: 'user', content: 'PMIL should retrieve local agent sessions as raw evidence.' }
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2026-05-15T09:01:00.000Z',
+          message: { role: 'assistant', content: 'Context packets can cite registered session evidence selectors.' }
+        })
+      ].join('\n'),
+      'utf8'
+    );
+
+    const sources = await syncExternalAISessionEvidenceSources(vaultPath, {
+      externalAISessionRoots: [{ agent: 'claude', source: 'claude-code', dir: sessionsRoot }]
+    });
+    const indexStore = createEvidenceChunkIndexStore(vaultPath);
+    const results = await indexStore.search({ query: 'raw evidence context packets selectors', limit: 5 });
+
+    expect(results[0].chunk.source_id).toBe(sources[0].id);
+    expect(results[0].chunk.text).toContain('local agent sessions as raw evidence');
+  });
 });

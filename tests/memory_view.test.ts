@@ -18,6 +18,9 @@ describe('MemoryContent', () => {
     expect(html).toContain('Transparent long-term memory');
     expect(html).toContain('Read source first');
     expect(html).toContain('Memory graph');
+    expect(html).toContain('来源证据');
+    expect(html).toContain('查看证据');
+    expect(html).toContain('不相关');
     expect(html).toContain('Promote to Resource');
     expect(html).toContain('semantic');
     expect(html).toContain('Stable');
@@ -44,6 +47,7 @@ function baseElement(overrides: Partial<Parameters<typeof MemoryContent>[0]> = {
     onArchive: vi.fn(),
     onConfirm: vi.fn(),
     onDigest: vi.fn(),
+    onFeedback: vi.fn(),
     onPromote: vi.fn(),
     ...overrides
   });
@@ -56,7 +60,14 @@ function sampleMemory(): MemoryNode {
     kind: 'preference',
     title: 'Read source first',
     summary: 'User prefers reading source before docs.',
-    sources: [],
+    sources: [
+      {
+        kind: 'note',
+        ref: 'note-1',
+        title: 'Source note',
+        excerpt: 'User prefers reading source before docs.'
+      }
+    ],
     evidence_count: 3,
     confidence: 0.8,
     stability: 'stable',

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import type { EvidenceReadResult, EvidenceSelector, EvidenceSourceKind } from '@shared/evidence';
+import { evidenceSourceId } from '@shared/evidence';
 import type { MemoryDigestResult, MemoryGraph, MemoryKind, MemoryLayer, MemoryNode } from '@shared/memory';
 import { MEMORY_KINDS, MEMORY_LAYERS } from '@shared/memory';
+import type { SynthesisSource } from '@shared/synthesis';
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
 interface ManualMemoryDraft {
@@ -72,6 +75,11 @@ export function MemoryView(): JSX.Element {
     await load();
   }
 
+  async function feedback(id: string, helpful: boolean): Promise<void> {
+    await window.orbit.memory.feedback(id, helpful);
+    await load();
+  }
+
   return (
     <MemoryContent
       kind={kind}
@@ -89,6 +97,7 @@ export function MemoryView(): JSX.Element {
       onConfirm={(node) => void confirmMemory(node)}
       onDigest={() => void generateDigest()}
       onPromote={(id, target) => void promote(id, target)}
+      onFeedback={(id, helpful) => void feedback(id, helpful)}
     />
   );
 }
@@ -109,6 +118,7 @@ export function MemoryContent(props: {
   onConfirm(node: MemoryNode): void;
   onDigest(): void;
   onPromote(id: string, target: 'resource' | 'project'): void;
+  onFeedback(id: string, helpful: boolean): void;
 }): JSX.Element {
   const stats = useMemo(() => summarize(props.nodes), [props.nodes]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -251,7 +261,14 @@ export function MemoryContent(props: {
         ) : (
           <section className="grid gap-3">
             {props.nodes.map((node) => (
-              <MemoryCard key={node.id} node={node} onArchive={props.onArchive} onConfirm={props.onConfirm} onPromote={props.onPromote} />
+              <MemoryCard
+                key={node.id}
+                node={node}
+                onArchive={props.onArchive}
+                onConfirm={props.onConfirm}
+                onFeedback={props.onFeedback}
+                onPromote={props.onPromote}
+              />
             ))}
           </section>
         )}
@@ -296,8 +313,10 @@ function MemoryCard(props: {
   node: MemoryNode;
   onArchive(id: string): void;
   onConfirm(node: MemoryNode): void;
+  onFeedback(id: string, helpful: boolean): void;
   onPromote(id: string, target: 'resource' | 'project'): void;
 }): JSX.Element {
+  const selectors = evidenceSelectorsFromMemory(props.node);
   const tone =
     props.node.stability === 'core'
       ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300'
@@ -320,6 +339,23 @@ function MemoryCard(props: {
       <p className="mt-2 text-xs text-neutral-500">
         Why it exists: {props.node.sources[0]?.title ?? props.node.sources[0]?.ref ?? 'manual memory'}{props.node.user_confirmed ? ' · user confirmed' : ''}
       </p>
+      {selectors.length ? (
+        <section className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">来源证据</h3>
+            <span className="text-xs text-neutral-500">{selectors.length} 条</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {selectors.slice(0, 5).map((selector) => (
+              <MemoryEvidenceButton key={memoryEvidenceSelectorKey(selector)} selector={selector} />
+            ))}
+          </div>
+        </section>
+      ) : (
+        <p className="mt-4 rounded-xl border border-dashed border-neutral-300 p-3 text-xs text-neutral-500 dark:border-neutral-700">
+          这条记忆还没有可下钻的 evidence selector；它可能来自手动创建或旧版 synthesis source。
+        </p>
+      )}
       {props.node.related_entities?.length ? (
         <div className="mt-3 flex flex-wrap gap-1">
           {props.node.related_entities.slice(0, 6).map((entity) => (
@@ -331,11 +367,52 @@ function MemoryCard(props: {
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <button onClick={() => props.onConfirm(props.node)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Confirm</button>
+        <button onClick={() => props.onFeedback(props.node.id, true)} className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">有帮助</button>
+        <button onClick={() => props.onFeedback(props.node.id, false)} className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs text-amber-700 dark:border-amber-900 dark:text-amber-300">不相关</button>
         <button onClick={() => props.onPromote(props.node.id, 'resource')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Promote to Resource</button>
         <button onClick={() => props.onPromote(props.node.id, 'project')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Promote to Project</button>
         <button onClick={() => props.onArchive(props.node.id)} className="rounded-lg border border-red-300 px-3 py-1.5 text-xs text-red-600 dark:border-red-900 dark:text-red-300">Archive</button>
       </div>
     </article>
+  );
+}
+
+function MemoryEvidenceButton({ selector }: { selector: EvidenceSelector }): JSX.Element {
+  const [result, setResult] = useState<EvidenceReadResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function readEvidence(): Promise<void> {
+    setLoading(true);
+    setError(null);
+    try {
+      setResult(await window.orbit.evidence.read(selector));
+    } catch (err) {
+      setResult(null);
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex max-w-full flex-col gap-1">
+      <button
+        type="button"
+        onClick={() => void readEvidence()}
+        disabled={loading}
+        className="rounded-md border border-emerald-300 bg-white px-2 py-0.5 text-[11px] text-emerald-700 disabled:opacity-60 dark:border-emerald-900 dark:bg-neutral-950 dark:text-emerald-300"
+      >
+        {loading ? '读取中' : `查看证据 ${shortEvidenceLabel(selector)}`}
+      </button>
+      {error ? <span className="text-[11px] text-red-600 dark:text-red-300">{error}</span> : null}
+      {result ? (
+        <span className="rounded-md border border-emerald-200 bg-white p-2 text-[11px] leading-5 text-neutral-600 dark:border-emerald-900 dark:bg-neutral-950 dark:text-neutral-300">
+          <span className="block font-medium text-neutral-800 dark:text-neutral-100">{result.source.title}</span>
+          {result.excerpts[0]?.text.slice(0, 520) ?? '没有可用摘录。'}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -360,6 +437,66 @@ function StateCard(props: { title: string; body: string; actionLabel: string; on
       <button onClick={props.onAction} className="mt-4 rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">{props.actionLabel}</button>
     </section>
   );
+}
+
+function evidenceSelectorsFromMemory(memory: MemoryNode): EvidenceSelector[] {
+  return dedupeMemorySelectors(memory.sources.flatMap(evidenceSelectorsFromSource));
+}
+
+function evidenceSelectorsFromSource(source: SynthesisSource): EvidenceSelector[] {
+  const direct = evidenceSelectorFromMetadata(source.metadata);
+  if (direct) return [direct];
+  const kind = synthesisSourceToEvidenceKind(source.kind);
+  if (!kind || !source.ref) return [];
+  return [
+    {
+      source_id: evidenceSourceId(kind, source.ref),
+      kind: 'whole_source',
+      content_view: 'safe_projection',
+      reason: 'memory source'
+    }
+  ];
+}
+
+function evidenceSelectorFromMetadata(metadata?: Record<string, unknown>): EvidenceSelector | null {
+  const selector = metadata?.['selector'];
+  if (!selector || typeof selector !== 'object') return null;
+  const candidate = selector as Partial<EvidenceSelector>;
+  if (typeof candidate.source_id !== 'string' || typeof candidate.kind !== 'string' || typeof candidate.content_view !== 'string') {
+    return null;
+  }
+  return candidate as EvidenceSelector;
+}
+
+function synthesisSourceToEvidenceKind(kind: SynthesisSource['kind']): EvidenceSourceKind | null {
+  if (kind === 'library') return 'library_item';
+  if (kind === 'event') return 'activity_event';
+  if (kind === 'kb') return 'kb_doc';
+  if (kind === 'note' || kind === 'resource' || kind === 'project' || kind === 'area' || kind === 'task' || kind === 'conversation') {
+    return kind;
+  }
+  return null;
+}
+
+function dedupeMemorySelectors(selectors: EvidenceSelector[]): EvidenceSelector[] {
+  const seen = new Set<string>();
+  const out: EvidenceSelector[] = [];
+  for (const selector of selectors) {
+    const key = memoryEvidenceSelectorKey(selector);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(selector);
+  }
+  return out;
+}
+
+function memoryEvidenceSelectorKey(selector: EvidenceSelector): string {
+  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
+}
+
+function shortEvidenceLabel(selector: EvidenceSelector): string {
+  const id = selector.source_id.split(':').slice(-2).join(':') || selector.source_id;
+  return id.length > 22 ? `${id.slice(0, 22)}...` : id;
 }
 
 function summarize(nodes: MemoryNode[]): { total: number; stable: number; core: number; recalls: number; semantic: number; episodic: number; procedural: number } {
