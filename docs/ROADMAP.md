@@ -1,6 +1,6 @@
 # Orbit — Roadmap
 
-> **Status**: Phase 5 已完成基础闭环，Phase 6.1 Notes + KB Import 已落地 foundation；下一步进入 Phase 6.2 Library workstation。
+> **Status**: Phase 5 已完成基础闭环，Phase 6.1 Notes + KB Import / AI Workbench / Markdown Live Preview 已落地 foundation；下一步进入 Phase 6.2 Library workstation。
 > **Update cadence**: 每个里程碑落地后更新；架构方向以 `docs/architecture/` 为准；thinking-trail 记录推理过程。
 
 ---
@@ -273,7 +273,7 @@ Acceptance:
 
 ### 6.1 Notes and KB import
 
-Status: **implemented (foundation)**.
+Status: **implemented (AI Workbench + Markdown Live Preview foundation)**.
 
 Deliverables:
 
@@ -293,6 +293,12 @@ Implemented notes:
 - KB activation creates a Note with `source.kind = kb`, records activation metadata under `.orbit-kb-meta/annotations/`, and emits `kb.doc.activated`.
 - Notes UI includes type/tag/area/resource filters, a Markdown editor, and a contextual side panel for backlinks/source/resources/areas/synthesis refs.
 - Knowledge Base UI includes an import wizard, KB browser/search, welcome analysis, and Activate-to-Note action.
+- Notes AI Workbench upgrades the top-level Notes surface into inbox/connect/express/settled processing queues.
+- `summary.entity` and `relate.notes` artifacts now back per-note summary, key points, suggested tags, Area/Resource links, task extraction, longform distillation, Resource seed creation, and semantic note relations.
+- Suggestions remain Layer 2 until explicit user acceptance through UI, IPC, CLI, or agent tools; acceptance updates Note frontmatter, creates longform Notes/Resources, links Resource refs, or submits task proposals.
+- `orbit note ...` exposes queue/get/search/workbench/classify/relate/distill/propose-update/accept-suggestion/dismiss-suggestion for AI parity.
+- Ask-Anywhere tool registry exposes note workbench/read relation tools plus a user-approved accept-suggestion write tool.
+- Notes body editing now uses a source-first CodeMirror Live Preview editor: Markdown remains the stored Layer 1 truth, Live Preview hides common syntax outside the active editing line, and Source mode shows full Markdown.
 
 Data structures:
 
@@ -306,8 +312,9 @@ Data structures:
 UI:
 
 - Notes sidebar filters by type/tag/area/resource
-- simple markdown editor
+- CodeMirror Markdown editor with Live Preview / Source modes
 - note detail right panel: backlinks / resources / areas / synthesis summary
+- AI Workbench: summary, proposals, semantic relations, accept/dismiss actions
 - KB import wizard
 - “activate into note” action
 

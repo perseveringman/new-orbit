@@ -117,8 +117,8 @@ export class SDKEndpointRegistry {
       protocol: input.protocol ?? 'anthropic-compatible',
       baseURL: normalizeBaseUrl(input.baseURL),
       defaultModel: input.defaultModel.trim(),
-      ...(input.fastModel?.trim() ? { fastModel: input.fastModel.trim() } : {}),
-      ...(input.heavyModel?.trim() ? { heavyModel: input.heavyModel.trim() } : {}),
+      fastModel: input.fastModel?.trim() || input.defaultModel.trim(),
+      heavyModel: input.heavyModel?.trim() || input.defaultModel.trim(),
       ...(input.modelAlias ? { modelAlias: cleanStringRecord(input.modelAlias) } : {}),
       ...(input.costProfile ? { costProfile: input.costProfile } : {}),
       enabled: input.enabled ?? existing?.enabled ?? false

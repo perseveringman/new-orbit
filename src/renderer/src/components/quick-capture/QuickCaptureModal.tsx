@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import type {
   QuickCaptureSuggestDraftInput,
   QuickCaptureSuggestDraftResult,
   QuickCaptureSuggestion
 } from '@shared/capture';
+
+export type QuickCaptureDraftTrigger = 'typing' | 'paste' | 'drop' | 'attachment' | 'audio';
 
 export interface QuickCapturePayload {
   content: string;
@@ -20,7 +23,8 @@ interface QuickCaptureModalProps {
   suggesting?: boolean;
   error?: string | null;
   suggestionResult?: QuickCaptureSuggestDraftResult | null;
-  onDraftChange?(input: QuickCaptureSuggestDraftInput): void;
+  onDraftChange?(input: QuickCaptureSuggestDraftInput, trigger: QuickCaptureDraftTrigger): void;
+  onAnalyzeNow?(): void;
   onSave(payload: QuickCapturePayload): void;
   onClose(): void;
 }
@@ -32,6 +36,7 @@ export function QuickCaptureModal({
   error = null,
   suggestionResult = null,
   onDraftChange,
+  onAnalyzeNow,
   onSave,
   onClose
 }: QuickCaptureModalProps): JSX.Element | null {
@@ -47,6 +52,7 @@ export function QuickCaptureModal({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordingStartedAtRef = useRef<number>(0);
+  const draftTriggerRef = useRef<QuickCaptureDraftTrigger>('typing');
 
   useEffect(() => {
     if (!open) return;
@@ -57,16 +63,19 @@ export function QuickCaptureModal({
     setAudioFile(null);
     setAudioDurationSec(0);
     setSelectedSuggestionIds([]);
+    draftTriggerRef.current = 'typing';
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
+    const trigger = draftTriggerRef.current;
     onDraftChange?.({
       content,
       hasAudio: Boolean(audioFile),
       attachmentNames: files.map((file) => file.name)
-    });
+    }, trigger);
+    draftTriggerRef.current = 'typing';
   }, [audioFile, content, files, onDraftChange, open]);
 
   useEffect(() => {
@@ -93,8 +102,9 @@ export function QuickCaptureModal({
     });
   }
 
-  function addFiles(nextFiles: File[]): void {
+  function addFiles(nextFiles: File[], trigger: QuickCaptureDraftTrigger): void {
     if (nextFiles.length === 0) return;
+    draftTriggerRef.current = trigger;
     setFiles((current) => [...current, ...nextFiles]);
   }
 
@@ -116,6 +126,7 @@ export function QuickCaptureModal({
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
         const seconds = Math.max(1, Math.round((Date.now() - recordingStartedAtRef.current) / 1000));
+        draftTriggerRef.current = 'audio';
         setAudioFile(new File([blob], `voice-note-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`, { type: blob.type }));
         setAudioDurationSec(seconds);
         stream.getTracks().forEach((track) => track.stop());
@@ -148,7 +159,7 @@ export function QuickCaptureModal({
         }}
         onDrop={(event) => {
           event.preventDefault();
-          addFiles(Array.from(event.dataTransfer.files ?? []));
+          addFiles(Array.from(event.dataTransfer.files ?? []), 'drop');
         }}
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
@@ -166,6 +177,9 @@ export function QuickCaptureModal({
             ref={textareaRef}
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            onPaste={() => {
+              draftTriggerRef.current = 'paste';
+            }}
             onKeyDown={(event) => {
               const mod = event.metaKey || event.ctrlKey;
               if (mod && event.key === 'Enter') {
@@ -186,7 +200,7 @@ export function QuickCaptureModal({
               type="file"
               multiple
               className="hidden"
-              onChange={(event) => addFiles(Array.from(event.currentTarget.files ?? []))}
+              onChange={(event) => addFiles(Array.from(event.currentTarget.files ?? []), 'attachment')}
             />
             <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-lg border border-neutral-300 px-3 py-1.5 font-medium dark:border-neutral-700">
               Attach files
@@ -211,6 +225,7 @@ export function QuickCaptureModal({
             suggesting={suggesting}
             tags={suggestionResult?.tags ?? []}
             onToggle={toggleSuggestion}
+            onAnalyzeNow={onAnalyzeNow}
           />
           {error ? <p className="text-xs text-red-600 dark:text-red-300">{error}</p> : null}
         </div>
@@ -243,23 +258,33 @@ function SuggestionStrip({
   selectedIds,
   suggesting,
   tags,
-  onToggle
+  onToggle,
+  onAnalyzeNow
 }: {
   suggestions: QuickCaptureSuggestion[];
   selectedIds: string[];
   suggesting: boolean;
   tags: string[];
   onToggle(id: string): void;
+  onAnalyzeNow?(): void;
 }): JSX.Element {
   const visibleTags = useMemo(() => tags.slice(0, 4), [tags]);
   if (suggestions.length === 0 && !suggesting && visibleTags.length === 0) {
-    return <div className="text-xs text-neutral-500">AI suggestions will appear here as you type.</div>;
+    return (
+      <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
+        <span>AI suggestions will appear after a pause.</span>
+        {onAnalyzeNow ? <AnalyzeButton suggesting={suggesting} onAnalyzeNow={onAnalyzeNow} /> : null}
+      </div>
+    );
   }
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-xs text-neutral-500">
-        <span>Suggestions</span>
-        {suggesting ? <span>thinking…</span> : null}
+      <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
+        <div className="flex items-center gap-2">
+          <span>Suggestions</span>
+          {suggesting ? <span>thinking…</span> : null}
+        </div>
+        {onAnalyzeNow ? <AnalyzeButton suggesting={suggesting} onAnalyzeNow={onAnalyzeNow} /> : null}
       </div>
       <div className="flex flex-wrap gap-2">
         {suggestions.map((suggestion) => {
@@ -288,5 +313,26 @@ function SuggestionStrip({
         ))}
       </div>
     </div>
+  );
+}
+
+function AnalyzeButton({
+  suggesting,
+  onAnalyzeNow
+}: {
+  suggesting: boolean;
+  onAnalyzeNow(): void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onAnalyzeNow}
+      disabled={suggesting}
+      aria-label="Analyze"
+      title="Analyze now"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-neutral-200 text-neutral-500 hover:border-sky-300 hover:text-sky-700 disabled:cursor-wait disabled:opacity-60 dark:border-neutral-800 dark:hover:border-sky-700 dark:hover:text-sky-200"
+    >
+      <RefreshCw size={13} className={suggesting ? 'animate-spin' : ''} />
+    </button>
   );
 }

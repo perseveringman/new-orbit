@@ -123,7 +123,7 @@ export async function acceptNoteSuggestion(
   publishTraceableEvent({
     source: 'activity',
     type: 'note.suggestion.accepted',
-    summary: `Accepted note suggestion: ${suggestion.title}`,
+    summary: `Accepted note suggestion: ${suggestionLabel(suggestion)}`,
     payload: {
       note_id: note.frontmatter.id,
       artifact_id: artifact.id,
@@ -146,7 +146,7 @@ export async function dismissNoteSuggestion(
   publishTraceableEvent({
     source: 'activity',
     type: 'note.suggestion.dismissed',
-    summary: `Dismissed note suggestion: ${suggestion.title}`,
+    summary: `Dismissed note suggestion: ${suggestionLabel(suggestion)}`,
     payload: {
       note_id: note.frontmatter.id,
       artifact_id: artifact.id,
@@ -660,6 +660,10 @@ function suggestion(input: Omit<NoteWorkbenchSuggestion, 'status' | 'created_at'
 
 function isRelationSuggestion(value: NoteWorkbenchSuggestion | NoteRelationSuggestion): value is NoteRelationSuggestion {
   return 'target_note_id' in value;
+}
+
+function suggestionLabel(value: NoteWorkbenchSuggestion | NoteRelationSuggestion): string {
+  return isRelationSuggestion(value) ? value.target_title : value.title;
 }
 
 function noteSource(note: Note): SynthesisSource {

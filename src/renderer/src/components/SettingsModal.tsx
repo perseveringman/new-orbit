@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAgent } from '../store/agent';
 import { useWorkspace } from '../store/workspace';
 import type { BudgetSettings } from '@shared/schemas';
@@ -51,26 +51,34 @@ const BTN_PRIMARY =
 const ENDPOINT_PROVIDERS: SDKEndpointProvider[] = ['anthropic', 'minimax', 'deepseek', 'custom'];
 
 function endpointDraft(provider: SDKEndpointProvider = 'anthropic'): SDKEndpointInput {
-  const presets: Record<SDKEndpointProvider, Pick<SDKEndpointInput, 'label' | 'baseURL' | 'defaultModel'>> = {
+  const presets: Record<SDKEndpointProvider, Pick<SDKEndpointInput, 'label' | 'baseURL' | 'defaultModel' | 'fastModel' | 'heavyModel'>> = {
     anthropic: {
       label: 'Anthropic',
       baseURL: 'https://api.anthropic.com',
-      defaultModel: 'claude-3-5-sonnet-latest'
+      defaultModel: 'claude-3-5-sonnet-latest',
+      fastModel: 'claude-3-5-haiku-latest',
+      heavyModel: 'claude-3-5-sonnet-latest'
     },
     minimax: {
       label: 'MiniMax',
       baseURL: 'https://api.minimaxi.com/anthropic',
-      defaultModel: 'MiniMax-M2.7'
+      defaultModel: 'MiniMax-M2.7',
+      fastModel: 'MiniMax-M2.7',
+      heavyModel: 'MiniMax-M2.7'
     },
     deepseek: {
       label: 'DeepSeek',
       baseURL: 'https://api.deepseek.com/anthropic',
-      defaultModel: 'deepseek-v4-pro'
+      defaultModel: 'deepseek-v4-pro',
+      fastModel: 'deepseek-chat',
+      heavyModel: 'deepseek-v4-pro'
     },
     custom: {
       label: 'Custom Anthropic-compatible',
       baseURL: 'https://api.example.com',
-      defaultModel: 'claude-compatible-model'
+      defaultModel: 'claude-compatible-model',
+      fastModel: 'fast-model',
+      heavyModel: 'heavy-model'
     }
   };
   return { provider, ...presets[provider], enabled: true };
@@ -126,6 +134,7 @@ export function SettingsModal(): JSX.Element | null {
   const [externalRequestLog, setExternalRequestLog] = useState<ExternalGatewayRequestLogEntry[]>([]);
   const [externalAllowedUsers, setExternalAllowedUsers] = useState<string>('');
   const [externalMessage, setExternalMessage] = useState<string>('');
+  const endpointFormRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -314,6 +323,8 @@ export function SettingsModal(): JSX.Element | null {
         provider: endpoint.provider,
         baseURL: endpoint.baseURL,
         defaultModel: endpoint.defaultModel,
+        fastModel: endpoint.fastModel,
+        heavyModel: endpoint.heavyModel,
         modelAlias: endpoint.modelAlias,
         costProfile: endpoint.costProfile,
         enabled: !endpoint.enabled
@@ -323,6 +334,25 @@ export function SettingsModal(): JSX.Element | null {
     } catch (error) {
       setEndpointStatus((s) => ({ ...s, [endpoint.id]: `操作失败：${(error as Error).message}` }));
     }
+  }
+
+  function onEditEndpoint(endpoint: SDKEndpointRegistrySnapshot['endpoints'][number]): void {
+    setEndpointForm({
+      id: endpoint.id,
+      label: endpoint.label,
+      provider: endpoint.provider,
+      baseURL: endpoint.baseURL,
+      defaultModel: endpoint.defaultModel,
+      fastModel: endpoint.fastModel,
+      heavyModel: endpoint.heavyModel,
+      modelAlias: endpoint.modelAlias,
+      costProfile: endpoint.costProfile,
+      enabled: endpoint.enabled
+    });
+    setEndpointStatus((s) => ({ ...s, form: `正在编辑 ${endpoint.label}` }));
+    window.requestAnimationFrame(() => {
+      endpointFormRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
   }
 
   async function onSendChat(): Promise<void> {
@@ -613,7 +643,7 @@ export function SettingsModal(): JSX.Element | null {
                           <div>
                             <div className="font-medium">{endpoint.label}</div>
                             <div className="text-xs text-neutral-500">
-                              {endpoint.provider} · {endpoint.defaultModel} · {endpoint.enabled ? '已启用' : '已禁用'}
+                              {endpoint.provider} · 默认 {endpoint.defaultModel} · 快速 {endpoint.fastModel ?? endpoint.defaultModel} · 重度 {endpoint.heavyModel ?? endpoint.defaultModel} · {endpoint.enabled ? '已启用' : '已禁用'}
                             </div>
                             <div className="mt-1 break-all text-[11px] text-neutral-500">
                               {endpoint.baseURL}
@@ -623,18 +653,7 @@ export function SettingsModal(): JSX.Element | null {
                             <button
                               type="button"
                               className={BTN}
-                              onClick={() =>
-                                setEndpointForm({
-                                  id: endpoint.id,
-                                  label: endpoint.label,
-                                  provider: endpoint.provider,
-                                  baseURL: endpoint.baseURL,
-                                  defaultModel: endpoint.defaultModel,
-                                  modelAlias: endpoint.modelAlias,
-                                  costProfile: endpoint.costProfile,
-                                  enabled: endpoint.enabled
-                                })
-                              }
+                              onClick={() => onEditEndpoint(endpoint)}
                             >
                               编辑
                             </button>
@@ -706,9 +725,16 @@ export function SettingsModal(): JSX.Element | null {
                     ))}
                   </div>
                 </section>
-                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                <section
+                  ref={endpointFormRef}
+                  className={`space-y-3 rounded border p-3 ${
+                    endpointForm.id
+                      ? 'border-sky-300 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/20'
+                      : 'border-neutral-200 dark:border-neutral-800'
+                  }`}
+                >
                   <h3 className="text-sm font-semibold">
-                    {endpointForm.id ? '编辑端点' : '新增端点'}
+                    {endpointForm.id ? `编辑端点 · ${endpointForm.label}` : '新增端点'}
                   </h3>
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="text-xs text-neutral-500">
@@ -744,6 +770,24 @@ export function SettingsModal(): JSX.Element | null {
                       <input
                         value={endpointForm.defaultModel}
                         onChange={(e) => setEndpointForm((f) => ({ ...f, defaultModel: e.target.value }))}
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                    <label className="text-xs text-neutral-500">
+                      快速模型
+                      <input
+                        value={endpointForm.fastModel ?? ''}
+                        onChange={(e) => setEndpointForm((f) => ({ ...f, fastModel: e.target.value }))}
+                        placeholder={endpointForm.defaultModel || '未填则使用默认模型'}
+                        className={`${INPUT} mt-1`}
+                      />
+                    </label>
+                    <label className="text-xs text-neutral-500">
+                      重度模型
+                      <input
+                        value={endpointForm.heavyModel ?? ''}
+                        onChange={(e) => setEndpointForm((f) => ({ ...f, heavyModel: e.target.value }))}
+                        placeholder={endpointForm.defaultModel || '未填则使用默认模型'}
                         className={`${INPUT} mt-1`}
                       />
                     </label>

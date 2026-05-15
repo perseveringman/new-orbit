@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import type { BrowserWindow } from 'electron';
 import type {
   CaptureAttachment,
   CaptureAttachmentInput,
@@ -14,14 +16,28 @@ import type {
   QuickCaptureSuggestion
 } from '@shared/capture';
 import type { SpecialMarkerKind } from '@shared/note';
+import type { RuntimeRouteDecision, SDKInvocationInput } from '@shared/runtime';
 import { createInboxServiceForVault } from '../../inbox';
 import { createLibraryStore } from '../../library/store';
 import { createNoteStore } from '../../note/store';
 import { assertInsideVault, toPosix } from '../../pathGuard';
+import type { SDKInvocationResult } from '../../runtime/sdk/anthropic-sdk-adapter';
 import { captureId, slugify, truncateText } from '../common';
 
+export interface QuickCaptureRuntimeRouter {
+  decide(input: { mode: 'background'; modelTier?: 'fast' }): Promise<RuntimeRouteDecision>;
+  stream(input: SDKInvocationInput, windows: () => BrowserWindow[]): Promise<SDKInvocationResult>;
+}
+
+export interface QuickCaptureServiceOptions {
+  router?: QuickCaptureRuntimeRouter | null;
+}
+
 export class QuickCaptureService {
-  constructor(private readonly vaultPath: string) {}
+  constructor(
+    private readonly vaultPath: string,
+    private readonly options: QuickCaptureServiceOptions = {}
+  ) {}
 
   async saveAttachment(input: CaptureAttachmentInput): Promise<CaptureAttachment> {
     const name = safeAttachmentName(input.name);
@@ -75,14 +91,14 @@ export class QuickCaptureService {
 
   async suggestDraft(input: QuickCaptureSuggestDraftInput): Promise<QuickCaptureSuggestDraftResult> {
     const heuristic = heuristicSuggestions(input);
-    const gemini = await geminiFlashSuggestions(input).catch(() => null);
-    if (!gemini) return heuristic;
+    const sdk = await sdkFastSuggestions(input, this.options.router).catch(() => null);
+    if (!sdk) return heuristic;
     return {
-      title: gemini.title ?? heuristic.title,
-      tags: unique([...(gemini.tags ?? []), ...heuristic.tags]).slice(0, 6),
-      suggestions: mergeSuggestions(heuristic.suggestions, gemini.suggestions),
-      model: gemini.model,
-      source: heuristic.suggestions.length > 0 ? 'mixed' : 'gemini_flash'
+      title: sdk.title ?? heuristic.title,
+      tags: unique([...(sdk.tags ?? []), ...heuristic.tags]).slice(0, 6),
+      suggestions: mergeSuggestions(heuristic.suggestions, sdk.suggestions),
+      model: sdk.model,
+      source: heuristic.suggestions.length > 0 ? 'mixed' : 'sdk_fast'
     };
   }
 
@@ -134,8 +150,8 @@ export class QuickCaptureService {
   }
 }
 
-export function createQuickCaptureService(vaultPath: string): QuickCaptureService {
-  return new QuickCaptureService(vaultPath);
+export function createQuickCaptureService(vaultPath: string, options: QuickCaptureServiceOptions = {}): QuickCaptureService {
+  return new QuickCaptureService(vaultPath, options);
 }
 
 function captureNoteBody(
@@ -302,59 +318,40 @@ function heuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptur
   };
 }
 
-async function geminiFlashSuggestions(input: QuickCaptureSuggestDraftInput): Promise<QuickCaptureSuggestDraftResult | null> {
-  const apiKey = process.env['GEMINI_API_KEY'] ?? process.env['GOOGLE_API_KEY'];
-  if (!apiKey) return null;
+async function sdkFastSuggestions(
+  input: QuickCaptureSuggestDraftInput,
+  router?: QuickCaptureRuntimeRouter | null
+): Promise<QuickCaptureSuggestDraftResult | null> {
+  if (!router) return null;
   const content = input.content.trim();
   if (content.length < 8 && !input.hasAudio && !(input.attachmentNames?.length)) return null;
-  const model = process.env['ORBIT_CAPTURE_SUGGEST_MODEL'] ?? process.env['GEMINI_FLASH_MODEL'] ?? 'gemini-2.5-flash';
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 1600);
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 512,
-            responseMimeType: 'application/json'
-          },
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: captureSuggestionPrompt(input) }]
-            }
-          ]
-        })
-      }
-    );
-    if (!response.ok) return null;
-    const json = (await response.json()) as GeminiGenerateContentResponse;
-    const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim();
-    if (!text) return null;
-    const parsed = JSON.parse(text) as Record<string, unknown>;
-    return {
-      title: typeof parsed['title'] === 'string' ? parsed['title'].slice(0, 90) : undefined,
-      tags: normalizeTags(Array.isArray(parsed['tags']) ? parsed['tags'].map(String) : []),
-      suggestions: parseGeminiSuggestions(parsed['suggestions']),
-      model,
-      source: 'gemini_flash'
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-interface GeminiGenerateContentResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
-    };
-  }>;
+  const decision = await router.decide({ mode: 'background', modelTier: 'fast' });
+  if (decision.track !== 'sdk' || !decision.endpointId) return null;
+  const traceId = `quick-capture-${randomUUID()}`;
+  const result = await router.stream(
+    {
+      endpointId: decision.endpointId,
+      model: decision.model,
+      modelTier: 'fast',
+      system: 'You are Orbit Quick Capture. Return strict JSON only.',
+      messages: [{ role: 'user', content: captureSuggestionPrompt(input) }],
+      maxTokens: 512,
+      temperature: 0.1,
+      traceId,
+      conversationId: traceId,
+      mode: 'background'
+    },
+    () => []
+  );
+  const parsed = parseJsonObject(result.text);
+  if (!parsed) return null;
+  return {
+    title: typeof parsed['title'] === 'string' ? parsed['title'].slice(0, 90) : undefined,
+    tags: normalizeTags(Array.isArray(parsed['tags']) ? parsed['tags'].map(String) : []),
+    suggestions: parseSdkSuggestions(parsed['suggestions']),
+    model: decision.model,
+    source: 'sdk_fast'
+  };
 }
 
 function captureSuggestionPrompt(input: QuickCaptureSuggestDraftInput): string {
@@ -371,7 +368,7 @@ function captureSuggestionPrompt(input: QuickCaptureSuggestDraftInput): string {
   ].join('\n');
 }
 
-function parseGeminiSuggestions(value: unknown): QuickCaptureSuggestion[] {
+function parseSdkSuggestions(value: unknown): QuickCaptureSuggestion[] {
   if (!Array.isArray(value)) return [];
   const actions = new Set<QuickCaptureSuggestion['action']>([
     'save_to_library',
@@ -395,14 +392,14 @@ function parseGeminiSuggestions(value: unknown): QuickCaptureSuggestion[] {
         : 'low';
     return [
       {
-        id: `gemini:${action}:${index}`,
+        id: `sdk:${action}:${index}`,
         action,
         label: typeof record['label'] === 'string' ? record['label'].slice(0, 40) : labelForAction(action),
         detail: typeof record['detail'] === 'string' ? record['detail'].slice(0, 100) : undefined,
         confidence: clamp(Number(record['confidence'] ?? 0.6), 0, 1),
         risk,
         params: typeof record['params'] === 'object' && record['params'] !== null ? (record['params'] as Record<string, unknown>) : undefined,
-        source: 'gemini_flash'
+        source: 'sdk_fast'
       }
     ];
   });
@@ -412,11 +409,29 @@ function mergeSuggestions(base: QuickCaptureSuggestion[], extra: QuickCaptureSug
   const byAction = new Map<QuickCaptureSuggestion['action'], QuickCaptureSuggestion>();
   for (const suggestion of [...base, ...extra]) {
     const existing = byAction.get(suggestion.action);
-    if (!existing || suggestion.confidence >= existing.confidence || suggestion.source === 'gemini_flash') {
+    if (!existing || suggestion.confidence >= existing.confidence || suggestion.source === 'sdk_fast') {
       byAction.set(suggestion.action, suggestion);
     }
   }
   return [...byAction.values()].slice(0, 5);
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try {
+      const parsed = JSON.parse(trimmed.slice(start, end + 1));
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 function looksActionable(value: string): boolean {

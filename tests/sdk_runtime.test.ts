@@ -75,6 +75,9 @@ describe('Runtime B SDK foundation', () => {
     const endpoint = await registry.require('minimax');
     expect(registry.resolveModel(endpoint, 'claude-3-5-sonnet-latest')).toBe('MiniMax-M2.7');
     expect(registry.resolveModel(endpoint, 'minimax-text-01')).toBe('minimax-text-01');
+    const deepseek = await registry.require('deepseek');
+    expect(registry.resolveModel(deepseek, undefined, 'fast')).toBe('deepseek-chat');
+    expect(registry.resolveModel(deepseek, undefined, 'heavy')).toBe('deepseek-v4-pro');
   });
 
   it('routes Ask to SDK when an enabled endpoint has a key', async () => {
@@ -84,6 +87,7 @@ describe('Runtime B SDK foundation', () => {
       provider: 'custom',
       baseURL: 'https://sdk.example.test',
       defaultModel: 'model-route',
+      fastModel: 'model-route-fast',
       enabled: true,
       apiKey: 'sk-route'
     });
@@ -94,6 +98,9 @@ describe('Runtime B SDK foundation', () => {
     expect(decision.endpointId).toBe('custom-route');
     expect(decision.model).toBe('model-route');
     expect(decision.fallback?.track).toBe('cli');
+    await registry.setDefaults({ background: saved.id });
+    const fastDecision = await router.decide({ mode: 'background', modelTier: 'fast' });
+    expect(fastDecision.model).toBe('model-route-fast');
   });
 
   it('falls back route decisions to CLI when no SDK endpoint is configured', async () => {

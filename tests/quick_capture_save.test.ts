@@ -80,6 +80,53 @@ describe('quick capture save', () => {
     expect(result.source).toBe('heuristic');
   });
 
+  it('uses the SDK fast model for AI capture suggestions when configured', async () => {
+    const service = createQuickCaptureService(vaultPath, {
+      router: {
+        async decide(input) {
+          expect(input).toEqual({ mode: 'background', modelTier: 'fast' });
+          return {
+            mode: 'background',
+            track: 'sdk',
+            runtime: 'sdk:test',
+            endpointId: 'test-endpoint',
+            model: 'fast-capture-model',
+            reason: 'test'
+          };
+        },
+        async stream(input) {
+          expect(input.modelTier).toBe('fast');
+          expect(input.mode).toBe('background');
+          return {
+            text: JSON.stringify({
+              title: 'Timeline note idea',
+              tags: ['timeline'],
+              suggestions: [
+                {
+                  action: 'distill_later',
+                  label: 'Distill later',
+                  detail: 'Reusable capture signal',
+                  confidence: 0.82,
+                  risk: 'needs_confirm'
+                }
+              ]
+            }),
+            eventIds: [],
+            inputTokens: 10,
+            outputTokens: 20
+          };
+        }
+      }
+    });
+
+    const result = await service.suggestDraft({ content: 'Captured idea about timeline notes becoming ground truth.' });
+
+    expect(result.source).toBe('sdk_fast');
+    expect(result.model).toBe('fast-capture-model');
+    expect(result.tags).toContain('timeline');
+    expect(result.suggestions[0]?.source).toBe('sdk_fast');
+  });
+
   it('captures bookmarks, read-later links, and tasks into the correct stores', async () => {
     const service = createQuickCaptureService(vaultPath);
     const bookmark = await service.createLink({
@@ -129,6 +176,7 @@ describe('quick capture save', () => {
             }
           ]
         },
+        onAnalyzeNow: () => undefined,
         onSave: () => undefined,
         onClose: () => undefined
       })
@@ -137,6 +185,7 @@ describe('quick capture save', () => {
     expect(html).toContain('Type, paste, drop files, or record voice');
     expect(html).toContain('Save to Library');
     expect(html).toContain('Save Note');
+    expect(html).toContain('Analyze');
     expect(html).not.toContain('Link');
     expect(html).not.toContain('Task title');
     expect(html).toContain('Attach files');

@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
 import type {
   DailySummaryPayload,
-  NoteWorkbenchPayload,
   EnsureSynthesisInput,
   ResourceEmergencePayload,
   SynthesisArtifact,
@@ -11,6 +10,7 @@ import type {
   SynthesisProvenance,
   SynthesisSource
 } from '@shared/synthesis';
+import type { NoteWorkbenchPayload } from '@shared/note';
 import type { RuntimeRouteDecision, SDKInvocationInput } from '@shared/runtime';
 import type { SDKInvocationResult } from '../runtime/sdk/anthropic-sdk-adapter';
 import { roughTokenEstimate } from '../runtime/sdk/cost';
@@ -23,7 +23,7 @@ export interface SynthesisRunnerOptions {
 }
 
 export interface SynthesisRuntimeRouter {
-  decide(input: { mode: 'synthesis' }): Promise<RuntimeRouteDecision>;
+  decide(input: { mode: 'synthesis'; modelTier?: 'heavy' }): Promise<RuntimeRouteDecision>;
   stream(input: SDKInvocationInput, windows: () => BrowserWindow[]): Promise<SDKInvocationResult>;
 }
 
@@ -49,12 +49,13 @@ export class SynthesisRunner {
 
     try {
       if (this.options.router) {
-        const decision = await this.options.router.decide({ mode: 'synthesis' });
+        const decision = await this.options.router.decide({ mode: 'synthesis', modelTier: 'heavy' });
         if (decision.track === 'sdk') {
           const result = await this.options.router.stream(
             {
               endpointId: decision.endpointId,
               model: decision.model,
+              modelTier: 'heavy',
               system: rendered.system,
               messages: [{ role: 'user', content: rendered.user }],
               traceId,

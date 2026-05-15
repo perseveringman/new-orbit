@@ -43,7 +43,7 @@ export class RuntimeRouter {
           reason: 'agent mode requires a configured SDK endpoint'
         };
       }
-      const model = this.registry.resolveModel(endpoint, input.modelHint);
+      const model = this.registry.resolveModel(endpoint, input.modelHint, input.modelTier);
       return {
         mode: input.mode,
         track: 'sdk_agent',
@@ -72,7 +72,7 @@ export class RuntimeRouter {
         reason: 'no configured SDK endpoint'
       };
     }
-    const model = this.registry.resolveModel(endpoint, input.modelHint);
+    const model = this.registry.resolveModel(endpoint, input.modelHint, input.modelTier);
     return {
       mode: input.mode,
       track: 'sdk',
@@ -164,6 +164,7 @@ export class RuntimeRouter {
       maxIterations: number;
       endpointId?: string;
       model?: string;
+      modelTier?: SDKInvocationInput['modelTier'];
       mode?: SDKInvocationInput['mode'];
       /** Phase D：AbortSignal 透传给 adapter.streamAgentTurn。 */
       signal?: AbortSignal;
@@ -176,6 +177,7 @@ export class RuntimeRouter {
     const resolved = await this.resolveInvocation({
       endpointId: input.endpointId,
       model: input.model,
+      modelTier: input.modelTier,
       messages: [],
       mode: input.mode,
       conversationId: input.conversationId
@@ -274,7 +276,7 @@ export class RuntimeRouter {
     if (!apiKey) throw new Error(`sdk_key_missing:${endpoint.id}`);
     return {
       endpoint,
-      model: this.registry.resolveModel(endpoint, input.model),
+      model: this.registry.resolveModel(endpoint, input.model, input.modelTier),
       apiKey
     };
   }

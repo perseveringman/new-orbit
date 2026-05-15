@@ -1,65 +1,117 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import type { QuickCaptureSuggestDraftInput, QuickCaptureSuggestDraftResult, QuickCaptureSuggestion } from '@shared/capture';
 import { useFiles } from '../../store/files';
-import { QuickCaptureModal, type QuickCapturePayload } from './QuickCaptureModal';
+import { QuickCaptureModal, type QuickCaptureDraftTrigger, type QuickCapturePayload } from './QuickCaptureModal';
+
+const TYPING_ANALYZE_DELAY_MS = 1500;
+const EVENT_ANALYZE_DELAY_MS = 500;
+const MIN_AI_CONTENT_CHARS = 12;
+const MEANINGFUL_DELTA_CHARS = 40;
+const REANALYZE_COOLDOWN_MS = 5000;
 
 export function QuickCaptureProvider(): JSX.Element {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-  const [draft, setDraft] = useState<QuickCaptureSuggestDraftInput>({ content: '' });
   const [suggestionResult, setSuggestionResult] = useState<QuickCaptureSuggestDraftResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const analyzeTimerRef = useRef<number | null>(null);
+  const analyzeSeqRef = useRef(0);
+  const latestDraftRef = useRef<QuickCaptureSuggestDraftInput>({ content: '' });
+  const lastAiAnalysisRef = useRef<{ signature: string; content: string; at: number } | null>(null);
   const toast = useFiles((state) => state.toast);
 
-  useEffect(() => {
-    return window.orbit.quickCapture.onOpen(() => {
-      setError(null);
-      setOpen(true);
-    });
+  const openCapture = useCallback(() => {
+    clearAnalyzeTimer(analyzeTimerRef);
+    analyzeSeqRef.current += 1;
+    latestDraftRef.current = { content: '' };
+    lastAiAnalysisRef.current = null;
+    setSuggestionResult(null);
+    setSuggesting(false);
+    setError(null);
+    setOpen(true);
   }, []);
+
+  useEffect(() => {
+    return window.orbit.quickCapture.onOpen(openCapture);
+  }, [openCapture]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
       const mod = event.metaKey || event.ctrlKey;
       if (mod && event.shiftKey && event.key.toLowerCase() === 'i') {
         event.preventDefault();
-        setError(null);
-        setOpen(true);
+        openCapture();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [openCapture]);
 
   useEffect(() => {
-    if (!open) return;
-    const hasSignal = draft.content.trim() || draft.hasAudio || (draft.attachmentNames?.length ?? 0) > 0;
-    if (!hasSignal) {
-      setSuggestionResult(null);
+    if (open) return undefined;
+    clearAnalyzeTimer(analyzeTimerRef);
+    analyzeSeqRef.current += 1;
+    setSuggesting(false);
+    return undefined;
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      clearAnalyzeTimer(analyzeTimerRef);
+      analyzeSeqRef.current += 1;
+    };
+  }, []);
+
+  async function runAiAnalysis(
+    nextDraft: QuickCaptureSuggestDraftInput,
+    force = false,
+    trigger: QuickCaptureDraftTrigger = 'typing'
+  ): Promise<void> {
+    clearAnalyzeTimer(analyzeTimerRef);
+    if (!force && !shouldRunAiAnalysis(nextDraft, trigger, lastAiAnalysisRef.current)) return;
+    if (force && !hasDraftSignal(nextDraft)) return;
+    const seq = analyzeSeqRef.current + 1;
+    analyzeSeqRef.current = seq;
+    setSuggesting(true);
+    try {
+      const result = await window.orbit.capture.quick.suggestDraft(nextDraft);
+      if (analyzeSeqRef.current !== seq) return;
+      setSuggestionResult(result);
+      lastAiAnalysisRef.current = {
+        signature: draftSignature(nextDraft),
+        content: nextDraft.content.trim(),
+        at: Date.now()
+      };
+    } catch {
+      if (analyzeSeqRef.current === seq) {
+        setSuggestionResult(localHeuristicSuggestions(nextDraft));
+      }
+    } finally {
+      if (analyzeSeqRef.current === seq) setSuggesting(false);
+    }
+  }
+
+  const handleDraftChange = useCallback((nextDraft: QuickCaptureSuggestDraftInput, trigger: QuickCaptureDraftTrigger = 'typing') => {
+    clearAnalyzeTimer(analyzeTimerRef);
+    analyzeSeqRef.current += 1;
+    latestDraftRef.current = nextDraft;
+    setSuggestionResult(localHeuristicSuggestions(nextDraft));
+
+    if (!open || !shouldRunAiAnalysis(nextDraft, trigger, lastAiAnalysisRef.current)) {
       setSuggesting(false);
       return;
     }
-    let cancelled = false;
-    setSuggesting(true);
-    const timer = window.setTimeout(() => {
-      void window.orbit.capture.quick
-        .suggestDraft(draft)
-        .then((result) => {
-          if (!cancelled) setSuggestionResult(result);
-        })
-        .catch(() => {
-          if (!cancelled) setSuggestionResult(null);
-        })
-        .finally(() => {
-          if (!cancelled) setSuggesting(false);
-        });
-    }, 420);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [draft, open]);
+
+    const delay = trigger === 'typing' ? TYPING_ANALYZE_DELAY_MS : EVENT_ANALYZE_DELAY_MS;
+    analyzeTimerRef.current = window.setTimeout(() => {
+      void runAiAnalysis(nextDraft, false, trigger);
+    }, delay);
+  }, [open]);
+
+  const analyzeNow = useCallback(() => {
+    void runAiAnalysis(latestDraftRef.current, true);
+  }, []);
 
   async function save(payload: QuickCapturePayload): Promise<void> {
     setSaving(true);
@@ -85,6 +137,7 @@ export function QuickCaptureProvider(): JSX.Element {
       });
       await applyAcceptedSuggestions(payload.acceptedSuggestions, payload.content, tags);
       toast(payload.acceptedSuggestions.length > 0 ? `Note captured + ${payload.acceptedSuggestions.length} action(s)` : 'Note captured to Timeline');
+      clearAnalyzeTimer(analyzeTimerRef);
       setOpen(false);
     } catch (caught) {
       setError((caught as Error).message);
@@ -100,11 +153,140 @@ export function QuickCaptureProvider(): JSX.Element {
       suggesting={suggesting}
       error={error}
       suggestionResult={suggestionResult}
-      onDraftChange={setDraft}
+      onDraftChange={handleDraftChange}
+      onAnalyzeNow={analyzeNow}
       onSave={(payload) => void save(payload)}
       onClose={() => setOpen(false)}
     />
   );
+}
+
+function clearAnalyzeTimer(ref: MutableRefObject<number | null>): void {
+  if (ref.current !== null) {
+    window.clearTimeout(ref.current);
+    ref.current = null;
+  }
+}
+
+function shouldRunAiAnalysis(
+  nextDraft: QuickCaptureSuggestDraftInput,
+  trigger: QuickCaptureDraftTrigger,
+  last: { signature: string; content: string; at: number } | null
+): boolean {
+  if (!hasDraftSignal(nextDraft)) return false;
+  const content = nextDraft.content.trim();
+  const hasRichInput = Boolean(nextDraft.hasAudio || (nextDraft.attachmentNames?.length ?? 0) > 0);
+  if (!hasRichInput && content.length < MIN_AI_CONTENT_CHARS) return false;
+  if (!last) return true;
+  const signature = draftSignature(nextDraft);
+  if (signature === last.signature) return false;
+  if (trigger !== 'typing') return true;
+  const delta = contentDelta(content, last.content);
+  return delta >= MEANINGFUL_DELTA_CHARS || Date.now() - last.at >= REANALYZE_COOLDOWN_MS;
+}
+
+function hasDraftSignal(input: QuickCaptureSuggestDraftInput): boolean {
+  return Boolean(input.content.trim() || input.hasAudio || (input.attachmentNames?.length ?? 0) > 0);
+}
+
+function draftSignature(input: QuickCaptureSuggestDraftInput): string {
+  return JSON.stringify({
+    content: input.content.trim(),
+    hasAudio: Boolean(input.hasAudio),
+    attachmentNames: input.attachmentNames ?? []
+  });
+}
+
+function contentDelta(a: string, b: string): number {
+  if (a === b) return 0;
+  let prefix = 0;
+  while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) prefix += 1;
+  let suffix = 0;
+  while (
+    suffix + prefix < a.length &&
+    suffix + prefix < b.length &&
+    a[a.length - 1 - suffix] === b[b.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+  return Math.max(a.length - prefix - suffix, b.length - prefix - suffix);
+}
+
+function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptureSuggestDraftResult | null {
+  if (!hasDraftSignal(input)) return null;
+  const content = input.content.trim();
+  const suggestions: QuickCaptureSuggestion[] = [];
+  const url = firstUrl(content);
+  if (url) {
+    const host = safeHostname(url);
+    suggestions.push({
+      id: `local:save_to_library:${url}`,
+      action: 'save_to_library',
+      label: 'Save to Library',
+      detail: host,
+      confidence: 0.88,
+      risk: 'low',
+      params: { url },
+      source: 'heuristic'
+    });
+  }
+  if (looksActionable(content)) {
+    suggestions.push({
+      id: 'local:create_task',
+      action: 'create_task',
+      label: 'Create task',
+      detail: titleFromContent(content),
+      confidence: 0.74,
+      risk: 'proposal',
+      params: { title: titleFromContent(content), details: content },
+      source: 'heuristic'
+    });
+  }
+  if (input.hasAudio) {
+    suggestions.push({
+      id: 'local:transcribe_voice',
+      action: 'transcribe_voice',
+      label: 'Transcribe voice',
+      detail: 'Attach transcript when a speech model is configured',
+      confidence: 0.72,
+      risk: 'needs_confirm',
+      source: 'heuristic'
+    });
+  }
+  if (content.length > 800) {
+    suggestions.push({
+      id: 'local:distill_later',
+      action: 'distill_later',
+      label: 'Distill later',
+      detail: 'Long capture with reusable signal',
+      confidence: 0.65,
+      risk: 'needs_confirm',
+      source: 'heuristic'
+    });
+  }
+  return {
+    title: titleFromDraft(content, input.attachmentNames ?? []),
+    tags: extractHashTags(content),
+    suggestions,
+    source: 'heuristic'
+  };
+}
+
+function extractHashTags(value: string): string[] {
+  return Array.from(value.matchAll(/(?:^|\s)#([a-zA-Z0-9_\-\u4e00-\u9fff]+)/g), (match) => match[1] ?? '')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function looksActionable(value: string): boolean {
+  return /\b(todo|fix|ship|write|call|email|review|implement|follow up|remind|need to|should|must)\b/i.test(value)
+    || /(?:^|\s)(要|需要|记得|待办|修复|实现|跟进|提醒|创建|整理)(?:\s|$)/.test(value);
+}
+
+function titleFromDraft(content: string, attachmentNames: string[]): string | undefined {
+  if (content) return titleFromContent(content);
+  if (attachmentNames.length > 0) return `Captured ${attachmentNames.length} file${attachmentNames.length === 1 ? '' : 's'}`;
+  return undefined;
 }
 
 async function applyAcceptedSuggestions(suggestions: QuickCaptureSuggestion[], content: string, tags: string[]): Promise<void> {
@@ -169,4 +351,12 @@ function firstUrl(value: string): string | undefined {
 
 function titleFromContent(value: string): string {
   return value.trim().split(/\r?\n/)[0]?.replace(/^(todo|task|待办)[:：]\s*/i, '').slice(0, 80) || 'Captured task';
+}
+
+function safeHostname(url: string): string | undefined {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
 }

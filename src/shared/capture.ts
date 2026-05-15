@@ -129,7 +129,7 @@ export interface QuickCaptureSuggestion {
   confidence: number;
   risk: QuickCaptureSuggestionRisk;
   params?: Record<string, unknown>;
-  source: 'heuristic' | 'gemini_flash';
+  source: 'heuristic' | 'sdk_fast';
 }
 
 export interface QuickCaptureSuggestDraftInput {
@@ -143,7 +143,7 @@ export interface QuickCaptureSuggestDraftResult {
   tags: string[];
   suggestions: QuickCaptureSuggestion[];
   model?: string;
-  source: 'heuristic' | 'gemini_flash' | 'mixed';
+  source: 'heuristic' | 'sdk_fast' | 'mixed';
 }
 
 export interface CreateCaptureNoteInput {

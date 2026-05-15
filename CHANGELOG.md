@@ -6,6 +6,8 @@
 
 ### Added
 
+- **Notes Markdown Live Preview editor foundation**：Notes 正文编辑器切换到 CodeMirror 6 source-first 模型，默认 Live Preview 隐藏常见 Markdown 标记并在当前编辑行露出源码，同时保留 Source 模式查看/编辑完整 Markdown。
+- **Notes AI Workbench foundation**：把 Notes 从 Markdown CRUD 升级为 AI-native 处理队列，新增 inbox/connect/express/settled queue、`summary.entity` / `relate.notes` synthesis artifacts、可接受/驳回的 Area/Resource/tag/task/distill/relation suggestions、`orbit note ...` CLI、Ask-Anywhere agent note tools，以及 Notes 右侧 Workbench UI。
 - **cc-connect External Gateway 集成**：落地 ADR-017 的 Orbit 侧域层实现，新增 JSONL/Unix Socket 协议、External Orchestrator、session → Conversation 持久桥接、Capability Registry、Ask/Capture/Library/Task/Inbox/Synthesis/Memory/Delegate adapters、请求日志/限流/权限配置，以及 Settings → External Gateway 状态与绑定查看；现有 Telegram Gateway 保留为自建 channel 兜底。
 - **Ask-Anywhere UX Revamp**：把悬浮球从"跳转开关"改造成真正的就地弹层对话框（复用 ChatView，顶部会话下拉 + 新建 + 展开到全页），并把全页从四列（Session/Context/Chat/Stage）压成两列 + 顶部可折叠 Context 条 + 按需 Stage 抽屉。落地 ADR-015 D-2 的弹层形态，不扩展 D-3/D-5/D-6。
 - **Gateway Telegram 可用化**：参照 openclaw 的 channel lifecycle 思路，把原本只会本地切状态的 Gateway 骨架升级为真实 Telegram Bot 长轮询运行时；支持 auto-start、关闭窗口后保持本地主进程运行、绑定码授权、未绑定用户拒绝、Telegram 回执、重连退避、channel 状态/错误/log 展示，并继续把 URL / `#thought` / 普通文本分别路由到 Library、Thoughts、Ask-Anywhere。

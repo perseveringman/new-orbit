@@ -23,12 +23,17 @@ import { createQuickCaptureService } from './quick/service';
 import { createThoughtService } from './thoughts/service';
 import { publishTraceableEvent } from '../events/bus';
 import { broadcastInboxEvent } from '../inbox/events';
+import { getSDKRuntime } from '../runtime/sdk/ipc';
 
 export function registerCaptureIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
     const value = getVaultPath();
     if (!value) throw new Error('no vault open');
     return value;
+  };
+  const quickCaptureService = (withRouter = false) => {
+    const vault = vaultPath();
+    return createQuickCaptureService(vault, withRouter ? { router: getSDKRuntime(vault).router } : {});
   };
 
   ipcMain.handle(IPC.capture.feed.listSubscriptions, () => createFeedService(vaultPath()).listSubscriptions());
@@ -150,13 +155,13 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
   });
 
   ipcMain.handle(IPC.capture.quick.saveAttachment, (_event, input: CaptureAttachmentInput) =>
-    createQuickCaptureService(vaultPath()).saveAttachment(input)
+    quickCaptureService().saveAttachment(input)
   );
   ipcMain.handle(IPC.capture.quick.suggestDraft, (_event, input: QuickCaptureSuggestDraftInput) =>
-    createQuickCaptureService(vaultPath()).suggestDraft(input)
+    quickCaptureService(true).suggestDraft(input)
   );
   ipcMain.handle(IPC.capture.quick.createNote, async (_event, input: CreateCaptureNoteInput) => {
-    const result = await createQuickCaptureService(vaultPath()).createNote(input);
+    const result = await quickCaptureService().createNote(input);
     publishTraceableEvent({
       source: 'activity',
       kind: 'note.created',
@@ -175,7 +180,7 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
     return result;
   });
   ipcMain.handle(IPC.capture.quick.createLink, async (_event, input: CreateCaptureLinkInput) => {
-    const result = await createQuickCaptureService(vaultPath()).createLink(input);
+    const result = await quickCaptureService().createLink(input);
     publishTraceableEvent({
       source: 'activity',
       kind: 'library.item.added',
@@ -190,7 +195,7 @@ export function registerCaptureIpc(getVaultPath: () => string | null): void {
     return result;
   });
   ipcMain.handle(IPC.capture.quick.createTask, async (_event, input: CreateCaptureTaskInput) => {
-    const result = await createQuickCaptureService(vaultPath()).createTask(input);
+    const result = await quickCaptureService().createTask(input);
     broadcastInboxEvent({ type: 'created', item: result.item });
     return result;
   });

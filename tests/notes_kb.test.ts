@@ -3,6 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createNoteStore } from '../src/main/note/store';
+import {
+  acceptNoteSuggestion,
+  buildNoteWorkbench,
+  dismissNoteSuggestion,
+  listNoteQueue
+} from '../src/main/note/workbench';
 import { createKnowledgeBaseStore } from '../src/main/knowledge-base/store';
 import { TRACEABLE_EVENT_KINDS } from '../src/shared/events/kinds';
 
@@ -63,6 +69,51 @@ describe('NoteStore Phase 6.1 contracts', () => {
     expect(archived.path).toContain('04_Archives/notes/thoughts/');
     expect(await notes.list()).toEqual([]);
     expect(await notes.get(note.frontmatter.id)).not.toBeNull();
+  });
+
+  it('builds an AI-native note workbench and applies suggestion decisions', async () => {
+    const notes = createNoteStore(tmp);
+    const note = await notes.create({
+      type: 'capture',
+      title: 'AI native notes',
+      body: [
+        '# AI native notes',
+        '',
+        'TODO: implement note workbench review flow',
+        '',
+        'This is a breakthrough about #notes and #ai. The note should connect capture, organize, distill, and express.'
+      ].join('\n'),
+      tags: []
+    });
+
+    const queue = await listNoteQueue(tmp, { bucket: 'inbox' });
+    expect(queue.map((item) => item.note_id)).toContain(note.frontmatter.id);
+    expect(queue.find((item) => item.note_id === note.frontmatter.id)?.reasons).toContain('no Area assignment');
+
+    const workbench = await buildNoteWorkbench(tmp, note.frontmatter.id, { force: true });
+    expect(workbench.artifact_id).toMatch(/^synth-/);
+    expect(workbench.payload.summary).toContain('TODO');
+    expect(workbench.payload.suggestions.some((item) => item.kind === 'add_tags')).toBe(true);
+    expect(workbench.payload.suggestions.some((item) => item.kind === 'propose_task')).toBe(true);
+
+    const tagSuggestion = workbench.payload.suggestions.find((item) => item.kind === 'add_tags');
+    expect(tagSuggestion).toBeTruthy();
+    const accepted = await acceptNoteSuggestion(tmp, {
+      noteId: note.frontmatter.id,
+      suggestionId: tagSuggestion!.id,
+      artifactId: tagSuggestion!.artifact_id ?? workbench.artifact_id
+    });
+    expect(accepted.note?.frontmatter.tags).toEqual(expect.arrayContaining(['ai', 'notes']));
+    expect(accepted.note?.frontmatter.synthesis_ref).toBe(workbench.artifact_id);
+
+    const summarySuggestion = workbench.payload.suggestions.find((item) => item.kind === 'summarize');
+    expect(summarySuggestion).toBeTruthy();
+    const dismissed = await dismissNoteSuggestion(tmp, {
+      noteId: note.frontmatter.id,
+      suggestionId: summarySuggestion!.id,
+      artifactId: workbench.artifact_id
+    });
+    expect(dismissed.suggestion.status).toBe('proposed');
   });
 });
 
