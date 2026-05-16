@@ -197,7 +197,7 @@ export function LibraryView(): JSX.Element {
             </div>
             <div className="grid grid-cols-3 gap-2 border-b border-neutral-200 p-3 dark:border-neutral-800">
               <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="标签" className="rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-              <input value={areas} onChange={(event) => setAreas(event.target.value)} placeholder="Areas" className="rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+              <input value={areas} onChange={(event) => setAreas(event.target.value)} placeholder="Areas，用英文逗号分隔" className="rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
               <input value={resourceRefs} onChange={(event) => setResourceRefs(event.target.value)} placeholder="Resource 引用" className="rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
             </div>
             <textarea value={body} onChange={(event) => setBody(event.target.value)} className="min-h-0 flex-1 resize-none bg-white p-5 font-mono text-sm leading-6 outline-none dark:bg-neutral-950" />

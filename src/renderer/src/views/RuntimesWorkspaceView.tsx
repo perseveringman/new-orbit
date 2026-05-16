@@ -400,7 +400,7 @@ export function RuntimesWorkspaceSurface({
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold">Runtime B SDK Endpoints</h3>
+                          <h3 className="text-sm font-semibold">Runtime B SDK 端点</h3>
                           <span className="text-xs text-neutral-500">{sdkEndpoints.length}</span>
                         </div>
                         {sdkEndpoints.length === 0 ? (

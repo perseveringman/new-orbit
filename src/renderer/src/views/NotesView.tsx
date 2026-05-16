@@ -352,13 +352,13 @@ export function NotesView(): JSX.Element {
             <input
               value={areaFilter}
               onChange={(event) => setAreaFilter(event.target.value)}
-               placeholder="Area"
+               placeholder="Area 筛选"
               className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
             />
             <input
               value={resourceFilter}
               onChange={(event) => setResourceFilter(event.target.value)}
-               placeholder="Resource"
+               placeholder="Resource 筛选"
               className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
             />
           </div>
@@ -451,14 +451,14 @@ export function NotesView(): JSX.Element {
                   value={areas}
                   onChange={(event) => setAreas(event.target.value)}
                   onBlur={() => void persistDraft()}
-                   placeholder="Areas"
+                    placeholder="Areas，用英文逗号分隔"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
                 <input
                   value={resourceRefs}
                   onChange={(event) => setResourceRefs(event.target.value)}
                   onBlur={() => void persistDraft()}
-                   placeholder="Resources"
+                    placeholder="Resources，用英文逗号分隔"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
               </div>

@@ -221,7 +221,7 @@ export function SearchContent(props: {
             <Select label="模式" value={props.mode} onChange={(value) => props.setMode(value as SearchMatchMode)} options={['hybrid', 'semantic', 'keyword']} />
             <Select label="实体" value={props.kind} onChange={props.setKind} options={['all', ...INDEXABLE_ENTITY_KINDS]} />
             <Select label="Layer" value={props.layer} onChange={props.setLayer} options={['all', '1', '2']} />
-            <FilterInput label="Area" value={props.area} onChange={props.setArea} placeholder="area slug" />
+            <FilterInput label="Area" value={props.area} onChange={props.setArea} placeholder="Area slug" />
             <FilterInput label="开始" value={props.dateFrom} onChange={props.setDateFrom} placeholder="YYYY-MM-DD" />
             <FilterInput label="结束" value={props.dateTo} onChange={props.setDateTo} placeholder="YYYY-MM-DD" />
           </div>

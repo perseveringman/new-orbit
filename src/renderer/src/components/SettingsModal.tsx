@@ -1223,7 +1223,7 @@ export function SettingsModal(): JSX.Element | null {
                 </section>
 
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-                  <h3 className="text-sm font-semibold">Session 绑定</h3>
+                  <h3 className="text-sm font-semibold">会话绑定</h3>
                   <div className="max-h-40 space-y-2 overflow-y-auto">
                     {externalSessions.length === 0 ? (
                       <p className="text-xs text-neutral-500">暂无外部 session。</p>
