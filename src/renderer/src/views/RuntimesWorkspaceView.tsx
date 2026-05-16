@@ -50,7 +50,7 @@ export function RuntimesWorkspaceView(): JSX.Element {
           return next.runtimes[0]?.runtimeId ?? null;
         });
       } catch (error) {
-        toast(`Load runtimes failed: ${(error as Error).message}`);
+        toast(`加载 Runtime 失败：${(error as Error).message}`);
       } finally {
         setLoading(false);
       }
@@ -147,44 +147,43 @@ export function RuntimesWorkspaceSurface({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-500">
-              Runtime and role routing
+              Runtime 与角色路由
             </p>
             <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-              AI Control Plane
+              AI 控制平面
             </h1>
             <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
-              Observe CLI runtimes, SDK endpoints, role bindings, and the leases/reports that are
-              currently flowing through Orbit&apos;s orchestration layer.
+              观察 CLI Runtime、SDK endpoint、角色绑定，以及当前流经 Orbit 编排层的 lease / report。
             </p>
           </div>
           <button
             onClick={onRefresh}
             className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Refresh registry
+            刷新注册表
           </button>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <WorkspaceStat
-            label="Online"
+            label="在线"
             value={String(stats.online)}
-            hint="CLI providers detected"
+            hint="已检测到 CLI provider"
           />
           <WorkspaceStat
-            label="Degraded"
+            label="降级"
             value={String(stats.degraded)}
-            hint="Need review or recovery"
+            hint="需要检查或恢复"
           />
           <WorkspaceStat
-            label="SDK ready"
+            label="SDK 就绪"
             value={String(stats.sdkReady)}
-            hint="Enabled endpoints with keys"
+            hint="已启用且配置 key 的 endpoint"
           />
           <WorkspaceStat
-            label="Role bindings"
+            label="角色绑定"
             value={String(stats.roleBindings)}
-            hint="Project roles wired to templates"
+            hint="已连接模板的项目角色"
           />
         </div>
       </header>
@@ -193,15 +192,15 @@ export function RuntimesWorkspaceSurface({
         <div className="flex h-full min-h-0">
           <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
             <div className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-              <h2 className="text-sm font-semibold">CLI Runtime Registry</h2>
-              <p className="mt-1 text-xs text-neutral-500">Providers discovered on this machine.</p>
+              <h2 className="text-sm font-semibold">CLI Runtime 注册表</h2>
+              <p className="mt-1 text-xs text-neutral-500">在本机发现的 provider。</p>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               {loading ? (
-                <p className="px-2 py-3 text-sm text-neutral-500">Loading runtimes…</p>
+                <p className="px-2 py-3 text-sm text-neutral-500">正在加载 Runtime…</p>
               ) : runtimes.length === 0 ? (
                 <p className="px-2 py-3 text-sm text-neutral-500">
-                  No local runtimes detected yet.
+                  尚未检测到本地 Runtime。
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -233,7 +232,7 @@ export function RuntimesWorkspaceSurface({
                               </div>
                             </div>
                             <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] dark:bg-neutral-800">
-                              {count} active
+                              {count} 个活跃
                             </span>
                           </div>
                         </button>
@@ -248,7 +247,7 @@ export function RuntimesWorkspaceSurface({
           <main className="flex min-h-0 flex-1 flex-col">
             {!selectedRuntime ? (
               <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-                Select a runtime to inspect its capabilities and workload.
+                选择一个 Runtime 来查看能力与工作负载。
               </div>
             ) : (
               <>
@@ -264,9 +263,9 @@ export function RuntimesWorkspaceSurface({
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-[11px] text-neutral-500">
-                      <span>Version: {runtimeVersionLabel(selectedRuntime)}</span>
+                      <span>版本：{runtimeVersionLabel(selectedRuntime)}</span>
                       <span>
-                        Last seen: {new Date(selectedRuntime.lastSeenAt).toLocaleString()}
+                        上次出现：{new Date(selectedRuntime.lastSeenAt).toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -276,7 +275,7 @@ export function RuntimesWorkspaceSurface({
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
                     <div className="space-y-4">
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
-                        <h3 className="text-sm font-semibold">Capabilities</h3>
+                        <h3 className="text-sm font-semibold">能力</h3>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <CapabilityBadge
                             label="Resume"
@@ -291,33 +290,33 @@ export function RuntimesWorkspaceSurface({
                             active={selectedRuntime.capabilities.supportsWorktree}
                           />
                           <CapabilityBadge
-                            label="Background"
+                            label="后台运行"
                             active={selectedRuntime.capabilities.supportsBackgroundRuns}
                           />
                           <CapabilityBadge
-                            label="Long context"
+                            label="长上下文"
                             active={Boolean(selectedRuntime.capabilities.supportsLongContext)}
                           />
                         </div>
                         <div className="mt-4 text-xs text-neutral-500">
-                          Max concurrent runs: {selectedRuntime.limits.maxConcurrentRuns}
+                          最大并发运行数：{selectedRuntime.limits.maxConcurrentRuns}
                         </div>
                         <div className="mt-2 text-xs text-neutral-500">
-                          Model default: {selectedRuntime.defaultModel ?? 'provider default'}
+                          默认模型：{selectedRuntime.defaultModel ?? 'provider 默认值'}
                         </div>
                         <div className="mt-2 text-xs text-neutral-500">
-                          Model choices: {runtimeModelChoicesLabel(selectedRuntime)}
+                          可选模型：{runtimeModelChoicesLabel(selectedRuntime)}
                         </div>
                       </section>
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold">Active Leases</h3>
+                          <h3 className="text-sm font-semibold">活跃 Lease</h3>
                           <span className="text-xs text-neutral-500">{runtimeLeases.length}</span>
                         </div>
                         {runtimeLeases.length === 0 ? (
                           <p className="mt-3 text-sm text-neutral-500">
-                            No active leases on this runtime.
+                            这个 Runtime 上没有活跃 Lease。
                           </p>
                         ) : (
                           <ul className="mt-3 space-y-2">
@@ -336,12 +335,12 @@ export function RuntimesWorkspaceSurface({
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold">Recent Reports</h3>
+                          <h3 className="text-sm font-semibold">最近报告</h3>
                           <span className="text-xs text-neutral-500">{runtimeReports.length}</span>
                         </div>
                         {runtimeReports.length === 0 ? (
                           <p className="mt-3 text-sm text-neutral-500">
-                            No reports have flowed through this runtime yet.
+                            这个 Runtime 还没有产生报告。
                           </p>
                         ) : (
                           <ul className="mt-3 space-y-2">
@@ -360,7 +359,7 @@ export function RuntimesWorkspaceSurface({
 
                     <div className="space-y-4">
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
-                        <h3 className="text-sm font-semibold">Runtime Snapshot</h3>
+                        <h3 className="text-sm font-semibold">Runtime 快照</h3>
                         <dl className="mt-3 space-y-3 text-sm">
                           <div>
                             <dt className="text-xs uppercase tracking-wide text-neutral-500">
@@ -372,7 +371,7 @@ export function RuntimesWorkspaceSurface({
                           </div>
                           <div>
                             <dt className="text-xs uppercase tracking-wide text-neutral-500">
-                              Binary
+                              二进制
                             </dt>
                             <dd className="mt-1 break-all text-neutral-700 dark:text-neutral-200">
                               {selectedRuntime.binaryPath}
@@ -380,7 +379,7 @@ export function RuntimesWorkspaceSurface({
                           </div>
                           <div>
                             <dt className="text-xs uppercase tracking-wide text-neutral-500">
-                              Discovered
+                              发现时间
                             </dt>
                             <dd className="mt-1 text-neutral-700 dark:text-neutral-200">
                               {new Date(selectedRuntime.discoveredAt).toLocaleString()}
@@ -389,7 +388,7 @@ export function RuntimesWorkspaceSurface({
                           {selectedRuntime.metadata?.versionProbeError && (
                             <div>
                               <dt className="text-xs uppercase tracking-wide text-neutral-500">
-                                Probe issue
+                                探测问题
                               </dt>
                               <dd className="mt-1 break-words text-amber-700 dark:text-amber-300">
                                 {selectedRuntime.metadata.versionProbeError}
@@ -406,7 +405,7 @@ export function RuntimesWorkspaceSurface({
                         </div>
                         {sdkEndpoints.length === 0 ? (
                           <p className="mt-3 text-sm text-neutral-500">
-                            No SDK endpoints have been registered yet.
+                            尚未注册 SDK endpoint。
                           </p>
                         ) : (
                           <ul className="mt-3 space-y-2">
@@ -422,14 +421,14 @@ export function RuntimesWorkspaceSurface({
                       </section>
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
-                        <h3 className="text-sm font-semibold">Role routing</h3>
+                        <h3 className="text-sm font-semibold">角色路由</h3>
                         <div className="mt-3 grid gap-2 text-sm">
                           <InfoRow
-                            label="Bindings"
+                            label="绑定"
                             value={String(snapshot?.bindings.length ?? 0)}
                           />
                           <InfoRow
-                            label="Autonomous"
+                            label="自主"
                             value={String(
                               (snapshot?.bindings ?? []).filter(
                                 (binding) => binding.dispatchMode === 'autonomous'
@@ -437,7 +436,7 @@ export function RuntimesWorkspaceSurface({
                             )}
                           />
                           <InfoRow
-                            label="Paused / blocked"
+                            label="暂停 / 阻塞"
                             value={String(
                               (snapshot?.bindings ?? []).filter(
                                 (binding) =>
@@ -449,7 +448,7 @@ export function RuntimesWorkspaceSurface({
                       </section>
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
-                        <h3 className="text-sm font-semibold">Projects touched</h3>
+                        <h3 className="text-sm font-semibold">触达项目</h3>
                         <ul className="mt-3 space-y-2 text-sm">
                           {Array.from(
                             new Map(
@@ -469,13 +468,13 @@ export function RuntimesWorkspaceSurface({
                                   onClick={() => onOpenProjectRoles(projectUid)}
                                   className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                                 >
-                                  Open roles
+                                  打开角色
                                 </button>
                               </li>
                             );
                           })}
                           {runtimeReports.every((report) => !report.projectUid) && (
-                            <li className="text-neutral-500">No project-linked reports yet.</li>
+                            <li className="text-neutral-500">暂无关联项目的报告。</li>
                           )}
                         </ul>
                       </section>
@@ -519,7 +518,7 @@ function LeaseListItem({
           </div>
           <div className="mt-1 text-xs text-neutral-500">
             {lease.ownerId}
-            {lease.runId && <> · run {lease.runId}</>}
+            {lease.runId && <> · 运行 {lease.runId}</>}
           </div>
         </div>
         {report?.projectUid && (
@@ -527,7 +526,7 @@ function LeaseListItem({
             onClick={() => onOpenProjectRoles(report.projectUid!)}
             className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            {project?.name ?? 'Open roles'}
+            {project?.name ?? '打开角色'}
           </button>
         )}
       </div>
@@ -556,7 +555,7 @@ function ReportListItem({
           <p className="mt-1 text-xs text-neutral-500">{report.summary}</p>
           <div className="mt-2 text-[11px] text-neutral-500">
             {new Date(report.createdAt).toLocaleString()}
-            {report.runId && <> · run {report.runId}</>}
+            {report.runId && <> · 运行 {report.runId}</>}
           </div>
         </div>
         {report.projectUid && (
@@ -564,7 +563,7 @@ function ReportListItem({
             onClick={() => onOpenProjectRoles(report.projectUid!)}
             className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            {project?.name ?? 'Open roles'}
+            {project?.name ?? '打开角色'}
           </button>
         )}
       </div>
@@ -581,6 +580,7 @@ function SDKEndpointItem({
 }): JSX.Element {
   const modes = (['ask', 'synthesis', 'background'] as const)
     .filter((mode) => defaults[mode] === endpoint.id)
+    .map((mode) => sdkDefaultModeLabel(mode))
     .join(', ');
   const ready = endpoint.enabled && endpoint.keyConfigured;
   return (
@@ -598,14 +598,14 @@ function SDKEndpointItem({
                     : 'bg-neutral-500/20 text-neutral-700 dark:text-neutral-300'
               }`}
             >
-              {ready ? 'ready' : endpoint.enabled ? 'missing key' : 'disabled'}
+              {ready ? '就绪' : endpoint.enabled ? '缺少 key' : '已停用'}
             </span>
           </div>
           <div className="mt-1 break-all text-xs text-neutral-500">
             {endpoint.provider} · {endpoint.defaultModel}
           </div>
           {modes && (
-            <div className="mt-2 text-[11px] text-neutral-500">Default for {modes}</div>
+            <div className="mt-2 text-[11px] text-neutral-500">默认用于 {modes}</div>
           )}
         </div>
       </div>
@@ -624,12 +624,12 @@ function InfoRow({ label, value }: { label: string; value: string }): JSX.Elemen
 
 function runtimeVersionLabel(runtime: RuntimeDescriptor): string {
   if (runtime.version) return runtime.version;
-  return runtime.status === 'degraded' ? 'version unavailable' : 'unknown version';
+  return runtime.status === 'degraded' ? '版本不可用' : '未知版本';
 }
 
 function runtimeModelChoicesLabel(runtime: RuntimeDescriptor): string {
   const options = runtime.modelOptions ?? [];
-  if (options.length === 0) return 'provider configured';
+  if (options.length === 0) return 'provider 已配置';
   return options.map((option) => option.label).join(', ');
 }
 
@@ -665,6 +665,47 @@ function CapabilityBadge({ label, active }: { label: string; active: boolean }):
   );
 }
 
+function sdkDefaultModeLabel(mode: 'ask' | 'synthesis' | 'background'): string {
+  const labels: Record<typeof mode, string> = {
+    ask: '提问',
+    synthesis: '合成',
+    background: '后台'
+  };
+  return labels[mode];
+}
+
+function runtimeStatusLabel(status: RuntimeDescriptor['status']): string {
+  const labels: Record<RuntimeDescriptor['status'], string> = {
+    online: '在线',
+    offline: '离线',
+    degraded: '降级'
+  };
+  return labels[status] ?? status;
+}
+
+function leaseStatusLabel(status: TaskLease['status']): string {
+  const labels: Partial<Record<TaskLease['status'], string>> = {
+    claimed: '已领取',
+    running: '运行中',
+    needs_attention: '需要关注',
+    released: '已释放',
+    completed: '已完成',
+    failed: '失败'
+  };
+  return labels[status] ?? status;
+}
+
+function reportStatusLabel(status: ImplementationReport['status']): string {
+  const labels: Partial<Record<ImplementationReport['status'], string>> = {
+    running: '运行中',
+    needs_attention: '需要关注',
+    released: '已释放',
+    completed: '已完成',
+    failed: '失败'
+  };
+  return labels[status] ?? status;
+}
+
 function RuntimeStatusBadge({ status }: { status: RuntimeDescriptor['status'] }): JSX.Element {
   const color =
     status === 'online'
@@ -676,7 +717,7 @@ function RuntimeStatusBadge({ status }: { status: RuntimeDescriptor['status'] })
     <span
       className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}
     >
-      {status}
+      {runtimeStatusLabel(status)}
     </span>
   );
 }
@@ -696,7 +737,7 @@ function LeaseStatusBadge({ status }: { status: TaskLease['status'] }): JSX.Elem
     <span
       className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}
     >
-      {status}
+      {leaseStatusLabel(status)}
     </span>
   );
 }
@@ -716,7 +757,7 @@ function ReportStatusBadge({ status }: { status: ImplementationReport['status'] 
     <span
       className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}
     >
-      {status}
+      {reportStatusLabel(status)}
     </span>
   );
 }
