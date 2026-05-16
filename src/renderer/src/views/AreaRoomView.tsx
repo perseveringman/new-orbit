@@ -34,14 +34,14 @@ export type AreaRoomOuterTab =
   | 'sessions';
 
 export const AREA_ROOM_TABS: Array<{ id: AreaRoomOuterTab; label: string }> = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'kanban', label: 'Kanban' },
-  { id: 'materials', label: 'Materials' },
-  { id: 'outputs', label: 'Outputs' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'terminal', label: 'Terminal' },
-  { id: 'sessions', label: 'Sessions' }
+  { id: 'dashboard', label: '仪表盘' },
+  { id: 'kanban', label: '看板' },
+  { id: 'materials', label: '素材' },
+  { id: 'outputs', label: '产出' },
+  { id: 'chat', label: '对话' },
+  { id: 'timeline', label: '时间线' },
+  { id: 'terminal', label: '终端' },
+  { id: 'sessions', label: '会话' }
 ];
 
 export function isAreaRoomOuterTab(value: string | null): value is AreaRoomOuterTab {
@@ -130,7 +130,7 @@ export function AreaRoomView(): JSX.Element {
       const next = await window.orbit.para.listTasks({ area_uid: areaUid });
       setTasks(next);
     } catch (error) {
-      toast(`Load area tasks failed: ${(error as Error).message}`);
+      toast(`加载 Area 任务失败：${(error as Error).message}`);
     }
   }, [areaUid, toast]);
 
@@ -139,7 +139,7 @@ export function AreaRoomView(): JSX.Element {
       const next = await window.orbit.vaultConfig.get();
       setExternalNotesPaths(next.external_notes_paths);
     } catch (error) {
-      toast(`Load notes config failed: ${(error as Error).message}`);
+      toast(`加载笔记配置失败：${(error as Error).message}`);
     }
   }, [toast]);
 
@@ -247,7 +247,7 @@ export function AreaRoomView(): JSX.Element {
         await window.orbit.para.updateTaskStatus(task.id, target);
       }
     } catch (error) {
-      toast(`Status update failed: ${(error as Error).message}`);
+      toast(`状态更新失败：${(error as Error).message}`);
       await refreshTasks();
     }
   }
@@ -260,7 +260,7 @@ export function AreaRoomView(): JSX.Element {
   if (!area) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-        Area not found.
+        未找到 Area。
       </div>
     );
   }
@@ -293,7 +293,7 @@ export function AreaRoomView(): JSX.Element {
             )}
             {externalNotesPaths.length > 0 && (
               <span className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-700">
-                External notes: {externalNotesPaths.length}
+                外部笔记：{externalNotesPaths.length}
               </span>
             )}
           </div>
@@ -303,7 +303,7 @@ export function AreaRoomView(): JSX.Element {
             onClick={() => setNewTaskOpen(true)}
             className="rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-500"
           >
-            New task
+            新建任务
           </button>
         )}
       </header>
@@ -334,16 +334,16 @@ export function AreaRoomView(): JSX.Element {
         ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
             <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm text-neutral-500">{tasks.length} long-running tasks</div>
+              <div className="text-sm text-neutral-500">{tasks.length} 个长期任务</div>
               <button
                 onClick={() => setNewTaskOpen(true)}
                 className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
               >
-                Create task
+                创建任务
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              <Suspense fallback={<p className="text-sm text-neutral-500">Loading board…</p>}>
+              <Suspense fallback={<p className="text-sm text-neutral-500">正在加载看板…</p>}>
                 <KanbanBoard columns={columns} onDrop={onDropTask} onStatus={onDropTask} />
               </Suspense>
             </div>
@@ -449,9 +449,9 @@ function AreaChatTab({
   return (
     <section className="flex min-h-0 flex-1 items-center justify-center p-6">
       <div className="max-w-md rounded-xl border border-neutral-200 bg-white p-6 text-center dark:border-neutral-800 dark:bg-neutral-950">
-        <h2 className="text-base font-semibold">Area-scoped Chat</h2>
+        <h2 className="text-base font-semibold">Area 限定对话</h2>
         <p className="mt-2 text-sm text-neutral-500">
-          Start a conversation scoped to {area.name}; Orbit will use this Area as the working context.
+          启动限定到 {area.name} 的对话；Orbit 会将这个 Area 作为工作上下文。
         </p>
         {error ? <p className="mt-3 text-xs text-red-500">{error}</p> : null}
         <button
@@ -459,7 +459,7 @@ function AreaChatTab({
           disabled={busy}
           className="mt-4 rounded bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500 disabled:opacity-50"
         >
-          {busy ? 'Opening...' : 'Open Area Chat'}
+          {busy ? '打开中…' : '打开 Area 对话'}
         </button>
       </div>
     </section>
@@ -497,15 +497,15 @@ function AreaTimelineTab({ area }: { area: AreaSummaryDTO }): JSX.Element {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <header className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-        <h2 className="text-sm font-semibold">Timeline</h2>
-        <p className="text-xs text-neutral-500">Today&apos;s visible events linked to this Area.</p>
+        <h2 className="text-sm font-semibold">时间线</h2>
+        <p className="text-xs text-neutral-500">今天关联到此 Area 的可见事件。</p>
       </header>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         {error ? <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{error}</div> : null}
         {!entries ? (
-          <div className="text-sm text-neutral-500">Loading timeline...</div>
+          <div className="text-sm text-neutral-500">正在加载时间线...</div>
         ) : entries.length === 0 ? (
-          <EmptyAreaTab title="No Area events today" description="Timeline events with an area ref will appear here." />
+          <EmptyAreaTab title="今天没有 Area 事件" description="带有 Area 引用的时间线事件会出现在这里。" />
         ) : (
           <div className="space-y-2">
             {entries.map((entry) => (

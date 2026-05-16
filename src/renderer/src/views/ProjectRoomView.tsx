@@ -48,6 +48,14 @@ import { SpaceOutputsView } from './SpaceOutputsView';
  */
 
 const STATUS_ORDER: TaskStatus[] = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'];
+const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  backlog: '积压',
+  waiting: '等待',
+  todo: '待办',
+  doing: '进行中',
+  blocked: '阻塞',
+  done: '完成'
+};
 
 export function ProjectRoomView(): JSX.Element {
   const projects = useWorkspace((s) => s.projects);
@@ -145,7 +153,7 @@ export function ProjectRoomView(): JSX.Element {
       const list = await window.orbit.project.getTasks(activeProjectUid);
       setTasks(list);
     } catch (e) {
-      toast(`Load tasks failed: ${(e as Error).message}`);
+      toast(`加载任务失败：${(e as Error).message}`);
     }
   }, [activeProjectUid, toast]);
 
@@ -163,7 +171,7 @@ export function ProjectRoomView(): JSX.Element {
       setGitHubState(next);
     } catch (e) {
       setGitHubState(null);
-      toast(`Load GitHub state failed: ${(e as Error).message}`);
+      toast(`加载 GitHub 状态失败：${(e as Error).message}`);
     }
   }, [activeProjectUid, toast]);
 
@@ -338,23 +346,23 @@ export function ProjectRoomView(): JSX.Element {
         await window.orbit.para.updateTaskStatus(t.id, target);
       }
     } catch (e) {
-      toast(`Status update failed: ${(e as Error).message}`);
+      toast(`状态更新失败：${(e as Error).message}`);
       await refreshTasks();
     }
   }
 
   async function archive(): Promise<void> {
     if (!project) return;
-    if (!window.confirm(`Archive project "${project.name}"?`)) return;
+    if (!window.confirm(`归档项目 "${project.name}"?`)) return;
     try {
       await disposeTerminalsByPrefix(`${project.uid}::`);
       const res = await window.orbit.project.archive(project.uid);
-      toast(`Archived → ${res.newPath}`);
+      toast(`已归档 → ${res.newPath}`);
       await refreshProjects();
       setActiveProjectUid(null);
       setView({ kind: 'dashboard' });
     } catch (e) {
-      toast(`Archive failed: ${(e as Error).message}`);
+      toast(`归档失败：${(e as Error).message}`);
     }
   }
 
@@ -369,11 +377,11 @@ export function ProjectRoomView(): JSX.Element {
         uid: project.uid,
         workdirPath: chosen.path
       });
-      toast(`Workdir linked → ${chosen.path}`);
+      toast(`Workdir 已重新关联 → ${chosen.path}`);
       await refreshProjects();
       await refreshGitHubState();
     } catch (e) {
-      toast(`Relink workdir failed: ${(e as Error).message}`);
+      toast(`重新关联 Workdir 失败：${(e as Error).message}`);
     } finally {
       setWorkdirBusy(false);
     }
@@ -386,7 +394,7 @@ export function ProjectRoomView(): JSX.Element {
     const targetDir = joinFsPath(chosen.path, project.slug);
     if (
       !window.confirm(
-        `Move copied code files from the Orbit coordination folder into:\n\n${targetDir}\n\nOrbit tasks, assets, outputs, and metadata stay in the vault.`
+        `将复制的代码文件从 Orbit 协调文件夹移动到：\n\n${targetDir}\n\nOrbit 任务、资产、产出与元数据会保留在 vault 中。`
       )
     ) {
       return;
@@ -400,11 +408,11 @@ export function ProjectRoomView(): JSX.Element {
         removeCopiedFiles: true,
         initializeGit: true
       });
-      toast(`Workdir moved → ${result.workdirPath}`);
+      toast(`Workdir 已移动 → ${result.workdirPath}`);
       await refreshProjects();
       await refreshGitHubState();
     } catch (e) {
-      toast(`Move workdir failed: ${(e as Error).message}`);
+      toast(`移动 Workdir 失败：${(e as Error).message}`);
     } finally {
       setWorkdirBusy(false);
     }
@@ -543,7 +551,7 @@ export function ProjectRoomView(): JSX.Element {
   if (!project) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-        Select a project to open its room.
+        请选择一个项目以打开项目房间。
       </div>
     );
   }
@@ -554,12 +562,12 @@ export function ProjectRoomView(): JSX.Element {
     (project.workdir?.linked_via === 'legacy-in-vault' ||
       project.workdirPath === project.coordinationPath);
   const workdirLabel = project.workdirMissing
-    ? 'missing'
+    ? '缺失'
     : isLegacyInVaultWorkdir
-      ? 'in vault'
+      ? '在 vault 中'
       : project.workdir
-        ? 'external'
-        : 'implicit';
+        ? '外部'
+        : '隐式';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -569,7 +577,7 @@ export function ProjectRoomView(): JSX.Element {
             <h1 className="truncate text-lg font-semibold">{project.name}</h1>
             {isLegacy && (
               <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                Legacy
+                旧版
               </span>
             )}
           </div>
@@ -610,7 +618,7 @@ export function ProjectRoomView(): JSX.Element {
               </>
             ) : (
               <span className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-700">
-                GitHub · not linked
+                GitHub · 未关联
               </span>
             )}
             {githubState?.connection?.authenticated === false && (
@@ -618,7 +626,7 @@ export function ProjectRoomView(): JSX.Element {
                 className="rounded border border-amber-300 px-2 py-0.5 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/30"
                 onClick={() => openResumeSession('gh auth login --web')}
               >
-                Authenticate gh
+                认证 gh
               </button>
             )}
             {!isLegacy && (
@@ -642,7 +650,7 @@ export function ProjectRoomView(): JSX.Element {
               disabled={workdirBusy}
               onClick={() => void migrateWorkdirOut()}
             >
-              Move Workdir Out
+              移出 Workdir
             </button>
           )}
           {!isLegacy && (
@@ -651,21 +659,21 @@ export function ProjectRoomView(): JSX.Element {
               disabled={workdirBusy}
               onClick={() => void relinkWorkdir()}
             >
-              Relink Workdir
+              重新关联 Workdir
             </button>
           )}
           <button
             className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
             onClick={() => void refreshGitHubState()}
           >
-            Refresh GitHub
+            刷新 GitHub
           </button>
           {githubState?.binding && !githubState.pullRequest && (
             <button
               className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
               onClick={() => void createPullRequest()}
             >
-              Create PR
+              创建 PR
             </button>
           )}
           {!githubState?.binding && !isLegacy && (
@@ -673,7 +681,7 @@ export function ProjectRoomView(): JSX.Element {
               className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
               onClick={() => void publishToGitHub()}
             >
-              Publish to GitHub
+              发布到 GitHub
             </button>
           )}
           {kanbanModel.headerActions.includes('archive-project') && (
@@ -681,7 +689,7 @@ export function ProjectRoomView(): JSX.Element {
               className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
               onClick={() => void archive()}
             >
-              Archive Project
+              归档项目
             </button>
           )}
         </div>
@@ -690,31 +698,31 @@ export function ProjectRoomView(): JSX.Element {
       {/* Outer tab bar */}
       <div className="flex shrink-0 border-b border-neutral-200 dark:border-neutral-800 px-4 text-sm">
         <OuterTabButton active={outerTab === 'kanban'} onClick={() => setOuterTab('kanban')}>
-          Kanban
+          看板
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'context'} onClick={() => setOuterTab('context')}>
           上下文
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'terminal'} onClick={() => setOuterTab('terminal')}>
-          Terminal
+          终端
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'github'} onClick={() => setOuterTab('github')}>
           GitHub
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'sessions'} onClick={() => setOuterTab('sessions')}>
-          Sessions
+          会话
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'materials'} onClick={() => setOuterTab('materials')}>
-          Materials
+          素材
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'outputs'} onClick={() => setOuterTab('outputs')}>
-          Outputs
+          产出
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'planner'} onClick={() => setOuterTab('planner')}>
-          Planner
+          规划
         </OuterTabButton>
         <OuterTabButton active={outerTab === 'roles'} onClick={() => setOuterTab('roles')}>
-          Roles
+          角色
         </OuterTabButton>
       </div>
 
@@ -732,26 +740,26 @@ export function ProjectRoomView(): JSX.Element {
       <div className={`flex min-h-0 flex-1 ${outerTab === 'kanban' ? 'flex' : 'hidden'}`}>
         <section className={`flex min-w-0 flex-col ${kanbanModel.kanbanPaneClassName}`}>
           <div className="flex shrink-0 items-center justify-between px-4 py-2 text-xs text-neutral-500">
-            <span>Kanban · {tasks.length} tasks</span>
+            <span>看板 · {tasks.length} 个任务</span>
             <button
               onClick={() => setNewTaskOpen(true)}
               disabled={isLegacy}
               className="rounded bg-sky-600 px-2 py-0.5 text-white hover:bg-sky-500 disabled:opacity-40"
-              title={isLegacy ? 'Migrate this project to create tasks' : 'Create new task'}
+              title={isLegacy ? '迁移此项目后即可创建任务' : '创建新任务'}
             >
-              + New Task
+              + 新建任务
             </button>
           </div>
           {isLegacy ? (
             <LegacyEmptyState onMigrate={() => setMigrateOpen(true)} />
           ) : tasks.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-xs text-neutral-500">
-              <p>No tasks yet.</p>
+              <p>暂无任务。</p>
               <button
                 onClick={() => setNewTaskOpen(true)}
                 className="rounded bg-sky-600 px-3 py-1.5 text-white hover:bg-sky-500"
               >
-                + Create first task
+                + 创建第一个任务
               </button>
             </div>
           ) : (
@@ -882,10 +890,10 @@ export function ProjectPMILContextPanel({
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">Personal Memory Intelligence</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">个人记忆智能</p>
             <h2 className="mt-1 text-xl font-semibold">项目上下文 · {projectName}</h2>
             <p className="mt-1 max-w-3xl text-sm text-neutral-500">
-              基于证据片段、图谱邻居、Personal QA 和开放回路启发式组装当前项目背景。
+              基于证据片段、图谱邻居、个人问答和开放回路启发式组装当前项目背景。
             </p>
           </div>
           <button
@@ -906,7 +914,7 @@ export function ProjectPMILContextPanel({
 
         {!work && !loading ? (
           <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900">
-            还没有足够的项目上下文。刷新后 Orbit 会从项目 evidence 中构建第一版 Work Context。
+            还没有足够的项目上下文。刷新后 Orbit 会从项目证据中构建第一版工作上下文。
           </div>
         ) : null}
 
@@ -1038,7 +1046,7 @@ function projectEvidenceSelectorKey(selector: EvidenceSelector): string {
 function withPMILTimeout<T>(promise: Promise<T>, ms = 15000): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timer = new Promise<T>((_resolve, reject) => {
-    timeout = setTimeout(() => reject(new Error('项目上下文构建超时，请稍后重试或先刷新 evidence index。')), ms);
+    timeout = setTimeout(() => reject(new Error('项目上下文构建超时，请稍后重试或先刷新证据索引。')), ms);
   });
   return Promise.race([promise, timer]).finally(() => {
     if (timeout) clearTimeout(timeout);
@@ -1103,7 +1111,7 @@ function KanbanColumn({
       className={`flex min-h-[140px] flex-col rounded border p-2 ${over ? 'border-sky-500 bg-sky-500/5' : 'border-neutral-200 bg-neutral-50/50 dark:border-neutral-800 dark:bg-neutral-900/40'}`}
     >
       <header className="mb-1 flex items-center justify-between px-1 text-[10px] uppercase tracking-wide text-neutral-500">
-        <span>{status}</span>
+        <span>{TASK_STATUS_LABELS[status]}</span>
         <span>{tasks.length}</span>
       </header>
       <ul className="space-y-1">
@@ -1156,7 +1164,7 @@ function TaskCard({
           />
         )}
         <span className="min-w-0 flex-1 truncate font-medium">{task.title}</span>
-        {awaitingUser && <span title="Awaiting user reply">💬</span>}
+        {awaitingUser && <span title="等待用户回复">💬</span>}
       </div>
       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-500">
         {task.origin && task.origin !== 'human' && (
@@ -1170,11 +1178,11 @@ function TaskCard({
           </span>
         )}
         {task.blocked_reason && (
-          <span className="rounded bg-red-500/15 px-1 text-red-600 dark:text-red-300">blocked</span>
+          <span className="rounded bg-red-500/15 px-1 text-red-600 dark:text-red-300">阻塞</span>
         )}
         {task.ready && task.status === 'waiting' && (
           <span className="rounded bg-emerald-500/15 px-1 text-emerald-600 dark:text-emerald-300">
-            ready
+            就绪
           </span>
         )}
         {task.due && <span>📅 {task.due}</span>}
@@ -1187,7 +1195,7 @@ function TaskCard({
           ))}
         {task.lost && (
           <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-700 dark:text-amber-300">
-            lost
+            丢失
           </span>
         )}
       </div>
@@ -1199,14 +1207,14 @@ function LegacyEmptyState({ onMigrate }: { onMigrate(): void }): JSX.Element {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-xs text-neutral-500">
       <p>
-        This is a <span className="font-medium">legacy single-file project</span>.
+        这是一个 <span className="font-medium">旧版单文件项目</span>。
       </p>
-      <p>Migrate it to a folder-backed project to unlock Kanban and tasks.</p>
+      <p>迁移为文件夹项目后即可解锁看板和任务。</p>
       <button
         onClick={onMigrate}
         className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
       >
-        Migrate this project
+        迁移此项目
       </button>
     </div>
   );
