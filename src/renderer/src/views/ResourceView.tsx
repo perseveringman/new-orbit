@@ -250,7 +250,7 @@ export function ResourceView({
         <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-200 bg-white/60 dark:border-neutral-800 dark:bg-neutral-950/40">
           <div className="space-y-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
             <div>
-              <h1 className="text-lg font-semibold">Resources</h1>
+              <h1 className="text-lg font-semibold">Resources 资源</h1>
               <p className="text-xs text-neutral-500">承载长期兴趣的知识空间。</p>
             </div>
             <div className="flex gap-2">

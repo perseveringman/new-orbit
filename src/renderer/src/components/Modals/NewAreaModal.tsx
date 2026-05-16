@@ -183,12 +183,12 @@ export function NewAreaModal(): JSX.Element | null {
             <>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">GitHub owner</span>
+                  <span className="mb-1 block text-xs text-neutral-500">GitHub Owner / 组织</span>
                   <input
                     className={input}
                     value={githubOwner}
                     onChange={(e) => setGithubOwner(e.target.value)}
-                    placeholder="e.g. vercel"
+                    placeholder="例如 vercel"
                     autoFocus
                   />
                 </label>
@@ -198,7 +198,7 @@ export function NewAreaModal(): JSX.Element | null {
                     className={input}
                     value={githubRepo}
                     onChange={(e) => setGithubRepo(e.target.value)}
-                    placeholder="e.g. next.js"
+                    placeholder="例如 next.js"
                   />
                 </label>
               </div>

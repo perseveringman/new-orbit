@@ -387,7 +387,7 @@ export function ProjectGitHubSurface({
       {activeTab === 'prs' && (
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <section className="rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/70">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Pull requests</h3>
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">PR 列表</h3>
             <div className="mt-4 space-y-3">
               {(details?.pullRequests ?? []).map((pullRequest) => (
                 <article key={pullRequest.number} className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
@@ -406,11 +406,11 @@ export function ProjectGitHubSurface({
           </section>
           <section className="space-y-4">
             <StatusPanel
-              title="Checks"
+              title="检查"
               items={(details?.checks ?? []).map((check) => `${check.name} · ${check.conclusion ?? check.status}`)}
             />
             <StatusPanel
-              title="Reviews"
+              title="评审"
               items={(details?.reviews ?? []).map((review) => `${review.reviewer} · ${review.state}`)}
             />
           </section>

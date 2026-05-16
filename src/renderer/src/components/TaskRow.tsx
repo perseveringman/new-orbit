@@ -141,7 +141,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             )}
             {task.recommended && (
               <span
-                 title="Orbit Daily Review 推荐"
+                 title="Orbit 每日复盘推荐"
                 className="rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-300"
               >
                  ✨ 推荐
