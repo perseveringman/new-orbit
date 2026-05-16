@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import type { ActivityEvent } from '@shared/activity';
 import type { DashboardSummary } from '@shared/dashboard';
-import type { TaskRecord, TaskStatus } from '@shared/schemas';
+import type { TaskExecutionMode, TaskRecord, TaskStatus } from '@shared/schemas';
 import { taskExecutionMode } from '@shared/schemas';
 import { useFiles } from '../../store/files';
 import { usePara } from '../../store/para';
@@ -34,7 +34,11 @@ export function DashboardFocusPanel(): JSX.Element {
     [projects]
   );
   const priorityTasks = useMemo(
-    () => tasks.filter((task) => task.status !== 'done').sort(compareTasks).slice(0, 6),
+    () =>
+      tasks
+        .filter((task) => task.status !== 'done')
+        .sort(compareTasks)
+        .slice(0, 6),
     [tasks]
   );
   const pressureRows = useMemo(
@@ -43,14 +47,19 @@ export function DashboardFocusPanel(): JSX.Element {
         .filter((project) => project.status !== 'archived')
         .map((project) => {
           const projectTasks = tasks.filter((task) => task.project_uid === project.uid);
-          const ready = projectTasks.filter((task) => task.status === 'todo' || task.status === 'waiting').length;
+          const ready = projectTasks.filter(
+            (task) => task.status === 'todo' || task.status === 'waiting'
+          ).length;
           const blocked = projectTasks.filter((task) => task.status === 'blocked').length;
           const doing = projectTasks.filter((task) => task.status === 'doing').length;
           const open = projectTasks.filter((task) => task.status !== 'done').length;
           return { project, ready, blocked, doing, open };
         })
         .filter((row) => row.open > 0 || row.project.workdirMissing)
-        .sort((a, b) => b.blocked * 10 + b.doing * 4 + b.ready - (a.blocked * 10 + a.doing * 4 + a.ready))
+        .sort(
+          (a, b) =>
+            b.blocked * 10 + b.doing * 4 + b.ready - (a.blocked * 10 + a.doing * 4 + a.ready)
+        )
         .slice(0, 5),
     [projects, tasks]
   );
@@ -66,7 +75,8 @@ export function DashboardFocusPanel(): JSX.Element {
   }
 
   const inboxPending = summary?.pending.inboxPending ?? 0;
-  const blockedTasks = summary?.pending.blockedTasks ?? tasks.filter((task) => task.status === 'blocked').length;
+  const blockedTasks =
+    summary?.pending.blockedTasks ?? tasks.filter((task) => task.status === 'blocked').length;
   const readyTasks =
     summary?.pending.pendingTasks ??
     tasks.filter((task) => task.status === 'todo' || task.status === 'waiting').length;
@@ -75,43 +85,43 @@ export function DashboardFocusPanel(): JSX.Element {
   return (
     <div className="space-y-3">
       <PanelTop
-        title="Dashboard command"
-        detail="Use the side pane as a launchpad, not another passive summary."
+        title="仪表盘指挥台"
+        detail="把侧边面板当作启动台，而不是另一个被动摘要。"
         loading={loading}
         onRefresh={reload}
       />
 
       <section className="rounded-md border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
         <div className="border-b border-neutral-200 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:border-neutral-800">
-          Decision order
+          决策顺序
         </div>
         <ActionRow
           icon={<Inbox size={14} />}
-          title="Clear approvals"
-          detail="Human decisions unblock agent work."
+          title="清理审批"
+          detail="人工决策会解锁 agent 工作。"
           value={inboxPending}
           hot={inboxPending > 0}
           onClick={() => setView({ kind: 'inbox' })}
         />
         <ActionRow
           icon={<AlertTriangle size={14} />}
-          title="Remove blockers"
-          detail="Blocked tasks should never hide in a dashboard."
+          title="移除阻塞"
+          detail="阻塞任务不应该藏在仪表盘里。"
           value={blockedTasks}
           hot={blockedTasks > 0}
           onClick={() => setView({ kind: 'kanban', projectUid: null })}
         />
         <ActionRow
           icon={<ListTodo size={14} />}
-          title="Plan ready work"
-          detail="Tasks ready or waiting for assignment."
+          title="规划可做工作"
+          detail="已经就绪或等待分配的任务。"
           value={readyTasks}
           onClick={() => setView({ kind: 'kanban', projectUid: null })}
         />
         <ActionRow
           icon={<Bot size={14} />}
-          title="Watch execution"
-          detail="Active agent runs across the vault."
+          title="观察执行"
+          detail="vault 内正在运行的 agent。"
           value={activeRuns}
           hot={activeRuns > 0}
           onClick={() => setView({ kind: 'agents' })}
@@ -119,29 +129,33 @@ export function DashboardFocusPanel(): JSX.Element {
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <SectionTitle title="Next tasks" />
+        <SectionTitle title="下一批任务" />
         {priorityTasks.map((task) => (
           <button
             key={task.id}
             onClick={() => openTaskDetail(task)}
             className="flex w-full items-start gap-2 border-t border-neutral-100 px-3 py-2.5 text-left hover:bg-neutral-50 dark:border-neutral-900 dark:hover:bg-neutral-900/70"
           >
-            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${statusDotClass(task.status)}`} />
+            <span
+              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${statusDotClass(task.status)}`}
+            />
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 text-sm">{task.title}</span>
               <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
                 <span>{statusLabel(task.status)}</span>
-                <span>{taskExecutionMode(task)}</span>
+                <span>{executionModeLabel(taskExecutionMode(task))}</span>
                 {task.project_uid ? <span>{projectByUid.get(task.project_uid)?.name}</span> : null}
               </span>
             </span>
           </button>
         ))}
-        {priorityTasks.length === 0 ? <EmptyHint title="No open tasks" detail="The task index has nothing waiting." /> : null}
+        {priorityTasks.length === 0 ? (
+          <EmptyHint title="没有开放任务" detail="任务索引中没有等待处理的任务。" />
+        ) : null}
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <SectionTitle title="Project pressure" />
+        <SectionTitle title="项目压力" />
         {pressureRows.map((row) => (
           <button
             key={row.project.uid}
@@ -151,15 +165,19 @@ export function DashboardFocusPanel(): JSX.Element {
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">{row.project.name}</span>
               <span className="text-[11px] text-neutral-500">
-                {row.ready} ready / {row.doing} doing / {row.blocked} blocked
+                {row.ready} 可做 / {row.doing} 进行中 / {row.blocked} 阻塞
               </span>
             </span>
-            <span className={`rounded px-2 py-1 text-xs tabular-nums ${row.blocked > 0 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-neutral-100 dark:bg-neutral-900'}`}>
+            <span
+              className={`rounded px-2 py-1 text-xs tabular-nums ${row.blocked > 0 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-neutral-100 dark:bg-neutral-900'}`}
+            >
               {row.open}
             </span>
           </button>
         ))}
-        {pressureRows.length === 0 ? <EmptyHint title="No project pressure" detail="Active projects have no open indexed tasks." /> : null}
+        {pressureRows.length === 0 ? (
+          <EmptyHint title="没有项目压力" detail="活跃项目没有开放的索引任务。" />
+        ) : null}
       </section>
     </div>
   );
@@ -179,24 +197,25 @@ export function DashboardRhythmPanel(): JSX.Element {
     try {
       const review = await window.orbit.review.generate();
       await openPath(review.path);
-      toast(`Daily Review generated: ${review.recommendedTaskUids.length} recommended task(s)`);
+      toast(`每日复盘已生成：${review.recommendedTaskUids.length} 个推荐任务`);
       await reload();
     } catch (error) {
-      toast(`Daily Review failed: ${(error as Error).message}`);
+      toast(`每日复盘失败：${(error as Error).message}`);
     } finally {
       setGeneratingReview(false);
     }
   }
 
-  const onlineRuntimes = summary?.health.runtimes.filter((runtime) => runtime.status === 'online').length ?? 0;
+  const onlineRuntimes =
+    summary?.health.runtimes.filter((runtime) => runtime.status === 'online').length ?? 0;
   const promoted =
     (summary?.knowledge.promotedToProject ?? 0) + (summary?.knowledge.promotedToResource ?? 0);
 
   return (
     <div className="space-y-3">
       <PanelTop
-        title="Rhythm"
-        detail="Vision, review cadence, knowledge growth, and system health."
+        title="节奏"
+        detail="愿景、复盘节奏、知识增长和系统健康度。"
         loading={loading}
         onRefresh={reload}
       />
@@ -204,27 +223,29 @@ export function DashboardRhythmPanel(): JSX.Element {
       <section className="rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-950">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
           <Target size={13} />
-          North Star
+          北极星
         </div>
         <p className="mt-2 line-clamp-5 text-sm leading-6 text-neutral-700 dark:text-neutral-200">
-          {visionText || 'Vision.md is empty. The dashboard has no useful direction without it.'}
+          {visionText || 'Vision.md 为空。没有它，仪表盘就缺少有效方向。'}
         </p>
         <button
           onClick={() => setView({ kind: 'vision' })}
           className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-300 px-2.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
           <Target size={13} />
-          Open Vision
+          打开愿景
         </button>
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <SectionTitle title="Review cadence" />
+        <SectionTitle title="复盘节奏" />
         <MetricRow
           icon={<CalendarCheck size={14} />}
-          label="Daily review"
-          value={summary?.thinking.dailyReviewAvailable ? 'Ready' : 'Missing'}
-          actionLabel={summary?.thinking.dailyReviewAvailable ? 'Open' : generatingReview ? 'Generating' : 'Generate'}
+          label="每日复盘"
+          value={summary?.thinking.dailyReviewAvailable ? '就绪' : '缺失'}
+          actionLabel={
+            summary?.thinking.dailyReviewAvailable ? '打开' : generatingReview ? '生成中' : '生成'
+          }
           onAction={async () => {
             if (summary?.thinking.dailyReviewPath) await openPath(summary.thinking.dailyReviewPath);
             else await generateDailyReview();
@@ -232,49 +253,67 @@ export function DashboardRhythmPanel(): JSX.Element {
         />
         <MetricRow
           icon={<Target size={14} />}
-          label="Vision review"
+          label="愿景复盘"
           value={
             summary?.thinking.visionDaysSinceReview === null ||
             summary?.thinking.visionDaysSinceReview === undefined
-              ? 'Unknown'
-              : `${summary.thinking.visionDaysSinceReview}d ago`
+              ? '未知'
+              : `${summary.thinking.visionDaysSinceReview} 天前`
           }
-          actionLabel="Edit"
+          actionLabel="编辑"
           onAction={() => setView({ kind: 'vision' })}
         />
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <SectionTitle title="Knowledge movement" />
+        <SectionTitle title="知识流动" />
         <div className="grid grid-cols-2 gap-2 p-3">
-          <MiniMetric label="Feed saved" value={summary?.knowledge.feedSaved ?? 0} />
-          <MiniMetric label="Library" value={summary?.knowledge.libraryAdded ?? 0} />
-          <MiniMetric label="Thoughts" value={summary?.knowledge.thoughtsCreated ?? 0} />
-          <MiniMetric label="Promoted" value={promoted} />
+          <MiniMetric label="已保存信息流" value={summary?.knowledge.feedSaved ?? 0} />
+          <MiniMetric label="资料库" value={summary?.knowledge.libraryAdded ?? 0} />
+          <MiniMetric label="想法" value={summary?.knowledge.thoughtsCreated ?? 0} />
+          <MiniMetric label="已提升" value={promoted} />
         </div>
         <button
           onClick={() => setView({ kind: 'library' })}
           className="mx-3 mb-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-300 px-2.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
           <Library size={13} />
-          Open Library
+          打开资料库
         </button>
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <SectionTitle title="System health" />
-        <MetricRow icon={<Gauge size={14} />} label="Runtime online" value={onlineRuntimes} actionLabel="Open" onAction={() => setView({ kind: 'runtimes' })} />
-        <MetricRow icon={<AlertTriangle size={14} />} label="Dirty projects" value={summary?.health.git.dirtyProjects.length ?? 0} actionLabel="Console" onAction={() => setView({ kind: 'developerConsole' })} />
-        <MetricRow icon={<CheckCircle2 size={14} />} label="Budget today" value={`$${(summary?.health.budget.todayUsd ?? 0).toFixed(4)}`} actionLabel="Details" onAction={() => setView({ kind: 'runtimes' })} />
+        <SectionTitle title="系统健康" />
+        <MetricRow
+          icon={<Gauge size={14} />}
+          label="在线 Runtime"
+          value={onlineRuntimes}
+          actionLabel="打开"
+          onAction={() => setView({ kind: 'runtimes' })}
+        />
+        <MetricRow
+          icon={<AlertTriangle size={14} />}
+          label="未提交项目"
+          value={summary?.health.git.dirtyProjects.length ?? 0}
+          actionLabel="控制台"
+          onAction={() => setView({ kind: 'developerConsole' })}
+        />
+        <MetricRow
+          icon={<CheckCircle2 size={14} />}
+          label="今日预算"
+          value={`$${(summary?.health.budget.todayUsd ?? 0).toFixed(4)}`}
+          actionLabel="详情"
+          onAction={() => setView({ kind: 'runtimes' })}
+        />
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <SectionTitle title="Recent activity" />
+        <SectionTitle title="近期活动" />
         {(summary?.thinking.recentActivities ?? []).slice(0, 5).map((event) => (
           <ActivityRow key={event.id} event={event} />
         ))}
         {(summary?.thinking.recentActivities ?? []).length === 0 ? (
-          <EmptyHint title="No activity yet" detail="Traceable events will appear here." />
+          <EmptyHint title="暂无活动" detail="可追踪事件会显示在这里。" />
         ) : null}
       </section>
     </div>
@@ -300,7 +339,7 @@ function useDashboardCompanionData(): {
       await Promise.all([refreshProjects(), refreshVision()]);
       setSummary(await window.orbit.dashboard.summary());
     } catch (error) {
-      toast(`Dashboard companion failed: ${(error as Error).message}`);
+      toast(`仪表盘辅助面板失败：${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -352,7 +391,7 @@ function PanelTop({
       <button
         onClick={() => void onRefresh()}
         className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-        title="Refresh dashboard companion"
+        title="刷新仪表盘辅助面板"
       >
         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
       </button>
@@ -393,7 +432,9 @@ function ActionRow({
         <span className="block text-sm font-medium">{title}</span>
         <span className="block truncate text-xs text-neutral-500">{detail}</span>
       </span>
-      <span className={`rounded px-2 py-1 text-xs font-semibold tabular-nums ${hot ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-200' : 'bg-neutral-100 dark:bg-neutral-900'}`}>
+      <span
+        className={`rounded px-2 py-1 text-xs font-semibold tabular-nums ${hot ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-200' : 'bg-neutral-100 dark:bg-neutral-900'}`}
+      >
         {value}
       </span>
     </button>
@@ -446,7 +487,9 @@ function ActivityRow({ event }: { event: ActivityEvent }): JSX.Element {
         <span>{formatTime(event.at)}</span>
         <span>{event.action}</span>
       </div>
-      <div className="mt-0.5 line-clamp-2 text-neutral-700 dark:text-neutral-300">{event.summary}</div>
+      <div className="mt-0.5 line-clamp-2 text-neutral-700 dark:text-neutral-300">
+        {event.summary}
+      </div>
     </div>
   );
 }
@@ -473,11 +516,31 @@ function taskScore(task: TaskRecord): number {
     backlog: 4,
     done: 9
   };
-  return statusScore[task.status] - (task.recommended ? 0.5 : 0) - (task.priority === 'high' ? 0.25 : 0);
+  return (
+    statusScore[task.status] - (task.recommended ? 0.5 : 0) - (task.priority === 'high' ? 0.25 : 0)
+  );
 }
 
 function statusLabel(status: TaskStatus): string {
-  return status[0].toUpperCase() + status.slice(1);
+  const labels: Record<TaskStatus, string> = {
+    blocked: '阻塞',
+    doing: '进行中',
+    waiting: '等待',
+    todo: '待办',
+    backlog: '待整理',
+    done: '已完成'
+  };
+  return labels[status];
+}
+
+function executionModeLabel(mode: TaskExecutionMode): string {
+  const labels: Record<TaskExecutionMode, string> = {
+    human: '人工',
+    assisted: '辅助',
+    agent: 'Agent',
+    scheduled: '计划'
+  };
+  return labels[mode];
 }
 
 function statusDotClass(status: TaskStatus): string {

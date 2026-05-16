@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type { ActivityEvent } from '@shared/activity';
 import type { DashboardSummary } from '@shared/dashboard';
-import type { TaskRecord, TaskStatus } from '@shared/schemas';
+import type { TaskExecutionMode, TaskRecord, TaskStatus } from '@shared/schemas';
 import { taskExecutionMode } from '@shared/schemas';
 import { useWorkspace } from '../store/workspace';
 import { useFiles } from '../store/files';
@@ -55,7 +55,7 @@ export function DashboardView(): JSX.Element {
     try {
       setSummary(await window.orbit.dashboard.summary());
     } catch (error) {
-      toast(`Dashboard refresh failed: ${(error as Error).message}`);
+      toast(`仪表盘刷新失败：${(error as Error).message}`);
     } finally {
       setLoadingSummary(false);
     }
@@ -157,10 +157,10 @@ export function DashboardView(): JSX.Element {
     try {
       const review = await window.orbit.review.generate();
       await openPath(review.path);
-      toast(`Daily Review generated: ${review.recommendedTaskUids.length} recommended task(s)`);
+      toast(`每日复盘已生成：${review.recommendedTaskUids.length} 个推荐任务`);
       await loadDashboard();
     } catch (error) {
-      toast(`Daily Review failed: ${(error as Error).message}`);
+      toast(`每日复盘失败：${(error as Error).message}`);
     } finally {
       setGeneratingReview(false);
     }
@@ -172,10 +172,10 @@ export function DashboardView(): JSX.Element {
       const next = summary?.agent.autoRunnerEnabled
         ? await window.orbit.autoRunner.stop()
         : await window.orbit.autoRunner.start();
-      toast(next.enabled ? 'Auto-runner enabled' : 'Auto-runner paused');
+      toast(next.enabled ? '自动执行已启用' : '自动执行已暂停');
       await loadDashboard();
     } catch (error) {
-      toast(`Auto-runner update failed: ${(error as Error).message}`);
+      toast(`自动执行更新失败：${(error as Error).message}`);
     } finally {
       setAutoRunnerBusy(false);
     }
@@ -188,29 +188,28 @@ export function DashboardView(): JSX.Element {
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-neutral-500">
               <Target size={14} />
-              Workspace Command
+              工作台指挥台
             </div>
-            <h1 className="mt-1 text-xl font-semibold">Dashboard</h1>
+            <h1 className="mt-1 text-xl font-semibold">仪表盘</h1>
             <p className="mt-1 max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
-              Start from the next decision, then move into the project, task, or review surface
-              that can actually change the vault.
+              从下一步决策开始，再进入真正会改变 vault 的项目、任务或复盘界面。
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <CommandButton icon={<Inbox size={14} />} onClick={() => setView({ kind: 'inbox' })}>
-              Inbox
+              收件箱
             </CommandButton>
             <CommandButton
               icon={<ListTodo size={14} />}
               onClick={() => setView({ kind: 'kanban', projectUid: null })}
             >
-              Kanban
+              看板
             </CommandButton>
             <CommandButton
               icon={<RefreshCw size={14} className={loadingSummary ? 'animate-spin' : ''} />}
               onClick={() => void loadDashboard()}
             >
-              Refresh
+              刷新
             </CommandButton>
           </div>
         </div>
@@ -226,40 +225,41 @@ export function DashboardView(): JSX.Element {
               generatingReview={generatingReview}
               onEditVision={() => setEditVision(true)}
               onOpenReview={async () => {
-                if (summary?.thinking.dailyReviewPath) await openPath(summary.thinking.dailyReviewPath);
+                if (summary?.thinking.dailyReviewPath)
+                  await openPath(summary.thinking.dailyReviewPath);
               }}
               onGenerateReview={() => void generateDailyReview()}
             />
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SignalTile
                 icon={<Inbox size={16} />}
-                label="Decision queue"
+                label="决策队列"
                 value={inboxPending}
-                detail="Inbox items waiting for review"
+                detail="等待审核的收件箱条目"
                 tone={inboxPending > 0 ? 'rose' : 'neutral'}
                 onClick={() => setView({ kind: 'inbox' })}
               />
               <SignalTile
                 icon={<ListTodo size={16} />}
-                label="Ready work"
+                label="可开始工作"
                 value={readyCount}
-                detail={`${pendingTasks} tasks plus ${inboxPending} inbox`}
+                detail={`${pendingTasks} 个任务，加 ${inboxPending} 个收件箱条目`}
                 tone={readyCount > 0 ? 'sky' : 'neutral'}
                 onClick={() => setView({ kind: 'kanban', projectUid: null })}
               />
               <SignalTile
                 icon={<AlertTriangle size={16} />}
-                label="Blocked"
+                label="阻塞"
                 value={blockedTasks}
-                detail="Tasks that need intervention"
+                detail="需要介入的任务"
                 tone={blockedTasks > 0 ? 'amber' : 'neutral'}
                 onClick={() => setView({ kind: 'kanban', projectUid: null })}
               />
               <SignalTile
                 icon={<Bot size={16} />}
-                label="Agent lane"
+                label="Agent 通道"
                 value={summary?.agent.activeRuns ?? 0}
-                detail={`${doingTasks} doing, $${(summary?.agent.todayCostUsd ?? 0).toFixed(4)} today`}
+                detail={`${doingTasks} 个进行中，今日 $${(summary?.agent.todayCostUsd ?? 0).toFixed(4)}`}
                 tone={(summary?.agent.activeRuns ?? 0) > 0 ? 'emerald' : 'neutral'}
                 onClick={() => setView({ kind: 'agents' })}
               />
@@ -271,8 +271,8 @@ export function DashboardView(): JSX.Element {
           <section className={`${surfaceCls} min-w-0 overflow-hidden`}>
             <PanelHeading
               icon={<ListTodo size={16} />}
-              title="Execution queue"
-              detail="Open work grouped by the surface you can jump into."
+              title="执行队列"
+              detail="按可跳转界面组织当前开放工作。"
             />
             <div className="grid gap-0 border-t border-neutral-200 dark:border-neutral-800 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
               <div className="min-w-0">
@@ -287,7 +287,7 @@ export function DashboardView(): JSX.Element {
                         <span className="truncate text-sm font-medium">{row.project.name}</span>
                         {row.project.workdirMissing ? (
                           <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] text-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
-                            workdir missing
+                            工作目录缺失
                           </span>
                         ) : null}
                       </div>
@@ -295,30 +295,40 @@ export function DashboardView(): JSX.Element {
                         {row.project.description || row.project.relPath}
                       </p>
                     </div>
-                    <ProjectPressure open={row.open} ready={row.ready} doing={row.doing} blocked={row.blocked} />
+                    <ProjectPressure
+                      open={row.open}
+                      ready={row.ready}
+                      doing={row.doing}
+                      blocked={row.blocked}
+                    />
                     <ChevronRight size={15} className="shrink-0 text-neutral-400" />
                   </button>
                 ))}
                 {projectRows.length === 0 ? (
-                  <EmptyState title="No active projects" detail="Create or reopen a project to populate the execution queue." />
+                  <EmptyState
+                    title="没有活跃项目"
+                    detail="创建或重新打开项目后，执行队列会显示内容。"
+                  />
                 ) : null}
               </div>
 
               <div className="border-t border-neutral-200 dark:border-neutral-800 lg:border-l lg:border-t-0">
                 <div className="border-b border-neutral-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:border-neutral-800">
-                  Next tasks
+                  下一批任务
                 </div>
                 <div>
                   {priorityTasks.map((task) => (
                     <TaskQueueRow
                       key={task.id}
                       task={task}
-                      projectName={task.project_uid ? projectByUid.get(task.project_uid)?.name : undefined}
+                      projectName={
+                        task.project_uid ? projectByUid.get(task.project_uid)?.name : undefined
+                      }
                       onClick={() => openTaskDetail(task)}
                     />
                   ))}
                   {priorityTasks.length === 0 ? (
-                    <EmptyState title="No open tasks" detail="Nothing is currently waiting in the task index." />
+                    <EmptyState title="没有开放任务" detail="当前任务索引中没有等待处理的任务。" />
                   ) : null}
                 </div>
               </div>
@@ -374,16 +384,16 @@ function NorthStarPanel({
 }): JSX.Element {
   return (
     <section className="min-w-0 border-l-2 border-neutral-900 pl-4 dark:border-neutral-100">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-500">North Star</div>
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-500">
+        北极星
+      </div>
       <p className="mt-2 line-clamp-4 text-sm leading-6 text-neutral-700 dark:text-neutral-200">
-        {vision && vision.trim()
-          ? vision
-          : 'Vision.md is empty. Set the direction before asking the system to optimize execution.'}
+        {vision && vision.trim() ? vision : 'Vision.md 为空。请先设定方向，再让系统优化执行。'}
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {dailyReviewAvailable ? (
           <CommandButton icon={<ClipboardCheck size={14} />} onClick={onOpenReview}>
-            Open review
+            打开复盘
           </CommandButton>
         ) : (
           <CommandButton
@@ -391,14 +401,14 @@ function NorthStarPanel({
             onClick={onGenerateReview}
             disabled={generatingReview}
           >
-            {generatingReview ? 'Generating' : 'Daily review'}
+            {generatingReview ? '生成中' : '每日复盘'}
           </CommandButton>
         )}
         <CommandButton icon={<Target size={14} />} onClick={onEditVision}>
-          Edit vision
+          编辑愿景
         </CommandButton>
         <span className={subtleCls}>
-          Reviewed {visionDaysSinceReview === null ? 'unknown' : `${visionDaysSinceReview}d ago`}
+          最近复盘：{visionDaysSinceReview === null ? '未知' : `${visionDaysSinceReview} 天前`}
         </span>
       </div>
     </section>
@@ -468,17 +478,27 @@ function ProjectPressure({
 }): JSX.Element {
   return (
     <div className="hidden shrink-0 grid-cols-4 gap-1 text-center text-[11px] text-neutral-500 md:grid">
-      <MiniStat label="open" value={open} />
-      <MiniStat label="ready" value={ready} />
-      <MiniStat label="doing" value={doing} />
-      <MiniStat label="block" value={blocked} hot={blocked > 0} />
+      <MiniStat label="开放" value={open} />
+      <MiniStat label="可做" value={ready} />
+      <MiniStat label="进行" value={doing} />
+      <MiniStat label="阻塞" value={blocked} hot={blocked > 0} />
     </div>
   );
 }
 
-function MiniStat({ label, value, hot }: { label: string; value: number; hot?: boolean }): JSX.Element {
+function MiniStat({
+  label,
+  value,
+  hot
+}: {
+  label: string;
+  value: number;
+  hot?: boolean;
+}): JSX.Element {
   return (
-    <span className={`rounded px-2 py-1 ${hot ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-neutral-100 dark:bg-neutral-900'}`}>
+    <span
+      className={`rounded px-2 py-1 ${hot ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-neutral-100 dark:bg-neutral-900'}`}
+    >
       <span className="font-semibold tabular-nums">{value}</span>
       <span className="ml-1 hidden xl:inline">{label}</span>
     </span>
@@ -505,7 +525,7 @@ function TaskQueueRow({
         <span className="line-clamp-2 text-sm">{task.title}</span>
         <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
           <span>{statusLabel(task.status)}</span>
-          <span>{mode}</span>
+          <span>{executionModeLabel(mode)}</span>
           {projectName ? <span className="truncate">{projectName}</span> : null}
         </span>
       </span>
@@ -530,28 +550,31 @@ function KnowledgeLoopPanel({
     <section className={surfaceCls}>
       <PanelHeading
         icon={<Library size={16} />}
-        title="Knowledge loop"
-        detail="Capture only matters after it becomes Library, Resource, or a project decision."
+        title="知识闭环"
+        detail="捕获只有进入资料库、资源或项目决策后才真正有价值。"
       />
       <div className="grid grid-cols-2 gap-2 px-4 pb-3">
-        <BigMetric label="Feed saved" value={knowledge?.feedSaved ?? 0} />
-        <BigMetric label="Library added" value={knowledge?.libraryAdded ?? paraCounts.resources} />
-        <BigMetric label="Thoughts" value={knowledge?.thoughtsCreated ?? 0} />
-        <BigMetric label="Promoted" value={promoted} />
+        <BigMetric label="已保存信息流" value={knowledge?.feedSaved ?? 0} />
+        <BigMetric label="新增资料" value={knowledge?.libraryAdded ?? paraCounts.resources} />
+        <BigMetric label="想法" value={knowledge?.thoughtsCreated ?? 0} />
+        <BigMetric label="已提升" value={promoted} />
       </div>
       <div className="border-t border-neutral-200 px-4 py-3 text-sm dark:border-neutral-800">
         <div className="grid grid-cols-2 gap-2">
-          <InventoryPill label="Active Projects" value={knowledge?.activeProjects ?? paraCounts.active} />
-          <InventoryPill label="Areas" value={paraCounts.areas} />
-          <InventoryPill label="Resources" value={paraCounts.resources} />
-          <InventoryPill label="Archived" value={knowledge?.archivedProjects ?? paraCounts.archived} />
+          <InventoryPill label="活跃项目" value={knowledge?.activeProjects ?? paraCounts.active} />
+          <InventoryPill label="领域" value={paraCounts.areas} />
+          <InventoryPill label="资源" value={paraCounts.resources} />
+          <InventoryPill
+            label="已归档"
+            value={knowledge?.archivedProjects ?? paraCounts.archived}
+          />
         </div>
         <div className="mt-3 flex gap-2">
           <CommandButton icon={<Library size={14} />} onClick={onLibrary}>
-            Library
+            资料库
           </CommandButton>
           <CommandButton icon={<Sparkles size={14} />} onClick={onResources}>
-            Resources
+            资源
           </CommandButton>
         </div>
       </div>
@@ -579,23 +602,35 @@ function SystemPulsePanel({
   const online = health?.runtimes.filter((runtime) => runtime.status === 'online').length ?? 0;
   return (
     <section className={surfaceCls}>
-      <PanelHeading icon={<Gauge size={16} />} title="System pulse" detail="Only show health that changes what you do next." />
+      <PanelHeading
+        icon={<Gauge size={16} />}
+        title="系统脉搏"
+        detail="只展示会影响下一步行动的健康信号。"
+      />
       <div className="grid grid-cols-2 gap-2 px-4 pb-3">
-        <BigMetric label="Git dirty" value={health?.git.dirtyProjects.length ?? 0} tone={(health?.git.dirtyProjects.length ?? 0) > 0 ? 'amber' : 'neutral'} />
-        <BigMetric label="Runtimes" value={online} />
-        <BigMetric label="Worktrees" value={formatBytes(health?.disk.worktreeSizeBytes ?? 0)} />
-        <BigMetric label="Budget today" value={`$${(health?.budget.todayUsd ?? 0).toFixed(4)}`} />
+        <BigMetric
+          label="Git 未提交"
+          value={health?.git.dirtyProjects.length ?? 0}
+          tone={(health?.git.dirtyProjects.length ?? 0) > 0 ? 'amber' : 'neutral'}
+        />
+        <BigMetric label="Runtime" value={online} />
+        <BigMetric label="Worktree" value={formatBytes(health?.disk.worktreeSizeBytes ?? 0)} />
+        <BigMetric label="今日预算" value={`$${(health?.budget.todayUsd ?? 0).toFixed(4)}`} />
       </div>
       <div className="border-t border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <div className="flex flex-wrap gap-2">
-          <CommandButton icon={<Bot size={14} />} onClick={onToggleAutoRunner} disabled={autoRunnerBusy}>
-            {autoRunnerEnabled ? 'Pause auto-runner' : 'Start auto-runner'}
+          <CommandButton
+            icon={<Bot size={14} />}
+            onClick={onToggleAutoRunner}
+            disabled={autoRunnerBusy}
+          >
+            {autoRunnerEnabled ? '暂停自动执行' : '启动自动执行'}
           </CommandButton>
           <CommandButton icon={<Gauge size={14} />} onClick={onRuntime}>
             Runtime
           </CommandButton>
           <CommandButton icon={<CheckCircle2 size={14} />} onClick={onConsole}>
-            Console
+            控制台
           </CommandButton>
         </div>
         {(health?.git.dirtyProjects ?? []).slice(0, 3).map((project) => (
@@ -605,7 +640,7 @@ function SystemPulsePanel({
             className="mt-2 flex w-full items-center justify-between rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
           >
             <span className="truncate">{project.projectName}</span>
-            <span>{project.uncommittedFiles} file(s)</span>
+            <span>{project.uncommittedFiles} 个文件</span>
           </button>
         ))}
       </div>
@@ -616,18 +651,29 @@ function SystemPulsePanel({
 function RecentActivityPanel({ events }: { events: ActivityEvent[] }): JSX.Element {
   return (
     <section className={surfaceCls}>
-      <PanelHeading icon={<Sparkles size={16} />} title="Recent activity" detail="Latest traceable changes in the vault." />
+      <PanelHeading
+        icon={<Sparkles size={16} />}
+        title="近期活动"
+        detail="vault 中最新的可追踪变更。"
+      />
       <div className="border-t border-neutral-200 dark:border-neutral-800">
         {events.slice(0, 5).map((event) => (
-          <div key={event.id} className="border-b border-neutral-100 px-4 py-2 text-xs dark:border-neutral-900">
+          <div
+            key={event.id}
+            className="border-b border-neutral-100 px-4 py-2 text-xs dark:border-neutral-900"
+          >
             <div className="flex items-center gap-2 text-neutral-500">
               <span>{formatTime(event.at)}</span>
               <span>{event.action}</span>
             </div>
-            <div className="mt-0.5 line-clamp-2 text-neutral-700 dark:text-neutral-300">{event.summary}</div>
+            <div className="mt-0.5 line-clamp-2 text-neutral-700 dark:text-neutral-300">
+              {event.summary}
+            </div>
           </div>
         ))}
-        {events.length === 0 ? <EmptyState title="No activity yet" detail="Traceable events will show up here." /> : null}
+        {events.length === 0 ? (
+          <EmptyState title="暂无活动" detail="可追踪事件会显示在这里。" />
+        ) : null}
       </div>
     </section>
   );
@@ -643,7 +689,9 @@ function BigMetric({
   tone?: 'neutral' | 'amber';
 }): JSX.Element {
   return (
-    <div className={`rounded-md px-3 py-2 ${tone === 'amber' ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-neutral-50 dark:bg-neutral-900'}`}>
+    <div
+      className={`rounded-md px-3 py-2 ${tone === 'amber' ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-neutral-50 dark:bg-neutral-900'}`}
+    >
       <div className="text-[11px] text-neutral-500 dark:text-neutral-400">{label}</div>
       <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
     </div>
@@ -704,11 +752,31 @@ function taskScore(task: TaskRecord): number {
     backlog: 4,
     done: 9
   };
-  return statusScore[task.status] - (task.recommended ? 0.5 : 0) - (task.priority === 'high' ? 0.25 : 0);
+  return (
+    statusScore[task.status] - (task.recommended ? 0.5 : 0) - (task.priority === 'high' ? 0.25 : 0)
+  );
 }
 
 function statusLabel(status: TaskStatus): string {
-  return status[0].toUpperCase() + status.slice(1);
+  const labels: Record<TaskStatus, string> = {
+    blocked: '阻塞',
+    doing: '进行中',
+    waiting: '等待',
+    todo: '待办',
+    backlog: '待整理',
+    done: '已完成'
+  };
+  return labels[status];
+}
+
+function executionModeLabel(mode: TaskExecutionMode): string {
+  const labels: Record<TaskExecutionMode, string> = {
+    human: '人工',
+    assisted: '辅助',
+    agent: 'Agent',
+    scheduled: '计划'
+  };
+  return labels[mode];
 }
 
 function statusDotClass(status: TaskStatus): string {
@@ -720,11 +788,14 @@ function statusDotClass(status: TaskStatus): string {
 
 function toneClasses(tone: 'neutral' | 'sky' | 'rose' | 'amber' | 'emerald'): string {
   const classes = {
-    neutral: 'border-neutral-200 bg-white text-neutral-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100',
+    neutral:
+      'border-neutral-200 bg-white text-neutral-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100',
     sky: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100',
     rose: 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-100',
-    amber: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100',
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-100'
+    amber:
+      'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100',
+    emerald:
+      'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-100'
   };
   return classes[tone];
 }
