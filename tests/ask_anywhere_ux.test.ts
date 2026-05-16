@@ -81,7 +81,7 @@ describe('Ask Anywhere UX revamp components', () => {
       })
     );
 
-    expect(html).toContain('Open Ask Anywhere');
+    expect(html).toContain('打开 Ask Anywhere');
     expect(html).toContain('aria-pressed="false"');
   });
 
