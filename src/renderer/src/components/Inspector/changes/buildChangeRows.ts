@@ -86,8 +86,9 @@ export function buildChangeFiles(
     })
     .filter((file) => {
       if (!q) return true;
-      return [file.path, file.origPath ?? '', file.dir]
-        .some((value) => value.toLowerCase().includes(q));
+      return [file.path, file.origPath ?? '', file.dir].some((value) =>
+        value.toLowerCase().includes(q)
+      );
     })
     .sort((a, b) => a.path.localeCompare(b.path));
 }
@@ -112,7 +113,7 @@ export function buildChangeRows(
       type: 'group',
       key: groupKey,
       dir,
-      label: dir || 'Root',
+      label: dir || '根目录',
       count: filesInGroup.length
     });
 

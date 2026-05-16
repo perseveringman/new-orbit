@@ -35,10 +35,10 @@ const STATUS_META: Record<
   LocalDiffFile['status'],
   { glyph: string; className: string; label: string }
 > = {
-  added: { glyph: 'A', className: 'text-emerald-600 dark:text-emerald-400', label: 'Added' },
-  modified: { glyph: 'M', className: 'text-amber-600 dark:text-amber-400', label: 'Modified' },
-  deleted: { glyph: 'D', className: 'text-red-600 dark:text-red-400', label: 'Deleted' },
-  renamed: { glyph: 'R', className: 'text-sky-600 dark:text-sky-400', label: 'Renamed' }
+  added: { glyph: 'A', className: 'text-emerald-600 dark:text-emerald-400', label: '新增' },
+  modified: { glyph: 'M', className: 'text-amber-600 dark:text-amber-400', label: '修改' },
+  deleted: { glyph: 'D', className: 'text-red-600 dark:text-red-400', label: '删除' },
+  renamed: { glyph: 'R', className: 'text-sky-600 dark:text-sky-400', label: '重命名' }
 };
 
 export { classifyPatch, formatShortSha };
@@ -188,9 +188,13 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const api = (window as unknown as {
-        orbit?: { git?: { getDiff?: (args: { worktreeId: string; base?: string }) => Promise<unknown> } };
-      }).orbit;
+      const api = (
+        window as unknown as {
+          orbit?: {
+            git?: { getDiff?: (args: { worktreeId: string; base?: string }) => Promise<unknown> };
+          };
+        }
+      ).orbit;
       const fn = api?.git?.getDiff;
       if (!fn) throw new Error('git.getDiff IPC not registered');
       const raw = await fn({ worktreeId, base });
@@ -251,8 +255,12 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
           {branchControl ?? (
             <span className="shrink-0 text-neutral-500 dark:text-neutral-400">分支</span>
           )}
-          <span className="font-mono text-emerald-600 dark:text-emerald-400">+{formatNumber(totals.add)}</span>
-          <span className="font-mono text-rose-600 dark:text-rose-400">-{formatNumber(totals.del)}</span>
+          <span className="font-mono text-emerald-600 dark:text-emerald-400">
+            +{formatNumber(totals.add)}
+          </span>
+          <span className="font-mono text-rose-600 dark:text-rose-400">
+            -{formatNumber(totals.del)}
+          </span>
           <span className="min-w-0 truncate font-mono text-neutral-500 dark:text-neutral-500">
             {effectiveBase}
             <span className="px-1.5 text-neutral-300 dark:text-neutral-700">→</span>
@@ -292,7 +300,11 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
 
       {!error && result && result.files.length === 0 && !loading && (
         <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
-          相比 <span className="mx-1 font-mono text-neutral-700 dark:text-neutral-300">{effectiveBase}</span> 没有变更
+          相比{' '}
+          <span className="mx-1 font-mono text-neutral-700 dark:text-neutral-300">
+            {effectiveBase}
+          </span>{' '}
+          没有变更
         </div>
       )}
 
@@ -305,7 +317,10 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
               const rows = rowsByFile.get(file.path) ?? [];
 
               return (
-                <section key={file.path} className="border-b border-neutral-200 dark:border-neutral-900/80">
+                <section
+                  key={file.path}
+                  className="border-b border-neutral-200 dark:border-neutral-900/80"
+                >
                   <button
                     type="button"
                     onClick={() =>
@@ -319,16 +334,23 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
                     <span className="rounded bg-neutral-100 p-1 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                       {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                     </span>
-                    <span className={`w-4 shrink-0 text-center text-[11px] font-semibold ${meta.className}`} title={meta.label}>
+                    <span
+                      className={`w-4 shrink-0 text-center text-[11px] font-semibold ${meta.className}`}
+                      title={meta.label}
+                    >
                       {meta.glyph}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-mono text-sm text-neutral-900 dark:text-neutral-100">
                       {file.path}
                     </span>
                     <span className="shrink-0 font-mono text-xs">
-                      <span className="text-emerald-600 dark:text-emerald-400">+{formatNumber(file.additions)}</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        +{formatNumber(file.additions)}
+                      </span>
                       <span className="px-1 text-neutral-300 dark:text-neutral-700"> </span>
-                      <span className="text-rose-600 dark:text-rose-400">-{formatNumber(file.deletions)}</span>
+                      <span className="text-rose-600 dark:text-rose-400">
+                        -{formatNumber(file.deletions)}
+                      </span>
                     </span>
                   </button>
 
@@ -374,7 +396,9 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
                               <span className="w-11 shrink-0 select-none px-2 text-right text-neutral-400 dark:text-neutral-500">
                                 {number ?? ''}
                               </span>
-                              <span className={`w-5 shrink-0 select-none text-center ${markerClass}`}>
+                              <span
+                                className={`w-5 shrink-0 select-none text-center ${markerClass}`}
+                              >
                                 {row.marker}
                               </span>
                               <span className="whitespace-pre pr-4">{row.text || ' '}</span>

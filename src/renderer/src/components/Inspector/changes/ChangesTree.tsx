@@ -57,7 +57,7 @@ export function ChangesTree(props: ChangesTreeProps): JSX.Element {
                 {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 <span>{row.label}</span>
               </span>
-              <span>{row.count} files</span>
+              <span>{row.count} 个文件</span>
             </button>
           );
         }
