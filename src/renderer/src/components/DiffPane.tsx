@@ -202,7 +202,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
         return next;
       });
     } catch (e) {
-      setError((e as Error).message || 'Failed to load diff');
+      setError((e as Error).message || '加载 diff 失败');
       setResult(null);
     } finally {
       setLoading(false);
@@ -249,7 +249,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
         <div className="flex min-w-0 items-center gap-2">
           <GitBranch size={14} className="shrink-0 text-neutral-500" />
           {branchControl ?? (
-            <span className="shrink-0 text-neutral-500 dark:text-neutral-400">Branch</span>
+            <span className="shrink-0 text-neutral-500 dark:text-neutral-400">分支</span>
           )}
           <span className="font-mono text-emerald-600 dark:text-emerald-400">+{formatNumber(totals.add)}</span>
           <span className="font-mono text-rose-600 dark:text-rose-400">-{formatNumber(totals.del)}</span>
@@ -262,7 +262,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
         <div className="flex shrink-0 items-center gap-2">
           {result && (
             <span className="hidden font-mono text-[11px] text-neutral-400 dark:text-neutral-600 xl:inline">
-              merge-base {formatShortSha(result.mergeBase)}
+              合并基线 {formatShortSha(result.mergeBase)}
             </span>
           )}
           <button
@@ -270,7 +270,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
             onClick={() => setNonce((n) => n + 1)}
             disabled={loading}
             className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-            title="Refresh diff"
+            title="刷新 diff"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -285,14 +285,14 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
             onClick={() => setNonce((n) => n + 1)}
             className="rounded border border-red-300 px-2 py-0.5 hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900/50"
           >
-            Retry
+            重试
           </button>
         </div>
       )}
 
       {!error && result && result.files.length === 0 && !loading && (
         <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
-          No changes vs <span className="mx-1 font-mono text-neutral-700 dark:text-neutral-300">{effectiveBase}</span>
+          相比 <span className="mx-1 font-mono text-neutral-700 dark:text-neutral-300">{effectiveBase}</span> 没有变更
         </div>
       )}
 
@@ -336,11 +336,11 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
                     <div className="font-mono text-xs leading-5">
                       {file.binary ? (
                         <div className="flex h-24 items-center justify-center text-neutral-500">
-                          Binary file — not shown
+                          二进制文件 — 不显示
                         </div>
                       ) : rows.length === 0 ? (
                         <div className="flex h-24 items-center justify-center text-neutral-500">
-                          No textual patch available
+                          没有可用的文本补丁
                         </div>
                       ) : (
                         rows.map((row) => {
@@ -349,7 +349,7 @@ export function DiffPane(props: DiffPaneProps): JSX.Element {
                               <div key={row.key} className="flex items-center py-1">
                                 <span className="w-11 shrink-0" />
                                 <div className="mx-2 flex-1 rounded-md bg-neutral-100 px-3 py-1 text-[11px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500">
-                                  {formatNumber(row.count)} unmodified lines
+                                  {formatNumber(row.count)} 行未修改
                                 </div>
                               </div>
                             );

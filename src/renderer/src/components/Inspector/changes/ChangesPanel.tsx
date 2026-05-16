@@ -72,7 +72,7 @@ export function ChangesPanel(): JSX.Element {
       if (token !== loadTokenRef.current) return;
       setSummary({ dirty: false, stagedCount: 0, unstagedCount: 0, untrackedCount: 0, files: [] });
       setDiffFiles([]);
-      setError((loadError as Error).message || 'Failed to load changes');
+      setError((loadError as Error).message || '加载变更失败');
     } finally {
       if (token === loadTokenRef.current) {
         setLoading(false);
@@ -105,7 +105,7 @@ export function ChangesPanel(): JSX.Element {
         setPendingDiscardPath(null);
         await load();
       } catch (actionError) {
-        toast(`Git action failed: ${(actionError as Error).message}`);
+        toast(`Git 操作失败：${(actionError as Error).message}`);
       } finally {
         setBusyPath(null);
       }
@@ -142,7 +142,7 @@ export function ChangesPanel(): JSX.Element {
     if (!projectCwd) return;
     const message = inspector.commitMessage?.trim() ?? '';
     if (!message) {
-      toast('Commit message is required');
+      toast('Commit 信息不能为空');
       return;
     }
 
@@ -151,10 +151,10 @@ export function ChangesPanel(): JSX.Element {
       try {
         const result = await window.orbit.git.commitSelection({ cwd: projectCwd, message });
         inspector.setCommitMessage?.('');
-        toast(`Committed ${result.sha.slice(0, 7)}`);
+        toast(`已提交 ${result.sha.slice(0, 7)}`);
         await load();
       } catch (commitError) {
-        toast(`Commit failed: ${(commitError as Error).message}`);
+        toast(`提交失败：${(commitError as Error).message}`);
       } finally {
         setBusyAction(null);
       }
@@ -169,9 +169,9 @@ export function ChangesPanel(): JSX.Element {
           const next = await window.orbit.github.publishProject(args);
           setGitHubState(next);
           await refreshProjects?.();
-          toast(`Published ${args.owner}/${args.repo}`);
+          toast(`已发布 ${args.owner}/${args.repo}`);
         } catch (publishError) {
-          toast(`Publish failed: ${(publishError as Error).message}`);
+          toast(`发布失败：${(publishError as Error).message}`);
         } finally {
           setBusyAction(null);
         }
@@ -189,9 +189,9 @@ export function ChangesPanel(): JSX.Element {
           setGitHubState((current) =>
             current ? { ...current, pullRequest } : current
           );
-          toast(`Created PR #${pullRequest.number}`);
+          toast(`已创建 PR #${pullRequest.number}`);
         } catch (pullRequestError) {
-          toast(`Create PR failed: ${(pullRequestError as Error).message}`);
+          toast(`创建 PR 失败：${(pullRequestError as Error).message}`);
         } finally {
           setBusyAction(null);
         }
@@ -209,12 +209,12 @@ export function ChangesPanel(): JSX.Element {
       <div className={`flex items-center justify-between gap-3 border-b border-inspector-border-subtle px-3 py-2 ${INSPECTOR_THEME.textSecondary}`}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className={INSPECTOR_THEME.textPrimary}>{gitStatus?.branch ?? 'Changes'}</span>
-            <span>Base {baseLabel}</span>
-            <span>{fileCount} files changed</span>
-            <span>Staged {summary?.stagedCount ?? 0}</span>
-            <span>Unstaged {summary?.unstagedCount ?? 0}</span>
-            <span>Untracked {summary?.untrackedCount ?? 0}</span>
+            <span className={INSPECTOR_THEME.textPrimary}>{gitStatus?.branch ?? '变更'}</span>
+            <span>基线 {baseLabel}</span>
+            <span>{fileCount} 个文件已变更</span>
+            <span>已暂存 {summary?.stagedCount ?? 0}</span>
+            <span>未暂存 {summary?.unstagedCount ?? 0}</span>
+            <span>未跟踪 {summary?.untrackedCount ?? 0}</span>
           </div>
         </div>
         <button
@@ -224,7 +224,7 @@ export function ChangesPanel(): JSX.Element {
           className="flex items-center gap-1 rounded border border-inspector-border-subtle px-2 py-1 text-xs disabled:opacity-50"
         >
           <RefreshCw size={12} />
-          {loading ? 'Refreshing…' : 'Refresh'}
+          {loading ? '刷新中…' : '刷新'}
         </button>
       </div>
 
@@ -233,7 +233,7 @@ export function ChangesPanel(): JSX.Element {
           type="search"
           value={inspector.changeQuery ?? ''}
           onChange={(event) => inspector.setChangeQuery?.(event.target.value)}
-          placeholder="Search changes..."
+          placeholder="搜索变更…"
           className="w-full rounded border border-inspector-border-subtle bg-inspector-surface-1 px-3 py-2 text-sm text-inspector-text-primary outline-none"
         />
       </div>
@@ -273,7 +273,7 @@ export function ChangesPanel(): JSX.Element {
           <div className="border-t border-inspector-border-subtle p-3">
             <GitHubPublishActions
               projectUid={project?.uid ?? ''}
-              projectName={project?.name ?? 'Project'}
+              projectName={project?.name ?? '项目'}
               defaultRepo={project?.slug ?? 'project'}
               binding={binding}
               pullRequest={githubState?.pullRequest ?? null}

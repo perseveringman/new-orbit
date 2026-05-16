@@ -136,7 +136,7 @@ export function QuickCaptureProvider(): JSX.Element {
           : {})
       });
       await applyAcceptedSuggestions(payload.acceptedSuggestions, payload.content, tags);
-      toast(payload.acceptedSuggestions.length > 0 ? `Note captured + ${payload.acceptedSuggestions.length} action(s)` : 'Note captured to Timeline');
+      toast(payload.acceptedSuggestions.length > 0 ? `已捕获笔记 + ${payload.acceptedSuggestions.length} 个行动` : '笔记已捕获到时间线');
       clearAnalyzeTimer(analyzeTimerRef);
       setOpen(false);
     } catch (caught) {
@@ -222,7 +222,7 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
     suggestions.push({
       id: `local:save_to_library:${url}`,
       action: 'save_to_library',
-      label: 'Save to Library',
+      label: '保存到资料库',
       detail: host,
       confidence: 0.88,
       risk: 'low',
@@ -234,7 +234,7 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
     suggestions.push({
       id: 'local:create_task',
       action: 'create_task',
-      label: 'Create task',
+      label: '创建任务',
       detail: titleFromContent(content),
       confidence: 0.74,
       risk: 'proposal',
@@ -246,8 +246,8 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
     suggestions.push({
       id: 'local:transcribe_voice',
       action: 'transcribe_voice',
-      label: 'Transcribe voice',
-      detail: 'Attach transcript when a speech model is configured',
+      label: '转写语音',
+      detail: '配置语音模型后附加转写稿',
       confidence: 0.72,
       risk: 'needs_confirm',
       source: 'heuristic'
@@ -257,8 +257,8 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
     suggestions.push({
       id: 'local:distill_later',
       action: 'distill_later',
-      label: 'Distill later',
-      detail: 'Long capture with reusable signal',
+      label: '稍后提炼',
+      detail: '包含可复用信号的长捕获',
       confidence: 0.65,
       risk: 'needs_confirm',
       source: 'heuristic'
@@ -285,7 +285,7 @@ function looksActionable(value: string): boolean {
 
 function titleFromDraft(content: string, attachmentNames: string[]): string | undefined {
   if (content) return titleFromContent(content);
-  if (attachmentNames.length > 0) return `Captured ${attachmentNames.length} file${attachmentNames.length === 1 ? '' : 's'}`;
+  if (attachmentNames.length > 0) return `已捕获 ${attachmentNames.length} 个文件`;
   return undefined;
 }
 
@@ -350,7 +350,7 @@ function firstUrl(value: string): string | undefined {
 }
 
 function titleFromContent(value: string): string {
-  return value.trim().split(/\r?\n/)[0]?.replace(/^(todo|task|待办)[:：]\s*/i, '').slice(0, 80) || 'Captured task';
+  return value.trim().split(/\r?\n/)[0]?.replace(/^(todo|task|待办)[:：]\s*/i, '').slice(0, 80) || '已捕获任务';
 }
 
 function safeHostname(url: string): string | undefined {

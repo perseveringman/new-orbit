@@ -11,7 +11,7 @@ export function DiffViewer({ file }: DiffViewerProps): JSX.Element {
   if (!file) {
     return (
       <div className={`flex flex-1 items-center justify-center text-sm ${INSPECTOR_THEME.textDim}`}>
-        Select a file to preview the patch.
+        请选择文件以预览补丁。
       </div>
     );
   }
@@ -20,7 +20,7 @@ export function DiffViewer({ file }: DiffViewerProps): JSX.Element {
     return (
       <div className={`flex flex-1 flex-col items-center justify-center gap-2 text-sm ${INSPECTOR_THEME.textDim}`}>
         <FileCode2 size={18} />
-        <p>Untracked file — stage it to generate a patch preview.</p>
+        <p>未跟踪文件 — 暂存后即可生成补丁预览。</p>
       </div>
     );
   }
@@ -28,7 +28,7 @@ export function DiffViewer({ file }: DiffViewerProps): JSX.Element {
   if (file.binary) {
     return (
       <div className={`flex flex-1 items-center justify-center text-sm ${INSPECTOR_THEME.textDim}`}>
-        Binary file — preview unavailable.
+        二进制文件 — 无法预览。
       </div>
     );
   }

@@ -193,18 +193,18 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
           <span className="font-mono">
-            Terminal{' '}
+            终端{' '}
             {snapshot.session ? (
               <span className="text-neutral-600 dark:text-neutral-300">
                 · {snapshot.session.id.slice(0, 6)} · pid {snapshot.session.pid}
               </span>
             ) : snapshot.exitState ? (
               <span className="text-amber-500">
-                · exited {snapshot.exitState.exitCode}
+                · 已退出 {snapshot.exitState.exitCode}
                 {snapshot.exitState.signal ? ` (sig ${snapshot.exitState.signal})` : ''}
               </span>
             ) : (
-              <span>· starting…</span>
+              <span>· 启动中…</span>
             )}
           </span>
           <span className="flex-1" />
@@ -212,21 +212,21 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(
             className="rounded border border-neutral-300 px-1.5 py-0.5 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
             onClick={() => void handleCopyAll()}
           >
-            Copy
+            复制
           </button>
           {snapshot.session ? (
             <button
               className="rounded border border-red-300 px-1.5 py-0.5 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40"
               onClick={() => void handleKill()}
             >
-              Kill
+              终止
             </button>
           ) : (
             <button
               className="rounded border border-sky-300 px-1.5 py-0.5 text-sky-600 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950/40"
               onClick={() => void handleRestart()}
             >
-              Restart
+              重启
             </button>
           )}
         </header>

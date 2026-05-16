@@ -35,13 +35,13 @@ export function DiffWorkspacePane(): JSX.Element {
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-neutral-200 bg-white text-neutral-900 dark:border-neutral-800 dark:bg-[#111111] dark:text-neutral-200">
         <header className="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-200 px-3 text-xs dark:border-neutral-800">
           <GitBranch size={14} className="text-neutral-500" />
-          <span className="text-neutral-500 dark:text-neutral-400">Branch</span>
+          <span className="text-neutral-500 dark:text-neutral-400">分支</span>
           <span className="font-mono text-emerald-600 dark:text-emerald-400">+0</span>
           <span className="font-mono text-rose-600 dark:text-rose-400">-0</span>
           <span className="font-mono text-neutral-500">main → worktree</span>
         </header>
         <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-neutral-500">
-          No active worktree to diff.
+          没有可用于 diff 的活跃 worktree。
         </div>
       </div>
     );
@@ -62,7 +62,7 @@ export function DiffWorkspacePane(): JSX.Element {
         ))}
       </select>
     ) : (
-      <span className="max-w-40 truncate text-neutral-700 dark:text-neutral-300">{selectedWorktree?.branch ?? 'Branch'}</span>
+      <span className="max-w-40 truncate text-neutral-700 dark:text-neutral-300">{selectedWorktree?.branch ?? '分支'}</span>
     );
 
   return (

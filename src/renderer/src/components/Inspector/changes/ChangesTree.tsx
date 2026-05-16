@@ -99,7 +99,7 @@ export function ChangesTree(props: ChangesTreeProps): JSX.Element {
                     disabled={busy}
                     className="rounded border border-inspector-border-subtle px-2 py-1 disabled:opacity-50"
                   >
-                    Unstage
+                    取消暂存
                   </button>
                 ) : (
                   <button
@@ -108,7 +108,7 @@ export function ChangesTree(props: ChangesTreeProps): JSX.Element {
                     disabled={busy}
                     className="rounded border border-inspector-border-subtle px-2 py-1 disabled:opacity-50"
                   >
-                    Stage
+                    暂存
                   </button>
                 )}
                 {needsConfirm ? (
@@ -119,7 +119,7 @@ export function ChangesTree(props: ChangesTreeProps): JSX.Element {
                       disabled={busy}
                       className="rounded border border-red-500/40 px-2 py-1 text-red-400 disabled:opacity-50"
                     >
-                      Confirm discard
+                      确认丢弃
                     </button>
                     <button
                       type="button"
@@ -127,7 +127,7 @@ export function ChangesTree(props: ChangesTreeProps): JSX.Element {
                       disabled={busy}
                       className="rounded border border-inspector-border-subtle px-2 py-1 disabled:opacity-50"
                     >
-                      Cancel
+                      取消
                     </button>
                   </>
                 ) : (
@@ -137,7 +137,7 @@ export function ChangesTree(props: ChangesTreeProps): JSX.Element {
                     disabled={busy}
                     className="rounded border border-inspector-border-subtle px-2 py-1 disabled:opacity-50"
                   >
-                    Discard
+                    丢弃
                   </button>
                 )}
               </div>

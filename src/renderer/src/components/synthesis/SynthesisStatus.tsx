@@ -16,8 +16,8 @@ export function SynthesisStatus({
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
       <SynthesisBadge artifact={artifact} />
-      {timestamp ? <span>generated {new Date(timestamp).toLocaleString()}</span> : <span>not generated</span>}
-      <span>{sourceCount ?? artifact?.sources.length ?? 0} source(s)</span>
+      {timestamp ? <span>生成于 {new Date(timestamp).toLocaleString()}</span> : <span>尚未生成</span>}
+      <span>{sourceCount ?? artifact?.sources.length ?? 0} 个来源</span>
       {artifact?.provenance.prompt_version ? <span>{artifact.provenance.prompt_version}</span> : null}
       {onRefresh ? (
         <button
@@ -25,10 +25,9 @@ export function SynthesisStatus({
           onClick={onRefresh}
           className="rounded border border-neutral-300 px-2 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
-          Refresh
+          刷新
         </button>
       ) : null}
     </div>
   );
 }
-

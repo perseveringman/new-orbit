@@ -111,7 +111,7 @@ export function QuickCaptureModal({
   async function startRecording(): Promise<void> {
     setRecordingError(null);
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setRecordingError('Voice recording is not supported in this environment.');
+      setRecordingError('当前环境不支持语音录制。');
       return;
     }
     try {
@@ -164,8 +164,8 @@ export function QuickCaptureModal({
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
           <div>
-            <h2 className="text-sm font-semibold">Quick Capture</h2>
-            <p className="text-xs text-neutral-500">Type, paste, drop files, or record voice · ⌘⇧I</p>
+            <h2 className="text-sm font-semibold">快速捕获</h2>
+            <p className="text-xs text-neutral-500">输入、粘贴、拖入文件或录制语音 · ⌘⇧I</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900">
             Esc
@@ -190,7 +190,7 @@ export function QuickCaptureModal({
                 onClose();
               }
             }}
-            placeholder="Write what happened, paste a link, or leave this blank and attach files/voice."
+            placeholder="写下发生了什么、粘贴链接，或留空后附加文件/语音。"
             className="h-44 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
           />
 
@@ -203,19 +203,19 @@ export function QuickCaptureModal({
               onChange={(event) => addFiles(Array.from(event.currentTarget.files ?? []), 'attachment')}
             />
             <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-lg border border-neutral-300 px-3 py-1.5 font-medium dark:border-neutral-700">
-              Attach files
+              附加文件
             </button>
             {!recording ? (
               <button type="button" onClick={() => void startRecording()} className="rounded-lg border border-rose-200 px-3 py-1.5 font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-200 dark:hover:bg-rose-950/30">
-                Record voice
+                录制语音
               </button>
             ) : (
               <button type="button" onClick={stopRecording} className="rounded-lg bg-rose-600 px-3 py-1.5 font-medium text-white hover:bg-rose-500">
-                Stop recording
+                停止录制
               </button>
             )}
-            {files.length > 0 ? <span className="text-neutral-500">{files.length} file(s)</span> : null}
-            {audioFile ? <span className="text-neutral-500">{audioDurationSec}s voice</span> : null}
+            {files.length > 0 ? <span className="text-neutral-500">{files.length} 个文件</span> : null}
+            {audioFile ? <span className="text-neutral-500">{audioDurationSec} 秒语音</span> : null}
             {recordingError ? <span className="text-red-600 dark:text-red-300">{recordingError}</span> : null}
           </div>
 
@@ -232,11 +232,11 @@ export function QuickCaptureModal({
 
         <div className="flex items-center justify-between border-t border-neutral-200 px-4 py-3 dark:border-neutral-800">
           <span className="text-xs text-neutral-500">
-            Saves to Notes and appears on Timeline. Suggestions are optional.
+             保存到笔记并显示在时间线中。建议项可选。
           </span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">
-              Cancel
+              取消
             </button>
             <button
               type="button"
@@ -244,7 +244,7 @@ export function QuickCaptureModal({
               disabled={!canSave || saving}
               className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? 'Saving…' : acceptedSuggestions.length > 0 ? `Save Note + ${acceptedSuggestions.length}` : 'Save Note'}
+              {saving ? '保存中…' : acceptedSuggestions.length > 0 ? `保存笔记 + ${acceptedSuggestions.length}` : '保存笔记'}
             </button>
           </div>
         </div>
@@ -272,7 +272,7 @@ function SuggestionStrip({
   if (suggestions.length === 0 && !suggesting && visibleTags.length === 0) {
     return (
       <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
-        <span>AI suggestions will appear after a pause.</span>
+        <span>暂停输入后会出现 AI 建议。</span>
         {onAnalyzeNow ? <AnalyzeButton suggesting={suggesting} onAnalyzeNow={onAnalyzeNow} /> : null}
       </div>
     );
@@ -281,8 +281,8 @@ function SuggestionStrip({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
         <div className="flex items-center gap-2">
-          <span>Suggestions</span>
-          {suggesting ? <span>thinking…</span> : null}
+          <span>建议</span>
+          {suggesting ? <span>思考中…</span> : null}
         </div>
         {onAnalyzeNow ? <AnalyzeButton suggesting={suggesting} onAnalyzeNow={onAnalyzeNow} /> : null}
       </div>
@@ -302,7 +302,7 @@ function SuggestionStrip({
               title={suggestion.detail ?? suggestion.label}
             >
               {suggestion.label}
-              {suggestion.risk === 'proposal' ? ' · proposal' : ''}
+              {suggestion.risk === 'proposal' ? ' · 建议' : ''}
             </button>
           );
         })}
@@ -328,8 +328,8 @@ function AnalyzeButton({
       type="button"
       onClick={onAnalyzeNow}
       disabled={suggesting}
-      aria-label="Analyze"
-      title="Analyze now"
+      aria-label="分析"
+      title="立即分析"
       className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-neutral-200 text-neutral-500 hover:border-sky-300 hover:text-sky-700 disabled:cursor-wait disabled:opacity-60 dark:border-neutral-800 dark:hover:border-sky-700 dark:hover:text-sky-200"
     >
       <RefreshCw size={13} className={suggesting ? 'animate-spin' : ''} />

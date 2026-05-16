@@ -30,18 +30,18 @@ export function CommitBar({
   return (
     <div className="space-y-2 border-t border-inspector-border-subtle p-3">
       <label className="block text-xs font-medium text-inspector-text-secondary">
-        Commit message
+        Commit 信息
       </label>
       <textarea
         value={message}
         onChange={(event) => onMessageChange(event.target.value)}
-        placeholder="Describe the staged change set..."
+        placeholder="描述已暂存的变更集…"
         rows={2}
         className="w-full rounded border border-inspector-border-subtle bg-inspector-surface-1 px-3 py-2 text-sm text-inspector-text-primary outline-none"
       />
       <div className="flex items-center justify-between gap-3">
         <span className={`text-[11px] ${INSPECTOR_THEME.textDim}`}>
-          {stagedCount > 0 ? `${stagedCount} staged files ready to commit` : 'Stage files to enable commit'}
+          {stagedCount > 0 ? `${stagedCount} 个已暂存文件可提交` : '暂存文件后即可提交'}
         </span>
         <button
           type="button"
@@ -49,7 +49,7 @@ export function CommitBar({
           disabled={!canCommit}
           className="rounded bg-inspector-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
         >
-          {busy ? 'Committing…' : 'Commit staged'}
+          {busy ? '提交中…' : '提交已暂存'}
         </button>
       </div>
     </div>
@@ -98,7 +98,7 @@ export function GitHubPublishActions({
   if (pullRequest) {
     return (
       <div className="space-y-2 rounded border border-inspector-border-subtle bg-inspector-surface-1 p-3">
-        <p className="text-xs font-medium text-inspector-text-secondary">Pull request</p>
+        <p className="text-xs font-medium text-inspector-text-secondary">PR</p>
         <p className="text-sm text-inspector-text-primary">
           #{pullRequest.number} · {pullRequest.title}
         </p>
@@ -108,7 +108,7 @@ export function GitHubPublishActions({
             onClick={() => onOpenPullRequest?.(pullRequest.url)}
             className="rounded border border-inspector-border-subtle px-3 py-1.5 text-xs"
           >
-            Open PR
+            打开 PR
           </button>
         </div>
       </div>
@@ -118,9 +118,9 @@ export function GitHubPublishActions({
   if (!binding) {
     return (
       <div className="space-y-3 rounded border border-inspector-border-subtle bg-inspector-surface-1 p-3">
-        <p className="text-xs font-medium text-inspector-text-secondary">Publish</p>
+        <p className="text-xs font-medium text-inspector-text-secondary">发布</p>
         <label className="block text-xs text-inspector-text-secondary">
-          Owner / organization
+          Owner / 组织
           <input
             value={owner}
             onChange={(event) => setOwner(event.target.value)}
@@ -128,7 +128,7 @@ export function GitHubPublishActions({
           />
         </label>
         <label className="block text-xs text-inspector-text-secondary">
-          Repository name
+          仓库名称
           <input
             value={repo}
             onChange={(event) => setRepo(event.target.value)}
@@ -136,15 +136,15 @@ export function GitHubPublishActions({
           />
         </label>
         <label className="block text-xs text-inspector-text-secondary">
-          Visibility
+          可见性
           <select
             value={visibility}
             onChange={(event) => setVisibility(event.target.value as GitHubRepoVisibility)}
             className="mt-1 w-full rounded border border-inspector-border-subtle bg-inspector-surface-0 px-3 py-2 text-sm text-inspector-text-primary outline-none"
           >
-            <option value="private">Private</option>
-            <option value="public">Public</option>
-            <option value="internal">Internal</option>
+            <option value="private">私有</option>
+            <option value="public">公开</option>
+            <option value="internal">内部</option>
           </select>
         </label>
         <div className="flex justify-end">
@@ -161,7 +161,7 @@ export function GitHubPublishActions({
             }
             className="rounded bg-inspector-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
-            {busy ? 'Publishing…' : 'Publish'}
+            {busy ? '发布中…' : '发布'}
           </button>
         </div>
       </div>
@@ -170,9 +170,9 @@ export function GitHubPublishActions({
 
   return (
     <div className="space-y-3 rounded border border-inspector-border-subtle bg-inspector-surface-1 p-3">
-      <p className="text-xs font-medium text-inspector-text-secondary">Create PR</p>
+      <p className="text-xs font-medium text-inspector-text-secondary">创建 PR</p>
       <label className="block text-xs text-inspector-text-secondary">
-        Pull request title
+        PR 标题
         <input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -185,7 +185,7 @@ export function GitHubPublishActions({
           checked={draft}
           onChange={(event) => setDraft(event.target.checked)}
         />
-        Draft pull request
+        草稿 pull request
       </label>
       <div className="flex justify-end">
         <button
@@ -200,7 +200,7 @@ export function GitHubPublishActions({
           }
           className="rounded bg-inspector-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
         >
-          {busy ? 'Creating…' : 'Create pull request'}
+          {busy ? '创建中…' : '创建 pull request'}
         </button>
       </div>
     </div>

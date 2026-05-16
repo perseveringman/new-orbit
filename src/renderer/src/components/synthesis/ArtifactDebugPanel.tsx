@@ -20,11 +20,11 @@ export function ArtifactDebugPanel({ filter = {} }: { filter?: SynthesisFilter }
     <section className="rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold">Synthesis artifacts</h3>
-          <p className="text-xs text-neutral-500">Layer 2 artifact debug panel.</p>
+          <h3 className="text-sm font-semibold">综合工件</h3>
+          <p className="text-xs text-neutral-500">Layer 2 工件调试面板。</p>
         </div>
         <button type="button" onClick={() => void reload()} className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700">
-          Reload
+          重新加载
         </button>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
@@ -45,13 +45,12 @@ export function ArtifactDebugPanel({ filter = {} }: { filter?: SynthesisFilter }
               <SynthesisStatus artifact={artifact} />
             </button>
           ))}
-          {artifacts.length === 0 ? <p className="text-xs text-neutral-500">No artifacts yet.</p> : null}
+          {artifacts.length === 0 ? <p className="text-xs text-neutral-500">还没有工件。</p> : null}
         </div>
         <pre className="max-h-72 overflow-auto rounded-lg bg-neutral-950 p-3 text-[11px] text-neutral-100">
-          {selected ? JSON.stringify(selected, null, 2) : 'Select an artifact'}
+          {selected ? JSON.stringify(selected, null, 2) : '请选择一个工件'}
         </pre>
       </div>
     </section>
   );
 }
-

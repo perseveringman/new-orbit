@@ -3,17 +3,17 @@ import type { ConversationTurn, RunSegment } from '@shared/orchestration';
 import { StreamingMarkdown } from './StreamingMarkdown';
 
 export function SegmentDivider({ segment }: { segment: RunSegment }): JSX.Element {
-  const triggerLabel = segment.trigger === 'dispatch' ? 'Auto' : 'Manual';
+  const triggerLabel = segment.trigger === 'dispatch' ? '自动' : '手动';
   const statusLabel =
     segment.status === 'running'
-      ? 'Running'
+      ? '运行中'
       : segment.status === 'completed'
-        ? 'Completed'
+        ? '已完成'
         : segment.status === 'needs_attention'
-          ? 'Needs input'
+          ? '需要输入'
           : segment.status === 'cancelled'
-            ? 'Cancelled'
-            : 'Failed';
+            ? '已取消'
+            : '失败';
 
   return (
     <div className="flex items-center gap-3 pt-2 text-[11px] uppercase tracking-[0.2em] text-neutral-500">
@@ -21,7 +21,7 @@ export function SegmentDivider({ segment }: { segment: RunSegment }): JSX.Elemen
       <span>
         {triggerLabel}
         {segment.bindingId ? ` · ${segment.bindingId}` : ''}
-        {segment.vendorSessionId ? ` · session ${segment.vendorSessionId.slice(0, 8)}` : ''}
+        {segment.vendorSessionId ? ` · 会话 ${segment.vendorSessionId.slice(0, 8)}` : ''}
         {` · ${statusLabel}`}
       </span>
       <div className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
@@ -77,13 +77,13 @@ export function AgentEventCard({
   event: AgentEvent;
   live?: boolean;
 }): JSX.Element | null {
-  if (event.kind === 'thinking') return <ThinkingCard text={event.text || 'Thinking…'} animate={live} />;
+  if (event.kind === 'thinking') return <ThinkingCard text={event.text || '思考中…'} animate={live} />;
   if (event.kind === 'tool_use') return <ToolUseCard event={event} />;
   if (event.kind === 'tool_result') return <ToolResultCard event={event} />;
   if (event.kind === 'cost') return <CostCard event={event} />;
   if (event.kind === 'hydrate') return <HydrateCard event={event} />;
-  if (event.kind === 'error') return <ErrorCard text={event.text || 'Agent error'} />;
-  if (event.kind === 'done') return <SystemEventCard text={event.text || 'Run finished'} />;
+  if (event.kind === 'error') return <ErrorCard text={event.text || 'Agent 错误'} />;
+  if (event.kind === 'done') return <SystemEventCard text={event.text || '运行已结束'} />;
   if ((event.kind === 'message' || event.kind === 'text') && event.text?.trim()) {
     return <AssistantMessageCard text={event.text} animate={live} />;
   }
@@ -91,15 +91,15 @@ export function AgentEventCard({
 }
 
 export function describeAgentEvent(event: AgentEvent): string {
-  if (event.kind === 'thinking') return `Thinking · ${truncate(event.text || 'Thinking…')}`;
-  if (event.kind === 'tool_use') return `Working · ${summarizeToolEvent(event, false)}`;
-  if (event.kind === 'tool_result') return `Finished · ${summarizeToolEvent(event, true)}`;
-  if (event.kind === 'hydrate') return event.text?.trim() || 'Recovered prior session context';
-  if (event.kind === 'error') return `Error · ${truncate(event.text || 'Agent error')}`;
-  if (event.kind === 'message' || event.kind === 'text') return truncate(event.text || 'Agent is working…');
-  if (event.kind === 'cost') return 'Usage updated';
-  if (event.kind === 'done') return event.text?.trim() || 'Run finished';
-  return 'Agent is working…';
+  if (event.kind === 'thinking') return `思考 · ${truncate(event.text || '思考中…')}`;
+  if (event.kind === 'tool_use') return `工作中 · ${summarizeToolEvent(event, false)}`;
+  if (event.kind === 'tool_result') return `已完成 · ${summarizeToolEvent(event, true)}`;
+  if (event.kind === 'hydrate') return event.text?.trim() || '已恢复先前会话上下文';
+  if (event.kind === 'error') return `错误 · ${truncate(event.text || 'Agent 错误')}`;
+  if (event.kind === 'message' || event.kind === 'text') return truncate(event.text || 'Agent 正在工作…');
+  if (event.kind === 'cost') return '用量已更新';
+  if (event.kind === 'done') return event.text?.trim() || '运行已结束';
+  return 'Agent 正在工作…';
 }
 
 export function ThinkingCard({
@@ -112,7 +112,7 @@ export function ThinkingCard({
   return (
     <div className="rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
       <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-300">
-        Thinking
+        思考中
       </div>
       <StreamingMarkdown content={text} animate={animate} />
     </div>
@@ -125,7 +125,7 @@ function ToolUseCard({ event }: { event: AgentEvent }): JSX.Element {
   return (
     <DisclosureEventCard
       accent="violet"
-      label="Tool call"
+      label="工具调用"
       summary={summary}
       details={details}
     />
@@ -138,7 +138,7 @@ function ToolResultCard({ event }: { event: AgentEvent }): JSX.Element {
   return (
     <DisclosureEventCard
       accent="neutral"
-      label="Tool result"
+      label="工具结果"
       summary={summary}
       details={details}
     />
@@ -147,28 +147,28 @@ function ToolResultCard({ event }: { event: AgentEvent }): JSX.Element {
 
 function CostCard({ event }: { event: AgentEvent }): JSX.Element {
   const parts = [
-    typeof event.input_tokens === 'number' ? `in ${event.input_tokens}` : null,
-    typeof event.output_tokens === 'number' ? `out ${event.output_tokens}` : null,
+      typeof event.input_tokens === 'number' ? `输入 ${event.input_tokens}` : null,
+      typeof event.output_tokens === 'number' ? `输出 ${event.output_tokens}` : null,
     typeof event.total_cost_usd === 'number' ? `$${event.total_cost_usd.toFixed(4)}` : null
   ].filter(Boolean);
   return (
-    <MetaEventCard accent="emerald" label="Usage">
-      {parts.join(' · ') || 'cost update'}
+    <MetaEventCard accent="emerald" label="用量">
+      {parts.join(' · ') || '成本更新'}
     </MetaEventCard>
   );
 }
 
 function HydrateCard({ event }: { event: AgentEvent }): JSX.Element {
   return (
-    <MetaEventCard accent="sky" label="Resume">
-      {event.text?.trim() || 'Recovered prior session context'}
+    <MetaEventCard accent="sky" label="恢复">
+      {event.text?.trim() || '已恢复先前会话上下文'}
     </MetaEventCard>
   );
 }
 
 function ErrorCard({ text }: { text: string }): JSX.Element {
   return (
-    <MetaEventCard accent="red" label="Error">
+    <MetaEventCard accent="red" label="错误">
       {text}
     </MetaEventCard>
   );
@@ -203,7 +203,7 @@ function DisclosureEventCard({
             {label}
           </span>
           <span className="min-w-0 flex-1 text-left leading-6">{summary}</span>
-          <span className="text-[11px] text-neutral-500">View</span>
+           <span className="text-[11px] text-neutral-500">查看</span>
         </div>
       </summary>
       <pre className="mt-3 overflow-x-auto rounded-lg bg-neutral-950 p-3 text-[11px] leading-relaxed text-neutral-100">
@@ -237,7 +237,7 @@ function MetaEventCard({
 }
 
 function summarizeToolEvent(event: AgentEvent, isResult: boolean): string {
-  const tool = event.toolName?.trim() || extractToolName(event.data) || 'Tool';
+  const tool = event.toolName?.trim() || extractToolName(event.data) || '工具';
   const input = extractToolInput(event.data);
   const pathValue = extractPathHint(input);
   const rangeValue = extractRangeHint(input);
@@ -245,7 +245,7 @@ function summarizeToolEvent(event: AgentEvent, isResult: boolean): string {
   const action = prettifyToolName(tool);
   const subject = basename ? `${action} ${basename}` : action;
   const suffix = rangeValue ? ` · ${rangeValue}` : pathValue ? ` · ${pathValue}` : '';
-  return isResult ? `${subject} completed${suffix}` : `${subject}${suffix}`;
+  return isResult ? `${subject} 已完成${suffix}` : `${subject}${suffix}`;
 }
 
 function prettifyToolName(value: string): string {
@@ -255,11 +255,11 @@ function prettifyToolName(value: string): string {
 }
 
 function formatEventDetails(event: AgentEvent): string {
-  if (event.data == null) return event.text?.trim() || '(no details)';
+  if (event.data == null) return event.text?.trim() || '（无详情）';
   try {
     return JSON.stringify(event.data, null, 2);
   } catch {
-    return event.text?.trim() || '(no details)';
+    return event.text?.trim() || '（无详情）';
   }
 }
 

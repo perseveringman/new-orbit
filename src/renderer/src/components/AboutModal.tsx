@@ -30,8 +30,8 @@ export function AboutModal({ open, onClose }: Props): JSX.Element | null {
       `os: ${info.os} (${info.arch})`,
       `electron: ${info.electron}`,
       `node: ${info.node}`,
-      `vault: ${info.vaultPath ?? '(none)'}`,
-      `claude: ${info.claudePath ?? '(not found)'} (${info.claudeVersion ?? '?'})`,
+      `vault: ${info.vaultPath ?? '（无）'}`,
+      `claude: ${info.claudePath ?? '（未找到）'} (${info.claudeVersion ?? '?'})`,
       `userData: ${info.userDataPath}`,
       `crashLog: ${info.crashLogPath}`
     ].join('\n');
@@ -51,10 +51,10 @@ export function AboutModal({ open, onClose }: Props): JSX.Element | null {
     >
       <div className="w-full max-w-md rounded-lg border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">About Orbit</h2>
+          <h2 className="text-base font-semibold">关于 Orbit</h2>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label="关闭"
             className={`rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${FOCUS}`}
           >
             ✕
@@ -62,22 +62,22 @@ export function AboutModal({ open, onClose }: Props): JSX.Element | null {
         </div>
         {info ? (
           <dl className="space-y-1 text-xs">
-            <Row k="Version" v={info.version} />
+            <Row k="版本" v={info.version} />
             <Row k="OS" v={`${info.os} (${info.arch})`} />
             <Row k="Electron" v={info.electron} />
             <Row k="Node" v={info.node} />
-            <Row k="Vault" v={info.vaultPath ?? '(none)'} mono />
-            <Row k="Claude" v={info.claudePath ?? '(not found)'} mono />
+            <Row k="Vault" v={info.vaultPath ?? '（无）'} mono />
+            <Row k="Claude" v={info.claudePath ?? '（未找到）'} mono />
             <Row k="userData" v={info.userDataPath} mono />
-            <Row k="Crash log" v={info.crashLogPath} mono />
+            <Row k="崩溃日志" v={info.crashLogPath} mono />
           </dl>
         ) : (
-          <p className="text-xs text-neutral-500">Loading diagnostics…</p>
+          <p className="text-xs text-neutral-500">正在加载诊断信息…</p>
         )}
         <div className="mt-4 flex items-center justify-end gap-2">
-          {copied && <span className="text-xs text-emerald-600">Copied!</span>}
+          {copied && <span className="text-xs text-emerald-600">已复制！</span>}
           <button onClick={() => void onCopy()} className={BTN}>
-            Copy diagnostics
+            复制诊断信息
           </button>
         </div>
       </div>

@@ -11,7 +11,7 @@ export function TaskDetailPanel(): JSX.Element {
   if (!task) {
     return (
       <div className="flex h-full items-center justify-center rounded border border-dashed border-neutral-300 px-4 text-center text-sm text-neutral-500 dark:border-neutral-700">
-        Select a task to inspect it here.
+        请选择一个任务以在这里查看详情。
       </div>
     );
   }

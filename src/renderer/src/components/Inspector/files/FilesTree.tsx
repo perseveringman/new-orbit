@@ -76,7 +76,7 @@ export function FilesTree({ root }: Props): JSX.Element {
         );
       })}
       {rows.length === 0 && (
-        <p className={`px-3 py-2 ${INSPECTOR_THEME.textDim}`}>No files found.</p>
+        <p className={`px-3 py-2 ${INSPECTOR_THEME.textDim}`}>未找到文件。</p>
       )}
     </div>
   );

@@ -1223,7 +1223,7 @@ export function SettingsModal(): JSX.Element | null {
                 </section>
 
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-                  <h3 className="text-sm font-semibold">Session Bindings</h3>
+                  <h3 className="text-sm font-semibold">Session 绑定</h3>
                   <div className="max-h-40 space-y-2 overflow-y-auto">
                     {externalSessions.length === 0 ? (
                       <p className="text-xs text-neutral-500">暂无外部 session。</p>
@@ -1232,7 +1232,7 @@ export function SettingsModal(): JSX.Element | null {
                         <div className="font-medium">{session.platform}:{session.userName ?? session.userId}</div>
                         <div className="font-mono text-[11px] text-neutral-500">{session.sessionId} → {session.conversationId}</div>
                         <div className="text-[11px] text-neutral-500">
-                          {session.archived ? 'archived' : 'active'} · {new Date(session.lastActivityAt).toLocaleString()}
+                          {session.archived ? '已归档' : '活跃'} · {new Date(session.lastActivityAt).toLocaleString()}
                         </div>
                       </div>
                     ))}
@@ -1240,7 +1240,7 @@ export function SettingsModal(): JSX.Element | null {
                 </section>
 
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-                  <h3 className="text-sm font-semibold">Request Log</h3>
+                  <h3 className="text-sm font-semibold">请求日志</h3>
                   <div className="max-h-52 space-y-2 overflow-y-auto">
                     {externalRequestLog.length === 0 ? (
                       <p className="text-xs text-neutral-500">暂无请求日志。</p>

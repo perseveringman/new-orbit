@@ -106,26 +106,26 @@ export function FilesPanel(): JSX.Element {
           type="search"
           value={fileQuery}
           onChange={(e) => state.setFileQuery?.(e.target.value)}
-          placeholder="Search files..."
-          aria-label="Search files"
+          placeholder="搜索文件…"
+          aria-label="搜索文件"
           className={`min-w-0 flex-1 rounded bg-transparent px-1.5 py-0.5 text-xs outline-none placeholder:${INSPECTOR_THEME.textDim} ${INSPECTOR_THEME.textPrimary}`}
         />
-        <IconButton icon={FilePlus} label="New File" onClick={() => {}} />
-        <IconButton icon={FolderPlus} label="New Folder" onClick={() => {}} />
-        <IconButton icon={RefreshCw} label="Refresh" onClick={handleRefresh} />
-        <IconButton icon={FoldVertical} label="Collapse All" onClick={() => state.collapseAll?.()} />
+        <IconButton icon={FilePlus} label="新建文件" onClick={() => {}} />
+        <IconButton icon={FolderPlus} label="新建文件夹" onClick={() => {}} />
+        <IconButton icon={RefreshCw} label="刷新" onClick={handleRefresh} />
+        <IconButton icon={FoldVertical} label="全部折叠" onClick={() => state.collapseAll?.()} />
       </div>
 
       {/* Tree body */}
       <div className={`flex-1 overflow-y-auto ${INSPECTOR_THEME.body}`}>
         {isProjectSurface && activeProject?.workdirMissing ? (
-          <p className={`p-3 text-xs text-red-400`}>Linked workdir is missing.</p>
+          <p className={`p-3 text-xs text-red-400`}>关联的 workdir 缺失。</p>
         ) : filteredTree ? (
           <FilesTree root={filteredTree} />
         ) : isProjectSurface && projectTreeError ? (
           <p className={`p-3 text-xs text-red-400`}>{projectTreeError}</p>
         ) : (
-          <p className={`p-3 text-xs ${INSPECTOR_THEME.textDim}`}>Loading…</p>
+          <p className={`p-3 text-xs ${INSPECTOR_THEME.textDim}`}>加载中…</p>
         )}
       </div>
     </div>

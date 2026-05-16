@@ -74,12 +74,12 @@ export function RunLogPane(): JSX.Element {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter log"
+          placeholder="过滤日志"
           className="w-40 rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
         />
       </div>
       <pre className="flex-1 overflow-auto rounded border border-neutral-200 bg-neutral-950 p-3 text-[11px] leading-relaxed text-neutral-100 dark:border-neutral-800">
-        {filtered || '(no log)'}
+        {filtered || '（无日志）'}
       </pre>
     </div>
   );
