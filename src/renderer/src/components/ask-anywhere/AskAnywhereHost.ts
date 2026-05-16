@@ -78,7 +78,7 @@ export interface UseAskAnywhereSessionResult {
 export function useAskAnywhereSession(
   options: UseAskAnywhereSessionOptions = {}
 ): UseAskAnywhereSessionResult {
-  const { enabled = true, initialActiveId = null, scope, title = 'Ask Anywhere' } = options;
+  const { enabled = true, initialActiveId = null, scope, title = '随处问' } = options;
   const sessionScope = scope ?? ASK_ANYWHERE_GLOBAL_SCOPE;
   const scopeKey = conversationScopeKey(sessionScope);
   const [sessions, setSessions] = useState<Conversation[]>([]);
@@ -369,10 +369,10 @@ function proposalToRuntimeEvent(
 
 function proposalTitle(proposal: Proposal, payload: Record<string, unknown>): string {
   if (proposal.type === 'external_path_access') {
-    return stringValue(payload['title']) ?? 'Allow external path read?';
+    return stringValue(payload['title']) ?? '允许读取外部路径？';
   }
   if (proposal.type === 'new_task') {
-    return `Approve task: ${stringValue(payload['title']) ?? proposal.subject}`;
+    return `批准任务：${stringValue(payload['title']) ?? proposal.subject}`;
   }
   return proposal.subject;
 }
@@ -381,15 +381,15 @@ function hintForProposalStatus(
   proposal: Proposal,
   payload: Record<string, unknown>
 ): string {
-  if (proposal.status === 'approved') return 'Approved. Inbox will update automatically.';
-  if (proposal.status === 'rejected') return 'Rejected. Inbox will update automatically.';
-  if (proposal.status === 'dismissed') return 'Dismissed. Inbox will update automatically.';
-  if (proposal.type === 'external_path_access') return 'Approve in this chat or Inbox to continue.';
+  if (proposal.status === 'approved') return '已批准。Inbox 会自动更新。';
+  if (proposal.status === 'rejected') return '已拒绝。Inbox 会自动更新。';
+  if (proposal.status === 'dismissed') return '已忽略。Inbox 会自动更新。';
+  if (proposal.type === 'external_path_access') return '在本对话或 Inbox 中批准后继续。';
   const detail = stringValue(payload['description']) ?? stringValue(payload['summary']);
   const action =
     proposal.type === 'new_task'
-      ? 'Approve here or in Inbox to create this task.'
-      : 'Approve here or in Inbox to continue.';
+      ? '在这里或 Inbox 中批准即可创建该任务。'
+      : '在这里或 Inbox 中批准后继续。';
   return [detail, action].filter(Boolean).join('\n\n');
 }
 

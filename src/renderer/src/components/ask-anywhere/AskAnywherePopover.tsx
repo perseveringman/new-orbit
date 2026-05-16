@@ -119,7 +119,7 @@ export function AskAnywherePopover({ open, onClose }: AskAnywherePopoverProps): 
   return (
     <div
       role="dialog"
-      aria-label="Ask Anywhere"
+      aria-label="随处问"
       tabIndex={-1}
       onKeyDown={(event) => {
         if (event.key === 'Escape') onClose();

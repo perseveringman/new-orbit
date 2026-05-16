@@ -21,7 +21,7 @@ export function PMILContextChips({ stage }: { stage: ConversationStage | null })
         </span>
         {qaCount ? (
           <span className="rounded-full border border-violet-300 px-2 py-0.5 dark:border-violet-800">
-            Personal QA
+            个人 QA
           </span>
         ) : null}
         {packet.freshness.stale_sources?.length ? (

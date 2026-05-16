@@ -114,13 +114,13 @@ export function ConversationShell({
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center text-sm text-neutral-500">
-          <p>No conversations yet.</p>
+          <p>暂无对话。</p>
           <button
             type="button"
             onClick={onNew}
             className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
           >
-            + New conversation
+            + 新建对话
           </button>
         </div>
       )}
@@ -164,7 +164,7 @@ function MemoryRecallChips({ conversation }: { conversation: Conversation }): JS
   return (
     <div className="border-b border-violet-200 bg-violet-50 px-4 py-2 text-xs text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">Relevant memory ({recall.memories.length})</span>
+        <span className="font-medium">相关记忆（{recall.memories.length}）</span>
         {recall.memories.map((memory) => {
           const match = recall.matches.find((item) => item.memory_id === memory.id);
           return (
@@ -182,7 +182,7 @@ function MemoryRecallChips({ conversation }: { conversation: Conversation }): JS
           onClick={() => setHidden(true)}
           className="ml-auto text-violet-600 hover:text-violet-800 dark:text-violet-300"
         >
-          Hide memory
+          隐藏记忆
         </button>
       </div>
     </div>

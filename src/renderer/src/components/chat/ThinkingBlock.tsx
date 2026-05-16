@@ -11,7 +11,7 @@ export function ThinkingBlock({ event }: ThinkingBlockProps): JSX.Element {
       <summary className="cursor-pointer select-none">
         <span className="inline-flex max-w-[calc(100%-1rem)] items-center gap-2 align-middle">
           <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
-            Thinking
+            思考中
           </span>
           <span className="min-w-0 flex-1 truncate text-left text-[12px] text-neutral-700 dark:text-neutral-200">
             {summary}
@@ -31,7 +31,7 @@ function summarizeThinking(text: string): string {
     .map((line) => line.replace(/^[-*#>\d.\s]+/, '').trim())
     .filter(Boolean)
     .join(' ');
-  if (!normalized) return 'Reviewing the next step';
+  if (!normalized) return '正在检查下一步';
   const firstSentence = normalized.match(/^(.{1,96}?)(?:[.?!。！？]|$)/)?.[1] ?? normalized;
   return truncate(firstSentence.trim(), 72);
 }

@@ -32,7 +32,7 @@ export function ToolCard({
           <div className="mt-2 border-t border-amber-200/70 pt-2 dark:border-amber-900/50">
             {inputJson ? (
               <div>
-                <div className="text-[10px] font-medium uppercase tracking-wide opacity-70">Input</div>
+                <div className="text-[10px] font-medium uppercase tracking-wide opacity-70">输入</div>
                 <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words text-[11px] opacity-80">
                   {inputJson}
                 </pre>
@@ -41,7 +41,7 @@ export function ToolCard({
             {toolResult ? (
               <div className={inputJson ? 'mt-3' : ''}>
                 <div className="text-[10px] font-medium uppercase tracking-wide opacity-70">
-                  {toolResult.payload.isError ? 'Error output' : 'Result'}
+                  {toolResult.payload.isError ? '错误输出' : '结果'}
                 </div>
                 <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words text-[11px]">
                   {toolResult.payload.result}
@@ -61,7 +61,7 @@ export function ToolCard({
               onClick={() => onApprove(toolUse.spanId)}
               className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
             >
-              Approve
+              批准
             </button>
           ) : null}
           {onReject ? (
@@ -70,7 +70,7 @@ export function ToolCard({
               onClick={() => onReject(toolUse.spanId)}
               className="rounded-md border border-rose-400 px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
             >
-              Reject
+              拒绝
             </button>
           ) : null}
         </div>
@@ -97,7 +97,7 @@ function ToolCardHeader({
       <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-amber-950 dark:text-amber-50">
         {summary}
       </span>
-      <span className={statusBadgeClassName(status)}>{status}</span>
+      <span className={statusBadgeClassName(status)}>{statusLabel(status)}</span>
     </span>
   );
 }
@@ -116,22 +116,22 @@ function buildToolSummary(toolName: string, toolInput: unknown): string {
   const displayName = humanizeToolName(toolName);
   const detail = extractPrimaryDetail(toolInput);
   if (matchesTool(normalizedToolName, ['read', 'view', 'cat', 'open'])) {
-    return detail ? `Reading ${detail}` : `Reading with ${displayName}`;
+    return detail ? `读取 ${detail}` : `用 ${displayName} 读取`;
   }
   if (matchesTool(normalizedToolName, ['search', 'find', 'grep', 'glob', 'query'])) {
-    return detail ? `Searching ${detail}` : `Searching with ${displayName}`;
+    return detail ? `搜索 ${detail}` : `用 ${displayName} 搜索`;
   }
   if (matchesTool(normalizedToolName, ['write', 'edit', 'patch', 'update', 'replace'])) {
-    return detail ? `Editing ${detail}` : `Editing with ${displayName}`;
+    return detail ? `编辑 ${detail}` : `用 ${displayName} 编辑`;
   }
   if (matchesTool(normalizedToolName, ['list', 'ls'])) {
-    return detail ? `Listing ${detail}` : `Listing with ${displayName}`;
+    return detail ? `列出 ${detail}` : `用 ${displayName} 列出`;
   }
   if (matchesTool(normalizedToolName, ['bash', 'shell', 'exec', 'command', 'run'])) {
-    return detail ? `Running ${detail}` : `Running ${displayName}`;
+    return detail ? `运行 ${detail}` : `运行 ${displayName}`;
   }
   if (matchesTool(normalizedToolName, ['create', 'new', 'add'])) {
-    return detail ? `Creating ${detail}` : `Creating with ${displayName}`;
+    return detail ? `创建 ${detail}` : `用 ${displayName} 创建`;
   }
   return detail ? `${displayName} · ${detail}` : displayName;
 }
@@ -145,7 +145,7 @@ function humanizeToolName(toolName: string): string {
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!normalized) return 'Tool call';
+  if (!normalized) return '工具调用';
   return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
@@ -196,6 +196,13 @@ function statusBadgeClassName(status: string): string {
     default:
       return 'rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/50 dark:text-amber-200';
   }
+}
+
+function statusLabel(status: string): string {
+  if (status === 'done') return '已完成';
+  if (status === 'failed') return '失败';
+  if (status === 'awaiting approval') return '等待批准';
+  return '运行中';
 }
 
 function truncate(value: string, maxLength: number): string {

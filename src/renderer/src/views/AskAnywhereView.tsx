@@ -56,7 +56,7 @@ export function AskAnywhereView({ initialActiveId = null }: AskAnywhereViewProps
               onClick={() => setStageOpen(true)}
               className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-900"
             >
-              Artifacts ({artifactCount})
+              产物（{artifactCount}）
             </button>
           ) : null
         }

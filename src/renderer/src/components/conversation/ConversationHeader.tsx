@@ -31,8 +31,8 @@ export function ConversationHeader({
           onArchive={onArchive}
         />
         <div className="mt-1 truncate px-1 text-[11px] text-neutral-500">
-          Scope: {scope}
-          {activeConversation?.currentRunId ? ` · running ${activeConversation.currentRunId}` : ''}
+          范围：{scope}
+          {activeConversation?.currentRunId ? ` · 运行中 ${activeConversation.currentRunId}` : ''}
         </div>
       </div>
       {actions}

@@ -202,7 +202,7 @@ function buildRenderItems(
           key: i.id,
           node: (
             <div className="rounded-xl border border-orange-300 bg-orange-50/80 px-3 py-2 text-xs text-orange-800 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-200">
-              <span className="font-semibold">⛔ Interrupted</span>
+              <span className="font-semibold">⛔ 已中断</span>
               <span className="ml-2 opacity-80">{i.payload.reason}</span>
             </div>
           )
@@ -213,15 +213,15 @@ function buildRenderItems(
         const c = ev as RuntimeEvent<'runtime.cost'>;
         const { inputTokens, outputTokens, totalUsd } = c.payload;
         const parts: string[] = [];
-        if (typeof inputTokens === 'number') parts.push(`in ${inputTokens}`);
-        if (typeof outputTokens === 'number') parts.push(`out ${outputTokens}`);
+        if (typeof inputTokens === 'number') parts.push(`输入 ${inputTokens}`);
+        if (typeof outputTokens === 'number') parts.push(`输出 ${outputTokens}`);
         if (typeof totalUsd === 'number') parts.push(`$${totalUsd.toFixed(4)}`);
         if (parts.length === 0) break;
         items.push({
           key: c.id,
           node: (
             <div className="rounded-md bg-neutral-100/70 px-2 py-1 text-[10px] text-neutral-500 dark:bg-neutral-900/50 dark:text-neutral-400">
-              ⓘ cost · {parts.join(' · ')}
+              ⓘ 成本 · {parts.join(' · ')}
             </div>
           )
         });
@@ -241,7 +241,7 @@ function buildRenderItems(
                   : 'bg-rose-100/60 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200'
               }`}
             >
-              {ok ? '✓ done' : `✗ exited (${code})`}
+              {ok ? '✓ 已完成' : `✗ 已退出（${code}）`}
               {d.payload.reason ? ` · ${d.payload.reason}` : ''}
             </div>
           )
@@ -273,14 +273,14 @@ function AwaitingUserCard({
 }): JSX.Element {
   const status = event.payload.status ?? 'pending';
   const proposalId = event.payload.proposalId ?? event.spanId;
-  const title = event.payload.title ?? 'Awaiting user approval';
+  const title = event.payload.title ?? '等待用户批准';
   const isExternalPathApproval = event.payload.kind === 'external_path_access';
   const showActions =
     status === 'pending' &&
     canApprove &&
     (onApprove || onReject);
-  const approveLabel = isExternalPathApproval ? 'Allow read' : 'Approve';
-  const rejectLabel = isExternalPathApproval ? 'Deny' : 'Reject';
+  const approveLabel = isExternalPathApproval ? '允许读取' : '批准';
+  const rejectLabel = isExternalPathApproval ? '拒绝' : '拒绝';
   return (
     <div className="rounded-xl border border-violet-300 bg-violet-50/80 px-3 py-2 text-xs text-violet-900 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-100">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -326,10 +326,10 @@ function AwaitingUserCard({
 function awaitingStatusLabel(
   status: NonNullable<RuntimeEvent<'runtime.awaiting_user'>['payload']['status']>
 ): string {
-  if (status === 'approved') return 'approved';
-  if (status === 'rejected') return 'rejected';
-  if (status === 'dismissed') return 'dismissed';
-  return 'pending';
+  if (status === 'approved') return '已批准';
+  if (status === 'rejected') return '已拒绝';
+  if (status === 'dismissed') return '已忽略';
+  return '待处理';
 }
 
 function awaitingStatusClassName(

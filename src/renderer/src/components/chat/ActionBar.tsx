@@ -26,7 +26,7 @@ export function ActionBar({
           onClick={onStop}
           className="rounded-md border border-neutral-300 bg-white px-2 py-1 font-medium hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
         >
-          Stop
+          停止
         </button>
       ) : null}
       {capabilities.canRetry ? (
@@ -35,7 +35,7 @@ export function ActionBar({
           onClick={onRetry}
           className="rounded-md border border-neutral-300 bg-white px-2 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
         >
-          Retry
+          重试
         </button>
       ) : null}
       {capabilities.canCompact ? (
@@ -44,7 +44,7 @@ export function ActionBar({
           onClick={onCompact}
           className="rounded-md border border-neutral-300 bg-white px-2 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
         >
-          Compact
+          压缩
         </button>
       ) : null}
       <div className="flex-1" />
@@ -62,7 +62,7 @@ export function ActionBar({
       {isLoading ? (
         <span className="ml-2 inline-flex items-center gap-1 text-neutral-500 dark:text-neutral-400">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
-          running
+          运行中
         </span>
       ) : null}
     </div>

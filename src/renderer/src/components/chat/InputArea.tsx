@@ -33,7 +33,7 @@ export function InputArea({
         className="flex-1 resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm leading-relaxed text-neutral-900 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50"
         rows={2}
         value={value}
-        placeholder={placeholder ?? 'Type a message…'}
+        placeholder={placeholder ?? '输入消息…'}
         disabled={disabled}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
@@ -48,7 +48,7 @@ export function InputArea({
         disabled={disabled || !value.trim()}
         className="rounded-lg bg-sky-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Send
+        发送
       </button>
     </form>
   );

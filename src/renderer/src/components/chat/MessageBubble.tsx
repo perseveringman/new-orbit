@@ -64,7 +64,7 @@ function parseArtifactFences(text: string): MessagePart[] {
         };
         parts.push({
           kind: 'artifact',
-          title: String(parsed.title ?? 'Artifact'),
+          title: String(parsed.title ?? '产物'),
           summary: typeof parsed.summary === 'string' ? parsed.summary : undefined,
           refs: Array.isArray(parsed.refs)
             ? parsed.refs.map((ref) => `${String(ref.kind ?? 'ref')}: ${String(ref.label ?? ref.ref ?? '')}`)
