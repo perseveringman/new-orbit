@@ -15,7 +15,7 @@ export function ReviewInboxView(): JSX.Element {
 
   function openTerminal(projectUid?: string, paneId?: string): void {
     if (!projectUid || !paneId) {
-      toast('No terminal pane linked to this review item.');
+      toast('这条复盘项没有关联的终端面板。');
       return;
     }
     queueTerminalNavigation({ projectUid, paneId, roomKind: 'project' });
@@ -25,35 +25,35 @@ export function ReviewInboxView(): JSX.Element {
 
   async function onApprove(worktreeId?: string): Promise<void> {
     if (!worktreeId) {
-      toast('No worktree linked to this review item.');
+      toast('这条复盘项没有关联的 worktree。');
       return;
     }
     try {
       const result = await window.orbit.git.mergeGhost(worktreeId, {
         strategy: 'fast-forward'
       });
-      toast(result.ok ? 'Merged ghost branch.' : 'Merge failed.');
+      toast(result.ok ? 'ghost 分支已合并。' : '合并失败。');
     } catch (error) {
-      toast(`Merge failed: ${(error as Error).message}`);
+      toast(`合并失败：${(error as Error).message}`);
     }
   }
 
   async function onReject(worktreeId?: string): Promise<void> {
     if (!worktreeId) {
-      toast('No worktree linked to this review item.');
+      toast('这条复盘项没有关联的 worktree。');
       return;
     }
     try {
       await window.orbit.git.removeWorktree(worktreeId, { force: true });
-      toast('Discarded worktree.');
+      toast('已丢弃 worktree。');
     } catch (error) {
-      toast(`Discard failed: ${(error as Error).message}`);
+      toast(`丢弃失败：${(error as Error).message}`);
     }
   }
 
   function openDiff(worktreeId?: string): void {
     if (!worktreeId) {
-      toast('No worktree linked to this review item.');
+      toast('这条复盘项没有关联的 worktree。');
       return;
     }
     window.dispatchEvent(
@@ -65,7 +65,7 @@ export function ReviewInboxView(): JSX.Element {
 
   function openLog(runId?: string): void {
     if (!runId) {
-      toast('No run log linked to this review item.');
+      toast('这条复盘项没有关联的运行日志。');
       return;
     }
     window.dispatchEvent(
@@ -79,9 +79,9 @@ export function ReviewInboxView(): JSX.Element {
     <div className="flex h-full flex-col gap-3">
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold">Morning Review</h2>
+          <h2 className="text-sm font-semibold">晨间复盘</h2>
           <p className="text-xs text-neutral-500">
-            Review permission requests from Orbit-managed agent sessions.
+            审查 Orbit 托管 Agent 会话中的权限请求。
           </p>
         </div>
         <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] dark:border-neutral-700">
@@ -91,7 +91,7 @@ export function ReviewInboxView(): JSX.Element {
 
       {items.length === 0 ? (
         <div className="flex flex-1 items-center justify-center rounded border border-dashed border-neutral-300 text-sm text-neutral-500 dark:border-neutral-700">
-          Inbox clear.
+          收件箱已清空。
         </div>
       ) : (
           <ul className="space-y-2 overflow-auto">
@@ -123,7 +123,7 @@ export function ReviewInboxView(): JSX.Element {
                       onClick={() => openTerminal(item.projectUid, item.paneId)}
                       className="rounded border border-amber-400/50 px-2 py-1 text-[11px] text-amber-600 hover:bg-amber-500/10 dark:text-amber-300"
                     >
-                      Open terminal
+                       打开终端
                     </button>
                   ) : null}
                   {item.worktreeId ? (
@@ -132,19 +132,19 @@ export function ReviewInboxView(): JSX.Element {
                         onClick={() => openDiff(item.worktreeId)}
                         className="rounded border border-sky-400/50 px-2 py-1 text-[11px] text-sky-600 hover:bg-sky-500/10 dark:text-sky-300"
                       >
-                        Diff
+                         查看 Diff
                       </button>
                       <button
                         onClick={() => void onApprove(item.worktreeId)}
                         className="rounded border border-emerald-400/50 px-2 py-1 text-[11px] text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-300"
                       >
-                        Approve
+                         批准
                       </button>
                       <button
                         onClick={() => void onReject(item.worktreeId)}
                         className="rounded border border-red-400/50 px-2 py-1 text-[11px] text-red-600 hover:bg-red-500/10 dark:text-red-300"
                       >
-                        Reject
+                         拒绝
                       </button>
                     </>
                   ) : null}
@@ -153,14 +153,14 @@ export function ReviewInboxView(): JSX.Element {
                       onClick={() => openLog(item.runId)}
                       className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                     >
-                      Log
+                       日志
                     </button>
                   ) : null}
                   <button
                     onClick={() => dismiss(item.id)}
                     className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   >
-                    Dismiss
+                     忽略
                   </button>
                 </div>
                   </div>

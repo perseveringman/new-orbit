@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ReviewFinding, ReviewKind, ReviewRun, ReviewRunDetail } from '@shared/review';
+import type { ReviewFinding, ReviewKind, ReviewRun, ReviewRunDetail, ReviewSeverity, ReviewStatus } from '@shared/review';
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
 
@@ -99,20 +99,20 @@ export function ReviewContent(props: {
         <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Review System</p>
-              <h1 className="mt-1 text-2xl font-semibold">Find stale, unassigned, and dormant work</h1>
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">复盘系统</p>
+              <h1 className="mt-1 text-2xl font-semibold">发现停滞、未归属和沉睡的工作</h1>
               <p className="mt-2 max-w-3xl text-sm text-neutral-500">
-                Generate daily, weekly, monthly, Area, and Resource reviews from Layer 1 truth and traceable events.
+                基于 Layer 1 真相和可追踪事件生成每日、每周、每月、Area 与 Resource 复盘。
               </p>
             </div>
             <button onClick={props.onTrigger} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">
-              Run review now
+              立即复盘
             </button>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {(['daily', 'weekly', 'monthly', 'area', 'resource'] as const).map((kind) => (
               <button key={kind} onClick={() => props.onTab(kind)} className={`rounded-full border px-3 py-1.5 text-xs ${props.tab === kind ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300' : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'}`}>
-                {kind}
+                {reviewKindLabel(kind)}
               </button>
             ))}
           </div>
@@ -121,16 +121,16 @@ export function ReviewContent(props: {
         {props.state === 'loading' ? (
           <div className="h-36 animate-pulse rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900" />
         ) : props.state === 'error' ? (
-          <StateCard title="Review failed" body={props.error ?? 'Unknown review error.'} actionLabel="Retry" onAction={props.onReload} />
+          <StateCard title="复盘失败" body={props.error ?? '未知复盘错误。'} actionLabel="重试" onAction={props.onReload} />
         ) : props.state === 'empty' ? (
-          <StateCard title="No review runs yet" body="Run a review to generate findings for stale projects, unassigned notes, dormant resources, and library items waiting for distillation." actionLabel="Run review now" onAction={props.onTrigger} />
+          <StateCard title="暂无复盘记录" body="运行一次复盘，生成停滞项目、未归属笔记、沉睡资源以及等待提炼的资料库条目的发现。" actionLabel="立即复盘" onAction={props.onTrigger} />
         ) : (
           <>
             <section className="grid gap-3 md:grid-cols-4">
-              <HealthCard label="Runs" value={props.runs.length} detail={`${props.tab} history`} />
-              <HealthCard label="Findings" value={findings.length} detail="current run" />
-              <HealthCard label="Warnings" value={findings.filter((finding) => finding.severity === 'warning').length} detail="need attention" />
-              <HealthCard label="Resolved" value={findings.filter((finding) => finding.resolved_at || finding.acknowledged).length} detail={props.detail?.run.status ?? 'unknown'} />
+              <HealthCard label="运行次数" value={props.runs.length} detail={`${reviewKindLabel(props.tab)}历史`} />
+              <HealthCard label="发现" value={findings.length} detail="当前复盘" />
+              <HealthCard label="警告" value={findings.filter((finding) => finding.severity === 'warning').length} detail="需要关注" />
+              <HealthCard label="已处理" value={findings.filter((finding) => finding.resolved_at || finding.acknowledged).length} detail={props.detail?.run.status ? reviewStatusLabel(props.detail.run.status) : '未知'} />
             </section>
             {pmil ? <PMILReviewPanel payload={pmil} /> : null}
             <section className="grid gap-3">
@@ -150,15 +150,15 @@ function PMILReviewPanel({ payload }: { payload: ReviewPMILPayload }): JSX.Eleme
     <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 shadow-sm dark:border-violet-900 dark:bg-violet-950/30">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">Personal Memory Intelligence</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">个人记忆智能</p>
           <h2 className="mt-1 text-lg font-semibold">当前工作上下文</h2>
         </div>
         <span className="rounded-full border border-violet-300 px-2 py-1 text-xs text-violet-700 dark:border-violet-800 dark:text-violet-300">
-          {payload.open_loops.length} open loop(s)
+          {payload.open_loops.length} 个开放回路
         </span>
       </div>
       <p className="mt-3 text-sm leading-6 text-neutral-700 dark:text-neutral-200">
-        Focus: {payload.current_focus}
+        焦点：{payload.current_focus}
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {payload.active_threads.slice(0, 4).map((thread) => (
@@ -169,7 +169,7 @@ function PMILReviewPanel({ payload }: { payload: ReviewPMILPayload }): JSX.Eleme
             </div>
             <p className="mt-2 text-xs leading-5 text-neutral-600 dark:text-neutral-300">{thread.summary}</p>
             {thread.likely_next_steps?.length ? (
-              <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">Next: {thread.likely_next_steps[0]}</p>
+              <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">下一步：{thread.likely_next_steps[0]}</p>
             ) : null}
           </article>
         ))}
@@ -210,20 +210,20 @@ function FindingCard(props: { finding: ReviewFinding; onAcknowledge(id: string):
   return (
     <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${tone}`}>{props.finding.severity}</span>
+        <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${tone}`}>{reviewSeverityLabel(props.finding.severity)}</span>
         <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">{props.finding.category}</span>
-        {props.finding.acknowledged && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">acknowledged</span>}
+        {props.finding.acknowledged && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">已确认</span>}
       </div>
       <h2 className="mt-3 text-lg font-semibold">{props.finding.title}</h2>
       <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">{props.finding.rationale}</p>
       <div className="mt-4 flex flex-wrap gap-2">
         {props.finding.suggested_actions.map((action) => (
           <button key={action.id} disabled={action.executed} onClick={() => props.onExecute(action.id)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs disabled:opacity-40 dark:border-neutral-700">
-            {action.executed ? 'Done' : action.description}
+            {action.executed ? '已完成' : action.description}
           </button>
         ))}
         <button onClick={() => props.onAcknowledge(props.finding.id)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
-          Acknowledge
+          确认
         </button>
       </div>
     </article>
@@ -248,4 +248,38 @@ function StateCard(props: { title: string; body: string; actionLabel: string; on
       <button onClick={props.onAction} className="mt-4 rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">{props.actionLabel}</button>
     </section>
   );
+}
+
+function reviewKindLabel(kind: ReviewKind): string {
+  const labels: Record<ReviewKind, string> = {
+    daily: '每日',
+    weekly: '每周',
+    monthly: '每月',
+    quarterly: '季度',
+    area: 'Area',
+    resource: 'Resource',
+    project: '项目'
+  };
+  return labels[kind];
+}
+
+function reviewSeverityLabel(severity: ReviewSeverity): string {
+  const labels: Record<ReviewSeverity, string> = {
+    info: '信息',
+    suggestion: '建议',
+    warning: '警告'
+  };
+  return labels[severity];
+}
+
+function reviewStatusLabel(status: ReviewStatus): string {
+  const labels: Record<ReviewStatus, string> = {
+    pending: '待处理',
+    generating: '生成中',
+    generated: '已生成',
+    reviewed: '已复盘',
+    actions_done: '动作完成',
+    archived: '已归档'
+  };
+  return labels[status];
 }

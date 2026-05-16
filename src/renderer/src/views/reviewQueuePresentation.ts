@@ -14,7 +14,7 @@ export function getReviewQueueContextSummary(
   if (item.terminalTitle) {
     parts.push(item.terminalTitle);
   } else if (item.paneId) {
-    parts.push(`Pane ${item.paneId}`);
+    parts.push(`面板 ${item.paneId}`);
   }
   return parts.length > 0 ? parts.join(' · ') : null;
 }
