@@ -10,11 +10,11 @@ const FAMILY_LABELS: Record<AuthorityToolFamily, string> = {
   orbit: 'Orbit',
   web: 'Web',
   shell: 'Shell',
-  browser: 'Browser',
-  subagent: 'Subagent',
-  automation: 'Automation',
-  media: 'Media',
-  plugin: 'Plugin'
+  browser: '浏览器',
+  subagent: '子 Agent',
+  automation: '自动化',
+  media: '媒体',
+  plugin: '插件'
 };
 
 const RISK_STYLES: Record<AuthorityRiskLevel, string> = {
@@ -57,9 +57,9 @@ export function ToolRegistryView(): JSX.Element {
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">
               <Wrench size={14} />
-              Ask Anywhere Tools
+              随处问工具
             </div>
-            <h1 className="text-2xl font-semibold tracking-normal">Tool Registry</h1>
+             <h1 className="text-2xl font-semibold tracking-normal">工具注册表</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600 dark:text-neutral-400">
               当前 Ask Anywhere 暴露给模型的工具、Authority 风险分级，以及对照 OpenClaw 仍在补齐的能力。
             </p>
@@ -70,7 +70,7 @@ export function ToolRegistryView(): JSX.Element {
             className="inline-flex items-center gap-2 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            Refresh
+             刷新
           </button>
         </header>
 
@@ -81,20 +81,20 @@ export function ToolRegistryView(): JSX.Element {
         ) : null}
 
         <section className="grid gap-3 sm:grid-cols-3">
-          <Metric label="Active tools" value={snapshot?.totalActive ?? 0} />
-          <Metric label="Planned parity tools" value={snapshot?.totalPlanned ?? 0} />
-          <Metric label="OpenClaw gaps" value={snapshot?.openClawParity.missing.length ?? 0} />
+           <Metric label="活跃工具" value={snapshot?.totalActive ?? 0} />
+           <Metric label="计划对齐工具" value={snapshot?.totalPlanned ?? 0} />
+           <Metric label="OpenClaw 缺口" value={snapshot?.openClawParity.missing.length ?? 0} />
         </section>
 
         {snapshot ? (
           <>
             <ParityStrip snapshot={snapshot} />
-            <ToolSection title="Active Registered Tools" groups={activeByFamily} />
-            <ToolSection title="Planned OpenClaw Parity" groups={plannedByFamily} planned />
+             <ToolSection title="已注册活跃工具" groups={activeByFamily} />
+             <ToolSection title="计划中的 OpenClaw 对齐" groups={plannedByFamily} planned />
           </>
         ) : (
           <div className="rounded-md border border-neutral-200 bg-white p-6 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
-            Loading registry…
+             正在加载注册表…
           </div>
         )}
       </div>
@@ -118,12 +118,12 @@ function ParityStrip({ snapshot }: { snapshot: AgentToolRegistrySnapshot }): JSX
     <section className="rounded-md border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
         <ShieldCheck size={16} />
-        OpenClaw parity map
+         OpenClaw 对齐地图
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <TokenGroup title="Implemented" tokens={snapshot.openClawParity.implemented} tone="green" />
-        <TokenGroup title="Planned" tokens={snapshot.openClawParity.planned} tone="amber" />
-        <TokenGroup title="Missing" tokens={snapshot.openClawParity.missing} tone="neutral" />
+         <TokenGroup title="已实现" tokens={snapshot.openClawParity.implemented} tone="green" />
+         <TokenGroup title="计划中" tokens={snapshot.openClawParity.planned} tone="amber" />
+         <TokenGroup title="缺失" tokens={snapshot.openClawParity.missing} tone="neutral" />
       </div>
     </section>
   );
@@ -150,7 +150,7 @@ function TokenGroup({
         {title}
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {(tokens.length ? tokens : ['none']).map((token) => (
+        {(tokens.length ? tokens : ['无']).map((token) => (
           <span key={token} className={`rounded border px-2 py-1 text-xs ${toneClass}`}>
             {token}
           </span>
@@ -179,7 +179,7 @@ function ToolSection({
         >
           <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
             <div className="text-sm font-semibold">{FAMILY_LABELS[family]}</div>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400">{tools.length} tools</div>
+             <div className="text-xs text-neutral-500 dark:text-neutral-400">{tools.length} 个工具</div>
           </div>
           <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {tools.map((tool) => (
@@ -210,7 +210,7 @@ function ToolRow({
             {tool.risk.replace(/^L/, 'L').replaceAll('_', ' ')}
           </span>
           <span className="rounded border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
-            {planned ? 'planned' : 'active'}
+            {planned ? '计划中' : '活跃'}
           </span>
         </div>
       </div>
@@ -218,7 +218,7 @@ function ToolRow({
       <div className="space-y-2 text-xs text-neutral-500 dark:text-neutral-400">
         {tool.cliMethod ? <Line label="CLI" value={tool.cliMethod} /> : null}
         {tool.openClawEquivalent ? <Line label="OpenClaw" value={tool.openClawEquivalent} /> : null}
-        <Line label="Permissions" value={tool.permissions.join(', ') || 'none'} />
+        <Line label="权限" value={tool.permissions.join(', ') || '无'} />
       </div>
     </div>
   );
