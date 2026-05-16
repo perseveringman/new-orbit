@@ -284,7 +284,7 @@ function MemoryAgentSessionsPanel(): JSX.Element {
   const [artifacts, setArtifacts] = useState<Record<string, SynthesisArtifact<ExternalSessionDistillPayload>>>({});
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [busySource, setBusySource] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   async function loadSessions(): Promise<void> {
@@ -327,12 +327,10 @@ function MemoryAgentSessionsPanel(): JSX.Element {
   }
 
   async function distillSession(source: EvidenceSource): Promise<void> {
-    setBusySource(source.id);
+    setBusyAction(sessionActionKey(source, 'distill'));
     setMessage(null);
     try {
-      const selector = wholeSourceSelector(source.id, 'safe_projection', 'memory session center');
-      const read = await window.orbit.evidence.read(selector);
-      const text = read.excerpts.map((excerpt) => excerpt.text).join('\n\n');
+      const projection = await readSessionProjection(source, 'memory session center');
       const artifact = await window.orbit.synthesis.ensure({
         kind: 'distill.external_session',
         scope_key: `distill.external_session:${source.id}`,
@@ -341,9 +339,9 @@ function MemoryAgentSessionsPanel(): JSX.Element {
             kind: 'external_ai_session',
             ref: source.id,
             title: source.title,
-            excerpt: text.slice(0, 8000),
+            excerpt: projection.text.slice(0, 8000),
             metadata: {
-              selector,
+              selector: projection.selector,
               source_hash: source.fingerprint.value,
               agent: stringMetadata(source, 'agent'),
               project_name: stringMetadata(source, 'project_name')
@@ -359,7 +357,73 @@ function MemoryAgentSessionsPanel(): JSX.Element {
     } catch (error) {
       setMessage(`摘要失败：${(error as Error).message}`);
     } finally {
-      setBusySource(null);
+      setBusyAction(null);
+    }
+  }
+
+  async function saveSessionAsNote(source: EvidenceSource): Promise<void> {
+    setBusyAction(sessionActionKey(source, 'note'));
+    setMessage(null);
+    try {
+      const projection = await readSessionProjection(source, 'save external session as note');
+      const artifact = artifacts[source.id];
+      const note = await window.orbit.notes.create({
+        type: 'capture',
+        title: `Agent 会话：${source.title}`,
+        tags: ['pmil', 'agent-session', normalizeTag(stringMetadata(source, 'agent') ?? 'local-agent')],
+        source: {
+          kind: 'external_ai_session',
+          ref: source.id,
+          excerpt: projection.text.slice(0, 600)
+        },
+        ...(artifact ? { synthesis_ref: artifact.id } : {}),
+        body: externalSessionNoteBody(source, projection, artifact)
+      });
+      setMessage(`已保存为笔记：${note.path}`);
+    } catch (error) {
+      setMessage(`保存笔记失败：${(error as Error).message}`);
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function materializeSession(source: EvidenceSource): Promise<void> {
+    setBusyAction(sessionActionKey(source, 'conversation'));
+    setMessage(null);
+    try {
+      const existing = await window.orbit.chat.findConversationsByAnchor('external_session', source.id);
+      if (existing[0]) {
+        setMessage(`已存在 Orbit 会话：${existing[0].title ?? existing[0].id}`);
+        return;
+      }
+      const projection = await readSessionProjection(source, 'materialize external session as conversation');
+      const artifact = artifacts[source.id];
+      const agent = stringMetadata(source, 'agent') ?? 'local-agent';
+      const project = stringMetadata(source, 'project_name') ?? 'local';
+      const conversation = await window.orbit.chat.createConversation({
+        anchor: { kind: 'external_session', refId: source.id, addedAt: new Date().toISOString() },
+        scope: { kind: 'external', platform: agent, user_id: project, session_id: source.id },
+        title: `${source.title}（外部会话）`
+      });
+      await window.orbit.chat.appendTurn({
+        conversationId: conversation.id,
+        role: 'system',
+        content: externalSessionSystemTurn(source, projection)
+      });
+      await window.orbit.chat.appendTurn({
+        conversationId: conversation.id,
+        role: 'assistant',
+        content: externalSessionConversationTurn(source, projection, artifact)
+      });
+      await window.orbit.chat.updateConversation(conversation.id, {
+        summary: artifact?.payload.summary ?? source.summary ?? `从 ${agent} 本地会话转入 Orbit。`,
+        tags: ['pmil', 'external-session', normalizeTag(agent)]
+      });
+      setMessage(`已转为 Orbit 会话：${conversation.title ?? conversation.id}`);
+    } catch (error) {
+      setMessage(`转为会话失败：${(error as Error).message}`);
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -380,6 +444,9 @@ function MemoryAgentSessionsPanel(): JSX.Element {
           <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">本地 Agent 会话中心</h2>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
             {sessions.length} 条 reference-truth 会话 · {Object.keys(artifacts).length} 条会话摘要
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            保留原始会话作为真相源，只在需要时生成摘要、保存为笔记，或转为 Orbit 会话继续整理。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -405,9 +472,11 @@ function MemoryAgentSessionsPanel(): JSX.Element {
           <AgentSessionCard
             key={source.id}
             artifact={artifacts[source.id]}
-            busy={busySource === source.id}
+            busyAction={busyAction?.endsWith(`:${source.id}`) ? busyAction.split(':')[0] : null}
             source={source}
             onDistill={() => void distillSession(source)}
+            onSaveNote={() => void saveSessionAsNote(source)}
+            onMaterialize={() => void materializeSession(source)}
           />
         ))}
         {!filtered.length ? (
@@ -423,11 +492,14 @@ function MemoryAgentSessionsPanel(): JSX.Element {
 function AgentSessionCard(props: {
   source: EvidenceSource;
   artifact?: SynthesisArtifact<ExternalSessionDistillPayload>;
-  busy: boolean;
+  busyAction: string | null;
   onDistill(): void;
+  onSaveNote(): void;
+  onMaterialize(): void;
 }): JSX.Element {
   const payload = props.artifact?.payload;
   const selector = wholeSourceSelector(props.source.id, 'safe_projection', 'session center preview');
+  const busy = props.busyAction !== null;
   return (
     <article className="rounded-xl border border-sky-200 bg-white p-4 text-sm dark:border-sky-900 dark:bg-neutral-900">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -451,10 +523,26 @@ function AgentSessionCard(props: {
           <button
             type="button"
             onClick={props.onDistill}
-            disabled={props.busy}
+            disabled={busy}
             className="rounded-lg border border-sky-300 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60 dark:border-sky-900 dark:text-sky-300"
           >
-            {props.busy ? '生成中' : payload ? '重新摘要' : '生成摘要'}
+            {props.busyAction === 'distill' ? '生成中' : payload ? '重新摘要' : '生成摘要'}
+          </button>
+          <button
+            type="button"
+            onClick={props.onSaveNote}
+            disabled={busy}
+            className="rounded-lg border border-sky-300 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60 dark:border-sky-900 dark:text-sky-300"
+          >
+            {props.busyAction === 'note' ? '保存中' : '保存为笔记'}
+          </button>
+          <button
+            type="button"
+            onClick={props.onMaterialize}
+            disabled={busy}
+            className="rounded-lg border border-sky-300 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60 dark:border-sky-900 dark:text-sky-300"
+          >
+            {props.busyAction === 'conversation' ? '转入中' : '转为 Orbit 会话'}
           </button>
         </div>
       </div>
@@ -835,6 +923,115 @@ function memoryEvidenceSelectorKey(selector: EvidenceSelector): string {
 function shortEvidenceLabel(selector: EvidenceSelector): string {
   const id = selector.source_id.split(':').slice(-2).join(':') || selector.source_id;
   return id.length > 22 ? `${id.slice(0, 22)}...` : id;
+}
+
+type SessionAction = 'distill' | 'note' | 'conversation';
+
+interface SessionProjection {
+  selector: EvidenceSelector;
+  text: string;
+}
+
+function sessionActionKey(source: EvidenceSource, action: SessionAction): string {
+  return `${action}:${source.id}`;
+}
+
+async function readSessionProjection(source: EvidenceSource, reason: string): Promise<SessionProjection> {
+  const selector = wholeSourceSelector(source.id, 'safe_projection', reason);
+  const read = await window.orbit.evidence.read(selector);
+  return {
+    selector,
+    text: read.excerpts.map((excerpt) => excerpt.text).join('\n\n')
+  };
+}
+
+function externalSessionNoteBody(
+  source: EvidenceSource,
+  projection: SessionProjection,
+  artifact?: SynthesisArtifact<ExternalSessionDistillPayload>
+): string {
+  const payload = artifact?.payload;
+  const loops = payload?.open_loops ?? [];
+  const actions = payload?.next_actions ?? [];
+  const lines = [
+    `# Agent 会话：${source.title}`,
+    '',
+    '> 这是一条从本地 Agent 会话安全投影保存的 Orbit Note。原始会话仍作为 reference-truth evidence 保留，可按证据入口继续读取。',
+    '',
+    '## 来源',
+    '',
+    `- Source ID: ${source.id}`,
+    `- Agent: ${stringMetadata(source, 'agent') ?? 'local-agent'}`,
+    `- Project: ${stringMetadata(source, 'project_name') ?? 'local'}`,
+    `- Path: ${source.canonical_ref}`,
+    `- Source hash: ${source.fingerprint.value}`,
+    `- Evidence selector: ${projection.selector.source_id} / ${projection.selector.kind} / ${projection.selector.content_view}`,
+    '',
+    '## 会话摘要',
+    '',
+    payload?.summary ?? source.summary ?? '尚未生成会话摘要。',
+    '',
+    '## 开放回路',
+    '',
+    ...(loops.length ? loops.slice(0, 8).map((loop) => `- ${loop.title}`) : ['- 暂无']),
+    '',
+    '## 下一步',
+    '',
+    ...(actions.length ? actions.slice(0, 8).map((action) => `- ${action}`) : ['- 暂无']),
+    '',
+    '## 安全投影摘录',
+    '',
+    '```text',
+    safeFenceText(projection.text.slice(0, 8000) || '没有可用安全投影。'),
+    '```'
+  ];
+  return `${lines.join('\n')}\n`;
+}
+
+function externalSessionSystemTurn(source: EvidenceSource, projection: SessionProjection): string {
+  return [
+    '这条 Orbit Conversation 由本地 Agent 会话主动转入，用于浏览、继续整理和后续上下文召回。',
+    '',
+    `Source ID: ${source.id}`,
+    `Agent: ${stringMetadata(source, 'agent') ?? 'local-agent'}`,
+    `Project: ${stringMetadata(source, 'project_name') ?? 'local'}`,
+    `Path: ${source.canonical_ref}`,
+    `Source hash: ${source.fingerprint.value}`,
+    `Evidence selector: ${projection.selector.source_id} / ${projection.selector.kind} / ${projection.selector.content_view}`
+  ].join('\n');
+}
+
+function externalSessionConversationTurn(
+  source: EvidenceSource,
+  projection: SessionProjection,
+  artifact?: SynthesisArtifact<ExternalSessionDistillPayload>
+): string {
+  const payload = artifact?.payload;
+  return [
+    `# ${source.title}`,
+    '',
+    payload?.summary ? `摘要：${payload.summary}` : '摘要：尚未生成会话摘要。',
+    '',
+    payload?.open_loops.length
+      ? `开放回路：${payload.open_loops.slice(0, 5).map((loop) => loop.title).join('；')}`
+      : '开放回路：暂无',
+    '',
+    payload?.next_actions.length
+      ? `下一步：${payload.next_actions.slice(0, 5).join('；')}`
+      : '下一步：暂无',
+    '',
+    '## 安全投影',
+    '',
+    safeFenceText(projection.text.slice(0, 12000) || '没有可用安全投影。')
+  ].join('\n');
+}
+
+function safeFenceText(value: string): string {
+  return value.replace(/```/g, "'''");
+}
+
+function normalizeTag(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/gu, '-').replace(/^-+|-+$/g, '') || 'local-agent';
 }
 
 function stringMetadata(source: EvidenceSource, key: string): string | undefined {

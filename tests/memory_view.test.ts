@@ -19,6 +19,8 @@ describe('MemoryContent', () => {
     expect(html).toContain('Read source first');
     expect(html).toContain('Memory graph');
     expect(html).toContain('本地 Agent 会话中心');
+    expect(html).toContain('保存为笔记');
+    expect(html).toContain('转为 Orbit 会话');
     expect(html).toContain('实体画像');
     expect(html).toContain('来源证据');
     expect(html).toContain('查看证据');

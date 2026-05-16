@@ -50,6 +50,7 @@ export interface NoteSource {
     | 'feed'
     | 'manual'
     | 'synthesis'
+    | 'external_ai_session'
     | 'quick_capture'
     | 'mobile_capture';
   ref?: string;

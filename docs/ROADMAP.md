@@ -77,14 +77,15 @@ Delivered:
 - Project Room now has a PMIL context tab that summarizes current focus, active threads, open loops, decisions, and cited evidence for the active project.
 - Memory Explorer now exposes source evidence drill-down and recall feedback controls, so MemoryNode entries can be inspected and tuned.
 - Registered local Agent sessions are retained in the default evidence chunk index, keeping `external_ai_session` truth sources available to normal recall/search rebuilds.
-- Local Agent session sources now have vault-level settings and filters in Settings → 记忆源, covering enabled state, scan limit, agent/project/path include-exclude lists, index level, and tool-output projection policy.
+- Local Agent session sources now have vault-level settings and filters in Settings → 记忆源, covering enabled state, scan limit, agent/project/path include/exclude lists, index level, and tool-output projection policy.
 - `distill.external_session` and `entity.profile` synthesis foundations now summarize matched local Agent sessions and graph entities into cited ContextPacket sections, with local deterministic fallback and prompt templates for later LLM refinement.
 - Memory Explorer now includes a local Agent session center and entity profile workspace, so users can sync sessions, inspect safe projections, generate per-session summaries, and turn recurring themes into browsable profiles.
+- Local Agent sessions can now be explicitly saved as Notes or materialized as Orbit Conversations from Memory Explorer, preserving the original session as reference-truth evidence while letting important spans enter Orbit-owned Layer 1 context.
 
 Remaining gaps:
 
 - Work Context / Open Loops are deterministic first-pass artifacts; richer LLM refinement and feedback loops remain future work.
-- Local Agent session providers still need deeper per-session review actions, snapshot/materialize flows, save-span-as-Note, and timeline/project-room dedicated browsing beyond the Memory Explorer foundation.
+- Local Agent session providers still need message-range selectors, first-class snapshot storage, deeper per-session review actions, and timeline/project-room dedicated browsing beyond the Memory Explorer foundation.
 
 ---
 
