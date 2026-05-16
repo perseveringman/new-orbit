@@ -7,6 +7,13 @@ import { GitHubPublishActions } from '../components/Inspector/changes/CommitBar'
 
 export type ProjectGitHubTab = 'overview' | 'issues' | 'prs' | 'worktrees';
 
+const GITHUB_TAB_LABELS: Record<ProjectGitHubTab, string> = {
+  overview: '概览',
+  issues: 'Issues',
+  prs: 'PRs',
+  worktrees: 'Worktrees'
+};
+
 export interface ProjectGitHubSurfaceProps {
   projectName: string;
   projectUid: string;
@@ -254,7 +261,7 @@ export function ProjectGitHubSurface({
                 : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
             }`}
           >
-            {tab === 'prs' ? 'PRs' : tab[0]!.toUpperCase() + tab.slice(1)}
+            {GITHUB_TAB_LABELS[tab]}
           </button>
         ))}
       </div>
@@ -270,7 +277,7 @@ export function ProjectGitHubSurface({
               <SummaryItem label="查看者" value={details?.overview.connection.viewer ?? '未连接'} />
               <SummaryItem label="分支" value={details?.overview.sync?.branch ?? '无活跃分支'} />
               <SummaryItem
-                label="Pull request"
+                label="PR"
                 value={
                   details?.overview.pullRequest
                     ? `#${details.overview.pullRequest.number} · ${details.overview.pullRequest.title}`
