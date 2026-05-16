@@ -96,7 +96,7 @@ export function MarkdownEditor({ onOpenWikilink, dark }: Props): JSX.Element {
   if (!active) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-        Select a file to start editing.
+        选择一个文件开始编辑。
       </div>
     );
   }

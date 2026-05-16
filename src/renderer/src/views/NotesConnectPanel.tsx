@@ -20,7 +20,7 @@ export function NotesConnectPanel({ onSkip }: Props): JSX.Element {
       const next = await window.orbit.vaultConfig.inspect();
       setPaths(next);
     } catch (error) {
-      toast(`Load notes paths failed: ${(error as Error).message}`);
+      toast(`加载笔记路径失败：${(error as Error).message}`);
     }
   }, [toast]);
 
@@ -35,10 +35,10 @@ export function NotesConnectPanel({ onSkip }: Props): JSX.Element {
       if (updated) {
         await refresh();
         notifyVaultConfigChanged();
-        toast('Linked external notes directory');
+        toast('已链接外部笔记目录');
       }
     } catch (error) {
-      toast(`Link notes directory failed: ${(error as Error).message}`);
+      toast(`链接笔记目录失败：${(error as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -51,10 +51,10 @@ export function NotesConnectPanel({ onSkip }: Props): JSX.Element {
       if (result) {
         await refresh();
         notifyVaultConfigChanged();
-        toast(`Imported ${result.importedFiles} notes → ${result.relPath}`);
+        toast(`已导入 ${result.importedFiles} 篇笔记 → ${result.relPath}`);
       }
     } catch (error) {
-      toast(`Import notes failed: ${(error as Error).message}`);
+      toast(`导入笔记失败：${(error as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -65,9 +65,9 @@ export function NotesConnectPanel({ onSkip }: Props): JSX.Element {
       await window.orbit.vaultConfig.unlinkDirectory(dirPath);
       await refresh();
       notifyVaultConfigChanged();
-      toast('Removed linked notes directory');
+      toast('已移除链接的笔记目录');
     } catch (error) {
-      toast(`Remove notes directory failed: ${(error as Error).message}`);
+      toast(`移除笔记目录失败：${(error as Error).message}`);
     }
   }
 
@@ -76,7 +76,7 @@ export function NotesConnectPanel({ onSkip }: Props): JSX.Element {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-            Step 1: 连接你的笔记（可选）
+            第 1 步：连接你的笔记（可选）
           </div>
           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
             你可以把旧笔记导入 Orbit，也可以仅链接外部目录，让 Vision Agent 在访谈前做归纳。

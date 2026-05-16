@@ -237,7 +237,7 @@ export function NotesView(): JSX.Element {
     await persistDraft();
     const note = await window.orbit.notes.create({
       type: nextType,
-      title: `New ${nextType}`,
+      title: `新建${noteTypeLabel(nextType)}`,
       body: '',
       tags: []
     });
@@ -307,11 +307,11 @@ export function NotesView(): JSX.Element {
         <div className="space-y-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold">Notes</h1>
-              <p className="truncate text-xs text-neutral-500">{queue.length} in current queue</p>
+              <h1 className="text-lg font-semibold">笔记</h1>
+              <p className="truncate text-xs text-neutral-500">当前队列 {queue.length} 条</p>
             </div>
             <button onClick={() => void createNote('thought')} className="rounded-md bg-neutral-900 px-2.5 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
-              New
+              新建
             </button>
           </div>
           <div className="grid grid-cols-5 gap-1">
@@ -319,7 +319,7 @@ export function NotesView(): JSX.Element {
               <BucketButton
                 key={item}
                 active={bucket === item}
-                label={item}
+                 label={bucketLabel(item)}
                 onClick={() => setBucket(item)}
               />
             ))}
@@ -327,7 +327,7 @@ export function NotesView(): JSX.Element {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search"
+             placeholder="搜索"
             className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900"
           />
           <div className="grid grid-cols-2 gap-2">
@@ -336,29 +336,29 @@ export function NotesView(): JSX.Element {
               onChange={(event) => setType(event.target.value as NoteType | 'all')}
               className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
             >
-              <option value="all">all types</option>
+               <option value="all">全部类型</option>
               {NOTE_TYPES.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {noteTypeLabel(item)}
                 </option>
               ))}
             </select>
             <input
               value={tagFilter}
               onChange={(event) => setTagFilter(event.target.value)}
-              placeholder="tag"
+               placeholder="标签"
               className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
             />
             <input
               value={areaFilter}
               onChange={(event) => setAreaFilter(event.target.value)}
-              placeholder="area"
+               placeholder="Area"
               className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
             />
             <input
               value={resourceFilter}
               onChange={(event) => setResourceFilter(event.target.value)}
-              placeholder="resource"
+               placeholder="Resource"
               className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
             />
           </div>
@@ -366,7 +366,7 @@ export function NotesView(): JSX.Element {
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {error ? <div className="mb-2 rounded-md bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div> : null}
           {queue.length === 0 && !error ? (
-            <div className="p-4 text-sm text-neutral-500">No notes.</div>
+             <div className="p-4 text-sm text-neutral-500">暂无笔记。</div>
           ) : null}
           {queue.map((item) => (
             <button
@@ -405,12 +405,12 @@ export function NotesView(): JSX.Element {
                 <div className="flex shrink-0 rounded-md border border-neutral-200 bg-neutral-100 p-0.5 dark:border-neutral-800 dark:bg-neutral-900">
                   <EditorModeButton
                     active={editorMode === 'live'}
-                    label="Live Preview"
+                     label="实时预览"
                     onClick={() => setEditorMode('live')}
                   />
                   <EditorModeButton
                     active={editorMode === 'source'}
-                    label="Source"
+                     label="源码"
                     onClick={() => setEditorMode('source')}
                   />
                 </div>
@@ -428,15 +428,15 @@ export function NotesView(): JSX.Element {
                 >
                   {['floating', 'project', 'area', 'resource', 'archive'].map((item) => (
                     <option key={item} value={item}>
-                      {item}
+                       {paraKindLabel(item)}
                     </option>
                   ))}
                 </select>
                 <button onClick={() => void archive()} className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
-                  Archive
+                  归档
                 </button>
                 <button onClick={() => void save()} className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">
-                  {saveStatus === 'saving' ? 'Saving...' : 'Save'}
+                  {saveStatus === 'saving' ? '保存中...' : '保存'}
                 </button>
               </div>
               <div className="grid grid-cols-3 gap-2 border-b border-neutral-200 p-3 dark:border-neutral-800">
@@ -444,21 +444,21 @@ export function NotesView(): JSX.Element {
                   value={tags}
                   onChange={(event) => setTags(event.target.value)}
                   onBlur={() => void persistDraft()}
-                  placeholder="tags"
+                   placeholder="标签"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
                 <input
                   value={areas}
                   onChange={(event) => setAreas(event.target.value)}
                   onBlur={() => void persistDraft()}
-                  placeholder="areas"
+                   placeholder="Areas"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
                 <input
                   value={resourceRefs}
                   onChange={(event) => setResourceRefs(event.target.value)}
                   onBlur={() => void persistDraft()}
-                  placeholder="resources"
+                   placeholder="Resources"
                   className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900"
                 />
               </div>
@@ -469,7 +469,7 @@ export function NotesView(): JSX.Element {
                 dark={dark}
                 vaultRoot={vaultRoot}
                 notePath={active.path}
-                placeholder="Start writing..."
+                 placeholder="开始书写..."
                 onBlur={() => void persistDraft()}
                 className="min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-950"
               />
@@ -478,21 +478,21 @@ export function NotesView(): JSX.Element {
             <aside className="flex w-96 shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-950">
               <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
                 <div>
-                  <h2 className="text-sm font-semibold">Workbench</h2>
-                  <div className="mt-0.5 text-[11px] text-neutral-500">{workbench?.artifact_id ?? 'No artifact'}</div>
+                   <h2 className="text-sm font-semibold">工作台</h2>
+                   <div className="mt-0.5 text-[11px] text-neutral-500">{workbench?.artifact_id ?? '暂无产物'}</div>
                 </div>
                 <button
                   onClick={() => void loadWorkbench(active.frontmatter.id, true)}
                   className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700"
                 >
-                  {loadingWorkbench ? 'Analyzing...' : 'Analyze'}
+                   {loadingWorkbench ? '分析中...' : '分析'}
                 </button>
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 text-xs">
                 <section className="rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
-                  <div className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Summary</div>
+                   <div className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">摘要</div>
                   <p className="mt-2 text-sm leading-5 text-neutral-800 dark:text-neutral-100">
-                    {workbench?.payload.summary || 'No summary yet.'}
+                     {workbench?.payload.summary || '暂无摘要。'}
                   </p>
                   {workbench?.payload.key_points.length ? (
                     <ul className="mt-3 space-y-1 text-neutral-600 dark:text-neutral-300">
@@ -504,7 +504,7 @@ export function NotesView(): JSX.Element {
                 </section>
 
                 <section className="space-y-2">
-                  <SectionTitle title={`Suggestions ${workbench?.payload.suggestions.length ?? 0}`} />
+                   <SectionTitle title={`建议 ${workbench?.payload.suggestions.length ?? 0}`} />
                   {workbench?.payload.suggestions.length ? (
                     workbench.payload.suggestions.map((suggestion) => (
                       <SuggestionCard
@@ -516,12 +516,12 @@ export function NotesView(): JSX.Element {
                       />
                     ))
                   ) : (
-                    <Empty label="No suggestions." />
+                     <Empty label="暂无建议。" />
                   )}
                 </section>
 
                 <section className="space-y-2">
-                  <SectionTitle title={`Relations ${workbench?.payload.relations.length ?? 0}`} />
+                   <SectionTitle title={`关联 ${workbench?.payload.relations.length ?? 0}`} />
                   {workbench?.payload.relations.length ? (
                     workbench.payload.relations.map((relation) => (
                       <RelationCard
@@ -533,24 +533,24 @@ export function NotesView(): JSX.Element {
                       />
                     ))
                   ) : (
-                    <Empty label="No relations." />
+                     <Empty label="暂无关联。" />
                   )}
                 </section>
 
                 <section className="rounded-md border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
-                  <SectionTitle title="Context" />
-                  <Meta label="Path" value={active.path} />
-                  <Meta label="Words" value={String(active.frontmatter.word_count ?? 0)} />
-                  <Meta label="Source" value={formatSource(active)} />
-                  <Meta label="Backlinks" value={active.frontmatter.backlinks.join(', ') || 'None'} />
-                  <Meta label="Links out" value={active.frontmatter.links_out.join(', ') || 'None'} />
+                   <SectionTitle title="上下文" />
+                   <Meta label="路径" value={active.path} />
+                   <Meta label="字数" value={String(active.frontmatter.word_count ?? 0)} />
+                   <Meta label="来源" value={formatSource(active)} />
+                   <Meta label="反向链接" value={active.frontmatter.backlinks.join(', ') || '无'} />
+                   <Meta label="出站链接" value={active.frontmatter.links_out.join(', ') || '无'} />
                   <label className="mt-3 block text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-                    Synthesis ref
+                     Synthesis 引用
                     <input
                       value={synthesisRef}
                       onChange={(event) => setSynthesisRef(event.target.value)}
                       onBlur={() => void persistDraft()}
-                      placeholder="artifact id"
+                       placeholder="产物 ID"
                       className="mt-1 w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 normal-case tracking-normal dark:border-neutral-800 dark:bg-neutral-950"
                     />
                   </label>
@@ -559,7 +559,7 @@ export function NotesView(): JSX.Element {
             </aside>
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">Select or create a note.</div>
+           <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">选择或新建一篇笔记。</div>
         )}
       </section>
     </div>
@@ -597,7 +597,7 @@ function SaveStatusPill({
   status: SaveStatus;
   error: string | null;
 }): JSX.Element {
-  const label = status === 'dirty' ? 'Unsaved' : status === 'saving' ? 'Saving' : status === 'error' ? 'Error' : 'Saved';
+  const label = status === 'dirty' ? '未保存' : status === 'saving' ? '保存中' : status === 'error' ? '错误' : '已保存';
   const tone =
     status === 'dirty'
       ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
@@ -643,7 +643,7 @@ function QueueBadge({ bucket }: { bucket: NoteWorkbenchBucket }): JSX.Element {
         : bucket === 'express'
           ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
           : 'border-neutral-200 bg-neutral-100 text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300';
-  return <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${tone}`}>{bucket}</span>;
+  return <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${tone}`}>{bucketLabel(bucket)}</span>;
 }
 
 function SectionTitle({ title }: { title: string }): JSX.Element {
@@ -723,21 +723,21 @@ function SuggestionActions({
         onClick={onAccept}
         className="rounded-md bg-neutral-900 px-2.5 py-1.5 text-[11px] text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-950"
       >
-        {busy ? 'Working...' : 'Accept'}
+        {busy ? '处理中...' : '接受'}
       </button>
       <button
         disabled={disabled}
         onClick={onDismiss}
         className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-[11px] disabled:opacity-40 dark:border-neutral-700"
       >
-        Dismiss
+        忽略
       </button>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: NoteSuggestionStatus }): JSX.Element {
-  return <span className="rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:border-neutral-800">{status}</span>;
+  return <span className="rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:border-neutral-800">{suggestionStatusLabel(status)}</span>;
 }
 
 function Empty({ label }: { label: string }): JSX.Element {
@@ -817,10 +817,44 @@ function parseAreas(value: string, existing: NoteAreaRef[] = []): NoteAreaRef[] 
 
 function formatSource(note: Note): string {
   const source = note.frontmatter.source;
-  if (!source) return 'Manual';
+  if (!source) return '手动';
   return [source.kind, source.ref].filter(Boolean).join(': ');
 }
 
 function formatConfidence(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function bucketLabel(bucket: NoteWorkbenchBucket | 'all'): string {
+  if (bucket === 'all') return '全部';
+  if (bucket === 'inbox') return '收件箱';
+  if (bucket === 'connect') return '连接';
+  if (bucket === 'express') return '表达';
+  if (bucket === 'settled') return '已沉淀';
+  return bucket;
+}
+
+function noteTypeLabel(type: NoteType): string {
+  if (type === 'thought') return '想法';
+  if (type === 'longform') return '长文';
+  if (type === 'capture') return '捕获';
+  if (type === 'voice_log') return '语音日志';
+  if (type === 'daily_summary') return '每日摘要';
+  return type;
+}
+
+function paraKindLabel(kind: string): string {
+  if (kind === 'floating') return '浮动';
+  if (kind === 'project') return 'Project';
+  if (kind === 'area') return 'Area';
+  if (kind === 'resource') return 'Resource';
+  if (kind === 'archive') return '归档';
+  return kind;
+}
+
+function suggestionStatusLabel(status: NoteSuggestionStatus): string {
+  if (status === 'proposed') return '待确认';
+  if (status === 'accepted') return '已接受';
+  if (status === 'dismissed') return '已忽略';
+  return status;
 }
