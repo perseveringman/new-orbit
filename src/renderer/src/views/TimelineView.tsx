@@ -78,8 +78,8 @@ export function TimelineView(): JSX.Element {
       <header className="border-b border-neutral-200 p-4 dark:border-neutral-800">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold">Daily Timeline</h1>
-            <p className="text-xs text-neutral-500">Life log projected from TraceableEvent. Layer 1 by default; Layer 2 only in developer mode.</p>
+            <h1 className="text-lg font-semibold">每日时间线</h1>
+            <p className="text-xs text-neutral-500">由 TraceableEvent 投射出的生活日志。默认展示 Layer 1；仅在开发者模式显示 Layer 2。</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => setDate(shiftDate(date, -1))} className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700">←</button>
@@ -89,15 +89,15 @@ export function TimelineView(): JSX.Element {
             <label className="flex items-center gap-1 text-xs text-neutral-500">
               <input type="checkbox" checked={developerMode} onChange={(event) => setDeveloperMode(event.target.checked)} /> Layer 2
             </label>
-            <button onClick={() => void summarize()} disabled={mode !== 'day'} className="rounded bg-sky-600 px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:bg-neutral-300">Summarize</button>
-            <button onClick={() => void exportScope()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Export PDF</button>
+            <button onClick={() => void summarize()} disabled={mode !== 'day'} className="rounded bg-sky-600 px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:bg-neutral-300">生成摘要</button>
+            <button onClick={() => void exportScope()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">导出 PDF</button>
           </div>
         </div>
-        {exportResult ? <p className="mt-2 text-xs text-neutral-500">Exported {exportResult.format.toUpperCase()} to {exportResult.path}</p> : null}
+        {exportResult ? <p className="mt-2 text-xs text-neutral-500">已导出 {exportResult.format.toUpperCase()} 到 {exportResult.path}</p> : null}
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto p-6">
         {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200">{error}</div> : null}
-        {loading ? <div className="text-sm text-neutral-500">Loading timeline…</div> : null}
+        {loading ? <div className="text-sm text-neutral-500">正在加载时间线…</div> : null}
         <TimelineContent
           mode={mode}
           day={state.day}
@@ -129,10 +129,10 @@ export function TimelineContent({
   summaryArtifact?: SynthesisArtifact | null;
   onSummarize?: () => void;
 }): JSX.Element {
-  if (mode === 'week') return week ? <WeekPanel week={week} /> : <EmptyState title="No week loaded" />;
-  if (mode === 'month') return month ? <MonthPanel month={month} /> : <EmptyState title="No month loaded" />;
-  if (mode === 'year') return year ? <YearPanel year={year} /> : <EmptyState title="No year loaded" />;
-  return day ? <DayPanel timeline={day} summaryArtifact={summaryArtifact ?? null} onSummarize={onSummarize} /> : <EmptyState title="No day loaded" />;
+  if (mode === 'week') return week ? <WeekPanel week={week} /> : <EmptyState title="未加载周时间线" />;
+  if (mode === 'month') return month ? <MonthPanel month={month} /> : <EmptyState title="未加载月时间线" />;
+  if (mode === 'year') return year ? <YearPanel year={year} /> : <EmptyState title="未加载年时间线" />;
+  return day ? <DayPanel timeline={day} summaryArtifact={summaryArtifact ?? null} onSummarize={onSummarize} /> : <EmptyState title="未加载日时间线" />;
 }
 
 function DayPanel({ timeline, summaryArtifact, onSummarize }: { timeline: DailyTimeline; summaryArtifact: SynthesisArtifact | null; onSummarize?: () => void }): JSX.Element {
@@ -142,30 +142,30 @@ function DayPanel({ timeline, summaryArtifact, onSummarize }: { timeline: DailyT
       <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">Today at a glance</h2>
-            <p className="text-xs text-neutral-500">Layer 1 events are shown by default; technical Layer 2 events are visually marked.</p>
+            <h2 className="text-sm font-semibold">今日一览</h2>
+            <p className="text-xs text-neutral-500">默认展示 Layer 1 事件；技术性的 Layer 2 事件会以视觉方式标记。</p>
           </div>
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-6">
-          <Glance label="Events" value={timeline.stats.total_events} />
-          <Glance label="Thoughts" value={timeline.stats.thoughts_count} />
-          <Glance label="Words" value={timeline.stats.longforms_words} />
-          <Glance label="Library" value={timeline.stats.library_added} />
-          <Glance label="Tasks" value={timeline.stats.tasks_completed} />
-          <Glance label="Chats" value={timeline.stats.conversations_count} />
+          <Glance label="事件" value={timeline.stats.total_events} />
+          <Glance label="想法" value={timeline.stats.thoughts_count} />
+          <Glance label="字数" value={timeline.stats.longforms_words} />
+          <Glance label="资料库" value={timeline.stats.library_added} />
+          <Glance label="任务" value={timeline.stats.tasks_completed} />
+          <Glance label="对话" value={timeline.stats.conversations_count} />
         </div>
       </section>
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">AI Daily Summary</h2>
+            <h2 className="text-sm font-semibold">AI 每日摘要</h2>
             <SynthesisStatus artifact={summaryArtifact} generatedAt={timeline.summary?.generated_at} sourceCount={summaryArtifact?.sources.length ?? 0} onRefresh={onSummarize} />
           </div>
-          <button onClick={onSummarize} className="rounded bg-amber-600 px-3 py-1.5 text-xs text-white">Generate</button>
+          <button onClick={onSummarize} className="rounded bg-amber-600 px-3 py-1.5 text-xs text-white">生成</button>
         </div>
-        <p className="mt-2 text-sm">{timeline.summary?.narrative ?? 'No summary yet. Generate one when the day has enough signal.'}</p>
+        <p className="mt-2 text-sm">{timeline.summary?.narrative ?? '暂无摘要。当天有足够信号后即可生成。'}</p>
       </section>
-      {timeline.entries.length === 0 ? <EmptyState title="Quiet day" description="No user-visible Layer 1 events were captured for this day." /> : null}
+      {timeline.entries.length === 0 ? <EmptyState title="安静的一天" description="这一天没有捕获到用户可见的 Layer 1 事件。" /> : null}
       {segments.map((group) => (
         <section key={group.id}>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">{group.label} · {group.range}</h2>
@@ -182,13 +182,13 @@ function WeekPanel({ week }: { week: WeeklyTimeline }): JSX.Element {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="text-sm font-semibold">Week {week.iso_week}</h2>
+        <h2 className="text-sm font-semibold">第 {week.iso_week} 周</h2>
         <p className="text-xs text-neutral-500">{week.range.from} → {week.range.to}</p>
         <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <Glance label="Events" value={week.stats.total_events} />
-          <Glance label="Thoughts" value={week.stats.thoughts_count} />
-          <Glance label="Library" value={week.stats.library_added} />
-          <Glance label="Tasks" value={week.stats.tasks_completed} />
+          <Glance label="事件" value={week.stats.total_events} />
+          <Glance label="想法" value={week.stats.thoughts_count} />
+          <Glance label="资料库" value={week.stats.library_added} />
+          <Glance label="任务" value={week.stats.tasks_completed} />
         </div>
       </section>
       <div className="grid gap-3 md:grid-cols-7">
@@ -196,7 +196,7 @@ function WeekPanel({ week }: { week: WeeklyTimeline }): JSX.Element {
           <article key={day.date} className="rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
             <div className="text-xs font-semibold">{day.date.slice(5)}</div>
             <div className="mt-2 text-2xl font-semibold">{day.stats.total_events}</div>
-            <div className="text-[11px] text-neutral-500">events</div>
+            <div className="text-[11px] text-neutral-500">事件</div>
             {day.summary?.headline ? <p className="mt-2 text-xs text-amber-700 dark:text-amber-200">{day.summary.headline}</p> : null}
           </article>
         ))}
@@ -208,7 +208,7 @@ function WeekPanel({ week }: { week: WeeklyTimeline }): JSX.Element {
 function MonthPanel({ month }: { month: MonthlyIndex }): JSX.Element {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <h2 className="text-sm font-semibold">Month {month.month}</h2>
+      <h2 className="text-sm font-semibold">{month.month} 月</h2>
       <div className="grid grid-cols-7 gap-2">
         {month.days.map((day) => (
           <article key={day.date} className={`min-h-24 rounded-xl border p-3 ${heatClass(day.entry_count)}`}>
@@ -225,13 +225,13 @@ function MonthPanel({ month }: { month: MonthlyIndex }): JSX.Element {
 function YearPanel({ year }: { year: YearlyIndex }): JSX.Element {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <h2 className="text-sm font-semibold">Year {year.year}</h2>
+      <h2 className="text-sm font-semibold">{year.year} 年</h2>
       <div className="grid gap-3 md:grid-cols-3">
         {year.months.map((month) => (
           <article key={month.month} className={`rounded-xl border p-4 ${heatClass(month.total_events)}`}>
             <div className="text-xs font-semibold">{month.month}</div>
             <div className="mt-2 text-2xl font-semibold">{month.total_events}</div>
-            <div className="text-xs text-neutral-500">{month.days_active} active days</div>
+            <div className="text-xs text-neutral-500">{month.days_active} 个活跃日</div>
           </article>
         ))}
       </div>
@@ -253,7 +253,7 @@ function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.
     setError(null);
     const loaded = await window.orbit.notes.getByPath(notePath);
     if (!loaded) {
-      setError('Note not found.');
+      setError('未找到笔记。');
       return;
     }
     setNote(loaded);
@@ -289,7 +289,7 @@ function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.
             <div className="font-medium">{entry.title}</div>
             {notePath ? (
               <button type="button" onClick={() => void startEdit()} className="rounded border border-neutral-300 px-2 py-1 text-[11px] text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
-                Edit
+                编辑
               </button>
             ) : null}
           </div>
@@ -299,7 +299,7 @@ function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.
               <input
                 value={draftTitle}
                 onChange={(event) => setDraftTitle(event.target.value)}
-                placeholder="Title"
+                 placeholder="标题"
                 className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-950"
               />
               <textarea
@@ -309,10 +309,10 @@ function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.
               />
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => void saveEdit()} disabled={saving} className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60">
-                  {saving ? 'Saving…' : 'Save'}
+                  {saving ? '保存中…' : '保存'}
                 </button>
                 <button type="button" onClick={() => setEditing(false)} className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">
-                  Cancel
+                  取消
                 </button>
               </div>
             </div>
@@ -320,8 +320,8 @@ function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.
             <p className="mt-1 text-neutral-600 dark:text-neutral-300">{entry.summary}</p>
           ) : null}
           {error ? <p className="mt-1 text-[11px] text-red-600 dark:text-red-300">{error}</p> : null}
-          {entry.refs?.length ? <p className="mt-1 text-[11px] text-neutral-500">Refs: {entry.refs.map((ref) => ref.label ?? ref.ref).join(', ')}</p> : null}
-          {entry.derived_from?.length ? <p className="mt-1 text-[11px] text-neutral-500">↳ related events: {entry.derived_from.length}</p> : null}
+          {entry.refs?.length ? <p className="mt-1 text-[11px] text-neutral-500">引用：{entry.refs.map((ref) => ref.label ?? ref.ref).join(', ')}</p> : null}
+          {entry.derived_from?.length ? <p className="mt-1 text-[11px] text-neutral-500">↳ 相关事件：{entry.derived_from.length}</p> : null}
         </div>
       </div>
     </article>
@@ -333,7 +333,7 @@ function ModeSwitcher({ mode, onChange }: { mode: TimelineMode; onChange: (mode:
     <div className="flex rounded-lg border border-neutral-200 p-0.5 dark:border-neutral-800">
       {(['day', 'week', 'month', 'year'] as const).map((item) => (
         <button key={item} onClick={() => onChange(item)} className={`rounded-md px-2 py-1 text-xs capitalize ${mode === item ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900' : 'text-neutral-500'}`}>
-          {item}
+          {timelineModeLabel(item)}
         </button>
       ))}
     </div>
@@ -353,6 +353,16 @@ function EmptyState({ title, description }: { title: string; description?: strin
   );
 }
 
+function timelineModeLabel(mode: TimelineMode): string {
+  const labels: Record<TimelineMode, string> = {
+    day: '日',
+    week: '周',
+    month: '月',
+    year: '年'
+  };
+  return labels[mode];
+}
+
 function groupByPeriod(entries: DailyTimeline['entries']): NonNullable<DailyTimeline['segments']> {
   const buckets = new Map<string, DailyTimeline['entries']>();
   for (const entry of entries) {
@@ -361,11 +371,11 @@ function groupByPeriod(entries: DailyTimeline['entries']): NonNullable<DailyTime
     buckets.set(id, [...(buckets.get(id) ?? []), entry]);
   }
   const labels = {
-    night: ['Night', '00:00-06:00'],
-    morning: ['Morning', '06:00-12:00'],
-    noon: ['Noon', '12:00-14:00'],
-    afternoon: ['Afternoon', '14:00-18:00'],
-    evening: ['Evening', '18:00-24:00']
+    night: ['夜间', '00:00-06:00'],
+    morning: ['上午', '06:00-12:00'],
+    noon: ['中午', '12:00-14:00'],
+    afternoon: ['下午', '14:00-18:00'],
+    evening: ['晚间', '18:00-24:00']
   } as const;
   return (Object.keys(labels) as Array<keyof typeof labels>)
     .map((id) => ({ id, label: labels[id][0], range: labels[id][1], entries: buckets.get(id) ?? [] }))
