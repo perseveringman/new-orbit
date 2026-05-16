@@ -17,7 +17,13 @@ describe('SearchContent', () => {
         area: '',
         dateFrom: '',
         dateTo: '',
-        status: { total_docs: 0, indexed_docs: 0, stale_docs: 0, embedding_model: 'local', embedding_dimensions: 384 },
+        status: {
+          total_docs: 0,
+          indexed_docs: 0,
+          stale_docs: 0,
+          embedding_model: 'local',
+          embedding_dimensions: 384
+        },
         results: [],
         memoryRecall: null,
         contextPacket: null,
@@ -38,8 +44,8 @@ describe('SearchContent', () => {
       })
     );
 
-    expect(html).toContain('No matching documents yet');
-    expect(html).toContain('Rebuild index');
+    expect(html).toContain('暂无匹配文档');
+    expect(html).toContain('重建索引');
   });
 
   it('renders stale status, synthesis answer, and Layer labels', () => {
@@ -52,7 +58,13 @@ describe('SearchContent', () => {
         area: '',
         dateFrom: '',
         dateTo: '',
-        status: { total_docs: 1, indexed_docs: 0, stale_docs: 1, embedding_model: 'local', embedding_dimensions: 384 },
+        status: {
+          total_docs: 1,
+          indexed_docs: 0,
+          stale_docs: 1,
+          embedding_model: 'local',
+          embedding_dimensions: 384
+        },
         results: [sampleResult()],
         memoryRecall: sampleRecall(),
         contextPacket: sampleContextPacket(),
@@ -61,7 +73,12 @@ describe('SearchContent', () => {
           kind: 'search.answer',
           scope_key: 'search.answer:test',
           sources: [],
-          provenance: { runtime: 'local:heuristic', model: 'local', prompt_version: 'search.answer.v1', generated_at: '2026-04-30T00:00:00.000Z' },
+          provenance: {
+            runtime: 'local:heuristic',
+            model: 'local',
+            prompt_version: 'search.answer.v1',
+            generated_at: '2026-04-30T00:00:00.000Z'
+          },
           payload: { answer: 'Memory appears in one note.', citations: [], confidence: 0.5 },
           status: 'fresh',
           created_at: '2026-04-30T00:00:00.000Z'
@@ -82,15 +99,15 @@ describe('SearchContent', () => {
       })
     );
 
-    expect(html).toContain('Stale');
-    expect(html).toContain('AI synthesis answer');
-    expect(html).toContain('PMIL context packet');
+    expect(html).toContain('已过期');
+    expect(html).toContain('AI 合成答案');
+    expect(html).toContain('PMIL 上下文包');
     expect(html).toContain('Personal QA');
     expect(html).toContain('GraphRAG improves recall');
     expect(html).toContain('查看证据');
-    expect(html).toContain('Recalled memory');
+    expect(html).toContain('召回记忆');
     expect(html).toContain('Memory preference');
-    expect(html).toContain('Helpful');
+    expect(html).toContain('有帮助');
     expect(html).toContain('Layer 1');
     expect(html).toContain('Memory appears in one note.');
   });

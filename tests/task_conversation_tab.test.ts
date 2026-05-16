@@ -105,16 +105,16 @@ describe('TaskConversationTimeline', () => {
       })
     );
 
-    expect(html).toContain('Auto · executor-binding · Completed');
-    expect(html).toContain('Manual · Running');
-    expect(html).toContain('Tool call');
+    expect(html).toContain('自动 · executor-binding · 已完成');
+    expect(html).toContain('手动 · 运行中');
+    expect(html).toContain('工具调用');
     expect(html).toContain('task.md');
     expect(html).toContain('Agent');
     expect(html).toContain('再补上对话输入框');
     expect(html).toContain('inline-flex max-w-[85%]');
     expect(html).toContain('text-[13px] leading-5');
-    expect(html).toContain('Activity');
-    expect(html).toContain('Agent is working…');
+    expect(html).toContain('活动');
+    expect(html).toContain('Agent 正在工作…');
   });
 
   it('builds unique live event keys when events share the same idx', () => {
@@ -170,7 +170,9 @@ describe('TaskConversationTimeline', () => {
   });
 
   it('uses state-aware input placeholders for waiting and running sessions', () => {
-    expect(getConversationInputPlaceholder(task.title, 'idle')).toBe('发送消息启动 "Implement task chat"');
+    expect(getConversationInputPlaceholder(task.title, 'idle')).toBe(
+      '发送消息启动 "Implement task chat"'
+    );
     expect(getConversationInputPlaceholder(task.title, 'waiting')).toBe('继续对话');
     expect(getConversationInputPlaceholder(task.title, 'running')).toBe(
       '追加消息给正在运行的 agent'
@@ -179,10 +181,12 @@ describe('TaskConversationTimeline', () => {
 
   it('prefers detailed segment events over synthetic assistant summary turns', () => {
     const entries = buildConversationTimelineEntries(conversation, {});
-    expect(entries.some((entry) => entry.kind === 'event' && entry.event?.kind === 'tool_use')).toBe(true);
     expect(
-      entries.some((entry) => entry.kind === 'turn' && entry.turn?.role === 'assistant')
-    ).toBe(false);
+      entries.some((entry) => entry.kind === 'event' && entry.event?.kind === 'tool_use')
+    ).toBe(true);
+    expect(entries.some((entry) => entry.kind === 'turn' && entry.turn?.role === 'assistant')).toBe(
+      false
+    );
   });
 
   it('summarizes the latest running activity for the footer status bar', () => {
@@ -210,7 +214,7 @@ describe('TaskConversationTimeline', () => {
           ]
         }
       })
-    ).toContain('Working · Grep task.md');
+    ).toContain('工作中 · Grep task.md');
   });
 
   it('treats near-bottom scroll positions as auto-follow eligible', () => {

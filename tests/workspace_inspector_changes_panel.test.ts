@@ -71,9 +71,8 @@ vi.mock('../src/renderer/src/store/files', () => ({
     sel ? sel(mockFilesState) : mockFilesState
 }));
 
-const { WorkspaceInspectorPane } = await import(
-  '../src/renderer/src/components/Inspector/WorkspaceInspectorPane'
-);
+const { WorkspaceInspectorPane } =
+  await import('../src/renderer/src/components/Inspector/WorkspaceInspectorPane');
 
 describe('WorkspaceInspectorPane changes tab', () => {
   beforeEach(() => {
@@ -82,17 +81,20 @@ describe('WorkspaceInspectorPane changes tab', () => {
 
   it('renders grouped changes summary and commit controls instead of the placeholder', () => {
     const html = renderToStaticMarkup(createElement(WorkspaceInspectorPane));
-    expect(html).toContain('Base main');
-    expect(html).toContain('files changed');
-    expect(html).toContain('Commit message');
-    expect(html).toContain('Create pull request');
+    expect(html).toContain('基线 main');
+    expect(html).toContain('个文件已变更');
+    expect(html).toContain('Commit 信息');
+    expect(html).toContain('创建 pull request');
   });
 });
 
 describe('change row helpers', () => {
   it('keeps change row helpers browser-safe', async () => {
     const source = await readFile(
-      new URL('../src/renderer/src/components/Inspector/changes/buildChangeRows.ts', import.meta.url),
+      new URL(
+        '../src/renderer/src/components/Inspector/changes/buildChangeRows.ts',
+        import.meta.url
+      ),
       'utf8'
     );
 
@@ -117,7 +119,7 @@ describe('change row helpers', () => {
     const changeFiles = buildChangeFiles(files, diffs, '');
     const rows = buildChangeRows(changeFiles, {});
 
-    expect(rows[0]).toMatchObject({ type: 'group', label: 'Root', count: 1 });
+    expect(rows[0]).toMatchObject({ type: 'group', label: '根目录', count: 1 });
     expect(rows[2]).toMatchObject({ type: 'group', label: 'src', count: 1 });
     expect(rows[3]).toMatchObject({
       type: 'file',

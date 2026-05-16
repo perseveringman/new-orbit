@@ -138,9 +138,9 @@ describe('orchestration workspace surfaces', () => {
       })
     );
 
-    expect(html).toContain('AI Control Plane');
-    expect(html).toContain('Runtime Registry');
-    expect(html).toContain('Runtime B SDK Endpoints');
+    expect(html).toContain('AI 控制平面');
+    expect(html).toContain('CLI Runtime 注册表');
+    expect(html).toContain('Runtime B SDK 端点');
     expect(html).toContain('claude-3-5-sonnet-latest');
     expect(html).toContain('Implement runtime page');
     expect(html).toContain('claude local runtime');
@@ -179,8 +179,8 @@ describe('orchestration workspace surfaces', () => {
       })
     );
 
-    expect(html).toContain('Version: version unavailable');
-    expect(html).toContain('Probe issue');
+    expect(html).toContain('版本：版本不可用');
+    expect(html).toContain('探测问题');
     expect(html).toContain('missing executable referenced by CLI wrapper');
   });
 
@@ -197,9 +197,9 @@ describe('orchestration workspace surfaces', () => {
       })
     );
 
-    expect(html).toContain('Role Templates');
-    expect(html).toContain('Template Baseline');
-    expect(html).toContain('Project Bindings');
+    expect(html).toContain('角色模板');
+    expect(html).toContain('模板基线');
+    expect(html).toContain('项目绑定');
     expect(html).toContain('Moonshot');
   });
 });

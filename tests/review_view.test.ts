@@ -8,22 +8,26 @@ describe('ReviewContent', () => {
   it('renders empty state guidance', () => {
     const html = renderToStaticMarkup(baseElement({ state: 'empty' }));
 
-    expect(html).toContain('No review runs yet');
-    expect(html).toContain('Run review now');
+    expect(html).toContain('暂无复盘记录');
+    expect(html).toContain('立即复盘');
   });
 
   it('renders findings and actions', () => {
-    const html = renderToStaticMarkup(baseElement({ state: 'success', runs: [sampleDetail().run], detail: sampleDetail() }));
+    const html = renderToStaticMarkup(
+      baseElement({ state: 'success', runs: [sampleDetail().run], detail: sampleDetail() })
+    );
 
-    expect(html).toContain('Find stale, unassigned, and dormant work');
+    expect(html).toContain('发现停滞、未归属和沉睡的工作');
     expect(html).toContain('Unassigned notes');
-    expect(html).toContain('Personal Memory Intelligence');
+    expect(html).toContain('个人记忆智能');
     expect(html).toContain('当前工作上下文');
-    expect(html).toContain('Acknowledge');
+    expect(html).toContain('确认');
   });
 });
 
-function baseElement(overrides: Partial<Parameters<typeof ReviewContent>[0]> = {}): ReturnType<typeof createElement> {
+function baseElement(
+  overrides: Partial<Parameters<typeof ReviewContent>[0]> = {}
+): ReturnType<typeof createElement> {
   return createElement(ReviewContent, {
     tab: 'weekly',
     runs: [],
@@ -91,7 +95,9 @@ function sampleDetail(): ReviewRunDetail {
         category: 'unassigned-note',
         title: 'Unassigned notes',
         rationale: 'Notes need Area assignment.',
-        suggested_actions: [{ id: 'action-1', kind: 'ignore', description: 'Ignore', executed: false }]
+        suggested_actions: [
+          { id: 'action-1', kind: 'ignore', description: 'Ignore', executed: false }
+        ]
       }
     ]
   };

@@ -20,8 +20,8 @@ const mockWorkspaceState = {
       tags: [],
       created_at: '2026-04-24T00:00:00.000Z',
       updated_at: '2026-04-24T00:00:00.000Z',
-      path: '/vault/02_Areas/vision',
-      relPath: '02_Areas/vision',
+      path: '/vault/02_领域/vision',
+      relPath: '02_领域/vision',
       hasVision: true
     }
   ]
@@ -31,8 +31,8 @@ const mockEntities: EntitySummary[] = Array.from({ length: 6 }, (_, i) => ({
   type: 'area',
   uid: `entity-${i + 1}`,
   title: `Area doc ${i + 1}`,
-  relPath: `02_Areas/vision/doc-${i + 1}.md`,
-  path: `/vault/02_Areas/vision/doc-${i + 1}.md`
+  relPath: `02_领域/vision/doc-${i + 1}.md`,
+  path: `/vault/02_领域/vision/doc-${i + 1}.md`
 }));
 
 const mockParaState = {
@@ -79,8 +79,10 @@ describe('DashboardView area count', () => {
 
   it('shows the number of real area directories instead of area-typed entity files', () => {
     const html = renderToStaticMarkup(createElement(DashboardView));
-    expect(html).toContain('Areas');
-    expect(html).toContain('>Areas</span><span class="ml-2 font-semibold tabular-nums">1</span>');
-    expect(html).not.toContain('>Areas</span><span class="ml-2 font-semibold tabular-nums">6</span>');
+    expect(html).toContain('领域');
+    expect(html).toContain('>领域</span><span class="ml-2 font-semibold tabular-nums">1</span>');
+    expect(html).not.toContain(
+      '>领域</span><span class="ml-2 font-semibold tabular-nums">6</span>'
+    );
   });
 });

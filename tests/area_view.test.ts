@@ -32,13 +32,13 @@ describe('AreaDashboardContent', () => {
       })
     );
 
-    expect(html).toContain('Area Dashboard');
-    expect(html).toContain('Health signals');
-    expect(html).toContain('Active projects (1)');
-    expect(html).toContain('Feed radar');
-    expect(html).toContain('Scheduled reviews');
-    expect(html).toContain('Unassigned queue (1)');
-    expect(html).toContain('Assign to systems');
+    expect(html).toContain('Area 仪表盘');
+    expect(html).toContain('健康信号');
+    expect(html).toContain('活跃项目（1）');
+    expect(html).toContain('Feed 雷达');
+    expect(html).toContain('计划复盘');
+    expect(html).toContain('未分配队列（1）');
+    expect(html).toContain('分配到 systems');
     expect(html).toContain('Area-scoped chat ready');
   });
 });

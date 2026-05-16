@@ -73,12 +73,12 @@ describe('GitHubWorkspaceSurface', () => {
       })
     );
 
-    expect(html).toContain('GitHub control plane');
+    expect(html).toContain('GitHub 控制平面');
     expect(html).toContain('orbit-test');
     expect(html).toContain('acme/orbit-app');
-    expect(html).toContain('Orbit-ready');
-    expect(html).toContain('Open Project');
-    expect(html).toContain('Import');
+    expect(html).toContain('Orbit 就绪');
+    expect(html).toContain('打开项目');
+    expect(html).toContain('导入');
     expect(html).toContain('acme/design-system');
   });
 });

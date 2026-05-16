@@ -158,8 +158,8 @@ describe('ProjectGitHubSurface', () => {
 
     expect(html).toContain('acme/orbit-app');
     expect(html).toContain('feature/github-redesign');
-    expect(html).toContain('Terminal flow');
-    expect(html).toContain('Auto-runner flow');
+    expect(html).toContain('终端流程');
+    expect(html).toContain('Auto-runner 流程');
     expect(html).toContain('PRs 1');
   });
 
@@ -193,9 +193,9 @@ describe('ProjectGitHubSurface', () => {
       })
     );
 
-    expect(html).toContain('Owner / organization');
-    expect(html).toContain('Repository name');
-    expect(html).toContain('Publish');
+    expect(html).toContain('Owner / 组织');
+    expect(html).toContain('仓库名称');
+    expect(html).toContain('发布');
   });
 
   it('renders inline pull request form fields when the repository is already linked', () => {
@@ -225,8 +225,8 @@ describe('ProjectGitHubSurface', () => {
       })
     );
 
-    expect(html).toContain('Pull request title');
-    expect(html).toContain('Create pull request');
+    expect(html).toContain('PR 标题');
+    expect(html).toContain('创建 pull request');
   });
 
   it('renders issue binding controls and existing task links', () => {
@@ -251,8 +251,8 @@ describe('ProjectGitHubSurface', () => {
     );
 
     expect(html).toContain('Setup auth');
-    expect(html).toContain('Linked to task');
-    expect(html).toContain('Bind to task');
+    expect(html).toContain('已关联任务');
+    expect(html).toContain('绑定到任务');
     expect(html).toContain('Polish GitHub UI');
   });
 
@@ -300,6 +300,6 @@ describe('ProjectGitHubSurface', () => {
     expect(prsHtml).toContain('CI');
     expect(prsHtml).toContain('approved');
     expect(worktreesHtml).toContain('feature/github-redesign');
-    expect(worktreesHtml).toContain('Open PR');
+    expect(worktreesHtml).toContain('打开 PR');
   });
 });

@@ -59,9 +59,9 @@ describe('AskAnywhereView', () => {
 
     const html = renderToStaticMarkup(createElement(AskAnywhereView));
 
-    expect(html).toContain('Artifacts (1)');
+    expect(html).toContain('产物（1）');
     expect(html).not.toContain('UX direction summary');
-    expect(html).not.toContain('Artifact Stage');
+    expect(html).not.toContain('工件舞台');
   });
 
   it('removes the workspace right sidebar on the full-page ask surface', () => {

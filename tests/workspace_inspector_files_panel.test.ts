@@ -213,9 +213,7 @@ const mockVaultTree: ProjectFileNode = {
   path: '/vault',
   relPath: '',
   isDir: true,
-  children: [
-    { name: 'README.md', path: '/vault/README.md', relPath: 'README.md', isDir: false }
-  ]
+  children: [{ name: 'README.md', path: '/vault/README.md', relPath: 'README.md', isDir: false }]
 };
 
 const mockProjectTree: ProjectFileNode = {
@@ -256,9 +254,7 @@ vi.mock('../src/renderer/src/store/files', () => ({
 }));
 
 // Dynamic imports after all vi.mock calls
-const { FilesPanel } = await import(
-  '../src/renderer/src/components/Inspector/files/FilesPanel'
-);
+const { FilesPanel } = await import('../src/renderer/src/components/Inspector/files/FilesPanel');
 
 // ---------------------------------------------------------------------------
 // FilesPanel component tests
@@ -284,29 +280,29 @@ describe('FilesPanel component', () => {
     mockFilesState.refreshProjectTree.mockClear();
   });
 
-  it('renders Search files... placeholder text', () => {
+  it('renders 搜索文件... placeholder text', () => {
     const html = renderToStaticMarkup(createElement(FilesPanel));
-    expect(html).toContain('Search files');
+    expect(html).toContain('搜索文件');
   });
 
-  it('renders New File toolbar button label', () => {
+  it('renders 新建文件 toolbar button label', () => {
     const html = renderToStaticMarkup(createElement(FilesPanel));
-    expect(html).toContain('New File');
+    expect(html).toContain('新建文件');
   });
 
-  it('renders New Folder toolbar button label', () => {
+  it('renders 新建文件夹 toolbar button label', () => {
     const html = renderToStaticMarkup(createElement(FilesPanel));
-    expect(html).toContain('New Folder');
+    expect(html).toContain('新建文件夹');
   });
 
-  it('renders Refresh toolbar button label', () => {
+  it('renders 刷新 toolbar button label', () => {
     const html = renderToStaticMarkup(createElement(FilesPanel));
-    expect(html).toContain('Refresh');
+    expect(html).toContain('刷新');
   });
 
-  it('renders Collapse All toolbar button label', () => {
+  it('renders 全部折叠 toolbar button label', () => {
     const html = renderToStaticMarkup(createElement(FilesPanel));
-    expect(html).toContain('Collapse All');
+    expect(html).toContain('全部折叠');
   });
 
   it('renders lucide SVG icons in the toolbar', () => {
@@ -356,13 +352,13 @@ describe('FilesPanel component', () => {
       { uid: 'proj-1', slug: 'my-project', name: 'My Project', path: '/projects/my-project' }
     ];
     mockFilesState.projectTree = null;
-    mockFilesState.projectTreeError = 'Failed to load project files';
+    mockFilesState.projectTreeError = '加载项目文件失败';
     const html = renderToStaticMarkup(createElement(FilesPanel));
-    expect(html).toContain('Failed to load project files');
-    expect(html).not.toContain('Loading');
+    expect(html).toContain('加载项目文件失败');
+    expect(html).not.toContain('正在加载');
   });
 
-  it('shows Loading when projectTree is null and no error in project surface', () => {
+  it('shows 正在加载 when projectTree is null and no error in project surface', () => {
     mockParaView.kind = 'project';
     mockParaView.projectUid = 'proj-1';
     mockWorkspaceState.activeProjectUid = 'proj-1';
@@ -372,18 +368,18 @@ describe('FilesPanel component', () => {
     mockFilesState.projectTree = null;
     mockFilesState.projectTreeError = null;
     const html = renderToStaticMarkup(createElement(FilesPanel));
-    expect(html).toContain('Loading');
-    expect(html).not.toContain('Failed');
+    expect(html).toContain('加载中…');
+    expect(html).not.toContain('失败');
   });
 
   it('does not show error message on non-project surface even when projectTreeError is set', () => {
     // Non-project surface should ignore projectTreeError and fall through to vault tree
     mockParaView.kind = 'editor';
-    mockFilesState.projectTreeError = 'Failed to load project files';
+    mockFilesState.projectTreeError = '加载项目文件失败';
     mockFilesState.tree = mockVaultTree;
     const html = renderToStaticMarkup(createElement(FilesPanel));
     // Vault tree should show, not the error message
     expect(html).toContain('README');
-    expect(html).not.toContain('Failed to load project files');
+    expect(html).not.toContain('加载项目文件失败');
   });
 });

@@ -32,7 +32,7 @@ describe('terminal session browser model', () => {
     ];
 
     expect(getTerminalSessionAgentFilters(sessions)).toEqual([
-      { id: 'all', title: 'All', count: 3 },
+      { id: 'all', title: '全部', count: 3 },
       { id: 'claude', title: 'Claude Code', count: 1 },
       { id: 'codex', title: 'Codex', count: 2 }
     ]);

@@ -1,7 +1,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { DailyTimeline, MonthlyIndex, WeeklyTimeline, YearlyIndex } from '../src/shared/timeline';
+import type {
+  DailyTimeline,
+  MonthlyIndex,
+  WeeklyTimeline,
+  YearlyIndex
+} from '../src/shared/timeline';
 import { TimelineContent } from '../src/renderer/src/views/TimelineView';
 
 describe('TimelineContent', () => {
@@ -18,18 +23,63 @@ describe('TimelineContent', () => {
       })
     );
 
-    expect(html).toContain('Today at a glance');
+    expect(html).toContain('今日一览');
     expect(html).toContain('Layer 1 event');
-    expect(html).toContain('AI Daily Summary');
-    expect(html).toContain('related events: 1');
+    expect(html).toContain('AI 每日摘要');
+    expect(html).toContain('相关事件：1');
     expect(html).toContain('second-brain');
   });
 
   it('renders week, month, year, and quiet day states', () => {
-    expect(renderToStaticMarkup(createElement(TimelineContent, { mode: 'week', day: null, week: sampleWeek(), month: null, year: null }))).toContain('Week 2026-W18');
-    expect(renderToStaticMarkup(createElement(TimelineContent, { mode: 'month', day: null, week: null, month: sampleMonth(), year: null }))).toContain('Month 2026-04');
-    expect(renderToStaticMarkup(createElement(TimelineContent, { mode: 'year', day: null, week: null, month: null, year: sampleYear() }))).toContain('Year 2026');
-    expect(renderToStaticMarkup(createElement(TimelineContent, { mode: 'day', day: { ...sampleDay(), entries: [], segments: [], stats: { ...sampleDay().stats, total_events: 0 } }, week: null, month: null, year: null }))).toContain('Quiet day');
+    expect(
+      renderToStaticMarkup(
+        createElement(TimelineContent, {
+          mode: 'week',
+          day: null,
+          week: sampleWeek(),
+          month: null,
+          year: null
+        })
+      )
+    ).toContain('第 2026-W18 周');
+    expect(
+      renderToStaticMarkup(
+        createElement(TimelineContent, {
+          mode: 'month',
+          day: null,
+          week: null,
+          month: sampleMonth(),
+          year: null
+        })
+      )
+    ).toContain('2026-04 月');
+    expect(
+      renderToStaticMarkup(
+        createElement(TimelineContent, {
+          mode: 'year',
+          day: null,
+          week: null,
+          month: null,
+          year: sampleYear()
+        })
+      )
+    ).toContain('2026 年');
+    expect(
+      renderToStaticMarkup(
+        createElement(TimelineContent, {
+          mode: 'day',
+          day: {
+            ...sampleDay(),
+            entries: [],
+            segments: [],
+            stats: { ...sampleDay().stats, total_events: 0 }
+          },
+          week: null,
+          month: null,
+          year: null
+        })
+      )
+    ).toContain('安静的一天');
   });
 });
 
@@ -103,7 +153,14 @@ function sampleWeek(): WeeklyTimeline {
 function sampleMonth(): MonthlyIndex {
   return {
     month: '2026-04',
-    days: [{ date: '2026-04-28', entry_count: 1, highlight_kinds: ['note.created'], summary_headline: 'Thinking day' }]
+    days: [
+      {
+        date: '2026-04-28',
+        entry_count: 1,
+        highlight_kinds: ['note.created'],
+        summary_headline: 'Thinking day'
+      }
+    ]
   };
 }
 

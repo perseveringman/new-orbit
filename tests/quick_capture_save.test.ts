@@ -4,7 +4,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { createQuickCaptureService, createThoughtService, isQuickCaptureAccelerator, QUICK_CAPTURE_ACCELERATOR } from '../src/main/capture';
+import {
+  createQuickCaptureService,
+  createThoughtService,
+  isQuickCaptureAccelerator,
+  QUICK_CAPTURE_ACCELERATOR
+} from '../src/main/capture';
 import type { ActivityEventInput } from '../src/main/activity';
 import type { ThoughtPayload } from '../src/shared/inbox';
 import { QuickCaptureModal } from '../src/renderer/src/components/quick-capture/QuickCaptureModal';
@@ -28,7 +33,12 @@ describe('quick capture save', () => {
       emitActivity: (event) => activities.push(event)
     });
 
-    const thought = await service.create({ content: 'Quick captured thought', tags: ['capture'], createdFrom: 'quick_capture', actor: 'user' });
+    const thought = await service.create({
+      content: 'Quick captured thought',
+      tags: ['capture'],
+      createdFrom: 'quick_capture',
+      actor: 'user'
+    });
     const stored = await service.get(thought.id);
 
     expect(QUICK_CAPTURE_ACCELERATOR).toBe('CmdOrCtrl+Shift+I');
@@ -63,8 +73,12 @@ describe('quick capture save', () => {
     expect(result.note.frontmatter.audio?.duration_sec).toBe(7);
     expect(result.note.body).toContain('## Attachments');
     expect(result.attachments).toHaveLength(2);
-    await expect(fs.readFile(path.join(vaultPath, result.attachments[0].path), 'utf8')).resolves.toBe('image-data');
-    await expect(fs.readFile(path.join(vaultPath, result.attachments[1].path), 'utf8')).resolves.toBe('voice-data');
+    await expect(
+      fs.readFile(path.join(vaultPath, result.attachments[0].path), 'utf8')
+    ).resolves.toBe('image-data');
+    await expect(
+      fs.readFile(path.join(vaultPath, result.attachments[1].path), 'utf8')
+    ).resolves.toBe('voice-data');
     const inboxDir = path.join(vaultPath, '.orbit', 'inbox');
     await expect(fs.stat(inboxDir)).rejects.toMatchObject({ code: 'ENOENT' });
   });
@@ -119,7 +133,9 @@ describe('quick capture save', () => {
       }
     });
 
-    const result = await service.suggestDraft({ content: 'Captured idea about timeline notes becoming ground truth.' });
+    const result = await service.suggestDraft({
+      content: 'Captured idea about timeline notes becoming ground truth.'
+    });
 
     expect(result.source).toBe('sdk_fast');
     expect(result.model).toBe('fast-capture-model');
@@ -155,7 +171,9 @@ describe('quick capture save', () => {
     expect(task.item.category).toBe('message');
     expect(task.item.subtype).toBe('A2');
     expect(task.item.status).toBe('pending');
-    expect((task.item.payload as { requested_action?: string }).requested_action).toBe('assign_to_project');
+    expect((task.item.payload as { requested_action?: string }).requested_action).toBe(
+      'assign_to_project'
+    );
   });
 
   it('renders a single-composer Capture modal with realtime suggestion affordances', () => {
@@ -169,7 +187,7 @@ describe('quick capture save', () => {
             {
               id: 'save_to_library:https://example.com',
               action: 'save_to_library',
-              label: 'Save to Library',
+              label: '保存到资料库',
               confidence: 0.9,
               risk: 'low',
               source: 'heuristic'
@@ -182,14 +200,14 @@ describe('quick capture save', () => {
       })
     );
 
-    expect(html).toContain('Type, paste, drop files, or record voice');
-    expect(html).toContain('Save to Library');
-    expect(html).toContain('Save Note');
-    expect(html).toContain('Analyze');
+    expect(html).toContain('输入、粘贴、拖入文件或录制语音');
+    expect(html).toContain('保存到资料库');
+    expect(html).toContain('保存笔记');
+    expect(html).toContain('立即分析');
     expect(html).not.toContain('Link');
     expect(html).not.toContain('Task title');
-    expect(html).toContain('Attach files');
-    expect(html).toContain('Record voice');
+    expect(html).toContain('附加文件');
+    expect(html).toContain('录制语音');
     expect(html).not.toContain('Thought-only MVP');
   });
 });

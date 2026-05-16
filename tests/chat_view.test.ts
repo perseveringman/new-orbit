@@ -138,9 +138,9 @@ describe('ChatView', () => {
         { id: 'tr1' }
       )
     ]);
-    expect(html).toContain('Reading a.md');
-    expect(html).toContain('done');
-    expect(html.match(/>Result</g)?.length).toBe(1);
+    expect(html).toContain('读取 a.md');
+    expect(html).toContain('已完成');
+    expect(html.match(/>结果</g)?.length).toBe(1);
   });
 
   it('merges one thinking span into one block', () => {
@@ -155,7 +155,7 @@ describe('ChatView', () => {
     ]);
 
     expect(html).toContain('查看有哪些项目');
-    expect(html.match(/>Thinking</g)?.length).toBe(1);
+    expect(html.match(/>思考中</g)?.length).toBe(1);
   });
 
   it('renders semantic thinking and tool summaries', () => {
@@ -173,8 +173,8 @@ describe('ChatView', () => {
     ]);
 
     expect(html).toContain('查看有哪些项目需要更新，并准备下一步');
-    expect(html).toContain('Searching &quot;roadmap&quot;');
-    expect(html).toContain('Input');
+    expect(html).toContain('搜索 &quot;roadmap&quot;');
+    expect(html).toContain('输入');
   });
 
   it('does not render approval controls when tool approval is unsupported', () => {
@@ -186,8 +186,8 @@ describe('ChatView', () => {
       )
     ]);
 
-    expect(html).not.toContain('Approve');
-    expect(html).not.toContain('Reject');
+    expect(html).not.toContain('批准');
+    expect(html).not.toContain('拒绝');
   });
 
   it('renders external path approval as an actionable awaiting-user card', () => {
@@ -199,9 +199,9 @@ describe('ChatView', () => {
             kind: 'external_path_access',
             status: 'pending',
             proposalId: 'prop_external',
-            title: 'Allow external path read?',
+            title: '允许读取外部路径？',
             targetPath: '/Users/ryan/outside',
-            hint: 'Approve in this chat or Inbox to continue.'
+            hint: '在此对话或收件箱批准后继续。'
           },
           { id: 'await-external', spanId: 'prop_external' }
         )
@@ -209,10 +209,10 @@ describe('ChatView', () => {
       { ...DEFAULT_CHAT_HOST_CAPABILITIES, canApproveTool: true }
     );
 
-    expect(html).toContain('Allow external path read?');
+    expect(html).toContain('允许读取外部路径？');
     expect(html).toContain('/Users/ryan/outside');
-    expect(html).toContain('Allow read');
-    expect(html).toContain('Deny');
+    expect(html).toContain('允许读取');
+    expect(html).toContain('拒绝');
   });
 
   it('renders task proposals as actionable approval cards', () => {
@@ -224,8 +224,8 @@ describe('ChatView', () => {
             kind: 'new_task',
             status: 'pending',
             proposalId: 'prop_task',
-            title: 'Approve task: 标签与收尾',
-            hint: 'Approve here or in Inbox to create this task.'
+            title: '批准任务：标签与收尾',
+            hint: '在此处或收件箱批准后创建此任务。'
           },
           { id: 'await-task', spanId: 'prop_task' }
         )
@@ -233,9 +233,9 @@ describe('ChatView', () => {
       { ...DEFAULT_CHAT_HOST_CAPABILITIES, canApproveTool: true }
     );
 
-    expect(html).toContain('Approve task: 标签与收尾');
-    expect(html).toContain('Approve');
-    expect(html).toContain('Reject');
+    expect(html).toContain('批准任务：标签与收尾');
+    expect(html).toContain('批准');
+    expect(html).toContain('拒绝');
   });
 
   it('merges external path approval status updates by proposal id', () => {
@@ -247,9 +247,9 @@ describe('ChatView', () => {
             kind: 'external_path_access',
             status: 'pending',
             proposalId: 'prop_external',
-            title: 'Allow external path read?',
+            title: '允许读取外部路径？',
             targetPath: '/Users/ryan/outside',
-            hint: 'Approve in this chat or Inbox to continue.'
+            hint: '在此对话或收件箱批准后继续。'
           },
           { id: 'await-external', spanId: 'prop_external' }
         ),
@@ -259,7 +259,7 @@ describe('ChatView', () => {
             kind: 'external_path_access',
             status: 'approved',
             proposalId: 'prop_external',
-            hint: 'Approved. Continuing.'
+            hint: '已批准。继续执行。'
           },
           { id: 'await-external-approved', spanId: 'prop_external' }
         )
@@ -267,11 +267,11 @@ describe('ChatView', () => {
       { ...DEFAULT_CHAT_HOST_CAPABILITIES, canApproveTool: true }
     );
 
-    expect(html).toContain('approved');
-    expect(html).toContain('Approved. Continuing.');
-    expect(html.match(/Allow external path read/g)?.length).toBe(1);
-    expect(html).not.toContain('Allow read');
-    expect(html).not.toContain('Deny');
+    expect(html).toContain('已批准');
+    expect(html).toContain('已批准。继续执行。');
+    expect(html.match(/允许读取外部路径/g)?.length).toBe(1);
+    expect(html).not.toContain('允许读取</button>');
+    expect(html).not.toContain('拒绝');
   });
 
   it('hides thinking blocks when capability disabled', () => {

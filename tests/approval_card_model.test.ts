@@ -7,7 +7,7 @@ describe('approval card renderer model', () => {
     const pending = proposal('pending');
     expect(getApprovalCardState(pending)).toMatchObject({
       proposalId: 'prop_card',
-      statusLabel: 'Pending approval',
+      statusLabel: '待审批',
       isPending: true,
       actions: [
         { decision: 'approved', disabled: false },

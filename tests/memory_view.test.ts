@@ -8,16 +8,16 @@ describe('MemoryContent', () => {
   it('renders empty guidance', () => {
     const html = renderToStaticMarkup(baseElement({ nodes: [], state: 'empty' }));
 
-    expect(html).toContain('No memories yet');
-    expect(html).toContain('Start an Ask-Anywhere conversation');
+    expect(html).toContain('暂无记忆');
+    expect(html).toContain('开始一次随处问对话');
   });
 
   it('renders memory stats and actions', () => {
     const html = renderToStaticMarkup(baseElement({ nodes: [sampleMemory()], state: 'success' }));
 
-    expect(html).toContain('Transparent long-term memory');
+    expect(html).toContain('透明的长期记忆');
     expect(html).toContain('Read source first');
-    expect(html).toContain('Memory graph');
+    expect(html).toContain('记忆图谱');
     expect(html).toContain('本地 Agent 会话中心');
     expect(html).toContain('保存为笔记');
     expect(html).toContain('转为 Orbit 会话');
@@ -25,13 +25,15 @@ describe('MemoryContent', () => {
     expect(html).toContain('来源证据');
     expect(html).toContain('查看证据');
     expect(html).toContain('不相关');
-    expect(html).toContain('Promote to Resource');
-    expect(html).toContain('semantic');
-    expect(html).toContain('Stable');
+    expect(html).toContain('提升为 Resource');
+    expect(html).toContain('语义');
+    expect(html).toContain('稳定');
   });
 });
 
-function baseElement(overrides: Partial<Parameters<typeof MemoryContent>[0]> = {}): ReturnType<typeof createElement> {
+function baseElement(
+  overrides: Partial<Parameters<typeof MemoryContent>[0]> = {}
+): ReturnType<typeof createElement> {
   return createElement(MemoryContent, {
     kind: 'all',
     layer: 'all',

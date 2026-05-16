@@ -15,7 +15,7 @@ const conversation: Conversation = {
   createdAt: '2026-04-28T00:00:00Z',
   updatedAt: '2026-04-28T01:00:00Z',
   status: 'active',
-  title: 'Ask Anywhere',
+  title: '随处问',
   anchors: [
     { kind: 'ask_anywhere_session', refId: 'ask-1', addedAt: '2026-04-28T00:00:00Z' },
     { kind: 'capture_item', refId: 'cap-1', addedAt: '2026-04-28T00:05:00Z' }
@@ -40,17 +40,17 @@ const stage: ConversationStage = {
   ]
 };
 
-describe('Ask Anywhere UX revamp components', () => {
-  it('renders ContextBar as a collapsed summary by default', () => {
+describe('随处问 UX revamp components', () => {
+  it('renders 上下文Bar as a collapsed summary by default', () => {
     const html = renderToStaticMarkup(createElement(ContextBar, { conversation }));
 
-    expect(html).toContain('Context');
-    expect(html).toContain('2 anchors');
-    expect(html).toContain('4 skills');
+    expect(html).toContain('上下文');
+    expect(html).toContain('2 个锚点');
+    expect(html).toContain('4 个技能');
     expect(html).not.toContain('orbit-capture');
   });
 
-  it('renders StageDrawer only when it is open and has artifacts', () => {
+  it('renders 舞台Drawer only when it is open and has artifacts', () => {
     const closedHtml = renderToStaticMarkup(
       createElement(StageDrawer, {
         stage,
@@ -69,7 +69,7 @@ describe('Ask Anywhere UX revamp components', () => {
     );
 
     expect(closedHtml).toBe('');
-    expect(openHtml).toContain('Stage');
+    expect(openHtml).toContain('阶段');
     expect(openHtml).toContain('UX direction summary');
   });
 
@@ -81,7 +81,7 @@ describe('Ask Anywhere UX revamp components', () => {
       })
     );
 
-    expect(html).toContain('打开 Ask Anywhere');
+    expect(html).toContain('打开随处问');
     expect(html).toContain('aria-pressed="false"');
   });
 
@@ -112,9 +112,9 @@ describe('Ask Anywhere UX revamp components', () => {
       })
     );
 
-    expect(html).toContain('Ask Anywhere');
+    expect(html).toContain('随处问');
     expect(html).toContain('Hello from Orbit');
-    expect(html).toContain('Artifact Stage');
+    expect(html).toContain('产物阶段');
     expect(html).toContain('UX direction summary');
   });
 
@@ -134,7 +134,7 @@ describe('Ask Anywhere UX revamp components', () => {
               conversation_id: conversation.id,
               kind: 'pmil.context_packet',
               created_at: '2026-05-16T00:00:00Z',
-              title: 'PMIL Context Packet',
+              title: 'PMIL 上下文 Packet',
               summary: '1 section, 1 evidence selector',
               payload: sampleContextPacket(),
               status: 'confirmed'
@@ -165,7 +165,7 @@ describe('Ask Anywhere UX revamp components', () => {
       areas: []
     });
     expect(projectContext.scope).toEqual({ kind: 'project', project_id: 'project-1' });
-    expect(projectContext.title).toBe('Ask · Ship Orbit');
+    expect(projectContext.title).toBe('提问 · Ship Orbit');
 
     const resourceContext = deriveSidebarAskContext({
       view: { kind: 'resource', resourceSlug: 'llm-agents' },

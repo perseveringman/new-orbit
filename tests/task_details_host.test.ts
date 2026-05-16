@@ -44,6 +44,6 @@ describe('TaskDetailsHost', () => {
 
     expect(html).toContain('conversation:调研下数据抓取');
     expect(html).not.toContain('detail:调研下数据抓取');
-    expect(html).toContain('Activity');
+    expect(html).toContain('活动');
   });
 });

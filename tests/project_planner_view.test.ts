@@ -9,10 +9,10 @@ describe('ProjectPlannerView', () => {
       createElement(ProjectPlannerView, { projectUid: 'project-1' })
     );
 
-    expect(html).toContain('Planning Chat');
-    expect(html).toContain('Plan Agent');
-    expect(html).toContain('Generate Task Split');
-    expect(html).toContain('No task split artifact yet');
-    expect(html).not.toContain('Task Split Artifact');
+    expect(html).toContain('规划对话');
+    expect(html).toContain('计划 Agent');
+    expect(html).toContain('生成任务拆分');
+    expect(html).toContain('还没有任务拆分工件');
+    expect(html).not.toContain('任务工件版本 1');
   });
 });

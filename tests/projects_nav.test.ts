@@ -11,7 +11,10 @@ import {
   workspaceBadgeCount
 } from '../src/renderer/src/components/Sidebar/ProjectsNav';
 import { ResourcesNav } from '../src/renderer/src/components/Sidebar/ResourcesNav';
-import { WORKSPACE_DESTINATIONS, type WorkspaceDestination } from '../src/renderer/src/components/topbarModel';
+import {
+  WORKSPACE_DESTINATIONS,
+  type WorkspaceDestination
+} from '../src/renderer/src/components/topbarModel';
 
 describe('ProjectsNav inbox badge', () => {
   it('keeps only the requested high-level destinations in the primary sidebar list', () => {
@@ -19,18 +22,13 @@ describe('ProjectsNav inbox badge', () => {
       (kind) => WORKSPACE_DESTINATIONS.find((destination) => destination.view.kind === kind)?.label
     );
 
-    expect(primaryLabels).toEqual([
-      'Dashboard',
-      'Ask Anywhere',
-      'Inbox',
-      'Timeline',
-      'Review'
-    ]);
+    expect(primaryLabels).toEqual(['仪表盘', '随处问', '收件箱', '时间线', '复盘']);
   });
 
-  it('renders non-primary workspace destinations under the More menu', () => {
+  it('renders non-primary workspace destinations under the 更多 menu', () => {
     const overflow = WORKSPACE_DESTINATIONS.filter(
-      (destination) => !isPrimaryWorkspaceDestination(destination) && destination.view.kind !== 'resources'
+      (destination) =>
+        !isPrimaryWorkspaceDestination(destination) && destination.view.kind !== 'resources'
     );
     const html = renderToStaticMarkup(
       createElement(WorkspaceOverflowMenu, {
@@ -42,26 +40,26 @@ describe('ProjectsNav inbox badge', () => {
       })
     );
 
-    expect(html).toContain('More');
-    expect(html).toContain('Vision');
-    expect(html).toContain('Library');
-    expect(html).toContain('Role Templates');
-    expect(html).not.toContain('Dashboard');
-    expect(html).not.toContain('Resources');
+    expect(html).toContain('更多');
+    expect(html).toContain('愿景');
+    expect(html).toContain('资料库');
+    expect(html).toContain('角色模板');
+    expect(html).not.toContain('仪表盘');
+    expect(html).not.toContain('资源');
   });
 
-  it('renders Resources as its own sidebar list section', () => {
+  it('renders 资源 as its own sidebar list section', () => {
     const html = renderToStaticMarkup(createElement(ResourcesNav));
 
-    expect(html).toContain('Resources');
-    expect(html).toContain('New resource');
-    expect(html).toContain('No resources yet');
+    expect(html).toContain('资源');
+    expect(html).toContain('新建资源');
+    expect(html).toContain('还没有资源');
   });
 
-  it('returns sidebar pending count only for the Inbox destination', () => {
-    const inbox: WorkspaceDestination = { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' };
+  it('returns sidebar pending count only for the 收件箱 destination', () => {
+    const inbox: WorkspaceDestination = { label: '收件箱', view: { kind: 'inbox' }, icon: '📥' };
     const dashboard: WorkspaceDestination = {
-      label: 'Dashboard',
+      label: '仪表盘',
       view: { kind: 'dashboard' },
       icon: '◎'
     };
@@ -70,17 +68,17 @@ describe('ProjectsNav inbox badge', () => {
     expect(workspaceBadgeCount(dashboard, 3)).toBe(0);
   });
 
-  it('renders a red badge for pending Inbox messages', () => {
+  it('renders a red badge for pending 收件箱 messages', () => {
     const html = renderToStaticMarkup(
       createElement(WorkspaceQuickItem, {
-        destination: { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
+        destination: { label: '收件箱', view: { kind: 'inbox' }, icon: '📥' },
         active: false,
         badgeCount: 3,
         onClick: () => undefined
       })
     );
 
-    expect(html).toContain('Inbox');
+    expect(html).toContain('收件箱');
     expect(html).toContain('bg-red-500');
     expect(html).toContain('h-5 w-5');
     expect(html).toContain('>3<');

@@ -109,7 +109,7 @@ describe('useFiles.refreshProjectTree', () => {
 
     // A toast should have been added
     expect(getState().toasts.length).toBeGreaterThan(0);
-    expect(getState().toasts[0].text).toBe('Failed to load project files');
+    expect(getState().toasts[0].text).toBe('加载项目文件失败');
   });
 
   it('replaces stale project-A tree with project-B tree after switching (Issue 1 end-to-end)', async () => {
@@ -142,7 +142,7 @@ describe('useFiles.refreshProjectTree', () => {
 
     await getState().refreshProjectTree('/bad-path');
 
-    expect(getState().projectTreeError).toBe('Failed to load project files');
+    expect(getState().projectTreeError).toBe('加载项目文件失败');
     expect(getState().projectTree).toBeNull();
   });
 
@@ -161,7 +161,11 @@ describe('useFiles.refreshProjectTree', () => {
     useFiles.setState({ projectTree: null, projectTreeError: 'old error' });
 
     let resolve!: (v: typeof TREE_B) => void;
-    mockListProjectTree.mockReturnValue(new Promise<typeof TREE_B>((res) => { resolve = res; }));
+    mockListProjectTree.mockReturnValue(
+      new Promise<typeof TREE_B>((res) => {
+        resolve = res;
+      })
+    );
 
     const promise = getState().refreshProjectTree('/b');
     // Error cleared immediately, before IPC resolves
@@ -182,8 +186,16 @@ describe('useFiles.refreshProjectTree', () => {
     let resolveB!: (v: typeof TREE_B) => void;
 
     mockListProjectTree
-      .mockReturnValueOnce(new Promise<typeof TREE_A>((res) => { resolveA = res; }))
-      .mockReturnValueOnce(new Promise<typeof TREE_B>((res) => { resolveB = res; }));
+      .mockReturnValueOnce(
+        new Promise<typeof TREE_A>((res) => {
+          resolveA = res;
+        })
+      )
+      .mockReturnValueOnce(
+        new Promise<typeof TREE_B>((res) => {
+          resolveB = res;
+        })
+      );
 
     // Start request A, then immediately start request B (supersedes A)
     const promiseA = getState().refreshProjectTree('/a');
@@ -207,8 +219,16 @@ describe('useFiles.refreshProjectTree', () => {
     let resolveB!: (v: typeof TREE_B) => void;
 
     mockListProjectTree
-      .mockReturnValueOnce(new Promise<typeof TREE_A>((_res, rej) => { rejectA = rej; }))
-      .mockReturnValueOnce(new Promise<typeof TREE_B>((res) => { resolveB = res; }));
+      .mockReturnValueOnce(
+        new Promise<typeof TREE_A>((_res, rej) => {
+          rejectA = rej;
+        })
+      )
+      .mockReturnValueOnce(
+        new Promise<typeof TREE_B>((res) => {
+          resolveB = res;
+        })
+      );
 
     const promiseA = getState().refreshProjectTree('/a');
     const promiseB = getState().refreshProjectTree('/b');

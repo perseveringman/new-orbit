@@ -17,9 +17,8 @@ vi.mock('../src/renderer/src/store/workspaceInspector', () => ({
 }));
 
 // Import WorkspaceInspectorPane AFTER the mock so it picks up the mocked store.
-const { WorkspaceInspectorPane } = await import(
-  '../src/renderer/src/components/Inspector/WorkspaceInspectorPane'
-);
+const { WorkspaceInspectorPane } =
+  await import('../src/renderer/src/components/Inspector/WorkspaceInspectorPane');
 
 describe('WorkspaceInspectorPane shell', () => {
   beforeEach(() => {
@@ -27,10 +26,10 @@ describe('WorkspaceInspectorPane shell', () => {
     mockSelectTab.mockClear();
   });
 
-  it('renders Files and Changes tab labels', () => {
+  it('renders 文件 and 变更 tab labels', () => {
     const html = renderToStaticMarkup(createElement(WorkspaceInspectorPane));
-    expect(html).toContain('Files');
-    expect(html).toContain('Changes');
+    expect(html).toContain('文件');
+    expect(html).toContain('变更');
   });
 
   it('renders lucide SVG icons for both tabs', () => {
@@ -61,13 +60,13 @@ describe('WorkspaceInspectorPane shell', () => {
 
   it('renders the files panel with a search input when activeTab is files', () => {
     const html = renderToStaticMarkup(createElement(WorkspaceInspectorPane));
-    expect(html).toContain('Search files');
+    expect(html).toContain('搜索文件');
   });
 
   it('shows the changes workspace when activeTab is changes', () => {
     mockState.activeTab = 'changes';
     const html = renderToStaticMarkup(createElement(WorkspaceInspectorPane));
-    expect(html).toContain('Commit message');
+    expect(html).toContain('Commit 信息');
   });
 
   it('INSPECTOR_THEME exports stable semantic class tokens', () => {

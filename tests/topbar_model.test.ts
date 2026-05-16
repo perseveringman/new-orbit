@@ -7,28 +7,28 @@ import {
 describe('top bar model', () => {
   it('keeps workspace destinations in the sidebar navigation model', () => {
     expect(WORKSPACE_DESTINATIONS.map((item) => item.label)).toEqual([
-      'Dashboard',
-      'Ask Anywhere',
-      'Vision',
-      'AI Control',
-      'Tools',
-      'Role Templates',
-      'Console',
+      '仪表盘',
+      '随处问',
+      '愿景',
+      'AI 控制台',
+      '工具',
+      '角色模板',
+      '开发者控制台',
       'GitHub',
-      'Inbox',
-      'Notes',
-      'Library',
-      'Search',
-      'Memory',
-      'Review',
-      'Feeds',
-      'Resources',
-      'Knowledge',
-      'Timeline',
-      'Scheduled',
-      'Gateway',
-      'Journals',
-      'Kanban'
+      '收件箱',
+      '笔记',
+      '资料库',
+      '搜索',
+      '记忆',
+      '复盘',
+      '信息流',
+      '资源',
+      '知识库',
+      '时间线',
+      '计划任务',
+      '网关',
+      '日志',
+      '看板'
     ]);
   });
 
@@ -42,14 +42,14 @@ describe('top bar model', () => {
         vaultPath: '/Users/ryan/Orbit Vault'
       })
     ).toEqual({
-      eyebrow: 'Workspace',
-      title: 'Dashboard',
-      detail: 'Orbit Vault · Vision, PARA health, and project activity.',
+      eyebrow: '工作台',
+      title: '仪表盘',
+      detail: 'Orbit Vault · 查看愿景、PARA 健康度和项目动态。',
       stateLabel: null
     });
   });
 
-  it('describes Ask Anywhere as a first-class workspace surface', () => {
+  it('describes 随处问 as a first-class workspace surface', () => {
     expect(
       deriveTopBarContext({
         view: { kind: 'askAnywhere' },
@@ -59,9 +59,9 @@ describe('top bar model', () => {
         vaultPath: '/Users/ryan/Orbit Vault'
       })
     ).toEqual({
-      eyebrow: 'Workspace',
-      title: 'Ask Anywhere',
-      detail: 'Orbit Vault · Persistent AI conversations across your vault context.',
+      eyebrow: '工作台',
+      title: '随处问',
+      detail: 'Orbit Vault · 围绕 vault 上下文持续进行 AI 对话。',
       stateLabel: null
     });
   });
@@ -83,10 +83,10 @@ describe('top bar model', () => {
         vaultPath: '/Users/ryan/Orbit Vault'
       })
     ).toEqual({
-      eyebrow: 'Project room',
+      eyebrow: '项目空间',
       title: 'Moonshot',
       detail: 'Launch the next release train',
-      stateLabel: 'Active project'
+      stateLabel: '活跃项目'
     });
   });
 
@@ -103,10 +103,10 @@ describe('top bar model', () => {
         vaultPath: '/Users/ryan/Orbit Vault'
       })
     ).toEqual({
-      eyebrow: 'Editor',
+      eyebrow: '编辑器',
       title: 'README.md',
       detail: '01_Projects/Moonshot/README.md',
-      stateLabel: 'Unsaved changes'
+      stateLabel: '有未保存更改'
     });
   });
 
@@ -120,9 +120,9 @@ describe('top bar model', () => {
         vaultPath: '/Users/ryan/Orbit Vault'
       })
     ).toEqual({
-      eyebrow: 'Workspace',
+      eyebrow: '工作台',
       title: 'GitHub',
-      detail: 'Orbit Vault · Connect accounts, import repos, and monitor GitHub delivery state.',
+      detail: 'Orbit Vault · 连接账号、导入仓库并监控 GitHub 交付状态。',
       stateLabel: null
     });
   });
@@ -137,10 +137,9 @@ describe('top bar model', () => {
         vaultPath: '/Users/ryan/Orbit Vault'
       })
     ).toEqual({
-      eyebrow: 'Workspace',
-      title: 'AI Control',
-      detail:
-        'Orbit Vault · Manage CLI runtimes, SDK endpoints, role routing, and orchestration health.',
+      eyebrow: '工作台',
+      title: 'AI 控制台',
+      detail: 'Orbit Vault · 管理 CLI runtime、SDK 端点、角色路由和编排健康度。',
       stateLabel: null
     });
   });

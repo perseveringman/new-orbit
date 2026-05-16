@@ -24,7 +24,7 @@ describe('terminal session action', () => {
   it('jumps to the active terminal for active sessions', () => {
     expect(getTerminalSessionAction(makeSession())).toEqual({
       disabled: false,
-      hint: 'Jump to active terminal',
+      hint: '跳转到活跃终端',
       navigation: {
         projectUid: 'project-1',
         roomKind: 'project',
@@ -38,7 +38,7 @@ describe('terminal session action', () => {
   it('resumes completed sessions in a new tab when a resume command is available', () => {
     expect(getTerminalSessionAction(makeSession({ status: 'completed' }))).toEqual({
       disabled: false,
-      hint: 'Resume in new tab',
+      hint: '在新标签页继续',
       navigation: {
         projectUid: 'project-1',
         roomKind: 'project',
@@ -60,7 +60,7 @@ describe('terminal session action', () => {
       )
     ).toEqual({
       disabled: false,
-      hint: 'Open a fresh terminal with session context',
+      hint: '带会话上下文打开新终端',
       navigation: {
         projectUid: 'project-1',
         roomKind: 'project',

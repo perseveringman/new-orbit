@@ -1,10 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type {
-  TerminalAgentSessionDTO,
-  TerminalAgentSessionDetailDTO
-} from '../src/shared/ipc';
+import type { TerminalAgentSessionDTO, TerminalAgentSessionDetailDTO } from '../src/shared/ipc';
 import { ProjectSessionsDetailPane } from '../src/renderer/src/views/ProjectSessionsView';
 
 function makeSession(overrides: Partial<TerminalAgentSessionDTO> = {}): TerminalAgentSessionDTO {
@@ -26,7 +23,9 @@ function makeSession(overrides: Partial<TerminalAgentSessionDTO> = {}): Terminal
   };
 }
 
-function makeDetail(overrides: Partial<TerminalAgentSessionDetailDTO> = {}): TerminalAgentSessionDetailDTO {
+function makeDetail(
+  overrides: Partial<TerminalAgentSessionDetailDTO> = {}
+): TerminalAgentSessionDetailDTO {
   return {
     ...makeSession(),
     messages: [
@@ -51,7 +50,7 @@ describe('ProjectSessionsDetailPane', () => {
       })
     );
 
-    expect(html).toContain('Conversation');
+    expect(html).toContain('对话');
     expect(html).toContain('min-w-0');
     expect(html).toContain('whitespace-pre-wrap');
     expect(html).toContain('overflow-hidden');
@@ -114,12 +113,14 @@ describe('ProjectSessionsDetailPane', () => {
     );
 
     expect(html).toContain('项目能做什么');
-    expect(html).toContain('Used Glob');
-    expect(html).toContain('Let me check the project documentation to understand what this project does.');
+    expect(html).toContain('使用了 Glob');
+    expect(html).toContain(
+      'Let me check the project documentation to understand what this project does.'
+    );
     expect(html).toContain('根据项目文件，这是一个 Twitter 抓取项目，但目前还处于非常早期阶段。');
     expect(html).not.toContain('Thinking:');
     expect(html).not.toContain('&quot;pattern&quot;');
-    expect(html.match(/>assistant</g)?.length ?? 0).toBe(1);
+    expect(html.match(/>助手</g)?.length ?? 0).toBe(1);
   });
 
   it('hides internal session metadata and fallback subtitle noise from the header', () => {
@@ -141,7 +142,7 @@ describe('ProjectSessionsDetailPane', () => {
     expect(html).not.toContain('Permissions 1');
     expect(html).not.toContain('Vendor vendor-1');
     expect(html).not.toContain('Claude Code · active');
-    expect(html).toContain('Started ');
-    expect(html).toContain('Last active ');
+    expect(html).toContain('开始于 ');
+    expect(html).toContain('最近活跃 ');
   });
 });

@@ -6,8 +6,8 @@ import { DeveloperConsoleView } from '../src/renderer/src/views/DeveloperConsole
 describe('DeveloperConsoleView', () => {
   it('renders event replay filters and payload panel', () => {
     const html = renderToStaticMarkup(createElement(DeveloperConsoleView));
-    expect(html).toContain('Event Replay');
-    expect(html).toContain('All sources');
-    expect(html).toContain('Payload');
+    expect(html).toContain('事件回放');
+    expect(html).toContain('全部来源');
+    expect(html).toContain('载荷');
   });
 });

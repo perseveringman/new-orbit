@@ -40,7 +40,10 @@ describe('review queue presentation', () => {
 
   it('falls back to pane identity when no terminal title is available', () => {
     expect(
-      getReviewQueueContextSummary(makeItem({ terminalTitle: undefined, paneId: 'pane-9' }), projects)
-    ).toBe('Orbit · Pane pane-9');
+      getReviewQueueContextSummary(
+        makeItem({ terminalTitle: undefined, paneId: 'pane-9' }),
+        projects
+      )
+    ).toBe('Orbit · 面板 pane-9');
   });
 });

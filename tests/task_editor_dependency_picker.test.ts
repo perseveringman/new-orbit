@@ -32,10 +32,10 @@ describe('TaskEditor dependency helpers', () => {
   });
 
   it('reports unmet and missing dependencies separately', () => {
-    const state = inspectDependencyState(['task-a', 'task-missing'], [
-      task('task-a', 'Draft outline', 'doing'),
-      task('task-b', 'Review outline', 'done')
-    ]);
+    const state = inspectDependencyState(
+      ['task-a', 'task-missing'],
+      [task('task-a', 'Draft outline', 'doing'), task('task-b', 'Review outline', 'done')]
+    );
 
     expect(state.unmet.map((entry) => entry.uid)).toEqual(['task-a']);
     expect(state.missing).toEqual(['task-missing']);
@@ -54,7 +54,7 @@ describe('TaskEditor dependency helpers', () => {
 
     expect(html).toContain('Draft outline');
     expect(html).toContain('Review outline');
-    expect(html).toContain('doing');
+    expect(html).toContain('进行中');
     expect(html).toContain('checked');
   });
 });

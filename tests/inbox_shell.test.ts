@@ -65,7 +65,7 @@ const helpRequest: InboxItem = {
   updated_at: '2026-04-26T11:00:00.000Z'
 };
 
-describe('Inbox v2 renderer shell', () => {
+describe('收件箱 v2 renderer shell', () => {
   it('renders top-level tabs and message Stage View markup', () => {
     const html = renderToStaticMarkup(
       createElement(InboxShellContent, {
@@ -80,19 +80,19 @@ describe('Inbox v2 renderer shell', () => {
       })
     );
 
-    expect(html).toContain('Inbox v2');
-    expect(html).toContain('Capture');
-    expect(html).toContain('Messages');
-    expect(html).toContain('Archive');
+    expect(html).toContain('收件箱 v2');
+    expect(html).toContain('捕获');
+    expect(html).toContain('消息');
+    expect(html).toContain('归档');
     expect(html).toContain('Create follow-up task');
-    expect(html).toContain('Authorization chain');
+    expect(html).toContain('授权链');
   });
 
-  it('renders Library article Stage View markup', () => {
+  it('renders 资料库 article Stage View markup', () => {
     const html = renderToStaticMarkup(createElement(StageView, { item: items[1] }));
-    expect(html).toContain('Library');
-    expect(html).toContain('Loading article');
-    expect(html).toContain('Promote to Resource');
+    expect(html).toContain('资料库');
+    expect(html).toContain('文章加载中…');
+    expect(html).toContain('提升为 Resource');
     expect(html).toContain('flex h-full min-h-0 flex-col overflow-hidden');
     expect(html).toContain('min-h-0 flex-1 overflow-y-auto p-6');
   });
@@ -106,8 +106,8 @@ describe('Inbox v2 renderer shell', () => {
       })
     );
     expect(html).toContain('Agent needs input: 调研埃及的历史');
-    expect(html).toContain('Open task');
-    expect(html).toContain('No task conversation yet');
+    expect(html).toContain('打开任务');
+    expect(html).toContain('暂无任务对话');
     expect(html).toContain('发送消息启动');
     expect(html).toContain('flex h-full min-h-0 flex-col gap-4');
     expect(html).toContain('min-h-0 flex-1 overflow-hidden');
