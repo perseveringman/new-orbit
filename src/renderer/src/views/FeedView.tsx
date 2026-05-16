@@ -150,7 +150,7 @@ export function FeedView(): JSX.Element {
         setActiveItemId(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load feed data.');
+      setError(err instanceof Error ? err.message : '加载 Feed 数据失败。');
     }
   }
 
@@ -214,16 +214,16 @@ export function FeedView(): JSX.Element {
       await reload(null);
       setMessage(
         source.kind === 'youtube'
-          ? `Added ${source.title}. Fetching ${source.fetch_policy?.initial_backfill === 'full' ? 'full channel' : 'latest 20'} now.`
-          : `Added ${source.title}. Fetching now.`
+          ? `已添加 ${source.title}，正在抓取${source.fetch_policy?.initial_backfill === 'full' ? '完整频道' : '最新 20 条'}。`
+          : `已添加 ${source.title}，正在抓取。`
       );
       window.setTimeout(() => void reload(null), 400);
       const result = await window.orbit.feeds.fetch(source.id);
       const created = result.reduce((sum, item) => sum + item.created, 0);
       await reload(null);
-      setMessage(`Added ${source.title} and fetched ${created} new item(s).`);
+      setMessage(`已添加 ${source.title}，并抓取 ${created} 条新内容。`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add source.');
+      setError(err instanceof Error ? err.message : '添加来源失败。');
     } finally {
       setBusy(false);
     }
@@ -237,9 +237,9 @@ export function FeedView(): JSX.Element {
       const result = await window.orbit.feeds.fetch(sourceId);
       const created = result.reduce((sum, item) => sum + item.created, 0);
       await reload();
-      setMessage(`Fetched ${created} new item(s).`);
+      setMessage(`已抓取 ${created} 条新内容。`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh feeds.');
+      setError(err instanceof Error ? err.message : '刷新 Feed 失败。');
     } finally {
       setBusy(false);
     }
@@ -251,9 +251,9 @@ export function FeedView(): JSX.Element {
     try {
       const result = await window.orbit.feeds.saveToLibrary(item.id);
       await reload(item.id);
-      setMessage(`Saved to Library: ${result.library_item.frontmatter.title}`);
+      setMessage(`已保存到资料库：${result.library_item.frontmatter.title}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save item.');
+      setError(err instanceof Error ? err.message : '保存条目失败。');
     } finally {
       setBusy(false);
     }
@@ -275,7 +275,7 @@ export function FeedView(): JSX.Element {
   }
 
   async function deleteSource(source: FeedSource): Promise<void> {
-    if (!window.confirm(`Remove feed source "${source.title}"?`)) return;
+    if (!window.confirm(`移除 Feed 来源「${source.title}」？`)) return;
     await window.orbit.feeds.deleteSource(source.id);
     if (activeSourceId === source.id) setActiveSourceId(null);
     await reload();
@@ -321,27 +321,27 @@ export function FeedView(): JSX.Element {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Radio size={17} className="text-sky-600 dark:text-sky-400" />
-              <h1 className="text-base font-semibold">Feed Signals</h1>
+              <h1 className="text-base font-semibold">Feed 信号</h1>
               <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-neutral-900">
-                Layer 0 until saved
+                保存前属于 Layer 0
               </span>
             </div>
             <p className="mt-0.5 text-xs text-neutral-500">
-              Daily incoming signals for triage, synthesis, and Library promotion.
+              每日输入信号，用于分拣、合成与提升到资料库。
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <IconButton title="Daily digest" onClick={() => void runDigest()} disabled={operationBusy}>
+            <IconButton title="每日日报" onClick={() => void runDigest()} disabled={operationBusy}>
               <FileText size={15} />
-              <span>Digest</span>
+              <span>摘要</span>
             </IconButton>
-            <IconButton title="Cluster visible signals" onClick={() => void runCluster()} disabled={operationBusy}>
+            <IconButton title="聚类可见信号" onClick={() => void runCluster()} disabled={operationBusy}>
               <Sparkles size={15} />
-              <span>Cluster</span>
+              <span>聚类</span>
             </IconButton>
-            <IconButton title="Generate daily report" onClick={() => void runReport()} disabled={operationBusy}>
+            <IconButton title="生成每日报告" onClick={() => void runReport()} disabled={operationBusy}>
               <Library size={15} />
-              <span>Report</span>
+              <span>报告</span>
             </IconButton>
             <button
               disabled={operationBusy}
@@ -349,7 +349,7 @@ export function FeedView(): JSX.Element {
               className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-600 px-3 text-xs font-medium text-white disabled:opacity-50"
             >
               <RefreshCw size={14} className={operationBusy ? 'animate-spin' : ''} />
-              Refresh
+              刷新
             </button>
           </div>
         </div>
@@ -366,7 +366,7 @@ export function FeedView(): JSX.Element {
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Optional source title"
+            placeholder="可选来源标题"
             className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
           />
           <input
@@ -376,7 +376,7 @@ export function FeedView(): JSX.Element {
               setUrl(nextUrl);
               if (looksLikeYouTubeSource(nextUrl)) setSourceKind('youtube');
             }}
-            placeholder={sourceKind === 'youtube' ? 'YouTube channel / playlist / @handle / video URL' : 'RSS / Atom URL'}
+            placeholder={sourceKind === 'youtube' ? 'YouTube 频道 / 播放列表 / @handle / 视频 URL' : 'RSS / Atom URL'}
             className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
           />
           <button
@@ -385,12 +385,12 @@ export function FeedView(): JSX.Element {
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-neutral-900 px-3 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
           >
             <Plus size={14} />
-            Add source
+            添加来源
           </button>
         </div>
         {sourceKind === 'youtube' ? (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
-            <span>YouTube backfill</span>
+            <span>YouTube 回填</span>
             <button
               type="button"
               onClick={() => setYoutubeBackfill('recent')}
@@ -400,7 +400,7 @@ export function FeedView(): JSX.Element {
                   : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
               }`}
             >
-              Latest 20
+              最新 20 条
             </button>
             <button
               type="button"
@@ -411,17 +411,17 @@ export function FeedView(): JSX.Element {
                   : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
               }`}
             >
-              Full channel
+              完整频道
             </button>
-            <span>Daily refresh still checks the latest 20 for newly published videos.</span>
+            <span>每日刷新仍会检查最新 20 条新发布视频。</span>
           </div>
         ) : null}
 
         <div className="mt-3 grid gap-2 md:grid-cols-4">
-          <Metric label="Today" value={metrics.today} tone="sky" />
-          <Metric label="New" value={metrics.newItems} tone="emerald" />
-          <Metric label="Saved" value={metrics.saved} tone="violet" />
-          <Metric label="Source issues" value={metrics.failedSources} tone={metrics.failedSources ? 'rose' : 'neutral'} />
+          <Metric label="今日" value={metrics.today} tone="sky" />
+          <Metric label="新增" value={metrics.newItems} tone="emerald" />
+          <Metric label="已保存" value={metrics.saved} tone="violet" />
+          <Metric label="来源问题" value={metrics.failedSources} tone={metrics.failedSources ? 'rose' : 'neutral'} />
         </div>
         {activeRunningRun ? <RunNotice run={activeRunningRun} source={sourceById.get(activeRunningRun.source_id)} /> : null}
         {message ? <Notice tone="sky" message={message} /> : null}
@@ -452,7 +452,7 @@ export function FeedView(): JSX.Element {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search current feed scope"
+                  placeholder="搜索当前 Feed 范围"
                   className="h-8 w-full rounded-md border border-neutral-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
                 />
               </div>
@@ -473,8 +473,8 @@ export function FeedView(): JSX.Element {
               </div>
             </div>
             <div className="mt-2 flex items-center justify-between text-[11px] text-neutral-500">
-              <span>{activeSource ? activeSource.title : 'All sources'} / {filteredItems.length} visible signals</span>
-              <span>{digest || cluster || report ? 'Synthesis available' : 'No synthesis generated in this session'}</span>
+              <span>{activeSource ? activeSource.title : '全部来源'} / {filteredItems.length} 条可见信号</span>
+              <span>{digest || cluster || report ? '已有合成结果' : '本会话尚未生成合成结果'}</span>
             </div>
           </div>
 
@@ -551,13 +551,13 @@ function SourceRail({
           activeSourceId === null ? 'bg-white shadow-sm dark:bg-neutral-900' : 'hover:bg-white dark:hover:bg-neutral-900'
         }`}
       >
-        <span className="font-medium">All sources</span>
+        <span className="font-medium">全部来源</span>
         <Inbox size={15} className="text-neutral-400" />
       </button>
       <div className="mt-3 space-y-2">
         {sources.length === 0 ? (
           <div className="rounded-md border border-dashed border-neutral-300 p-3 text-sm text-neutral-500 dark:border-neutral-800">
-            Add a source to start the daily signal loop.
+            添加来源以启动每日信号循环。
           </div>
         ) : null}
         {sources.map((source) => {
@@ -589,9 +589,9 @@ function SourceRail({
                 </div>
               </button>
               <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
-                <SmallStat label="Today" value={counts.today} />
-                <SmallStat label="New" value={counts.newItems} />
-                <SmallStat label="Saved" value={counts.saved} />
+                <SmallStat label="今日" value={counts.today} />
+                <SmallStat label="新增" value={counts.newItems} />
+                <SmallStat label="已保存" value={counts.saved} />
               </div>
               {running && latestRun ? (
                 <RunInline run={latestRun} stage={stage} />
@@ -603,34 +603,34 @@ function SourceRail({
               ) : latestRun?.status === 'partial' ? (
                 <div className="mt-2 flex gap-1.5 rounded-md bg-amber-50 p-2 text-[11px] text-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
                   <AlertTriangle size={13} className="shrink-0" />
-                  <span className="line-clamp-2">{latestRun.error ?? 'Some items were fetched without transcripts.'}</span>
+                  <span className="line-clamp-2">{latestRun.error ?? '部分条目已抓取，但没有转录文本。'}</span>
                 </div>
               ) : (
                 <div className="mt-2 flex items-center gap-1 text-[11px] text-neutral-500">
                   <Clock size={12} />
-                  <span>{source.last_fetched_at ? formatRelative(source.last_fetched_at) : 'Never fetched'}</span>
+                  <span>{source.last_fetched_at ? formatRelative(source.last_fetched_at) : '从未抓取'}</span>
                 </div>
               )}
               <div className="mt-3 flex items-center gap-1">
                 <button
-                  title="Refresh source"
+                  title="刷新来源"
                   disabled={busy || running}
                   onClick={() => onRefresh(source)}
                   className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-neutral-200 text-[11px] hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
                 >
                   <RefreshCw size={12} className={running ? 'animate-spin' : ''} />
-                  {running ? 'Fetching' : 'Fetch'}
+                  {running ? '抓取中' : '抓取'}
                 </button>
                 <button
-                  title={source.enabled ? 'Disable source' : 'Enable source'}
+                  title={source.enabled ? '停用来源' : '启用来源'}
                   onClick={() => onToggle(source)}
                   className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-neutral-200 text-[11px] hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
                 >
                   {source.enabled ? <Check size={12} /> : <Ban size={12} />}
-                  {source.enabled ? 'On' : 'Off'}
+                  {source.enabled ? '开启' : '关闭'}
                 </button>
                 <button
-                  title="Remove source"
+                  title="移除来源"
                   onClick={() => onDelete(source)}
                   className="inline-flex h-7 w-8 items-center justify-center rounded-md border border-neutral-200 text-neutral-500 hover:bg-rose-50 hover:text-rose-600 dark:border-neutral-800 dark:hover:bg-rose-950/30"
                 >
@@ -679,20 +679,20 @@ function FeedItemRow({
           <div className="flex items-center gap-2">
             <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{item.title}</h2>
             {isYouTube ? (
-              <span title="YouTube video" className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] text-red-700 dark:bg-red-950/40 dark:text-red-200">
+              <span title="YouTube 视频" className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] text-red-700 dark:bg-red-950/40 dark:text-red-200">
                 <PlayCircle size={11} />
-                Video
+                视频
               </span>
             ) : null}
             {hasAnalysis ? (
-              <span title="Analysis available" className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
+              <span title="已有分析" className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700 dark:bg-violet-950/40 dark:text-violet-200">
                 <Sparkles size={11} />
-                Analysis
+                分析
               </span>
             ) : null}
             {item.extracted_ref ? (
-              <span title="Readable extraction cached" className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
-                {isYouTube ? (hasYouTubeTranscript(item) ? 'Transcript' : 'Description') : 'Extracted'}
+              <span title="已缓存可读提取内容" className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+                {isYouTube ? (hasYouTubeTranscript(item) ? '转录' : '描述') : '已提取'}
               </span>
             ) : null}
           </div>
@@ -702,7 +702,7 @@ function FeedItemRow({
             <span>{labelForStatus(item.status)}</span>
             {item.language ? <span>{item.language}</span> : null}
             {item.metadata?.duration_human ? <span>{item.metadata.duration_human}</span> : null}
-            {typeof item.metadata?.view_count === 'number' ? <span>{formatCompactNumber(item.metadata.view_count)} views</span> : null}
+            {typeof item.metadata?.view_count === 'number' ? <span>{formatCompactNumber(item.metadata.view_count)} 次观看</span> : null}
           </div>
           <p className="mt-2 line-clamp-2 text-sm leading-5 text-neutral-600 dark:text-neutral-300">
             {item.summary || item.excerpt || item.url}
@@ -710,7 +710,7 @@ function FeedItemRow({
         </div>
         <div className="flex shrink-0 flex-col gap-1 opacity-0 transition group-hover:opacity-100">
           <button
-            title="Save to Library"
+            title="保存到资料库"
             disabled={saved}
             onClick={(event) => {
               event.stopPropagation();
@@ -721,7 +721,7 @@ function FeedItemRow({
             <BookmarkPlus size={13} />
           </button>
           <button
-            title="Mark seen"
+            title="标为已读"
             onClick={(event) => {
               event.stopPropagation();
               onSeen();
@@ -731,7 +731,7 @@ function FeedItemRow({
             <Eye size={13} />
           </button>
           <button
-            title="Ignore"
+            title="忽略"
             onClick={(event) => {
               event.stopPropagation();
               onIgnore();
@@ -798,7 +798,7 @@ function Inspector({
     }
     const getItemContent = window.orbit.feeds.getItemContent;
     if (typeof getItemContent !== 'function') {
-      setContentError('Transcript reader IPC is not active yet. Restart the dev app once so the updated preload is loaded.');
+      setContentError('转录读取 IPC 尚未激活。请重启开发应用以加载更新后的 preload。');
       setContentLoading(false);
       return;
     }
@@ -809,7 +809,7 @@ function Inspector({
         if (!cancelled) setContent(nextContent);
       })
       .catch((err) => {
-        if (!cancelled) setContentError(err instanceof Error ? err.message : 'Failed to load readable content.');
+        if (!cancelled) setContentError(err instanceof Error ? err.message : '加载可读内容失败。');
       })
       .finally(() => {
         if (!cancelled) setContentLoading(false);
@@ -829,7 +829,7 @@ function Inspector({
     return (
       <aside className="h-full min-h-0 overflow-y-auto overscroll-contain bg-neutral-50 p-4 dark:bg-neutral-950">
         <div className="rounded-md border border-dashed border-neutral-300 p-5 text-sm text-neutral-500 dark:border-neutral-800">
-          Select a signal to inspect its source, synthesis, and promotion path.
+          选择一个信号以查看来源、合成与提升路径。
         </div>
       </aside>
     );
@@ -840,7 +840,7 @@ function Inspector({
       <div className="shrink-0 p-4 pb-0">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-wide text-neutral-500">Selected signal</div>
+          <div className="text-[11px] uppercase tracking-wide text-neutral-500">已选信号</div>
           <h2 className="mt-1 line-clamp-2 text-base font-semibold">{item.title}</h2>
           {item.metadata?.provider === 'youtube' ? (
             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
@@ -881,7 +881,7 @@ function Inspector({
           className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-neutral-200 bg-white text-[11px] dark:border-neutral-800 dark:bg-neutral-900"
         >
           <Ban size={13} />
-          Ignore
+          忽略
         </button>
       </div>
 
@@ -890,7 +890,7 @@ function Inspector({
         className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1 rounded-md border border-neutral-200 bg-white text-[11px] dark:border-neutral-800 dark:bg-neutral-900"
       >
         <ExternalLink size={13} />
-        Open original
+        打开原文
       </a>
 
       <div className="mt-4 flex rounded-md border border-neutral-200 bg-white p-1 dark:border-neutral-800 dark:bg-neutral-900">
@@ -911,19 +911,19 @@ function Inspector({
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
       {tab === 'overview' ? (
         <div className="mt-4 space-y-4">
-          <Section title="Readable signal">
+          <Section title="可读信号">
             <ReadableSignalText item={item} />
             {item.metadata?.provider === 'youtube' ? (
               <div className="mt-3 rounded-md bg-neutral-50 p-3 text-xs leading-5 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
                 {hasYouTubeTranscript(item)
-                  ? 'Full transcript is captured for this video.'
-                  : `This video currently has no captured transcript. ${youtubeSubtitleStatusLabel(item)}.`}
+                  ? '此视频已捕获完整转录。'
+                  : `此视频当前没有已捕获转录。${youtubeSubtitleStatusLabel(item)}。`}
                 <button
                   type="button"
                   onClick={() => setTab('content')}
                   className="mt-2 inline-flex h-7 items-center rounded-md border border-neutral-200 bg-white px-2 text-[11px] font-medium text-neutral-800 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
                 >
-                  {hasYouTubeTranscript(item) ? 'Open full transcript' : 'Open cached description'}
+                  {hasYouTubeTranscript(item) ? '打开完整转录' : '打开缓存描述'}
                 </button>
               </div>
             ) : null}
@@ -934,28 +934,28 @@ function Inspector({
                   item.metadata?.provider === 'youtube'
                     ? item.extracted_ref
                       ? hasYouTubeTranscript(item)
-                        ? 'Transcript cached'
-                        : `Description cached; ${youtubeSubtitleStatusLabel(item)}`
-                      : 'Transcript pending'
+                        ? '已缓存转录'
+                        : `已缓存描述；${youtubeSubtitleStatusLabel(item)}`
+                      : '转录待处理'
                     : item.extracted_ref
-                      ? 'Extracted text cached'
-                      : 'Extraction pending'
+                      ? '已缓存提取文本'
+                      : '提取待处理'
                 }
               />
-              <Pill icon={<Languages size={12} />} text={translation ? `Translation ${translation.payload.target_language}` : 'No translation'} />
-              <Pill icon={<Sparkles size={12} />} text={analysis ? 'Analysis available' : 'No item analysis'} />
-              {item.metadata?.subtitle_language ? <Pill icon={<PlayCircle size={12} />} text={`Subtitle ${item.metadata.subtitle_language}`} /> : null}
+              <Pill icon={<Languages size={12} />} text={translation ? `翻译 ${translation.payload.target_language}` : '暂无翻译'} />
+              <Pill icon={<Sparkles size={12} />} text={analysis ? '已有分析' : '暂无条目分析'} />
+              {item.metadata?.subtitle_language ? <Pill icon={<PlayCircle size={12} />} text={`字幕 ${item.metadata.subtitle_language}`} /> : null}
             </div>
           </Section>
 
-          <Section title="Today synthesis">
-            <SynthesisSummary artifact={digest} fallback="Generate a digest to see today's top signals." />
-            <SynthesisSummary artifact={cluster} fallback="Generate clusters to group related signals." />
-            <SynthesisSummary artifact={report} fallback="Generate a report to capture what changed." />
+          <Section title="今日合成">
+            <SynthesisSummary artifact={digest} fallback="生成摘要以查看今日重点信号。" />
+            <SynthesisSummary artifact={cluster} fallback="生成聚类以分组相关信号。" />
+            <SynthesisSummary artifact={report} fallback="生成报告以记录变化。" />
             <div className="mt-3 grid grid-cols-3 gap-1">
-              <MiniAction onClick={onDigest} label="Digest" />
-              <MiniAction onClick={onCluster} label="Cluster" />
-              <MiniAction onClick={onReport} label="Report" />
+              <MiniAction onClick={onDigest} label="摘要" />
+              <MiniAction onClick={onCluster} label="聚类" />
+              <MiniAction onClick={onReport} label="报告" />
             </div>
           </Section>
         </div>
@@ -963,7 +963,7 @@ function Inspector({
 
       {tab === 'content' ? (
         <div className="mt-4 space-y-4">
-          <Section title={item.metadata?.provider === 'youtube' ? (hasYouTubeTranscript(item) ? 'YouTube subtitle / transcript' : 'YouTube description') : 'Readable content'}>
+          <Section title={item.metadata?.provider === 'youtube' ? (hasYouTubeTranscript(item) ? 'YouTube 字幕 / 转录' : 'YouTube 描述') : '可读内容'}>
             <ReadableContentPanel
               item={item}
               content={content}
@@ -976,30 +976,30 @@ function Inspector({
 
       {tab === 'analysis' ? (
         <div className="mt-4 space-y-4">
-          <Section title="Item analysis">
+          <Section title="条目分析">
             {analysis ? (
               <div className="space-y-3 text-sm">
                 <p className="leading-6 text-neutral-700 dark:text-neutral-300">{analysis.payload.summary}</p>
-                <KeyValueList title="Key points" values={analysis.payload.key_points} />
-                <KeyValueList title="Entities" values={analysis.payload.entities} inline />
-                <KeyValueList title="Suggested actions" values={analysis.payload.suggested_actions} />
+                <KeyValueList title="关键点" values={analysis.payload.key_points} />
+                <KeyValueList title="实体" values={analysis.payload.entities} inline />
+                <KeyValueList title="建议行动" values={analysis.payload.suggested_actions} />
               </div>
             ) : (
               <p className="text-sm text-neutral-500">
-                Analysis artifacts are created when an item is saved or when source processing policy runs enrichment.
+                条目保存后，或来源处理策略运行 enrich 时，会创建分析产物。
               </p>
             )}
           </Section>
-          <Section title="Translation">
+          <Section title="翻译">
             {translation ? (
               <div className="text-sm leading-6 text-neutral-700 dark:text-neutral-300">
-                <div className="mb-2 text-xs text-neutral-500">Target: {translation.payload.target_language}</div>
+                <div className="mb-2 text-xs text-neutral-500">目标：{translation.payload.target_language}</div>
                 <div className="max-h-72 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words rounded-md bg-neutral-50 p-3 text-xs leading-5 [overflow-wrap:anywhere] dark:bg-neutral-900">
                   {translation.payload.content}
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-neutral-500">No translation artifact attached yet.</p>
+              <p className="text-sm text-neutral-500">尚未附加翻译产物。</p>
             )}
           </Section>
         </div>
@@ -1007,24 +1007,24 @@ function Inspector({
 
       {tab === 'provenance' ? (
         <div className="mt-4 space-y-4">
-          <Section title="Source">
-            <Meta label="Source" value={source?.title ?? item.source_id} />
+          <Section title="来源">
+            <Meta label="来源" value={source?.title ?? item.source_id} />
             {item.metadata?.provider ? <Meta label="Provider" value={item.metadata.provider} /> : null}
-            {item.metadata?.external_id ? <Meta label="External ID" value={item.metadata.external_id} mono /> : null}
-            {item.metadata?.channel_name ? <Meta label="Channel" value={item.metadata.channel_name} /> : null}
-            {item.metadata?.duration_human ? <Meta label="Duration" value={item.metadata.duration_human} /> : null}
-            {typeof item.metadata?.view_count === 'number' ? <Meta label="Views" value={formatCompactNumber(item.metadata.view_count)} /> : null}
-            <Meta label="Published" value={item.published_at ? new Date(item.published_at).toLocaleString() : 'Unknown'} />
-            <Meta label="Fetched" value={new Date(item.fetched_at).toLocaleString()} />
-            <Meta label="Canonical URL" value={item.canonical_url ?? item.url} />
-            <Meta label="Content hash" value={item.content_hash ?? 'Missing'} mono />
+            {item.metadata?.external_id ? <Meta label="外部 ID" value={item.metadata.external_id} mono /> : null}
+            {item.metadata?.channel_name ? <Meta label="频道" value={item.metadata.channel_name} /> : null}
+            {item.metadata?.duration_human ? <Meta label="时长" value={item.metadata.duration_human} /> : null}
+            {typeof item.metadata?.view_count === 'number' ? <Meta label="观看次数" value={formatCompactNumber(item.metadata.view_count)} /> : null}
+            <Meta label="发布时间" value={item.published_at ? new Date(item.published_at).toLocaleString() : '未知'} />
+            <Meta label="抓取时间" value={new Date(item.fetched_at).toLocaleString()} />
+            <Meta label="规范 URL" value={item.canonical_url ?? item.url} />
+            <Meta label="内容哈希" value={item.content_hash ?? '缺失'} mono />
           </Section>
-          <Section title="Stored refs">
-            <Meta label="Raw" value={item.raw_ref?.path ?? 'Missing'} mono />
-            {item.raw_refs?.length ? <Meta label="Raw refs" value={item.raw_refs.map((ref) => ref.path ?? ref.kind).join('\n')} mono /> : null}
-            <Meta label="Extracted" value={item.extracted_ref?.path ?? 'Missing'} mono />
-            <Meta label="Fetch run" value={item.fetch_run_id ?? 'Missing'} mono />
-            <Meta label="Library item" value={item.saved_library_item_id ?? 'Not saved'} mono />
+          <Section title="存储引用">
+            <Meta label="原始" value={item.raw_ref?.path ?? '缺失'} mono />
+            {item.raw_refs?.length ? <Meta label="原始引用" value={item.raw_refs.map((ref) => ref.path ?? ref.kind).join('\n')} mono /> : null}
+            <Meta label="已提取" value={item.extracted_ref?.path ?? '缺失'} mono />
+            <Meta label="抓取运行" value={item.fetch_run_id ?? '缺失'} mono />
+            <Meta label="资料库条目" value={item.saved_library_item_id ?? '未保存'} mono />
           </Section>
         </div>
       ) : null}
@@ -1061,7 +1061,7 @@ function ReadableContentPanel({
   loading: boolean;
   error: string | null;
 }): JSX.Element {
-  if (loading) return <p className="text-sm text-neutral-500">Loading extracted content...</p>;
+  if (loading) return <p className="text-sm text-neutral-500">提取内容加载中...</p>;
   if (error) {
     return (
       <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
@@ -1069,23 +1069,23 @@ function ReadableContentPanel({
       </div>
     );
   }
-  if (!content) return <p className="text-sm text-neutral-500">Open this tab to load the extracted content.</p>;
+  if (!content) return <p className="text-sm text-neutral-500">打开此标签页以加载提取内容。</p>;
 
   const isYouTube = item.metadata?.provider === 'youtube';
-  const transcriptSection = isYouTube ? extractMarkdownSection(content.content, 'Transcript') : null;
+  const transcriptSection = isYouTube ? extractMarkdownSection(content.content, '转录') : null;
   const transcript = transcriptSection && !isMissingTranscriptText(transcriptSection) ? transcriptSection : null;
-  const description = isYouTube ? extractMarkdownSection(content.content, 'Description') : null;
+  const description = isYouTube ? extractMarkdownSection(content.content, '描述') : null;
   const displayContent = isYouTube ? transcript : content.content;
 
   return (
     <div className="space-y-3">
       {isYouTube ? (
         <div className="grid grid-cols-2 gap-2 text-[11px] text-neutral-500">
-          <MiniMeta label="Subtitle" value={youtubeSubtitleStatusLabel(item)} />
-          <MiniMeta label="Format" value={item.metadata?.subtitle_format ?? 'Unknown'} />
-          <MiniMeta label="Requested" value={compactLanguageList(item.metadata?.subtitle_requested_languages)} />
-          <MiniMeta label="Exposed" value={youtubeExposedSubtitleLabel(item)} />
-          <MiniMeta label="Tracks" value={youtubeTranscriptTracksLabel(item)} />
+          <MiniMeta label="字幕" value={youtubeSubtitleStatusLabel(item)} />
+          <MiniMeta label="格式" value={item.metadata?.subtitle_format ?? '未知'} />
+          <MiniMeta label="请求语言" value={compactLanguageList(item.metadata?.subtitle_requested_languages)} />
+          <MiniMeta label="公开字幕" value={youtubeExposedSubtitleLabel(item)} />
+          <MiniMeta label="轨道" value={youtubeTranscriptTracksLabel(item)} />
         </div>
       ) : null}
       {isYouTube && item.media?.transcript_tracks?.length ? (
@@ -1096,14 +1096,14 @@ function ReadableContentPanel({
               className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200"
             >
               {track.label}
-              {track.translation_of_track_id ? ' translation' : ''}
+              {track.translation_of_track_id ? ' 翻译' : ''}
             </span>
           ))}
         </div>
       ) : null}
       {description ? (
         <details className="rounded-md bg-neutral-50 p-3 text-xs dark:bg-neutral-900">
-          <summary className="cursor-pointer text-neutral-600 dark:text-neutral-300">Description</summary>
+          <summary className="cursor-pointer text-neutral-600 dark:text-neutral-300">描述</summary>
           <div className="mt-2 max-h-40 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words leading-5 text-neutral-700 [overflow-wrap:anywhere] dark:text-neutral-300">
             {description}
           </div>
@@ -1115,11 +1115,11 @@ function ReadableContentPanel({
         </div>
       ) : (
         <div className="rounded-md bg-amber-50 p-3 text-xs leading-5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-          No subtitles were available from YouTube for this video. Orbit still cached the video metadata and description.
+          YouTube 未提供此视频字幕。Orbit 仍已缓存视频元数据和描述。
         </div>
       )}
       <div className="text-[11px] text-neutral-500">
-        Stored as {content.content_kind}
+        存储为 {content.content_kind}
         {content.ref?.path ? ` / ${content.ref.path}` : ''}
       </div>
     </div>
@@ -1143,11 +1143,11 @@ function RunNotice({ run, source }: { run: FeedFetchRun; source?: FeedSource }):
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <RefreshCw size={13} className="shrink-0 animate-spin" />
-          <span className="truncate font-medium">Fetching {source?.title ?? run.source_url}</span>
+          <span className="truncate font-medium">正在抓取 {source?.title ?? run.source_url}</span>
         </div>
         <span className="shrink-0 text-sky-600 dark:text-sky-200">{progress}</span>
       </div>
-      <div className="mt-1 truncate text-sky-700 dark:text-sky-200">{stage?.detail ?? 'Preparing feed run.'}</div>
+      <div className="mt-1 truncate text-sky-700 dark:text-sky-200">{stage?.detail ?? '正在准备 Feed 运行。'}</div>
     </div>
   );
 }
@@ -1158,12 +1158,12 @@ function RunInline({ run, stage }: { run: FeedFetchRun; stage?: FeedFetchRunStag
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex min-w-0 items-center gap-1">
           <RefreshCw size={12} className="shrink-0 animate-spin" />
-          <span className="truncate">{stage?.label ?? 'Fetching'}</span>
+          <span className="truncate">{stage?.label ?? '抓取中'}</span>
         </span>
         <span className="shrink-0">{progressLabel(stage)}</span>
       </div>
       <div className="mt-1 line-clamp-2 text-sky-700 dark:text-sky-200">
-        {stage?.detail ?? `Fetched ${run.created}/${run.fetched} item(s).`}
+        {stage?.detail ?? `已抓取 ${run.created}/${run.fetched} 条内容。`}
       </div>
     </div>
   );
@@ -1176,7 +1176,7 @@ function currentRunStage(run?: FeedFetchRun | null): FeedFetchRunStageLike | und
 }
 
 function progressLabel(stage?: FeedFetchRunStageLike): string {
-  if (!stage || stage.total === undefined) return 'Working';
+  if (!stage || stage.total === undefined) return '处理中';
   return `${stage.completed ?? 0}/${stage.total}`;
 }
 
@@ -1234,7 +1234,7 @@ function SynthesisSummary({ artifact, fallback }: { artifact: FeedSynthesisArtif
   const payload = artifact.payload as FeedReportPayload;
   return (
     <div className="mt-2 rounded-md bg-emerald-50 p-2 text-xs text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-      <div className="font-medium">{payload.item_count} item report</div>
+      <div className="font-medium">{payload.item_count} 条内容报告</div>
       <div className="mt-1 text-emerald-700 dark:text-emerald-200">{payload.sections.slice(0, 3).map((item) => item.summary).join(' / ')}</div>
     </div>
   );
@@ -1349,7 +1349,7 @@ function EmptyFeedState({ activeSource }: { activeSource: FeedSource | null }): 
     <div className="flex h-full items-center justify-center p-8">
       <div className="max-w-sm rounded-md border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-800">
         <Inbox className="mx-auto mb-3 text-neutral-400" size={24} />
-        {activeSource ? 'No signals match the current filters for this source.' : 'No signals match the current filters.'}
+        {activeSource ? '此来源没有符合当前筛选条件的信号。' : '没有符合当前筛选条件的信号。'}
       </div>
     </div>
   );
@@ -1370,8 +1370,13 @@ function StatusDot({ status }: { status: FeedItemStatus }): JSX.Element {
 }
 
 function labelForStatus(status: FeedItemStatus | 'all'): string {
-  if (status === 'all') return 'All';
-  return status[0].toUpperCase() + status.slice(1);
+  if (status === 'all') return '全部';
+  if (status === 'new') return '新增';
+  if (status === 'seen') return '已读';
+  if (status === 'saved') return '已保存';
+  if (status === 'ignored') return '已忽略';
+  if (status === 'expired') return '已过期';
+  return status;
 }
 
 function looksLikeYouTubeSource(value: string): boolean {
@@ -1394,22 +1399,22 @@ function hasYouTubeTranscript(item: FeedItem): boolean {
 
 function inspectorTabLabel(item: FeedItem, tab: InspectorTab): string {
   if (tab !== 'content' || item.metadata?.provider !== 'youtube') return tab;
-  return hasYouTubeTranscript(item) ? 'Transcript' : 'Description';
+  return hasYouTubeTranscript(item) ? '转录' : '描述';
 }
 
 function youtubeSubtitleStatusLabel(item: FeedItem): string {
   if (item.metadata?.provider !== 'youtube') return 'N/A';
   if (item.metadata.has_transcript) {
-    return item.metadata.subtitle_language ? `Captured ${item.metadata.subtitle_language}` : 'Captured';
+    return item.metadata.subtitle_language ? `已捕获 ${item.metadata.subtitle_language}` : '已捕获';
   }
-  if (item.metadata.subtitle_status === 'not_exposed') return 'Not exposed by YouTube';
-  if (item.metadata.subtitle_status === 'available_but_not_downloaded') return 'Available but not downloaded';
-  return 'Missing';
+  if (item.metadata.subtitle_status === 'not_exposed') return 'YouTube 未公开';
+  if (item.metadata.subtitle_status === 'available_but_not_downloaded') return '可用但未下载';
+  return '缺失';
 }
 
 function youtubeTranscriptTracksLabel(item: FeedItem): string {
   const tracks = item.media?.transcript_tracks ?? [];
-  if (tracks.length === 0) return 'None';
+  if (tracks.length === 0) return '无';
   const languages = [...new Set(tracks.map((track) => track.language))];
   return `${tracks.length} / ${compactLanguageList(languages)}`;
 }
@@ -1418,14 +1423,14 @@ function youtubeExposedSubtitleLabel(item: FeedItem): string {
   const manual = item.metadata?.subtitle_available_languages ?? [];
   const automatic = item.metadata?.automatic_caption_languages ?? [];
   const values = [
-    manual.length > 0 ? `manual ${compactLanguageList(manual)}` : null,
-    automatic.length > 0 ? `auto ${compactLanguageList(automatic)}` : null
+    manual.length > 0 ? `手动 ${compactLanguageList(manual)}` : null,
+    automatic.length > 0 ? `自动 ${compactLanguageList(automatic)}` : null
   ].filter(Boolean);
-  return values.length > 0 ? values.join(' / ') : 'None reported';
+  return values.length > 0 ? values.join(' / ') : '无公开信息';
 }
 
 function compactLanguageList(values?: string[]): string {
-  if (!values || values.length === 0) return 'None';
+  if (!values || values.length === 0) return '无';
   const preview = values.slice(0, 3).join(', ');
   return values.length > 3 ? `${preview} +${values.length - 3}` : preview;
 }
@@ -1440,7 +1445,7 @@ function isMissingTranscriptText(value: string): boolean {
 
 function extractMarkdownSection(content: string, heading: string): string | null {
   const markerPattern =
-    heading === 'Transcript'
+    heading === '转录'
       ? /<!-- YOUTUBE_TRANSCRIPT_START -->[\s\S]*?## Transcript\s*\n([\s\S]*?)\n<!-- YOUTUBE_TRANSCRIPT_END -->/i
       : null;
   const markerMatch = markerPattern?.exec(content);
@@ -1465,9 +1470,9 @@ function formatRelative(value: string): string {
   const minute = 60_000;
   const hour = minute * 60;
   const day = hour * 24;
-  if (Math.abs(diffMs) < hour) return `${Math.max(1, Math.round(diffMs / minute))}m ago`;
-  if (Math.abs(diffMs) < day) return `${Math.round(diffMs / hour)}h ago`;
-  if (Math.abs(diffMs) < day * 7) return `${Math.round(diffMs / day)}d ago`;
+  if (Math.abs(diffMs) < hour) return `${Math.max(1, Math.round(diffMs / minute))} 分钟前`;
+  if (Math.abs(diffMs) < day) return `${Math.round(diffMs / hour)} 小时前`;
+  if (Math.abs(diffMs) < day * 7) return `${Math.round(diffMs / day)} 天前`;
   return date.toLocaleDateString();
 }
 
