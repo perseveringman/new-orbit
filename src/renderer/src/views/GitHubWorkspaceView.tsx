@@ -45,9 +45,9 @@ export function GitHubWorkspaceView(): JSX.Element {
       try {
         await window.orbit.github.authenticate();
         await refresh();
-        toast('GitHub authenticated');
+        toast('GitHub 已认证');
       } catch (error) {
-        toast(`GitHub authentication failed: ${(error as Error).message}`);
+        toast(`GitHub 认证失败：${(error as Error).message}`);
       }
     })();
   };
@@ -64,9 +64,9 @@ export function GitHubWorkspaceView(): JSX.Element {
         await refreshProjects();
         setActiveProjectUid(result.uid);
         setView({ kind: 'project', projectUid: result.uid, pane: 'github' });
-        toast(`Imported ${repo.fullName}`);
+        toast(`已导入 ${repo.fullName}`);
       } catch (error) {
-        toast(`Import failed: ${(error as Error).message}`);
+        toast(`导入失败：${(error as Error).message}`);
       }
     })();
   };
@@ -128,14 +128,13 @@ export function GitHubWorkspaceSurface({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-500">
-              GitHub control plane
+              GitHub 控制平面
             </p>
             <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-              Workspace GitHub
+              工作区 GitHub
             </h1>
             <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
-              Connect your GitHub identity, browse accessible repositories, and import the right
-              repo into Orbit as a project without losing its existing git history.
+              连接你的 GitHub 身份，浏览可访问仓库，并将合适仓库作为项目导入 Orbit，同时保留既有 git 历史。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -143,33 +142,33 @@ export function GitHubWorkspaceSurface({
               className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
               onClick={onRefresh}
             >
-              Refresh
+              刷新
             </button>
             {connection?.authenticated !== true && (
               <button
                 className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
                 onClick={onAuthenticate}
               >
-                Authenticate gh
+                认证 gh
               </button>
             )}
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <WorkspaceStat
-            label="Account"
-            value={connection?.authenticated ? connection.viewer ?? connection.host : 'Not connected'}
+            label="账户"
+            value={connection?.authenticated ? connection.viewer ?? connection.host : '未连接'}
             hint={connection?.host ?? 'github.com'}
           />
           <WorkspaceStat
-            label="Repositories"
+            label="仓库"
             value={String(repositories.length)}
-            hint="Visible from the active GitHub identity"
+            hint="当前 GitHub 身份可见"
           />
           <WorkspaceStat
-            label="Imported"
+            label="已导入"
             value={String(repositories.filter((repo) => repo.importStatus === 'imported').length)}
-            hint="Already linked to Orbit projects"
+            hint="已关联 Orbit 项目"
           />
         </div>
       </header>
@@ -177,22 +176,22 @@ export function GitHubWorkspaceSurface({
       <section className="rounded-2xl border border-neutral-200 bg-white/80 p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/70">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">
-            <span className="text-neutral-500">Search</span>
+            <span className="text-neutral-500">搜索</span>
             <input
               value={searchQuery}
               onChange={(event) => onSearchQueryChange(event.target.value)}
-              placeholder="Filter repositories"
+              placeholder="筛选仓库"
               className="w-full bg-transparent outline-none"
             />
           </label>
           <label className="flex items-center gap-2 rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">
-            <span className="text-neutral-500">Owner</span>
+            <span className="text-neutral-500">所有者</span>
             <select
               value={selectedOwner}
               onChange={(event) => onSelectOwner(event.target.value)}
               className="bg-transparent outline-none"
             >
-              <option value={GITHUB_ALL_OWNERS}>All owners</option>
+              <option value={GITHUB_ALL_OWNERS}>全部 owner</option>
               {owners.map((owner) => (
                 <option key={owner} value={owner}>
                   {owner}
@@ -203,12 +202,12 @@ export function GitHubWorkspaceSurface({
         </div>
 
         {loading ? (
-          <p className="text-sm text-neutral-500">Loading repositories…</p>
+          <p className="text-sm text-neutral-500">正在加载仓库…</p>
         ) : visibleRepositories.length === 0 ? (
           <p className="text-sm text-neutral-500">
             {connection?.authenticated === true
-              ? 'No repositories matched the current filters.'
-              : 'Authenticate with GitHub to load repositories.'}
+              ? '没有仓库匹配当前筛选。'
+              : '请先认证 GitHub 以加载仓库。'}
           </p>
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
@@ -225,7 +224,7 @@ export function GitHubWorkspaceSurface({
                         {repo.fullName}
                       </h2>
                       <p className="mt-1 text-xs text-neutral-500">
-                        {repo.description?.trim() || 'No description'}
+                        {repo.description?.trim() || '暂无描述'}
                       </p>
                     </div>
                     <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500 dark:border-neutral-700">
@@ -237,7 +236,7 @@ export function GitHubWorkspaceSurface({
                       {repo.importStatus}
                     </span>
                     <span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">
-                      {ready ? 'Orbit-ready' : 'Needs setup'}
+                      {ready ? 'Orbit 就绪' : '需要设置'}
                     </span>
                     <span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">
                       {repo.defaultBranch}
@@ -245,7 +244,7 @@ export function GitHubWorkspaceSurface({
                   </div>
                   {repo.linkedProjectName && (
                     <p className="mt-3 text-xs text-neutral-500">
-                      Linked project: <span className="font-medium">{repo.linkedProjectName}</span>
+                      关联项目：<span className="font-medium">{repo.linkedProjectName}</span>
                     </p>
                   )}
                   <div className="mt-4 flex items-center gap-2">
@@ -254,7 +253,7 @@ export function GitHubWorkspaceSurface({
                         className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
                         onClick={() => onOpenProject(repo.linkedProjectUid!)}
                       >
-                        Open Project
+                        打开项目
                       </button>
                     ) : (
                       <button
@@ -262,7 +261,7 @@ export function GitHubWorkspaceSurface({
                         disabled={importingFullName === repo.fullName}
                         onClick={() => onImportRepository(repo)}
                       >
-                        {importingFullName === repo.fullName ? 'Importing…' : 'Import'}
+                        {importingFullName === repo.fullName ? '导入中…' : '导入'}
                       </button>
                     )}
                     <a
@@ -271,7 +270,7 @@ export function GitHubWorkspaceSurface({
                       rel="noreferrer"
                       className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                     >
-                      Open GitHub
+                      打开 GitHub
                     </a>
                   </div>
                 </article>

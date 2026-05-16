@@ -60,7 +60,7 @@ export function ProjectGitHubView({
       setDetails(await window.orbit.github.getProjectDetails(project.uid));
     } catch (error) {
       setDetails(null);
-      toast(`Load GitHub details failed: ${(error as Error).message}`);
+      toast(`加载 GitHub 详情失败：${(error as Error).message}`);
     }
   }, [project.uid, toast]);
 
@@ -79,9 +79,9 @@ export function ProjectGitHubView({
         await window.orbit.github.publishProject(args);
         await onProjectsChanged();
         await refresh();
-        toast(`Published ${args.owner}/${args.repo}`);
+        toast(`已发布 ${args.owner}/${args.repo}`);
       } catch (error) {
-        toast(`Publish failed: ${(error as Error).message}`);
+        toast(`发布失败：${(error as Error).message}`);
       }
     })();
   };
@@ -97,35 +97,35 @@ export function ProjectGitHubView({
       try {
         const pullRequest = await window.orbit.github.createPullRequest(args);
         await refresh();
-        toast(`Created PR #${pullRequest.number}`);
+        toast(`已创建 PR #${pullRequest.number}`);
       } catch (error) {
-        toast(`Create PR failed: ${(error as Error).message}`);
+        toast(`创建 PR 失败：${(error as Error).message}`);
       }
     })();
   };
 
   const bindIssue = (issueNumber: number): void => {
     if (tasks.length === 0) {
-      toast('Create a project task first so Orbit can bind the GitHub issue.');
+      toast('请先创建项目任务，以便 Orbit 绑定 GitHub issue。');
       return;
     }
     const choices = tasks
       .filter((task) => task.filePath)
       .map((task) => `${task.uid ?? task.id} — ${task.title}`)
       .join('\n');
-    const input = window.prompt(`Bind issue #${issueNumber} to which task?\n${choices}`);
+    const input = window.prompt(`绑定 issue #${issueNumber} 到哪个任务？\n${choices}`);
     if (!input) return;
     const normalized = input.trim();
     const task = tasks.find(
       (entry) => entry.uid === normalized || entry.id === normalized || entry.title === normalized
     );
     if (!task) {
-      toast('Task not found. Paste the task UID, id, or exact title.');
+      toast('未找到任务。请粘贴任务 UID、id 或完整标题。');
       return;
     }
     const issue = details?.issues.find((entry) => entry.number === issueNumber);
     if (!issue) {
-      toast(`Issue #${issueNumber} is no longer available.`);
+      toast(`Issue #${issueNumber} 已不可用。`);
       return;
     }
     void (async () => {
@@ -138,9 +138,9 @@ export function ProjectGitHubView({
         });
         await onTasksChanged();
         await refresh();
-        toast(`Bound issue #${issueNumber} to ${task.title}`);
+        toast(`已绑定 issue #${issueNumber} 到 ${task.title}`);
       } catch (error) {
-        toast(`Bind failed: ${(error as Error).message}`);
+        toast(`绑定失败：${(error as Error).message}`);
       }
     })();
   };
@@ -151,9 +151,9 @@ export function ProjectGitHubView({
         await window.orbit.github.unbindTaskIssue(taskPath);
         await onTasksChanged();
         await refresh();
-        toast('Removed GitHub issue binding');
+        toast('已移除 GitHub issue 绑定');
       } catch (error) {
-        toast(`Unbind failed: ${(error as Error).message}`);
+        toast(`解绑失败：${(error as Error).message}`);
       }
     })();
   };
@@ -210,11 +210,10 @@ export function ProjectGitHubSurface({
               Project GitHub
             </p>
             <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
-              {details?.overview.binding?.fullName ?? `${projectName} · not linked`}
+              {details?.overview.binding?.fullName ?? `${projectName} · 未关联`}
             </h2>
             <p className="text-sm text-neutral-600 dark:text-neutral-300">
-              Keep tasks, issues, branches, worktrees, PRs, and Auto-runner delivery status in one
-              place.
+              在一处管理任务、issue、分支、worktree、PR 与 Auto-runner 交付状态。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -222,7 +221,7 @@ export function ProjectGitHubSurface({
               className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
               onClick={onRefresh}
             >
-              Refresh
+              刷新
             </button>
           </div>
         </div>
@@ -264,18 +263,18 @@ export function ProjectGitHubSurface({
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <section className="rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/70">
             <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-              Repository state
+              仓库状态
             </h3>
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-              <SummaryItem label="Repository" value={details?.overview.binding?.fullName ?? 'Not linked'} />
-              <SummaryItem label="Viewer" value={details?.overview.connection.viewer ?? 'Not connected'} />
-              <SummaryItem label="Branch" value={details?.overview.sync?.branch ?? 'No active branch'} />
+              <SummaryItem label="仓库" value={details?.overview.binding?.fullName ?? '未关联'} />
+              <SummaryItem label="查看者" value={details?.overview.connection.viewer ?? '未连接'} />
+              <SummaryItem label="分支" value={details?.overview.sync?.branch ?? '无活跃分支'} />
               <SummaryItem
                 label="Pull request"
                 value={
                   details?.overview.pullRequest
                     ? `#${details.overview.pullRequest.number} · ${details.overview.pullRequest.title}`
-                    : 'No active PR'
+                    : '无活跃 PR'
                 }
               />
             </dl>
@@ -284,7 +283,7 @@ export function ProjectGitHubSurface({
                 className="mt-4 rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                 onClick={() => onOpenPullRequest(details.overview.pullRequest!.url)}
               >
-                Open PR
+                打开 PR
               </button>
             )}
             <div className="mt-4">
@@ -303,18 +302,18 @@ export function ProjectGitHubSurface({
 
           <section className="space-y-4">
             <JourneyCard
-              title="Terminal flow"
-              description="Pick a task, bind it to an issue, work in the project terminal, then turn the branch into a PR."
-              actionLabel="Open Terminal"
+              title="终端流程"
+              description="选择一个任务，绑定到 issue，在项目终端中工作，然后将分支转为 PR。"
+              actionLabel="打开终端"
               onAction={onOpenTerminal}
-              steps={['Task → issue binding', 'Branch + worktree', 'Terminal work', 'Push + PR + review']}
+              steps={['任务 → issue 绑定', '分支 + worktree', '终端工作', '推送 + PR + review']}
             />
             <JourneyCard
-              title="Auto-runner flow"
-              description="Use approved tasks, worktree execution, and PR/check state as the delivery trail."
-              actionLabel="Open Terminal"
+              title="Auto-runner 流程"
+              description="使用已批准任务、worktree 执行与 PR/check 状态作为交付轨迹。"
+              actionLabel="打开终端"
               onAction={onOpenTerminal}
-              steps={['Issue-linked task queue', 'Ghost worktree', 'Autonomous execution', 'PR + checks + follow-up']}
+              steps={['已关联 issue 的任务队列', 'Ghost worktree', '自主执行', 'PR + checks + 跟进']}
             />
           </section>
         </div>
@@ -353,7 +352,7 @@ export function ProjectGitHubSurface({
                   </div>
                   {binding ? (
                     <div className="text-right">
-                      <p className="text-xs text-neutral-500">Linked to task</p>
+                      <p className="text-xs text-neutral-500">已关联任务</p>
                       <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
                         {binding.taskTitle}
                       </p>
@@ -364,7 +363,7 @@ export function ProjectGitHubSurface({
                           onUnbindTask(task?.filePath ?? binding.taskId.replace(/^file:/, ''));
                         }}
                       >
-                        Unbind
+                        解绑
                       </button>
                     </div>
                   ) : (
@@ -372,7 +371,7 @@ export function ProjectGitHubSurface({
                       className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
                       onClick={() => onBindIssue(issue.number)}
                     >
-                      Bind to task
+                      绑定到任务
                     </button>
                   )}
                 </div>
@@ -380,7 +379,7 @@ export function ProjectGitHubSurface({
             );
           })}
           {(details?.issues.length ?? 0) === 0 && (
-            <p className="text-sm text-neutral-500">No issues available for this repository.</p>
+            <p className="text-sm text-neutral-500">此仓库暂无可用 issue。</p>
           )}
         </section>
       )}
@@ -433,7 +432,7 @@ export function ProjectGitHubSurface({
                   <p className="text-xs text-neutral-500">{worktree.path}</p>
                 </div>
                 <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-neutral-800">
-                  {worktree.status ?? 'ready'}
+                  {worktree.status ?? '就绪'}
                 </span>
               </div>
               {worktree.prUrl && (
@@ -441,13 +440,13 @@ export function ProjectGitHubSurface({
                   className="mt-3 rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   onClick={() => onOpenPullRequest(worktree.prUrl!)}
                 >
-                  Open PR
+                  打开 PR
                 </button>
               )}
             </article>
           ))}
           {(details?.worktrees.length ?? 0) === 0 && (
-            <p className="text-sm text-neutral-500">No Orbit worktrees are currently linked to this repo.</p>
+            <p className="text-sm text-neutral-500">当前没有 Orbit worktree 关联到此仓库。</p>
           )}
         </section>
       )}
@@ -507,7 +506,7 @@ function StatusPanel({ title, items }: { title: string; items: string[] }): JSX.
     <article className="rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/70">
       <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{title}</h3>
       <ul className="mt-4 space-y-2 text-xs text-neutral-500">
-        {items.length === 0 ? <li>No {title.toLowerCase()} yet.</li> : items.map((item) => <li key={item}>{item}</li>)}
+        {items.length === 0 ? <li>暂无{title}。</li> : items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </article>
   );
