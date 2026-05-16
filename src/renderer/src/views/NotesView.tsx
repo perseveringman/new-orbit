@@ -845,9 +845,9 @@ function noteTypeLabel(type: NoteType): string {
 
 function paraKindLabel(kind: string): string {
   if (kind === 'floating') return '浮动';
-  if (kind === 'project') return 'Project';
+  if (kind === 'project') return '项目';
   if (kind === 'area') return 'Area';
-  if (kind === 'resource') return 'Resource';
+  if (kind === 'resource') return '资源';
   if (kind === 'archive') return '归档';
   return kind;
 }

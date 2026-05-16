@@ -9,9 +9,9 @@ export type ProjectGitHubTab = 'overview' | 'issues' | 'prs' | 'worktrees';
 
 const GITHUB_TAB_LABELS: Record<ProjectGitHubTab, string> = {
   overview: '概览',
-  issues: 'Issues',
+  issues: 'Issues 议题',
   prs: 'PRs',
-  worktrees: 'Worktrees'
+  worktrees: 'Worktrees 工作树'
 };
 
 export interface ProjectGitHubSurfaceProps {
