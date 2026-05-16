@@ -33,6 +33,7 @@ import { createSynthesisStore } from '../synthesis/store';
 import { parseContentSource } from '../content-connectors';
 import { parseRss } from '../capture/feed/rss';
 import {
+  DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES,
   defaultYouTubeFeedProvider,
   normalizeYouTubeSource,
   transcriptTrackId,
@@ -45,7 +46,6 @@ const FEEDS_ROOT = 'feeds';
 const SOURCES_FILE = '_sources.json';
 const FEED_ASSET_ROOT = path.join('.orbit', 'feed');
 const DEFAULT_YOUTUBE_RECENT_COUNT = 20;
-const DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES = ['en', 'zh-Hans', 'zh'];
 const YOUTUBE_DOWNLOAD_INTERVAL_MS = 5_000;
 const YOUTUBE_RATE_LIMIT_BASE_DELAY_MS = 30_000;
 const YOUTUBE_RATE_LIMIT_MAX_RETRIES = 5;
@@ -219,7 +219,7 @@ export class FeedStore {
 
   async ensureReadableContent(id: string): Promise<{ feed_item: FeedItem; content: string; ref: FeedReadableRef }> {
     const item = await this.requireItem(id);
-    if (item.extracted_ref?.path) {
+    if (item.extracted_ref?.path && (!isYouTubeItem(item) || !shouldRefreshYouTubeReadableContent(item))) {
       const existing = await readOptional(path.join(this.vaultPath, item.extracted_ref.path));
       if (existing) return { feed_item: item, content: existing, ref: item.extracted_ref };
     }
@@ -621,7 +621,7 @@ export class FeedStore {
     const sourceType = youtubeSourceTypeFromItem(item, source);
     const fetchedAt = this.now().toISOString();
     const archive = await this.youtubeProvider.fetchArchive(videoId, {
-      subtitleLanguages: source?.processing_policy?.preferred_languages
+      subtitleLanguages: youtubeSubtitleLanguages(source?.processing_policy?.preferred_languages)
     });
     const record = this.youtubeProvider.buildMarkdown(sourceType, archive);
     const infoRef = await this.writeAsset(
@@ -1223,6 +1223,10 @@ export function createFeedStore(vaultPath: string, options?: FeedStoreOptions): 
   return new FeedStore(vaultPath, options);
 }
 
+function youtubeSubtitleLanguages(preferred?: string[]): string[] {
+  return [...new Set([...DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES, ...(preferred ?? [])].map((item) => item.trim()).filter(Boolean))];
+}
+
 function normalizeFeedSource(value: FeedSource): FeedSource {
   if (!value.id || !value.title || !value.url || !value.kind) throw new Error('invalid_feed_source');
   const youtube =
@@ -1513,7 +1517,13 @@ function shouldRefreshYouTubeReadableContent(item: FeedItem): boolean {
   if (!isYouTubeItem(item)) return false;
   if (!item.extracted_ref) return true;
   if (item.metadata?.last_processing_error) return true;
-  return item.metadata?.subtitle_status === undefined;
+  if (item.metadata?.subtitle_status === undefined) return true;
+  return !hasDefaultYouTubeSubtitleRequest(item.metadata?.subtitle_requested_languages);
+}
+
+function hasDefaultYouTubeSubtitleRequest(requested?: string[]): boolean {
+  const values = new Set((requested ?? []).map((item) => item.toLowerCase()));
+  return DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES.every((language) => values.has(language.toLowerCase()));
 }
 
 function youtubeVideoIdFromItem(item: FeedItem): string | null {

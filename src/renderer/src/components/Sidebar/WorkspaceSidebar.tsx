@@ -10,6 +10,7 @@ interface Item {
 const ITEMS: Item[] = [
   { label: '仪表盘', view: { kind: 'dashboard' }, icon: '◎' },
   { label: 'AI 控制台', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: 'AI 会话', view: { kind: 'runtimeSessions' }, icon: '◈' },
   { label: '工具', view: { kind: 'tools' }, icon: '⌘' },
   { label: '角色模板', view: { kind: 'agents' }, icon: '◌' },
   { label: '收件箱', view: { kind: 'inbox' }, icon: '📥' },

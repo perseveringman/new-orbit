@@ -53,6 +53,7 @@ import { autoStartExternalGatewayIfNeeded, registerExternalGatewayIpc } from './
 import { stopExternalGatewayRuntime } from './external-orchestrator/runtime';
 import { registerResourceIpc } from './resource/ipc';
 import { registerSDKRuntimeIpc } from './runtime/sdk/ipc';
+import { registerRuntimeSessionIpc } from './runtime-sessions/ipc';
 import { registerSynthesisIpc } from './synthesis/ipc';
 import { getSemanticRuntime, registerSemanticIpc } from './semantic/ipc';
 import { registerContextIpc } from './context/ipc';
@@ -422,6 +423,7 @@ function registerIpc(): void {
   registerExternalGatewayIpc(() => currentVault?.path ?? null);
   registerResourceIpc(() => currentVault?.path ?? null);
   registerSDKRuntimeIpc(() => currentVault?.path ?? null);
+  registerRuntimeSessionIpc();
   registerSynthesisIpc(() => currentVault?.path ?? null);
   registerSemanticIpc(() => currentVault?.path ?? null);
   registerContextIpc(() => currentVault?.path ?? null);

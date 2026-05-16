@@ -100,7 +100,7 @@ export interface YouTubeFeedProvider {
   buildMarkdown(sourceType: YouTubeSourceType, archive: YouTubeVideoArchive): YouTubeMarkdownRecord;
 }
 
-const DEFAULT_SUBTITLE_LANGUAGES = ['en', 'zh-Hans', 'zh'];
+export const DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES = ['zh.*', 'en.*'];
 const YT_DLP_SHARED_ARGS = [
   '--no-warnings',
   '--cookies-from-browser',
@@ -443,7 +443,7 @@ export function buildYouTubeArchiveArgs(videoId: string, outputTemplate: string,
     '--sub-langs',
     normalizeSubtitleLanguages(subtitleLanguages).join(','),
     '--sub-format',
-    'json3',
+    'json3/vtt/best',
     ...YT_DLP_SHARED_ARGS,
     '-o',
     outputTemplate,
@@ -711,7 +711,18 @@ function subtitleLanguagePriorityScore(language: string | undefined, languagePri
 function languageMatchesPreference(language: string, preference: string): boolean {
   const normalizedLanguage = language.toLowerCase();
   const normalizedPreference = preference.toLowerCase();
+  if (looksLikeRegexLanguagePreference(preference)) {
+    try {
+      return new RegExp(`^(?:${preference})$`, 'i').test(language);
+    } catch {
+      return false;
+    }
+  }
   return normalizedLanguage.startsWith(`${normalizedPreference}-`) || normalizedPreference.startsWith(`${normalizedLanguage}-`);
+}
+
+function looksLikeRegexLanguagePreference(preference: string): boolean {
+  return /[.*+?^${}()|[\]\\]/.test(preference);
 }
 
 export function transcriptTrackId(source: 'youtube' | 'ai' | 'user', language: string, sourceKind: FeedTranscriptTrackSourceKind): string {
@@ -742,8 +753,8 @@ function uniqueLanguages(values: string[]): string[] {
 }
 
 function normalizeSubtitleLanguages(value?: string[]): string[] {
-  const clean = [...new Set((value?.length ? value : DEFAULT_SUBTITLE_LANGUAGES).map((item) => item.trim()).filter(Boolean))];
-  return clean.length ? clean : DEFAULT_SUBTITLE_LANGUAGES;
+  const clean = [...new Set((value?.length ? value : DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES).map((item) => item.trim()).filter(Boolean))];
+  return clean.length ? clean : DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

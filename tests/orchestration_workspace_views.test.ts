@@ -6,6 +6,7 @@ import type { DispatchSnapshot } from '../src/shared/orchestration';
 import type { SDKEndpointRegistrySnapshot } from '../src/shared/runtime';
 import type { ExternalSessionDistillPayload, SynthesisArtifact } from '../src/shared/synthesis';
 import { AgentsLibrarySurface } from '../src/renderer/src/views/AgentsLibraryView';
+import { RuntimeSessionsView } from '../src/renderer/src/views/RuntimeSessionsView';
 import { RuntimesWorkspaceSurface } from '../src/renderer/src/views/RuntimesWorkspaceView';
 
 const noop = vi.fn();
@@ -209,7 +210,8 @@ describe('orchestration workspace surfaces', () => {
     expect(html).toContain('AI 控制平面');
     expect(html).toContain('CLI Runtime 注册表');
     expect(html).toContain('Runtime B SDK 端点');
-    expect(html).toContain('本地 AI 会话接入');
+    expect(html).toContain('Runtime 会话库接入');
+    expect(html).toContain('不限于 Orbit 里启动过的任务');
     expect(html).toContain('PMIL 消化链路');
     expect(html).toContain('PMIL local agent strategy');
     expect(html).toContain('claude-3-5-sonnet-latest');
@@ -272,5 +274,14 @@ describe('orchestration workspace surfaces', () => {
     expect(html).toContain('模板基线');
     expect(html).toContain('项目绑定');
     expect(html).toContain('Moonshot');
+  });
+
+  it('renders the dedicated runtime sessions viewer shell', () => {
+    const html = renderToStaticMarkup(createElement(RuntimeSessionsView));
+
+    expect(html).toContain('AI 会话');
+    expect(html).toContain('Claude Code');
+    expect(html).toContain('Codex');
+    expect(html).toContain('正在加载会话');
   });
 });

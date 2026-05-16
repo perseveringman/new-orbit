@@ -81,7 +81,7 @@ export function RuntimesWorkspaceView(): JSX.Element {
         )
       );
     } catch (error) {
-      setExternalSessionMessage(`本地 AI 会话加载失败：${(error as Error).message}`);
+      setExternalSessionMessage(`Runtime 会话库加载失败：${(error as Error).message}`);
     } finally {
       setExternalSessionsLoading(false);
     }
@@ -143,13 +143,13 @@ export function RuntimesWorkspaceView(): JSX.Element {
 
   const syncExternalSessions = useCallback(async () => {
     setExternalSessionsLoading(true);
-    setExternalSessionMessage('正在同步本地 AI 会话…');
+    setExternalSessionMessage('正在同步 Runtime 全量会话库…');
     try {
       await window.orbit.evidence.sync({ includeExternalAISessions: true });
       await loadExternalSessions();
-      setExternalSessionMessage('本地 AI 会话已同步到 PMIL 证据层。');
+      setExternalSessionMessage('Runtime 全量会话库已同步到 PMIL 证据层。');
     } catch (error) {
-      setExternalSessionMessage(`同步本地 AI 会话失败：${(error as Error).message}`);
+      setExternalSessionMessage(`同步 Runtime 会话库失败：${(error as Error).message}`);
     } finally {
       setExternalSessionsLoading(false);
     }
@@ -162,7 +162,7 @@ export function RuntimesWorkspaceView(): JSX.Element {
       const selector = wholeSourceSelector(
         source.id,
         'safe_projection',
-        'runtime local AI session summary'
+        'runtime session-library summary'
       );
       const read = await window.orbit.evidence.read(selector);
       const text = read.excerpts.map((excerpt) => excerpt.text).join('\n\n');
@@ -293,7 +293,7 @@ export function RuntimesWorkspaceSurface({
               AI 控制平面
             </h1>
             <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
-              观察 CLI Runtime、SDK endpoint、角色绑定、编排层 lease / report，以及这些 Runtime 在本机留下的 AI 会话证据。
+              观察 CLI Runtime、SDK endpoint、角色绑定、编排层 lease / report，以及这些 Runtime 自己保存的全量历史会话库。
             </p>
           </div>
           <button
@@ -326,7 +326,7 @@ export function RuntimesWorkspaceSurface({
             hint="已连接模板的项目角色"
           />
           <WorkspaceStat
-            label="本地会话"
+            label="Runtime 会话"
             value={`${stats.externalSessions}/${stats.externalSummaries}`}
             hint="证据源 / 已摘要"
           />
@@ -689,10 +689,10 @@ function ExternalSessionRuntimePanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-sky-900 dark:text-sky-100">
-            本地 AI 会话接入
+            Runtime 会话库接入
           </h3>
           <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">
-            把 {runtime.provider} 在本机留下的对话作为 reference-truth 接入 PMIL，再按需生成会话摘要。
+            扫描 {runtime.provider} runtime 自己保存的历史会话，不限于 Orbit 里启动过的任务；原始会话作为 reference-truth，摘要只按需生成。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -718,7 +718,7 @@ function ExternalSessionRuntimePanel({
       <div className="mt-3 grid gap-2 text-xs md:grid-cols-4">
         <InfoPill label="来源设置" value={settingsLabel} />
         <InfoPill label="索引级别" value={indexLabel} />
-        <InfoPill label="全部会话" value={String(totalSessions)} />
+        <InfoPill label="会话库总量" value={String(totalSessions)} />
         <InfoPill label="当前 Runtime" value={`${sessions.length}/${summarized}`} />
       </div>
       {message ? <p className="mt-3 text-xs text-neutral-500">{message}</p> : null}
@@ -735,7 +735,7 @@ function ExternalSessionRuntimePanel({
         ))}
         {!sessions.length ? (
           <p className="rounded-xl border border-dashed border-sky-300 bg-white p-4 text-sm text-neutral-500 dark:border-sky-900 dark:bg-neutral-950">
-            当前 Runtime 还没有匹配到已索引的本地 AI 会话。先同步，或在设置里的「记忆源」调整 agent / 路径过滤。
+            当前 Runtime 还没有匹配到已索引的历史会话。先同步 Runtime 会话库，或在设置里的「记忆源」调整 agent / 路径过滤。
           </p>
         ) : null}
       </div>
@@ -826,7 +826,7 @@ function PMILLocalSessionDigestCard({
             PMIL 消化链路
           </h3>
           <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">
-            从原始会话到可召回上下文的完整路径，目前属于 foundation 可演示状态。
+            从 runtime 原始历史会话到可召回上下文的完整路径，目前属于 foundation 可演示状态。
           </p>
         </div>
         <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-neutral-950 dark:text-emerald-300">

@@ -55,6 +55,13 @@ import type {
   ConversationTurnRole as ChatConversationTurnRole
 } from './conversation';
 import type { BuildContextPacketInput, BuildWorkContextInput, ContextPacket, WorkContextReport } from './context';
+import type {
+  RuntimeSessionBridgeStatus,
+  RuntimeSessionDetail,
+  RuntimeSessionDisplaySettings,
+  RuntimeSessionGroups,
+  RuntimeSessionMarkdownResult
+} from './runtime-sessions';
 
 export interface ChatCreateConversationInput {
   anchor: ChatConversationAnchor;
@@ -441,6 +448,12 @@ export const IPC = {
       testEndpoint: 'runtime:sdk:endpoint:test',
       decide: 'runtime:sdk:decide'
     }
+  },
+  runtimeSessions: {
+    status: 'runtimeSessions:status',
+    list: 'runtimeSessions:list',
+    get: 'runtimeSessions:get',
+    markdown: 'runtimeSessions:markdown'
   },
   tools: {
     snapshot: 'tools:snapshot'
@@ -1488,6 +1501,16 @@ export interface OrbitApi {
       ): Promise<SDKEndpointTestResult>;
       decide(input: RuntimeRouteInput): Promise<RuntimeRouteDecision>;
     };
+  };
+  runtimeSessions: {
+    status(): Promise<RuntimeSessionBridgeStatus>;
+    list(refresh?: boolean): Promise<RuntimeSessionGroups>;
+    get(agent: string, id: string): Promise<RuntimeSessionDetail | null>;
+    markdown(
+      agent: string,
+      id: string,
+      settings?: Partial<RuntimeSessionDisplaySettings>
+    ): Promise<RuntimeSessionMarkdownResult>;
   };
   tools: {
     snapshot(): Promise<AgentToolRegistrySnapshot>;

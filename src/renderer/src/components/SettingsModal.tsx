@@ -236,7 +236,7 @@ export function SettingsModal(): JSX.Element | null {
       setExternalSessionSettings(await window.orbit.evidence.externalSessionSettings());
       setExternalSessionMessage('');
     } catch (error) {
-      setExternalSessionMessage(`加载本地会话设置失败：${(error as Error).message}`);
+      setExternalSessionMessage(`加载 Runtime 会话库设置失败：${(error as Error).message}`);
     }
   }
 
@@ -490,7 +490,7 @@ export function SettingsModal(): JSX.Element | null {
 
   async function onSaveExternalSessionSettings(): Promise<void> {
     if (!externalSessionSettings) return;
-    setExternalSessionMessage('保存本地会话设置…');
+    setExternalSessionMessage('保存 Runtime 会话库设置…');
     try {
       const saved =
         await window.orbit.evidence.updateExternalSessionSettings(externalSessionSettings);
@@ -499,7 +499,7 @@ export function SettingsModal(): JSX.Element | null {
         includeExternalAISessions: saved.enabled,
         externalAISessionLimit: saved.limit
       });
-      setExternalSessionMessage('本地会话设置已保存，证据源已同步。');
+      setExternalSessionMessage('Runtime 会话库设置已保存，证据源已同步。');
     } catch (error) {
       setExternalSessionMessage(`保存失败：${(error as Error).message}`);
     }
@@ -1050,9 +1050,9 @@ export function SettingsModal(): JSX.Element | null {
                     <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-sm font-semibold">本地 Agent 会话</h3>
+                          <h3 className="text-sm font-semibold">Runtime 会话库</h3>
                           <p className="text-xs text-neutral-500">
-                            Claude / Codex / Amp / CodeBuddy
+                            Claude / Codex / Amp / Copilot / CodeBuddy / Box 的本机 runtime 历史目录
                           </p>
                         </div>
                         <label className="flex items-center gap-2 text-xs">

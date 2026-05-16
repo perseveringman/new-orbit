@@ -302,7 +302,7 @@ function MemoryAgentSessionsPanel(): JSX.Element {
           .map((artifact) => [artifact.payload.source_id, artifact])
       ));
     } catch (error) {
-      setMessage(`本地会话加载失败：${(error as Error).message}`);
+      setMessage(`Runtime 会话库加载失败：${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -314,11 +314,11 @@ function MemoryAgentSessionsPanel(): JSX.Element {
 
   async function syncSessions(): Promise<void> {
     setLoading(true);
-    setMessage('同步本地 Agent 会话…');
+    setMessage('同步 Runtime 全量会话库…');
     try {
       await window.orbit.evidence.sync({ includeExternalAISessions: true });
       await loadSessions();
-      setMessage('本地 Agent 会话已同步。');
+      setMessage('Runtime 全量会话库已同步。');
     } catch (error) {
       setMessage(`同步失败：${(error as Error).message}`);
     } finally {
@@ -369,8 +369,8 @@ function MemoryAgentSessionsPanel(): JSX.Element {
       const artifact = artifacts[source.id];
       const note = await window.orbit.notes.create({
         type: 'capture',
-        title: `Agent 会话：${source.title}`,
-        tags: ['pmil', 'agent-session', normalizeTag(stringMetadata(source, 'agent') ?? 'local-agent')],
+        title: `Runtime 会话：${source.title}`,
+        tags: ['pmil', 'runtime-session', normalizeTag(stringMetadata(source, 'agent') ?? 'local-agent')],
         source: {
           kind: 'external_ai_session',
           ref: source.id,
@@ -416,7 +416,7 @@ function MemoryAgentSessionsPanel(): JSX.Element {
         content: externalSessionConversationTurn(source, projection, artifact)
       });
       await window.orbit.chat.updateConversation(conversation.id, {
-        summary: artifact?.payload.summary ?? source.summary ?? `从 ${agent} 本地会话转入 Orbit。`,
+        summary: artifact?.payload.summary ?? source.summary ?? `从 ${agent} runtime 历史会话转入 Orbit。`,
         tags: ['pmil', 'external-session', normalizeTag(agent)]
       });
       setMessage(`已转为 Orbit 会话：${conversation.title ?? conversation.id}`);
@@ -441,12 +441,12 @@ function MemoryAgentSessionsPanel(): JSX.Element {
     <section className="rounded-2xl border border-sky-200 bg-sky-50 p-5 dark:border-sky-900 dark:bg-sky-950/30">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">本地 Agent 会话中心</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">Runtime 会话库</h2>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
             {sessions.length} 条 reference-truth 会话 · {Object.keys(artifacts).length} 条会话摘要
           </p>
           <p className="mt-1 text-xs text-neutral-500">
-            保留原始会话作为真相源，只在需要时生成摘要、保存为笔记，或转为 Orbit 会话继续整理。
+            扫描本机 runtime 自己保存的历史会话，不限于 Orbit 内使用过的会话；原始会话保留为真相源，只在需要时生成摘要、保存为笔记，或转为 Orbit 会话继续整理。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -481,7 +481,7 @@ function MemoryAgentSessionsPanel(): JSX.Element {
         ))}
         {!filtered.length ? (
           <p className="rounded-xl border border-dashed border-sky-300 bg-white p-4 text-sm text-neutral-500 dark:border-sky-900 dark:bg-neutral-950">
-            还没有匹配的本地 Agent 会话。先在设置里的「记忆源」启用并同步，或调整筛选条件。
+            还没有匹配的 Runtime 历史会话。先在设置里的「记忆源」启用并同步，或调整筛选条件。
           </p>
         ) : null}
       </div>
@@ -954,9 +954,9 @@ function externalSessionNoteBody(
   const loops = payload?.open_loops ?? [];
   const actions = payload?.next_actions ?? [];
   const lines = [
-    `# Agent 会话：${source.title}`,
+    `# Runtime 会话：${source.title}`,
     '',
-    '> 这是一条从本地 Agent 会话安全投影保存的 Orbit Note。原始会话仍作为 reference-truth evidence 保留，可按证据入口继续读取。',
+    '> 这是一条从 Runtime 历史会话安全投影保存的 Orbit Note。原始会话仍作为 reference-truth evidence 保留，可按证据入口继续读取。',
     '',
     '## 来源',
     '',
@@ -990,7 +990,7 @@ function externalSessionNoteBody(
 
 function externalSessionSystemTurn(source: EvidenceSource, projection: SessionProjection): string {
   return [
-    '这条 Orbit Conversation 由本地 Agent 会话主动转入，用于浏览、继续整理和后续上下文召回。',
+    '这条 Orbit Conversation 由 Runtime 历史会话主动转入，用于浏览、继续整理和后续上下文召回。',
     '',
     `Source ID: ${source.id}`,
     `Agent: ${stringMetadata(source, 'agent') ?? 'local-agent'}`,

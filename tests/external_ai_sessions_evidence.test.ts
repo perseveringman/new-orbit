@@ -10,6 +10,7 @@ import {
   EXTERNAL_AI_SESSION_PROVIDER_ID,
   createEvidenceChunkIndexStore,
   createOrbitEvidenceProvider,
+  defaultExternalAISessionRoots,
   syncExternalAISessionEvidenceSources,
   updateExternalAISessionSettings
 } from '../src/main/evidence';
@@ -29,6 +30,23 @@ afterEach(async () => {
 });
 
 describe('external AI session evidence source', () => {
+  it('defaults to runtime-wide session stores, not Orbit-owned sessions only', () => {
+    const roots = defaultExternalAISessionRoots();
+    const rootKeys = roots.map((root) => `${root.agent}:${root.source}`);
+
+    expect(rootKeys).toEqual(expect.arrayContaining([
+      'claude:claude-transcripts',
+      'claude:claude-projects',
+      'claude-internal:claude-internal-projects',
+      'codex:codex',
+      'amp:amp',
+      'copilot:copilot',
+      'codebuddy:codebuddy-projects',
+      'codebuddy:codebuddy-history',
+      'box:box-history'
+    ]));
+  });
+
   it('registers local agent sessions as reference-truth evidence and indexes safe projections', async () => {
     const projectDir = path.join(sessionsRoot, '-Users-ryan-Developer-new-orbit');
     await fs.mkdir(projectDir, { recursive: true });
@@ -75,6 +93,52 @@ describe('external AI session evidence source', () => {
     expect(read.excerpts[0].text).toContain('PMIL external agent session truth layer');
     expect(read.excerpts[0].text).not.toContain('large hidden tool output');
     expect(results[0].chunk.source_id).toBe(source.id);
+  });
+
+  it('reads Copilot runtime event logs through nested data payloads', async () => {
+    const sessionDir = path.join(sessionsRoot, 'copilot-session-1');
+    await fs.mkdir(sessionDir, { recursive: true });
+    await fs.writeFile(
+      path.join(sessionDir, 'events.jsonl'),
+      [
+        JSON.stringify({
+          type: 'session.start',
+          timestamp: '2026-05-16T08:59:00.000Z',
+          data: {
+            startTime: '2026-05-16T08:59:00.000Z',
+            context: { repository: 'ryan/new-orbit', branch: 'pmil-runtime-sessions' }
+          }
+        }),
+        JSON.stringify({
+          type: 'user.message',
+          timestamp: '2026-05-16T09:00:00.000Z',
+          data: { content: 'Copilot runtime archive should be readable as PMIL evidence.' }
+        }),
+        JSON.stringify({
+          type: 'assistant.message',
+          timestamp: '2026-05-16T09:01:00.000Z',
+          data: { content: 'Nested event payloads should become safe projections.' }
+        }),
+        JSON.stringify({
+          type: 'tool.execution_complete',
+          timestamp: '2026-05-16T09:02:00.000Z',
+          data: { result: { content: 'tool output should stay hidden by default' } }
+        })
+      ].join('\n'),
+      'utf8'
+    );
+
+    const [source] = await syncExternalAISessionEvidenceSources(vaultPath, {
+      externalAISessionRoots: [{ agent: 'copilot', source: 'copilot', dir: sessionsRoot }]
+    });
+    const provider = createOrbitEvidenceProvider(vaultPath);
+    const read = await provider.read(wholeSourceSelector(source.id, 'safe_projection'));
+
+    expect(source.metadata?.agent).toBe('copilot');
+    expect(source.scope_refs).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'project', ref: 'new-orbit' })]));
+    expect(read.excerpts[0].text).toContain('Copilot runtime archive should be readable');
+    expect(read.excerpts[0].text).toContain('Nested event payloads should become safe projections');
+    expect(read.excerpts[0].text).not.toContain('tool output should stay hidden');
   });
 
   it('keeps registered external sessions in the default chunk index', async () => {

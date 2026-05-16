@@ -57,6 +57,7 @@ import type {
   GitHubTaskBinding,
   GitHubWorkspaceRepository
 } from '@shared/github';
+import type { RuntimeSessionDisplaySettings } from '@shared/runtime-sessions';
 import type { FsEvent, ProjectFileNode, Theme } from '@shared/types';
 import type { ActivityEvent, ActivityQueryFilter } from '@shared/activity';
 import type {
@@ -379,6 +380,13 @@ const api: OrbitApi = {
         ipcRenderer.invoke(IPC.runtime.sdk.testEndpoint, endpointId, model, prompt),
       decide: (input) => ipcRenderer.invoke(IPC.runtime.sdk.decide, input)
     }
+  },
+  runtimeSessions: {
+    status: () => ipcRenderer.invoke(IPC.runtimeSessions.status),
+    list: (refresh?: boolean) => ipcRenderer.invoke(IPC.runtimeSessions.list, refresh),
+    get: (agent: string, id: string) => ipcRenderer.invoke(IPC.runtimeSessions.get, agent, id),
+    markdown: (agent: string, id: string, settings?: Partial<RuntimeSessionDisplaySettings>) =>
+      ipcRenderer.invoke(IPC.runtimeSessions.markdown, agent, id, settings)
   },
   tools: {
     snapshot: (): Promise<AgentToolRegistrySnapshot> => ipcRenderer.invoke(IPC.tools.snapshot)

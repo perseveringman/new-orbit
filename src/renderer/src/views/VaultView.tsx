@@ -69,6 +69,7 @@ import { GitHubWorkspaceView } from './GitHubWorkspaceView';
 import { ProjectRoomView } from './ProjectRoomView';
 import { JournalHistoryView } from './JournalHistoryView';
 import { RuntimesWorkspaceView } from './RuntimesWorkspaceView';
+import { RuntimeSessionsView } from './RuntimeSessionsView';
 import { ToolRegistryView } from './ToolRegistryView';
 import { DeveloperConsoleView } from './DeveloperConsoleView';
 import { NewProjectModal } from '../components/Modals/NewProjectModal';
@@ -559,6 +560,8 @@ export function VaultView(): JSX.Element {
           <DashboardView />
         ) : view.kind === 'runtimes' ? (
           <RuntimesWorkspaceView />
+        ) : view.kind === 'runtimeSessions' ? (
+          <RuntimeSessionsView />
         ) : view.kind === 'tools' ? (
           <ToolRegistryView />
         ) : view.kind === 'developerConsole' ? (
@@ -750,5 +753,5 @@ export function VaultView(): JSX.Element {
 }
 
 export function shouldShowRightSidebar(view: WorkspaceView): boolean {
-  return view.kind !== 'askAnywhere';
+  return view.kind !== 'askAnywhere' && view.kind !== 'runtimeSessions';
 }

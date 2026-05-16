@@ -12,6 +12,7 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: '随处问', view: { kind: 'askAnywhere' }, icon: '✦' },
   { label: '愿景', view: { kind: 'vision' }, icon: '✦' },
   { label: 'AI 控制台', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: 'AI 会话', view: { kind: 'runtimeSessions' }, icon: '◈' },
   { label: '工具', view: { kind: 'tools' }, icon: '⌘' },
   { label: '角色模板', view: { kind: 'agents' }, icon: '◌' },
   { label: '开发者控制台', view: { kind: 'developerConsole' }, icon: '⌁' },
@@ -70,7 +71,8 @@ const WORKSPACE_DETAILS: Record<
    | 'gateway'
   | 'journals'
   | 'kanban'
-  | 'runtimes',
+  | 'runtimes'
+  | 'runtimeSessions',
   string
 > = {
   dashboard: '查看愿景、PARA 健康度和项目动态。',
@@ -95,7 +97,8 @@ const WORKSPACE_DETAILS: Record<
   gateway: '配置进入随处问和捕获流程的远程通道。',
   journals: '回顾过往每日笔记和决策。',
   kanban: '追踪活跃项目的任务流转。',
-  runtimes: '管理 CLI runtime、SDK 端点、角色路由和编排健康度。'
+  runtimes: '管理 CLI runtime、SDK 端点、角色路由和编排健康度。',
+  runtimeSessions: '浏览本机 runtime 保存的全量 AI 会话。'
 };
 
 export function deriveTopBarContext({
@@ -192,7 +195,8 @@ export function deriveTopBarContext({
     view.kind === 'gateway' ||
     view.kind === 'journals' ||
     view.kind === 'kanban' ||
-    view.kind === 'runtimes'
+    view.kind === 'runtimes' ||
+    view.kind === 'runtimeSessions'
       ? WORKSPACE_DETAILS[view.kind]
       : '通过侧边栏在工作台中切换。';
 

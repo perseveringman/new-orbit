@@ -18,7 +18,8 @@ describe('MemoryContent', () => {
     expect(html).toContain('透明的长期记忆');
     expect(html).toContain('Read source first');
     expect(html).toContain('记忆图谱');
-    expect(html).toContain('本地 Agent 会话中心');
+    expect(html).toContain('Runtime 会话库');
+    expect(html).toContain('不限于 Orbit 内使用过的会话');
     expect(html).toContain('保存为笔记');
     expect(html).toContain('转为 Orbit 会话');
     expect(html).toContain('实体画像');

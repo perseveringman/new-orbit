@@ -25,6 +25,7 @@ export type VaultViewKind =
   | 'project'
   | 'kanban'
   | 'runtimes'
+  | 'runtimeSessions'
   | 'area'
   | 'areaRoom';
 
@@ -55,6 +56,7 @@ export type SidebarSurfaceId =
   | 'journals'
   | 'kanban'
   | 'runtimes'
+  | 'runtimeSessions'
   | 'area'
   | 'areaRoom'
   | 'project.kanban'
@@ -312,6 +314,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
       { id: 'overview', title: '概览', panels: ['inspector', 'worktrees'] },
       { id: 'execution', title: '执行', panels: ['runlog', 'review'] }
     ]
+  },
+  runtimeSessions: {
+    intents: [{ id: 'overview', title: '概览', panels: ['inspector'] }]
   },
   area: {
     intents: [{ id: 'overview', title: '概览', panels: ['files'] }]

@@ -26,6 +26,7 @@ export type WorkspaceView =
   | { kind: 'conversations' }
   | { kind: 'journals' }
   | { kind: 'runtimes' }
+  | { kind: 'runtimeSessions' }
   | { kind: 'kanban'; projectUid: string | null }
   | { kind: 'area'; areaUid: string | null }
   | { kind: 'areaRoom'; areaUid: string }

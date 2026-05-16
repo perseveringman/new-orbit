@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -138,6 +138,7 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
 
   it('fetches YouTube subscriptions as Layer 0 videos and promotes transcript snapshots to Library', async () => {
     const listLimits: Array<number | undefined> = [];
+    const subtitleRequests: string[][] = [];
     const subtitleContent = JSON.stringify({
       events: [
         { tStartMs: 0, dDurationMs: 1100, segs: [{ utf8: 'hello orbit' }] },
@@ -157,47 +158,50 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
           }
         ];
       },
-      fetchArchive: async () => ({
-        info: {
-          id: 'video-1',
-          title: 'First video from channel',
-          webpage_url: 'https://www.youtube.com/watch?v=video-1',
-          thumbnail: 'https://i.ytimg.com/vi/video-1/hqdefault.jpg',
-          channel: 'Orbit Channel',
-          channel_id: 'UC123',
-          uploader_id: '@orbit',
-          uploader_url: 'https://www.youtube.com/@orbit',
-          timestamp: 1777370400,
-          upload_date: '20260428',
-          duration: 95,
-          view_count: 1200,
-          like_count: 88,
-          language: 'en',
-          availability: 'public',
-          description: 'A useful video about daily feed workflows and personal data loops.',
-          tags: ['orbit', 'feed'],
-          categories: ['Education']
-        },
-        subtitle_content: subtitleContent,
-        subtitle_format: 'json3',
-        subtitle_language: 'en',
-        subtitle_tracks: [
-          {
+      fetchArchive: async (_videoId, options) => {
+        subtitleRequests.push(options?.subtitleLanguages ?? []);
+        return {
+          info: {
+            id: 'video-1',
+            title: 'First video from channel',
+            webpage_url: 'https://www.youtube.com/watch?v=video-1',
+            thumbnail: 'https://i.ytimg.com/vi/video-1/hqdefault.jpg',
+            channel: 'Orbit Channel',
+            channel_id: 'UC123',
+            uploader_id: '@orbit',
+            uploader_url: 'https://www.youtube.com/@orbit',
+            timestamp: 1777370400,
+            upload_date: '20260428',
+            duration: 95,
+            view_count: 1200,
+            like_count: 88,
             language: 'en',
-            label: 'English auto',
-            source_kind: 'auto',
-            file_name: 'video-1.en.auto.json3',
-            content: subtitleContent,
-            format: 'json3',
-            segments: json3ToSegments(subtitleContent),
-            transcript: json3ToTranscript(subtitleContent)
-          }
-        ],
-        subtitle_status: 'captured',
-        subtitle_requested_languages: ['zh-Hans', 'zh-Hant', 'zh', 'en'],
-        subtitle_available_languages: [],
-        automatic_caption_languages: ['en']
-      }),
+            availability: 'public',
+            description: 'A useful video about daily feed workflows and personal data loops.',
+            tags: ['orbit', 'feed'],
+            categories: ['Education']
+          },
+          subtitle_content: subtitleContent,
+          subtitle_format: 'json3',
+          subtitle_language: 'en',
+          subtitle_tracks: [
+            {
+              language: 'en',
+              label: 'English auto',
+              source_kind: 'auto',
+              file_name: 'video-1.en.auto.json3',
+              content: subtitleContent,
+              format: 'json3',
+              segments: json3ToSegments(subtitleContent),
+              transcript: json3ToTranscript(subtitleContent)
+            }
+          ],
+          subtitle_status: 'captured',
+          subtitle_requested_languages: options?.subtitleLanguages ?? [],
+          subtitle_available_languages: [],
+          automatic_caption_languages: ['en']
+        };
+      },
       buildMarkdown: defaultYouTubeFeedProvider.buildMarkdown
     };
     const feed = createFeedStore(tmp, {
@@ -231,6 +235,7 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(source.fetch_policy).toMatchObject({ max_items_per_fetch: 20, initial_backfill: 'recent', initial_backfill_count: 20 });
     expect(source.metadata).toMatchObject({ provider: 'youtube', youtube_source_type: 'channel' });
     expect(listLimits).toEqual([20, 20]);
+    expect(subtitleRequests[0]).toEqual(['zh.*', 'en.*']);
     expect(first[0]).toMatchObject({ fetched: 1, created: 1, skipped: 0, failed: 0 });
     expect(second[0]).toMatchObject({ fetched: 1, created: 0, skipped: 1 });
     expect(item.dedupe_key).toBe('youtube:video-1');
@@ -288,6 +293,73 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(promoted.library_item.frontmatter.source_snapshot_ref).toBe(item.extracted_ref?.path);
   });
 
+  it('refreshes older YouTube transcript caches that predate bilingual subtitle requests', async () => {
+    const subtitleRequests: string[][] = [];
+    const subtitleContent = JSON.stringify({
+      events: [{ tStartMs: 0, dDurationMs: 1100, segs: [{ utf8: 'hello orbit' }] }]
+    });
+    const youtubeProvider: YouTubeFeedProvider = {
+      normalizeSource: normalizeYouTubeSource,
+      listCandidates: async () => [
+        {
+          id: 'video-1',
+          title: 'Bilingual cache video',
+          url: 'https://www.youtube.com/watch?v=video-1',
+          canonical_url: 'https://www.youtube.com/watch?v=video-1'
+        }
+      ],
+      fetchArchive: async (_videoId, options) => {
+        subtitleRequests.push(options?.subtitleLanguages ?? []);
+        return {
+          info: {
+            id: 'video-1',
+            title: 'Bilingual cache video',
+            webpage_url: 'https://www.youtube.com/watch?v=video-1',
+            description: 'A video with refreshed subtitle request policy.'
+          },
+          subtitle_content: subtitleContent,
+          subtitle_format: 'json3',
+          subtitle_language: 'en',
+          subtitle_tracks: [
+            {
+              language: 'en',
+              label: 'English auto',
+              source_kind: 'auto',
+              file_name: 'video-1.en.auto.json3',
+              content: subtitleContent,
+              format: 'json3',
+              segments: json3ToSegments(subtitleContent),
+              transcript: json3ToTranscript(subtitleContent)
+            }
+          ],
+          subtitle_status: 'captured',
+          subtitle_requested_languages: options?.subtitleLanguages ?? [],
+          subtitle_available_languages: [],
+          automatic_caption_languages: ['en']
+        };
+      },
+      buildMarkdown: defaultYouTubeFeedProvider.buildMarkdown
+    };
+    const feed = createFeedStore(tmp, {
+      now: () => new Date('2026-04-28T12:00:00.000Z'),
+      youtubeProvider
+    });
+    const source = await feed.createSource({ kind: 'youtube', url: '@orbit' });
+    await feed.fetch(source.id);
+    const [item] = await feed.listItems({ include_saved: true });
+    const itemPath = path.join(tmp, 'feeds', source.id, `${item.id}.json`);
+    const stale = JSON.parse(await readFile(itemPath, 'utf8')) as typeof item;
+    stale.metadata = { ...(stale.metadata ?? {}), subtitle_requested_languages: ['en', 'zh-Hans', 'zh'] };
+    await writeFile(itemPath, `${JSON.stringify(stale, null, 2)}\n`, 'utf8');
+
+    await feed.getItemContent(item.id);
+
+    expect(subtitleRequests).toEqual([
+      ['zh.*', 'en.*'],
+      ['zh.*', 'en.*']
+    ]);
+  });
+
   it('allows full YouTube initial backfill while keeping recurring refresh bounded', async () => {
     const listLimits: Array<number | undefined> = [];
     const youtubeProvider: YouTubeFeedProvider = {
@@ -310,7 +382,7 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
         subtitle_format: null,
         subtitle_tracks: [],
         subtitle_status: 'not_exposed',
-        subtitle_requested_languages: ['zh-Hans', 'zh-Hant', 'zh', 'en'],
+        subtitle_requested_languages: ['zh.*', 'en.*'],
         subtitle_available_languages: [],
         automatic_caption_languages: []
       }),
@@ -356,7 +428,7 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
         subtitle_format: null,
         subtitle_tracks: [],
         subtitle_status: 'not_exposed',
-        subtitle_requested_languages: ['zh-Hans', 'zh-Hant', 'zh', 'en'],
+        subtitle_requested_languages: ['zh.*', 'en.*'],
         subtitle_available_languages: [],
         automatic_caption_languages: []
       }),

@@ -79,7 +79,13 @@ hello <b>orbit</b>
       'chrome'
     ]);
     expect(args.filter((arg) => arg === '--sub-format')).toHaveLength(1);
-    expect(args.slice(args.indexOf('--sub-format'), args.indexOf('--sub-format') + 2)).toEqual(['--sub-format', 'json3']);
+    expect(args.slice(args.indexOf('--sub-format'), args.indexOf('--sub-format') + 2)).toEqual(['--sub-format', 'json3/vtt/best']);
+
+    const defaultArgs = buildYouTubeArchiveArgs('abc123', '/tmp/abc123.%(ext)s', []);
+    expect(defaultArgs.slice(defaultArgs.indexOf('--sub-langs'), defaultArgs.indexOf('--sub-langs') + 2)).toEqual([
+      '--sub-langs',
+      'zh.*,en.*'
+    ]);
   });
 
   it('selects subtitle languages by requested language before manual-vs-auto preference', () => {
@@ -88,5 +94,6 @@ hello <b>orbit</b>
       '/tmp/video.zh-Hans.auto.json3'
     );
     expect(chooseFallbackSubtitleLanguage([], ['zh-Hant', 'en'], ['zh-Hans', 'zh', 'en'])).toBe('zh-Hant');
+    expect(chooseFallbackSubtitleLanguage([], ['en-GB', 'zh-Hans-en-GB'], ['zh.*', 'en.*'])).toBe('zh-Hans-en-GB');
   });
 });
