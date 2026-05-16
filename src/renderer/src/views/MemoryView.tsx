@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { EvidenceReadResult, EvidenceSelector, EvidenceSource, EvidenceSourceKind } from '@shared/evidence';
 import { evidenceSourceId, wholeSourceSelector } from '@shared/evidence';
-import type { MemoryDigestResult, MemoryGraph, MemoryKind, MemoryLayer, MemoryNode } from '@shared/memory';
+import type { MemoryDigestResult, MemoryGraph, MemoryKind, MemoryLayer, MemoryNode, MemoryRelationKind, MemoryStability } from '@shared/memory';
 import { MEMORY_KINDS, MEMORY_LAYERS } from '@shared/memory';
 import type { EntityProfilePayload, ExternalSessionDistillPayload, SynthesisArtifact, SynthesisSource } from '@shared/synthesis';
 
@@ -54,7 +54,7 @@ export function MemoryView(): JSX.Element {
   }
 
   async function archive(id: string): Promise<void> {
-    if (!window.confirm('Archive this memory?')) return;
+    if (!window.confirm('归档这条记忆？')) return;
     await window.orbit.memory.archive(id);
     await load();
   }
@@ -132,7 +132,7 @@ export function MemoryContent(props: {
     const title = manualTitle.trim();
     const summary = manualSummary.trim();
     if (!title || !summary) {
-      setManualError('Title and summary are required.');
+      setManualError('请填写标题和摘要。');
       return;
     }
     setManualError(null);
@@ -155,22 +155,22 @@ export function MemoryContent(props: {
         <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Memory Explorer</p>
-              <h1 className="mt-1 text-2xl font-semibold">Transparent long-term memory</h1>
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">记忆浏览器</p>
+              <h1 className="mt-1 text-2xl font-semibold">透明的长期记忆</h1>
               <p className="mt-2 max-w-3xl text-sm text-neutral-500">
-                Review, confirm, edit, archive, and promote memories extracted from conversations and reviews.
+                查看、确认、编辑、归档，并提升从对话和审查中提取的记忆。
               </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={props.onDigest} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">Generate digest</button>
-              <button onClick={() => setCreateOpen(true)} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">+ Memory</button>
+              <button onClick={props.onDigest} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">生成摘要</button>
+              <button onClick={() => setCreateOpen(true)} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">+ 记忆</button>
             </div>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-4">
-            <Stat label="Total" value={stats.total} />
-            <Stat label="Stable" value={stats.stable} />
-            <Stat label="Core" value={stats.core} />
-            <Stat label="Recalls" value={stats.recalls} />
+            <Stat label="总数" value={stats.total} />
+            <Stat label="稳定" value={stats.stable} />
+            <Stat label="核心" value={stats.core} />
+            <Stat label="召回" value={stats.recalls} />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {(['all', ...MEMORY_LAYERS] as const).map((item) => (
@@ -179,14 +179,14 @@ export function MemoryContent(props: {
                 onClick={() => props.onLayerChange(item)}
                 className={`rounded-full border px-3 py-1.5 text-xs ${props.layer === item ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'}`}
               >
-                {item}
+                {memoryLayerLabel(item)}
               </button>
             ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
-            <span>semantic {stats.semantic}</span>
-            <span>episodic {stats.episodic}</span>
-            <span>procedural {stats.procedural}</span>
+            <span>语义 {stats.semantic}</span>
+            <span>情景 {stats.episodic}</span>
+            <span>流程 {stats.procedural}</span>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {(['all', ...MEMORY_KINDS] as const).map((item) => (
@@ -195,7 +195,7 @@ export function MemoryContent(props: {
                 onClick={() => props.onKindChange(item)}
                 className={`rounded-full border px-3 py-1.5 text-xs ${props.kind === item ? 'border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'border-neutral-300 text-neutral-500 dark:border-neutral-700'}`}
               >
-                {item}
+                {memoryKindLabel(item)}
               </button>
             ))}
           </div>
@@ -205,24 +205,24 @@ export function MemoryContent(props: {
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
             <form className="grid gap-3" onSubmit={(event) => void submitManual(event)}>
               <div>
-                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">Create memory</h2>
-                <p className="mt-1 text-sm text-neutral-500">Add a user-confirmed preference, lesson, goal, or pattern to the transparent memory layer.</p>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">创建记忆</h2>
+                <p className="mt-1 text-sm text-neutral-500">向透明记忆层添加一条用户确认的偏好、经验、目标或模式。</p>
               </div>
               <label className="grid gap-1 text-sm font-medium">
-                Title
+                标题
                 <input
                   value={manualTitle}
                   onChange={(event) => setManualTitle(event.currentTarget.value)}
-                  placeholder="e.g. Read source first"
+                  placeholder="例如：先读源文件"
                   className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-950"
                 />
               </label>
               <label className="grid gap-1 text-sm font-medium">
-                Summary
+                摘要
                 <textarea
                   value={manualSummary}
                   onChange={(event) => setManualSummary(event.currentTarget.value)}
-                  placeholder="Describe what Orbit should remember and why it matters."
+                  placeholder="描述 Orbit 应该记住什么，以及为什么重要。"
                   rows={3}
                   className="resize-none rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-950"
                 />
@@ -230,9 +230,9 @@ export function MemoryContent(props: {
               {manualError ? <p className="text-sm text-red-600 dark:text-red-300">{manualError}</p> : null}
               <div className="flex flex-wrap gap-2">
                 <button type="submit" disabled={savingManual} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-950">
-                  {savingManual ? 'Creating...' : 'Create memory'}
+                  {savingManual ? '创建中...' : '创建记忆'}
                 </button>
-                <button type="button" onClick={() => setCreateOpen(false)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">Cancel</button>
+                <button type="button" onClick={() => setCreateOpen(false)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">取消</button>
               </div>
             </form>
           </section>
@@ -240,12 +240,12 @@ export function MemoryContent(props: {
 
         {props.digest && (
           <section className="rounded-2xl border border-violet-200 bg-violet-50 p-5 text-sm dark:border-violet-900 dark:bg-violet-950/40">
-            <strong>Memory digest generated</strong>
+            <strong>记忆摘要已生成</strong>
             <p className="mt-1 text-neutral-600 dark:text-neutral-300">
-              {props.digest.artifact.scope_key}: {props.digest.artifact.payload.new_memories.length} new, {props.digest.artifact.payload.reinforced_memories.length} reinforced.
+              {props.digest.artifact.scope_key}: {props.digest.artifact.payload.new_memories.length} 条新增，{props.digest.artifact.payload.reinforced_memories.length} 条已强化。
             </p>
             <p className="mt-2 text-neutral-600 dark:text-neutral-300">
-              semantic {props.digest.artifact.payload.layer_counts.semantic.total} · episodic {props.digest.artifact.payload.layer_counts.episodic.total} · procedural {props.digest.artifact.payload.layer_counts.procedural.total}
+              语义 {props.digest.artifact.payload.layer_counts.semantic.total} · 情景 {props.digest.artifact.payload.layer_counts.episodic.total} · 流程 {props.digest.artifact.payload.layer_counts.procedural.total}
             </p>
           </section>
         )}
@@ -257,9 +257,9 @@ export function MemoryContent(props: {
         {props.state === 'loading' ? (
           <MemorySkeleton />
         ) : props.state === 'error' ? (
-          <StateCard title="Memory failed to load" body={props.error ?? 'Unknown memory error.'} actionLabel="Retry" onAction={props.onReload} />
+          <StateCard title="记忆加载失败" body={props.error ?? '未知记忆错误。'} actionLabel="重试" onAction={props.onReload} />
         ) : props.state === 'empty' ? (
-          <StateCard title="No memories yet" body="Start an Ask-Anywhere conversation or create a memory manually. Orbit will extract preferences, lessons, goals, and patterns transparently." actionLabel="Create memory" onAction={() => setCreateOpen(true)} />
+          <StateCard title="暂无记忆" body="开始一次随处问对话，或手动创建记忆。Orbit 会透明地提取偏好、经验、目标和模式。" actionLabel="创建记忆" onAction={() => setCreateOpen(true)} />
         ) : (
           <section className="grid gap-3">
             {props.nodes.map((node) => (
@@ -707,20 +707,20 @@ function MemoryGraphPanel({ graph }: { graph: MemoryGraph }): JSX.Element {
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950/30">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Memory graph</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">记忆图谱</h2>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
-            {graph.nodes.length} node(s), {graph.relations.length} relation(s)
+            {graph.nodes.length} 个节点，{graph.relations.length} 条关系
           </p>
         </div>
-        <span className="text-xs text-neutral-500">generated {graph.generated_at.slice(0, 10)}</span>
+        <span className="text-xs text-neutral-500">生成于 {graph.generated_at.slice(0, 10)}</span>
       </div>
       {graph.relations.length ? (
         <div className="mt-4 grid gap-2 md:grid-cols-2">
           {graph.relations.slice(0, 6).map((relation) => (
             <div key={relation.id} className="rounded-xl border border-emerald-200 bg-white p-3 text-sm dark:border-emerald-900 dark:bg-neutral-900">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{relation.kind}</span>
-                <span className="text-xs text-neutral-500">strength {relation.strength.toFixed(2)}</span>
+                <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{memoryRelationKindLabel(relation.kind)}</span>
+                <span className="text-xs text-neutral-500">强度 {relation.strength.toFixed(2)}</span>
               </div>
               <p className="mt-2 text-neutral-700 dark:text-neutral-200">{relation.label}</p>
               <p className="mt-1 text-xs text-neutral-500">{relation.evidence.slice(0, 4).join(' · ')}</p>
@@ -728,7 +728,7 @@ function MemoryGraphPanel({ graph }: { graph: MemoryGraph }): JSX.Element {
           ))}
         </div>
       ) : (
-        <p className="mt-4 text-sm text-neutral-500">No memory relations yet. Shared entities, sources, and overlapping themes will appear here.</p>
+        <p className="mt-4 text-sm text-neutral-500">暂无记忆关系。共享实体、来源和重叠主题会显示在这里。</p>
       )}
     </section>
   );
@@ -751,18 +751,18 @@ function MemoryCard(props: {
   return (
     <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap gap-2">
-        <span className={`rounded-full border px-2 py-1 text-xs ${tone}`}>{props.node.stability}</span>
-        <span className="rounded-full border border-emerald-300 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">{props.node.layer}</span>
-        <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">{props.node.kind}</span>
-        <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">confidence {props.node.confidence.toFixed(2)}</span>
+        <span className={`rounded-full border px-2 py-1 text-xs ${tone}`}>{memoryStabilityLabel(props.node.stability)}</span>
+        <span className="rounded-full border border-emerald-300 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">{memoryLayerLabel(props.node.layer)}</span>
+        <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">{memoryKindLabel(props.node.kind)}</span>
+        <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">置信度 {props.node.confidence.toFixed(2)}</span>
       </div>
       <h2 className="mt-3 text-lg font-semibold">{props.node.title}</h2>
       <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-300">{props.node.summary}</p>
       <p className="mt-3 text-xs text-neutral-500">
-        evidence {props.node.evidence_count} · recalls {props.node.recall_count} · sources {props.node.sources.length}
+        证据 {props.node.evidence_count} · 召回 {props.node.recall_count} · 来源 {props.node.sources.length}
       </p>
       <p className="mt-2 text-xs text-neutral-500">
-        Why it exists: {props.node.sources[0]?.title ?? props.node.sources[0]?.ref ?? 'manual memory'}{props.node.user_confirmed ? ' · user confirmed' : ''}
+        存在原因：{props.node.sources[0]?.title ?? props.node.sources[0]?.ref ?? '手动记忆'}{props.node.user_confirmed ? ' · 用户已确认' : ''}
       </p>
       {selectors.length ? (
         <section className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
@@ -791,12 +791,12 @@ function MemoryCard(props: {
         </div>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
-        <button onClick={() => props.onConfirm(props.node)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Confirm</button>
+        <button onClick={() => props.onConfirm(props.node)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">确认</button>
         <button onClick={() => props.onFeedback(props.node.id, true)} className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">有帮助</button>
         <button onClick={() => props.onFeedback(props.node.id, false)} className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs text-amber-700 dark:border-amber-900 dark:text-amber-300">不相关</button>
-        <button onClick={() => props.onPromote(props.node.id, 'resource')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Promote to Resource</button>
-        <button onClick={() => props.onPromote(props.node.id, 'project')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">Promote to Project</button>
-        <button onClick={() => props.onArchive(props.node.id)} className="rounded-lg border border-red-300 px-3 py-1.5 text-xs text-red-600 dark:border-red-900 dark:text-red-300">Archive</button>
+        <button onClick={() => props.onPromote(props.node.id, 'resource')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">提升为 Resource</button>
+        <button onClick={() => props.onPromote(props.node.id, 'project')} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">提升为 Project</button>
+        <button onClick={() => props.onArchive(props.node.id)} className="rounded-lg border border-red-300 px-3 py-1.5 text-xs text-red-600 dark:border-red-900 dark:text-red-300">归档</button>
       </div>
     </article>
   );
@@ -1133,6 +1133,47 @@ function simpleHash(value: string): string {
     hash = (Math.imul(31, hash) + value.charCodeAt(index)) | 0;
   }
   return Math.abs(hash).toString(16);
+}
+
+function memoryLayerLabel(value: MemoryLayer | 'all'): string {
+  const labels: Record<MemoryLayer | 'all', string> = {
+    all: '全部',
+    semantic: '语义',
+    episodic: '情景',
+    procedural: '流程'
+  };
+  return labels[value];
+}
+
+function memoryKindLabel(value: MemoryKind | 'all'): string {
+  const labels: Record<MemoryKind | 'all', string> = {
+    all: '全部',
+    interest: '兴趣',
+    preference: '偏好',
+    pattern: '模式',
+    lesson: '经验',
+    entity_memory: '实体记忆',
+    goal: '目标'
+  };
+  return labels[value];
+}
+
+function memoryStabilityLabel(value: MemoryStability): string {
+  const labels: Record<MemoryStability, string> = {
+    volatile: '临时',
+    stable: '稳定',
+    core: '核心'
+  };
+  return labels[value];
+}
+
+function memoryRelationKindLabel(value: MemoryRelationKind): string {
+  const labels: Record<MemoryRelationKind, string> = {
+    shared_entity: '共享实体',
+    shared_source: '共享来源',
+    theme_overlap: '主题重叠'
+  };
+  return labels[value];
 }
 
 function summarize(nodes: MemoryNode[]): { total: number; stable: number; core: number; recalls: number; semantic: number; episodic: number; procedural: number } {
