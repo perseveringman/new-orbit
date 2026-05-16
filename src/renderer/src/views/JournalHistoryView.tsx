@@ -21,7 +21,7 @@ export function JournalHistoryView(): JSX.Element {
         const r = await window.orbit.review.list();
         if (!cancelled) setItems(r);
       } catch (e) {
-        if (!cancelled) toast(`Failed to load journals: ${(e as Error).message}`);
+        if (!cancelled) toast(`加载日志失败：${(e as Error).message}`);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -34,15 +34,15 @@ export function JournalHistoryView(): JSX.Element {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-3 border-b border-neutral-200 px-4 py-2 text-sm dark:border-neutral-800">
-        <h2 className="font-semibold">Journal history</h2>
+        <h2 className="font-semibold">日志历史</h2>
         <span className="text-xs text-neutral-500">
           02_Areas/Journal — 按日期倒序
         </span>
       </header>
       <div className="flex-1 overflow-auto p-4 text-sm">
-        {loading && <p className="text-neutral-500">Loading…</p>}
+        {loading && <p className="text-neutral-500">加载中…</p>}
         {!loading && items.length === 0 && (
-          <p className="text-neutral-500">No journals yet. Generate a Daily Review from the Dashboard.</p>
+          <p className="text-neutral-500">暂无日志。可从仪表盘生成每日复盘。</p>
         )}
         <ul className="space-y-1">
           {items.map((j) => (
