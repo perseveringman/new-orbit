@@ -39,7 +39,7 @@ export function ProjectSessionsView({
         sessionId: nextSelected
       });
     } catch (e) {
-      toast(`Load project sessions failed: ${(e as Error).message}`);
+      toast(`加载项目会话失败：${(e as Error).message}`);
     }
   }, [projectUid, selectedSessionId, setSidebarFocus, toast]);
 
@@ -69,7 +69,7 @@ export function ProjectSessionsView({
       .catch((e) => {
         if (!cancelled) {
           setDetail(null);
-          toast(`Load session detail failed: ${(e as Error).message}`);
+          toast(`加载会话详情失败：${(e as Error).message}`);
         }
       });
     return () => {
@@ -87,8 +87,7 @@ export function ProjectSessionsView({
       <div className="min-h-0 flex-1">
         {sessions.length === 0 ? (
           <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500">
-            No project sessions yet. Start Claude or Codex in the project terminal and Orbit will
-            build a reusable history here.
+            还没有项目会话。在项目终端中启动 Claude 或 Codex 后，Orbit 会在这里构建可复用的历史。
           </div>
         ) : selected ? (
           <ProjectSessionsDetailPane
@@ -98,7 +97,7 @@ export function ProjectSessionsView({
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500">
-            Pick a session from the right sidebar to inspect its history and jump back into work.
+            请从右侧边栏选择一个会话，以查看历史并回到工作现场。
           </div>
         )}
       </div>
@@ -132,7 +131,7 @@ export function ProjectSessionsDetailPane({
               <span className={`rounded px-2 py-1 font-medium ${agentMeta.badgeClassName}`}>
                 {agentMeta.title}
               </span>
-              <span className={statusClasses(selected.status)}>{selected.status}</span>
+              <span className={statusClasses(selected.status)}>{sessionStatusLabel(selected.status)}</span>
             </div>
             <div className="mt-3 text-xl font-semibold text-neutral-900 dark:text-neutral-100">
               {getTerminalSessionDisplayTitle(selected)}
@@ -143,23 +142,23 @@ export function ProjectSessionsDetailPane({
               </div>
             ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
-              <span>Started {formatRelativeTs(selected.startedAt)}</span>
-              <span>Last active {formatRelativeTs(selected.lastActivityAt)}</span>
-              {presentedMessages.length ? <span>{presentedMessages.length} turns</span> : null}
+              <span>开始于 {formatRelativeTs(selected.startedAt)}</span>
+              <span>最近活跃 {formatRelativeTs(selected.lastActivityAt)}</span>
+              {presentedMessages.length ? <span>{presentedMessages.length} 轮对话</span> : null}
             </div>
           </div>
           <button
             onClick={onOpenSession}
             className="shrink-0 rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
           >
-            {action.hint}
+            {terminalSessionActionLabel(action.hint)}
           </button>
         </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
         <div className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          Conversation
+          对话
         </div>
         {presentedMessages.length ? (
           <div className="min-w-0 space-y-3">
@@ -169,7 +168,7 @@ export function ProjectSessionsDetailPane({
                 className="min-w-0 rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
               >
                 <div className="mb-1 flex items-center justify-between gap-3 text-[10px] uppercase tracking-wide text-neutral-500">
-                  <span>{message.role}</span>
+                  <span>{messageRoleLabel(message.role)}</span>
                   <span className="shrink-0">{formatRelativeTs(message.at)}</span>
                 </div>
                 <div className="min-w-0 overflow-hidden break-all whitespace-pre-wrap text-sm text-neutral-800 dark:text-neutral-100">
@@ -180,7 +179,7 @@ export function ProjectSessionsDetailPane({
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-neutral-300 p-4 text-xs text-neutral-500 dark:border-neutral-700">
-            No conversation has been imported for this session yet.
+            这个会话还没有导入对话内容。
           </div>
         )}
       </div>
@@ -240,7 +239,7 @@ function cleanTranscriptMessage(
           .slice('Tool Use:'.length)
           .split('\n', 1)[0]
           ?.trim();
-        return name ? `Used ${name}` : '';
+        return name ? `使用了 ${name}` : '';
       }
       return section;
     })
@@ -253,12 +252,31 @@ function formatRelativeTs(value: string): string {
   const delta = Date.now() - Date.parse(value);
   if (!Number.isFinite(delta)) return value;
   const minutes = Math.round(delta / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
+  if (hours < 48) return `${hours} 小时前`;
   const days = Math.round(hours / 24);
-  return `${days}d ago`;
+  return `${days} 天前`;
+}
+
+function sessionStatusLabel(status: TerminalAgentSessionDTO['status']): string {
+  if (status === 'active') return '活跃';
+  if (status === 'completed') return '已完成';
+  return '失败';
+}
+
+function messageRoleLabel(role: TerminalAgentSessionDetailDTO['messages'][number]['role']): string {
+  if (role === 'user') return '用户';
+  if (role === 'assistant') return '助手';
+  return role;
+}
+
+function terminalSessionActionLabel(hint: string): string {
+  if (hint === 'Jump to active terminal') return '跳转到活跃终端';
+  if (hint === 'Resume in new tab') return '在新标签页继续';
+  if (hint === 'Open a fresh terminal with session context') return '带会话上下文打开新终端';
+  return hint;
 }
 
 function statusClasses(status: TerminalAgentSessionDTO['status']): string {

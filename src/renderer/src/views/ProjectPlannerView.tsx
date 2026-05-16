@@ -62,18 +62,18 @@ const PLANNER_AGENTS: Array<{
 }> = [
   {
     id: 'plan-agent',
-    label: 'Plan Agent',
-    description: 'Brainstorm requirements and turn decisions into task splits.'
+    label: '计划 Agent',
+    description: '梳理需求，并将决策转化为任务拆分。'
   },
   {
     id: 'architect-agent',
-    label: 'Architect Agent',
-    description: 'Stress-test scope, dependencies, and implementation boundaries.'
+    label: '架构 Agent',
+    description: '检验范围、依赖与实现边界。'
   },
   {
     id: 'executor-agent',
-    label: 'Executor Agent',
-    description: 'Review whether the split is executable by runtime agents.'
+    label: '执行 Agent',
+    description: '审查拆分是否适合由运行时 Agent 执行。'
   }
 ];
 
@@ -94,7 +94,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
       role: 'assistant',
       agentId: 'plan-agent',
       content:
-        'Tell me the outcome you want. I will help brainstorm the requirement first; once the split is clear, generate a task artifact on the right.'
+        '告诉我你想达成的结果。我会先帮你梳理需求；拆分清晰后，再在右侧生成任务工件。'
     }
   ]);
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<PlannerFlowNode>([]);
@@ -110,7 +110,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
           : (list[0]?.proposalId ?? null)
       );
     } catch (e) {
-      toast(`Load proposals failed: ${(e as Error).message}`);
+      toast(`加载方案失败：${(e as Error).message}`);
     }
   }, [projectUid, toast]);
 
@@ -168,7 +168,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
         }
       ]);
     } catch (e) {
-      toast(`Planner chat failed: ${(e as Error).message}`);
+      toast(`规划对话失败：${(e as Error).message}`);
     } finally {
       setPendingMode(null);
     }
@@ -196,11 +196,11 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
           content: reply.message
         }
       ]);
-      toast('Task split proposal created');
+      toast('已创建任务拆分方案');
       await refresh();
       setSelectedProposalId(reply.proposal.proposalId);
     } catch (e) {
-      toast(`Generate task split failed: ${(e as Error).message}`);
+      toast(`生成任务拆分失败：${(e as Error).message}`);
     } finally {
       setPendingMode(null);
     }
@@ -210,11 +210,11 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
     try {
       const parsed = JSON.parse(editedJson) as PlanProposal;
       await window.orbit.planner.saveProposal(parsed);
-      toast('Proposal saved');
+      toast('方案已保存');
       setEditMode(false);
       await refresh();
     } catch (e) {
-      toast(`Save failed: ${(e as Error).message}`);
+      toast(`保存失败：${(e as Error).message}`);
     }
   }
 
@@ -230,24 +230,24 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
         }))
       };
       await window.orbit.planner.saveProposal(next);
-      toast('Planner layout saved');
+      toast('规划布局已保存');
       await refresh();
     } catch (e) {
-      toast(`Save layout failed: ${(e as Error).message}`);
+      toast(`保存布局失败：${(e as Error).message}`);
     }
   }
 
   async function publish(): Promise<void> {
     if (!selected) return;
-    if (!window.confirm(`Publish proposal "${selected.title}"? This will create/update tasks.`))
+    if (!window.confirm(`发布方案 "${selected.title}"? 这会创建或更新任务。`))
       return;
     try {
       const result = await window.orbit.planner.publishProposal(projectUid, selected.proposalId);
       setPublishResult(result);
-      toast('Proposal published');
+      toast('方案已发布');
       await refresh();
     } catch (e) {
-      toast(`Publish failed: ${(e as Error).message}`);
+      toast(`发布失败：${(e as Error).message}`);
     }
   }
 
@@ -271,9 +271,9 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
       <PlannerDeprecationBanner />
       <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
         <div>
-          <h2 className="text-sm font-semibold">Project Planner</h2>
+          <h2 className="text-sm font-semibold">项目规划</h2>
           <p className="text-xs text-neutral-500">
-            Brainstorm in chat first. The task artifact appears when a split is ready.
+            先在对话中梳理思路。拆分完成后，任务工件会出现在这里。
           </p>
         </div>
         <button
@@ -281,7 +281,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
           disabled={pendingMode !== null}
           className="rounded-full border border-sky-300 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
         >
-          {pendingMode === 'proposal' ? 'Generating…' : 'Generate Task Split'}
+          {pendingMode === 'proposal' ? '生成中…' : '生成任务拆分'}
         </button>
       </div>
 
@@ -296,9 +296,9 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-                    Planning Chat
+                    规划对话
                   </div>
-                  <h3 className="mt-1 text-lg font-semibold">Brainstorm the requirement</h3>
+                  <h3 className="mt-1 text-lg font-semibold">梳理需求</h3>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-neutral-500">
                   Agent
@@ -334,14 +334,13 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
               ))}
               {pendingMode && (
                 <div className="text-xs text-neutral-500">
-                  {PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.label} is{' '}
-                  {pendingMode === 'proposal' ? 'generating a task split…' : 'thinking…'}
+                  {PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.label} 正在
+                  {pendingMode === 'proposal' ? '生成任务拆分…' : '思考…'}
                 </div>
               )}
               {!selected && (
                 <div className="rounded-2xl border border-dashed border-neutral-300 bg-white/70 p-4 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60">
-                  No task split artifact yet. Continue the conversation, then generate a versioned
-                  React Flow artifact when the scope is clear.
+                   还没有任务拆分工件。继续对话，范围清晰后再生成带版本的 React Flow 工件。
                 </div>
               )}
             </div>
@@ -357,12 +356,12 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
                 disabled={pendingMode !== null}
-                placeholder={`Message ${PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.label ?? 'agent'}...`}
+                placeholder={`发送给 ${PLANNER_AGENTS.find((agent) => agent.id === activeAgentId)?.label ?? 'Agent'}…`}
                 className="min-h-[92px] w-full resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
               />
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="text-xs text-neutral-500">
-                  Generate creates a new artifact version from the current conversation.
+                   生成操作会基于当前对话创建新的工件版本。
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -371,14 +370,14 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                     disabled={pendingMode !== null}
                     className="rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white"
                   >
-                    {pendingMode === 'proposal' ? 'Generating…' : 'Generate Split'}
+                     {pendingMode === 'proposal' ? '生成中…' : '生成拆分'}
                   </button>
                   <button
                     type="submit"
                     disabled={pendingMode !== null}
                     className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   >
-                    {pendingMode === 'chat' ? 'Thinking…' : 'Send'}
+                     {pendingMode === 'chat' ? '思考中…' : '发送'}
                   </button>
                 </div>
               </div>
@@ -392,15 +391,15 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="truncate text-lg font-semibold">Task Split Artifact</h3>
+                    <h3 className="truncate text-lg font-semibold">任务拆分工件</h3>
                     <ProposalStatusBadge status={selected.status} />
                   </div>
                   <p className="mt-1 line-clamp-2 text-xs text-neutral-500">{selected.summary}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-neutral-500">
-                    <span>Source: {selected.source}</span>
-                    <span>Created: {new Date(selected.createdAt).toLocaleString()}</span>
+                    <span>来源：{selected.source}</span>
+                    <span>创建：{new Date(selected.createdAt).toLocaleString()}</span>
                     {selected.publishedAt && (
-                      <span>Published: {new Date(selected.publishedAt).toLocaleString()}</span>
+                      <span>发布：{new Date(selected.publishedAt).toLocaleString()}</span>
                     )}
                   </div>
                 </div>
@@ -409,7 +408,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                     value={selectedProposalId ?? ''}
                     onChange={(event) => setSelectedProposalId(event.target.value)}
                     className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                    aria-label="Switch artifact version"
+                    aria-label="切换工件版本"
                   >
                     {proposals.map((proposal) => (
                       <option key={proposal.proposalId} value={proposal.proposalId}>
@@ -423,13 +422,13 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                         onClick={() => void saveEdited()}
                         className="rounded border border-sky-300 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
                       >
-                        Save
+                        保存
                       </button>
                       <button
                         onClick={() => setEditMode(false)}
                         className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                       >
-                        Cancel
+                        取消
                       </button>
                     </>
                   ) : (
@@ -438,20 +437,20 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                         onClick={() => void saveLayout()}
                         className="rounded border border-violet-300 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-950/30"
                       >
-                        Save Layout
+                        保存布局
                       </button>
                       <button
                         onClick={() => setEditMode(true)}
                         className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                       >
-                        Edit JSON
+                        编辑 JSON
                       </button>
                       {selected.status === 'draft' && (
                         <button
                           onClick={() => void publish()}
                           className="rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                         >
-                          Publish
+                          发布
                         </button>
                       )}
                     </>
@@ -477,7 +476,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                   <div className="min-h-[480px] flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
                     {flowNodes.length === 0 ? (
                       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-                        No nodes in this artifact yet.
+                         这个工件还没有节点。
                       </div>
                     ) : (
                       <ReactFlow<PlannerFlowNode, Edge>
@@ -503,34 +502,34 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
 
                   <section className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
                     <div className="rounded border border-neutral-200 bg-white p-3 text-xs dark:border-neutral-800 dark:bg-neutral-950">
-                      <h4 className="text-sm font-semibold">Artifact Summary</h4>
+                      <h4 className="text-sm font-semibold">工件摘要</h4>
                       <div className="mt-3 grid grid-cols-2 gap-3">
-                        <StatChip label="Nodes" value={selected.nodes.length} />
-                        <StatChip label="Edges" value={selected.edges.length} />
+                        <StatChip label="节点" value={selected.nodes.length} />
+                        <StatChip label="依赖边" value={selected.edges.length} />
                         <StatChip
-                          label="Todo"
+                          label="待办"
                           value={selected.nodes.filter((node) => node.status === 'todo').length}
                         />
                         <StatChip
-                          label="Waiting"
+                          label="等待"
                           value={selected.nodes.filter((node) => node.status === 'waiting').length}
                         />
                       </div>
                     </div>
 
                     <div className="rounded border border-neutral-200 bg-white p-3 text-xs dark:border-neutral-800 dark:bg-neutral-950">
-                      <h4 className="text-sm font-semibold">Selected Node</h4>
+                      <h4 className="text-sm font-semibold">选中节点</h4>
                       {selectedPlanNode ? (
                         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px]">
                           <NodeCard node={selectedPlanNode} compact />
                           <RelationList
-                            title="Depends on"
+                            title="依赖"
                             edges={incomingEdges}
                             lookup={nodeLookup}
                             keyField="fromTaskUid"
                           />
                           <RelationList
-                            title="Unblocks"
+                            title="解除阻塞"
                             edges={outgoingEdges}
                             lookup={nodeLookup}
                             keyField="toTaskUid"
@@ -538,7 +537,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                         </div>
                       ) : (
                         <p className="mt-3 text-neutral-500">
-                          Select a node on the canvas to inspect it.
+                           在画布上选择一个节点以查看详情。
                         </p>
                       )}
                     </div>
@@ -567,9 +566,26 @@ function ProposalStatusBadge({ status }: { status: PlanProposal['status'] }): JS
     <span
       className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}
     >
-      {status}
+      {proposalStatusLabel(status)}
     </span>
   );
+}
+
+function proposalStatusLabel(status: PlanProposal['status']): string {
+  if (status === 'published') return '已发布';
+  if (status === 'accepted') return '已接受';
+  if (status === 'rejected') return '已拒绝';
+  return '草稿';
+}
+
+function nodeStatusLabel(status: PlanProposalNode['status']): string {
+  if (!status) return '';
+  if (status === 'todo') return '待办';
+  if (status === 'waiting') return '等待';
+  if (status === 'doing') return '进行中';
+  if (status === 'done') return '完成';
+  if (status === 'blocked') return '阻塞';
+  return status;
 }
 
 function PlannerChatBubble({
@@ -591,7 +607,7 @@ function PlannerChatBubble({
       >
         {!isUser && (
           <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-sky-500">
-            {agentLabel ?? 'Planner'}
+            {agentLabel ?? '规划器'}
           </div>
         )}
         <p className="whitespace-pre-wrap leading-6">{message.content}</p>
@@ -625,7 +641,7 @@ function PlannerCanvasNode({ data, selected }: NodeProps<PlannerFlowNode>): JSX.
       )}
       <div className="mt-3 flex flex-wrap gap-1 text-[10px] text-neutral-500">
         <span className="font-mono">{node.taskUid}</span>
-        {node.recommendedRole && <span>role:{node.recommendedRole}</span>}
+        {node.recommendedRole && <span>角色：{node.recommendedRole}</span>}
         {node.executionStrategy && <span>{node.executionStrategy}</span>}
       </div>
     </div>
@@ -647,7 +663,7 @@ function NodeCard({
             <h5 className={`font-semibold ${compact ? 'text-sm' : ''}`}>{node.title}</h5>
             {node.status && (
               <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[9px] dark:bg-neutral-800">
-                {node.status}
+                {nodeStatusLabel(node.status)}
               </span>
             )}
             {node.priority && (
@@ -663,11 +679,11 @@ function NodeCard({
           )}
           <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-neutral-500">
             <span className="font-mono">{node.taskUid}</span>
-            {node.executionStrategy && <span>Strategy: {node.executionStrategy}</span>}
-            {node.recommendedOwnerType && <span>Owner: {node.recommendedOwnerType}</span>}
-            {node.recommendedRole && <span>Role: {node.recommendedRole}</span>}
-            {node.effort && <span>Effort: {node.effort}</span>}
-            {node.due && <span>Due: {node.due}</span>}
+            {node.executionStrategy && <span>策略：{node.executionStrategy}</span>}
+            {node.recommendedOwnerType && <span>负责人：{node.recommendedOwnerType}</span>}
+            {node.recommendedRole && <span>角色：{node.recommendedRole}</span>}
+            {node.effort && <span>工作量：{node.effort}</span>}
+            {node.due && <span>截止：{node.due}</span>}
           </div>
           {node.tags && node.tags.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -702,7 +718,7 @@ function RelationList({
     <div>
       <div className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">{title}</div>
       {edges.length === 0 ? (
-        <p className="mt-2 text-neutral-500">None</p>
+        <p className="mt-2 text-neutral-500">无</p>
       ) : (
         <ul className="mt-2 space-y-1">
           {edges.map((edge) => {
@@ -745,30 +761,30 @@ function PublishResultPanel({
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <h4 className="font-semibold text-emerald-800 dark:text-emerald-200">
-            Proposal Published
+            方案已发布
           </h4>
           <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
-            Published at {new Date(result.publishedAt).toLocaleString()}
+            发布时间：{new Date(result.publishedAt).toLocaleString()}
           </p>
           <div className="mt-2 grid grid-cols-3 gap-3 text-[11px]">
             <div>
-              <span className="text-neutral-600 dark:text-neutral-400">Created:</span>{' '}
+              <span className="text-neutral-600 dark:text-neutral-400">已创建：</span>{' '}
               <span className="font-semibold">{result.createdTaskUids.length}</span>
             </div>
             <div>
-              <span className="text-neutral-600 dark:text-neutral-400">Updated:</span>{' '}
+              <span className="text-neutral-600 dark:text-neutral-400">已更新：</span>{' '}
               <span className="font-semibold">{result.updatedTaskUids.length}</span>
             </div>
             <div>
-              <span className="text-neutral-600 dark:text-neutral-400">Unchanged:</span>{' '}
+              <span className="text-neutral-600 dark:text-neutral-400">未变化：</span>{' '}
               <span className="font-semibold">{result.unchangedTaskUids.length}</span>
             </div>
             <div>
-              <span className="text-neutral-600 dark:text-neutral-400">Waiting:</span>{' '}
+              <span className="text-neutral-600 dark:text-neutral-400">等待：</span>{' '}
               <span className="font-semibold">{result.waitingTaskUids.length}</span>
             </div>
             <div>
-              <span className="text-neutral-600 dark:text-neutral-400">Todo:</span>{' '}
+              <span className="text-neutral-600 dark:text-neutral-400">待办：</span>{' '}
               <span className="font-semibold">{result.todoTaskUids.length}</span>
             </div>
           </div>

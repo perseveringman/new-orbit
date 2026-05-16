@@ -825,7 +825,7 @@ export function ProjectRoomView(): JSX.Element {
       </div>
 
       <div className={`min-h-0 flex-1 ${outerTab === 'outputs' ? 'flex' : 'hidden'}`}>
-        <SpaceOutputsView spaceId={project.uid} spaceLabel="project" />
+        <SpaceOutputsView spaceId={project.uid} spaceLabel="项目" />
       </div>
 
       <div className={`min-h-0 flex-1 ${outerTab === 'planner' ? 'flex' : 'hidden'}`}>

@@ -3,13 +3,13 @@ import type { AssetManifest, AssetScope } from '@shared/assets';
 import type { ProjectSummaryDTO } from '@shared/ipc';
 
 export function ProjectMaterialsView({ project }: { project: ProjectSummaryDTO }): JSX.Element {
-  return <SpaceMaterialsView spaceId={project.uid} spaceName={project.name} spaceLabel="project" />;
+  return <SpaceMaterialsView spaceId={project.uid} spaceName={project.name} spaceLabel="项目" />;
 }
 
 export function SpaceMaterialsView({
   spaceId,
   spaceName,
-  spaceLabel = 'space'
+  spaceLabel = '空间'
 }: {
   spaceId: string;
   spaceName: string;
@@ -42,9 +42,9 @@ export function SpaceMaterialsView({
   }, [manifest]);
 
   async function addScope(): Promise<void> {
-    const source = window.prompt(`Path, glob, or URL to authorize as ${spaceLabel} material`);
+    const source = window.prompt(`请输入要授权为${spaceLabel}素材的路径、glob 或 URL`);
     if (!source) return;
-    const title = window.prompt('Scope title', source.split('/').filter(Boolean).at(-1) ?? source) ?? undefined;
+    const title = window.prompt('范围标题', source.split('/').filter(Boolean).at(-1) ?? source) ?? undefined;
     const kind = source.startsWith('http') ? 'url' : 'folder';
     try {
       await window.orbit.assets.addScope(spaceId, {
@@ -61,7 +61,7 @@ export function SpaceMaterialsView({
   }
 
   async function removeScope(scope: AssetScope): Promise<void> {
-    if (!window.confirm(`Remove material scope "${scope.title}"?`)) return;
+    if (!window.confirm(`移除素材范围 "${scope.title}"?`)) return;
     try {
       await window.orbit.assets.removeScope(spaceId, scope.id);
       await reload();
@@ -83,16 +83,16 @@ export function SpaceMaterialsView({
     <section className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-2 text-sm dark:border-neutral-800">
         <div>
-          <h2 className="font-medium">Materials</h2>
+          <h2 className="font-medium">素材</h2>
           <p className="text-xs text-neutral-500">
-            Authorized scopes define what AI may access for this {spaceLabel}: {spaceName}.
+            授权范围定义 AI 可访问的{spaceLabel}素材：{spaceName}。
           </p>
         </div>
         <button
           onClick={() => void addScope()}
           className="rounded bg-sky-600 px-3 py-1 text-xs text-white hover:bg-sky-500"
         >
-          + Add scope
+          + 添加范围
         </button>
       </header>
       {error && (
@@ -105,18 +105,18 @@ export function SpaceMaterialsView({
           className={activeView === 'map' ? 'text-sky-600 dark:text-sky-400' : 'text-neutral-500'}
           onClick={() => setActiveView('map')}
         >
-          Map ({manifest?.scopes.length ?? 0})
+          范围地图（{manifest?.scopes.length ?? 0}）
         </button>
         <button
           className={activeView === 'pinned' ? 'text-sky-600 dark:text-sky-400' : 'text-neutral-500'}
           onClick={() => setActiveView('pinned')}
         >
-          Pinned ({manifest?.pins.length ?? 0})
+          已固定（{manifest?.pins.length ?? 0}）
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         {!manifest ? (
-          <div className="text-sm text-neutral-500">Loading materials...</div>
+          <div className="text-sm text-neutral-500">正在加载素材…</div>
         ) : activeView === 'map' ? (
           manifest.scopes.length === 0 ? (
             <EmptyMaterials spaceLabel={spaceLabel} onAdd={() => void addScope()} />
@@ -146,10 +146,10 @@ export function SpaceMaterialsView({
                             #{tag}
                           </span>
                         ))}
-                        <span>{pinsByScope.get(scope.id) ?? 0} pins</span>
+                        <span>{pinsByScope.get(scope.id) ?? 0} 个固定项</span>
                         {scope.stats && (
                           <span>
-                            {scope.stats.file_count} files · {formatBytes(scope.stats.total_bytes)}
+                            {scope.stats.file_count} 个文件 · {formatBytes(scope.stats.total_bytes)}
                           </span>
                         )}
                       </div>
@@ -160,14 +160,14 @@ export function SpaceMaterialsView({
                           onClick={() => void scanScope(scope)}
                           className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
                         >
-                          Scan
+                          扫描
                         </button>
                       )}
                       <button
                         onClick={() => void removeScope(scope)}
                         className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
                       >
-                        Remove
+                        移除
                       </button>
                     </div>
                   </div>
@@ -177,7 +177,7 @@ export function SpaceMaterialsView({
           )
         ) : manifest.pins.length === 0 ? (
           <div className="rounded border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800">
-            No pinned materials yet.
+            还没有固定素材。
           </div>
         ) : (
           <div className="space-y-2">
@@ -189,7 +189,7 @@ export function SpaceMaterialsView({
                 <h3 className="font-medium">{pin.title}</h3>
                 <p className="mt-1 truncate font-mono text-xs text-neutral-500">{pin.source}</p>
                 <p className="mt-1 text-xs text-neutral-500">
-                  {pin.parent_scope ? `from ${pin.parent_scope}` : 'standalone pin'} · {pin.pinned_by}
+                  {pin.parent_scope ? `来自 ${pin.parent_scope}` : '独立固定项'} · {pin.pinned_by}
                 </p>
               </article>
             ))}
@@ -204,15 +204,15 @@ function EmptyMaterials({ spaceLabel, onAdd }: { spaceLabel: string; onAdd(): vo
   return (
     <div className="flex h-full items-center justify-center">
       <div className="max-w-md rounded border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-800">
-        <h3 className="text-sm font-medium">No material scopes yet</h3>
+        <h3 className="text-sm font-medium">还没有素材范围</h3>
         <p className="mt-2 text-xs text-neutral-500">
-          Add a folder, file, glob, or URL scope to explicitly authorize {spaceLabel} materials for AI.
+          添加文件夹、文件、glob 或 URL 范围，明确授权 AI 使用{spaceLabel}素材。
         </p>
         <button
           onClick={onAdd}
           className="mt-4 rounded bg-sky-600 px-3 py-1.5 text-xs text-white hover:bg-sky-500"
         >
-          + Add first scope
+          + 添加第一个范围
         </button>
       </div>
     </div>

@@ -352,7 +352,7 @@ export function AreaRoomView(): JSX.Element {
       </div>
 
       <div className={`min-h-0 flex-1 ${outerTab === 'materials' ? 'flex' : 'hidden'}`}>
-        <SpaceMaterialsView spaceId={area.uid} spaceName={area.name} spaceLabel="area" />
+        <SpaceMaterialsView spaceId={area.uid} spaceName={area.name} spaceLabel="Area" />
       </div>
 
       <div className={`min-h-0 flex-1 ${outerTab === 'outputs' ? 'flex' : 'hidden'}`}>

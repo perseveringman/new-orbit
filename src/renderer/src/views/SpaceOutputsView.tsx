@@ -3,7 +3,7 @@ import type { SpaceContextBundle, SpaceOutputSummary } from '@shared/space';
 
 export function SpaceOutputsView({
   spaceId,
-  spaceLabel = 'space'
+  spaceLabel = '空间'
 }: {
   spaceId: string;
   spaceLabel?: string;
@@ -32,8 +32,8 @@ export function SpaceOutputsView({
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <header className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-        <h2 className="text-sm font-semibold">Outputs</h2>
-        <p className="text-xs text-neutral-500">Durable results produced by this {spaceLabel}.</p>
+        <h2 className="text-sm font-semibold">产出</h2>
+        <p className="text-xs text-neutral-500">这个{spaceLabel}产生的持久结果。</p>
       </header>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         {error ? (
@@ -42,13 +42,13 @@ export function SpaceOutputsView({
           </div>
         ) : null}
         {!outputs ? (
-          <div className="text-sm text-neutral-500">Loading outputs...</div>
+          <div className="text-sm text-neutral-500">正在加载产出…</div>
         ) : outputs.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="rounded border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-800">
-              <h3 className="text-sm font-medium">No outputs yet</h3>
+              <h3 className="text-sm font-medium">还没有产出</h3>
               <p className="mt-2 max-w-sm text-xs text-neutral-500">
-                Outputs will appear here once outputs/_manifest.md records them.
+                一旦 outputs/_manifest.md 记录产出，它们就会显示在这里。
               </p>
             </div>
           </div>

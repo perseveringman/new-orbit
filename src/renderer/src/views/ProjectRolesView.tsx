@@ -45,7 +45,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
         setSelectedBindingId(bs[0].id);
       }
     } catch (e) {
-      toast(`Load roles failed: ${(e as Error).message}`);
+      toast(`加载角色失败：${(e as Error).message}`);
     }
   }, [projectUid, selectedBindingId, toast]);
 
@@ -106,7 +106,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
       })
       .catch((e) => {
         if (!cancelled) {
-          toast(`Load binding details failed: ${(e as Error).message}`);
+          toast(`加载绑定详情失败：${(e as Error).message}`);
         }
       });
     return () => {
@@ -119,7 +119,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
       const vs = await window.orbit.role.listTemplateVersions(templateId);
       setVersions((m) => new Map(m).set(templateId, vs));
     } catch (e) {
-      toast(`Load template versions failed: ${(e as Error).message}`);
+      toast(`加载模板版本失败：${(e as Error).message}`);
     }
   }
 
@@ -134,7 +134,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
       .then((vs) => vs.find((v) => v.id === template.latestVersionId) ?? vs[0]);
 
     if (!latestVersion) {
-      toast('No versions found for this template');
+      toast('这个模板没有可用版本');
       return;
     }
 
@@ -151,11 +151,11 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
 
     try {
       const created = await window.orbit.role.createBinding(projectUid, binding);
-      toast(`Binding created: ${template.name}`);
+      toast(`已创建绑定：${template.name}`);
       await refresh();
       setSelectedBindingId(created.id);
     } catch (e) {
-      toast(`Create binding failed: ${(e as Error).message}`);
+      toast(`创建绑定失败：${(e as Error).message}`);
     }
   }
 
@@ -165,10 +165,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
   ): Promise<void> {
     try {
       await window.orbit.role.updateBinding(projectUid, bindingId, patch);
-      toast('Binding updated');
+      toast('绑定已更新');
       await refresh();
     } catch (e) {
-      toast(`Update binding failed: ${(e as Error).message}`);
+      toast(`更新绑定失败：${(e as Error).message}`);
     }
   }
 
@@ -178,13 +178,13 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
-        <h2 className="text-sm font-semibold">Project Roles</h2>
+        <h2 className="text-sm font-semibold">项目角色</h2>
         <div className="flex gap-2">
           <button
             onClick={() => void refresh()}
             className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Refresh
+            刷新
           </button>
         </div>
       </div>
@@ -194,10 +194,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
           <div className="flex h-full flex-col">
             <div className="shrink-0 border-b border-neutral-200 p-3 dark:border-neutral-800">
               <h3 className="mb-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                Project Bindings ({bindings.length})
+                 项目绑定（{bindings.length}）
               </h3>
               {bindings.length === 0 ? (
-                <p className="text-xs text-neutral-500">No bindings yet.</p>
+                 <p className="text-xs text-neutral-500">还没有绑定。</p>
               ) : (
                 <ul className="space-y-1">
                   {bindings.map((b) => {
@@ -213,11 +213,11 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                           }`}
                         >
                           <div className="flex items-center gap-1.5">
-                            <span className="truncate font-medium">{tmpl?.name ?? 'Unknown'}</span>
+                             <span className="truncate font-medium">{tmpl?.name ?? '未知'}</span>
                             <HealthBadge health={b.health} />
                           </div>
                           <div className="mt-0.5 text-[10px] text-neutral-500">
-                            {b.dispatchMode} · {tmpl?.kind ?? ''}
+                             {dispatchModeLabel(b.dispatchMode)} · {tmpl?.kind ?? ''}
                           </div>
                         </button>
                       </li>
@@ -229,10 +229,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
 
             <div className="flex-1 overflow-auto p-3">
               <h3 className="mb-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                Available Templates ({templates.length})
+                 可用模板（{templates.length}）
               </h3>
               {templates.length === 0 ? (
-                <p className="text-xs text-neutral-500">No templates found.</p>
+                 <p className="text-xs text-neutral-500">未找到模板。</p>
               ) : (
                 <ul className="space-y-1">
                   {templates.map((t) => (
@@ -252,7 +252,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                             onClick={() => setCreatingFromTemplate(t.id)}
                             className="rounded border border-neutral-300 px-1.5 py-0.5 text-[10px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                           >
-                            + Bind
+                             + 绑定
                           </button>
                         </div>
                         {creatingFromTemplate === t.id && (
@@ -261,13 +261,13 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                               onClick={() => void createBinding(t.id)}
                               className="flex-1 rounded border border-sky-300 px-2 py-1 text-[10px] text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950/30"
                             >
-                              Create Binding
+                               创建绑定
                             </button>
                             <button
                               onClick={() => setCreatingFromTemplate(null)}
                               className="rounded border border-neutral-300 px-2 py-1 text-[10px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                             >
-                              Cancel
+                               取消
                             </button>
                           </div>
                         )}
@@ -284,8 +284,8 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
           {!selectedBinding ? (
             <div className="flex h-full items-center justify-center text-sm text-neutral-500">
               {bindings.length === 0
-                ? 'Create a binding from a template to get started.'
-                : 'Select a binding to view details.'}
+                ? '从模板创建绑定即可开始。'
+                : '请选择一个绑定以查看详情。'}
             </div>
           ) : (
             <>
@@ -294,7 +294,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="text-lg font-semibold">
-                        {selectedTemplate?.name ?? 'Unknown Template'}
+                         {selectedTemplate?.name ?? '未知模板'}
                       </h3>
                       <HealthBadge health={selectedBinding.health} />
                     </div>
@@ -304,8 +304,8 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                       </p>
                     )}
                     <div className="mt-2 flex items-center gap-3 text-[10px] text-neutral-500">
-                      <span>Created: {new Date(selectedBinding.createdAt).toLocaleString()}</span>
-                      <span>Updated: {new Date(selectedBinding.updatedAt).toLocaleString()}</span>
+                       <span>创建：{new Date(selectedBinding.createdAt).toLocaleString()}</span>
+                       <span>更新：{new Date(selectedBinding.updatedAt).toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -314,12 +314,12 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
               <div className="flex-1 overflow-auto p-4">
                 <div className="space-y-4">
                   <section>
-                    <h4 className="mb-2 text-sm font-semibold">Configuration</h4>
+                     <h4 className="mb-2 text-sm font-semibold">配置</h4>
                     <div className="space-y-3 rounded border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-950">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                            Dispatch Mode
+                             分发模式
                           </label>
                           <select
                             value={selectedBinding.dispatchMode}
@@ -330,14 +330,14 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                             }
                             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                           >
-                            <option value="manual-only">Manual Only</option>
-                            <option value="suggested">Suggested</option>
-                            <option value="autonomous">Autonomous</option>
+                             <option value="manual-only">仅手动</option>
+                             <option value="suggested">建议</option>
+                             <option value="autonomous">自主</option>
                           </select>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                            Health
+                             健康状态
                           </label>
                           <select
                             value={selectedBinding.health}
@@ -348,10 +348,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                             }
                             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                           >
-                            <option value="healthy">Healthy</option>
-                            <option value="degraded">Degraded</option>
-                            <option value="paused">Paused</option>
-                            <option value="blocked">Blocked</option>
+                             <option value="healthy">健康</option>
+                             <option value="degraded">降级</option>
+                             <option value="paused">已暂停</option>
+                             <option value="blocked">阻塞</option>
                           </select>
                         </div>
                       </div>
@@ -359,7 +359,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                            Runtime Preference
+                             Runtime 偏好
                           </label>
                           <select
                             value={selectedBinding.runtimePreference ?? ''}
@@ -387,7 +387,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                             }}
                             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                           >
-                            <option value="">Auto from role/default</option>
+                             <option value="">根据角色/默认值自动选择</option>
                             {(snapshot?.runtimes ?? []).map((runtime) => (
                               <option key={runtime.runtimeId} value={runtime.runtimeId}>
                                 {runtimeOptionLabel(runtime)}
@@ -397,7 +397,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                            Model Preference
+                             模型偏好
                           </label>
                           <select
                             value={selectedBinding.modelPreference ?? ''}
@@ -419,7 +419,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                             ))}
                             {selectedBinding.modelPreference && !selectedModelIsPreset ? (
                               <option value={selectedBinding.modelPreference}>
-                                {selectedBinding.modelPreference} (current)
+                                 {selectedBinding.modelPreference}（当前）
                               </option>
                             ) : null}
                           </select>
@@ -429,20 +429,20 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                       {selectedTemplateVersion && (
                         <div className="rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
                           <div className="font-medium text-neutral-700 dark:text-neutral-200">
-                            Template routing defaults
+                             模板路由默认值
                           </div>
                           <div className="mt-1">
-                            Providers:{' '}
-                            {selectedTemplateVersion.providerPreferences?.join(', ') || 'any'}
-                            {' · '}
-                            Model: {selectedTemplateVersion.modelPreference ?? 'provider default'}
+                             Provider：{' '}
+                             {selectedTemplateVersion.providerPreferences?.join(', ') || '任意'}
+                             {' · '}
+                             模型：{selectedTemplateVersion.modelPreference ?? 'Provider 默认'}
                           </div>
                         </div>
                       )}
 
                       <div>
                         <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                          Overlay Instructions
+                           覆盖指令
                         </label>
                         <textarea
                           value={selectedBinding.overlayInstructions ?? ''}
@@ -451,7 +451,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                               overlayInstructions: e.target.value
                             })
                           }
-                          placeholder="Additional instructions for this binding..."
+                           placeholder="此绑定的附加指令…"
                           className="w-full resize-none rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                           rows={3}
                         />
@@ -461,10 +461,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
 
                   <section>
                     <h4 className="mb-2 text-sm font-semibold">
-                      Binding Tasks ({tasks.length})
+                       绑定任务（{tasks.length}）
                     </h4>
                     {tasks.length === 0 ? (
-                      <p className="text-xs text-neutral-500">No tasks assigned to this binding.</p>
+                       <p className="text-xs text-neutral-500">还没有任务分配给这个绑定。</p>
                     ) : (
                       <ul className="space-y-2">
                         {tasks.map((task) => (
@@ -476,7 +476,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                               <div className="flex-1">
                                 <div className="font-semibold">{task.title}</div>
                                 <div className="mt-1 text-[10px] text-neutral-500">
-                                  {task.status} · {task.relPath}
+                                   {taskStatusLabel(task.status)} · {task.relPath}
                                 </div>
                               </div>
                             </div>
@@ -488,10 +488,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
 
                   <section>
                     <h4 className="mb-2 text-sm font-semibold">
-                      Recent Reports ({reports.length})
+                       最近报告（{reports.length}）
                     </h4>
                     {reports.length === 0 ? (
-                      <p className="text-xs text-neutral-500">No reports yet.</p>
+                       <p className="text-xs text-neutral-500">还没有报告。</p>
                     ) : (
                       <ul className="space-y-2">
                         {reports.slice(0, 10).map((report) => (
@@ -509,10 +509,10 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                                   {report.summary}
                                 </p>
                                 <div className="mt-2 text-[10px] text-neutral-500">
-                                  Created: {new Date(report.createdAt).toLocaleString()}
-                                  {report.completedAt && (
-                                    <> · Completed: {new Date(report.completedAt).toLocaleString()}</>
-                                  )}
+                                   创建：{new Date(report.createdAt).toLocaleString()}
+                                   {report.completedAt && (
+                                     <> · 完成：{new Date(report.completedAt).toLocaleString()}</>
+                                   )}
                                 </div>
                                 {report.details.length > 0 && (
                                   <ul className="mt-2 space-y-1 border-l-2 border-neutral-300 pl-2 text-[10px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
@@ -521,7 +521,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                                     ))}
                                     {report.details.length > 3 && (
                                       <li className="text-neutral-500">
-                                        ... and {report.details.length - 3} more
+                                         …还有 {report.details.length - 3} 条
                                       </li>
                                     )}
                                   </ul>
@@ -537,7 +537,7 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                   {snapshot && (
                     <section>
                       <h4 className="mb-2 text-sm font-semibold">
-                        Runtime Providers ({snapshot.runtimes.length})
+                         Runtime Provider（{snapshot.runtimes.length}）
                       </h4>
                       <ul className="space-y-2">
                         {snapshot.runtimes
@@ -553,11 +553,11 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
                                     <RuntimeStatusBadge status={runtime.status} />
                                   </div>
                                   <div className="mt-1 text-[10px] text-neutral-500">
-                                    {runtime.provider} · {runtime.version ?? 'unknown version'}
+                                     {runtime.provider} · {runtime.version ?? '未知版本'}
                                     {' · '}
                                     {runtimeTaskReadiness(runtime)}
                                     {runtime.activeRunIds && runtime.activeRunIds.length > 0 && (
-                                      <> · {runtime.activeRunIds.length} active runs</>
+                                       <> · {runtime.activeRunIds.length} 个活跃运行</>
                                     )}
                                   </div>
                                 </div>
@@ -578,13 +578,29 @@ export function ProjectRolesView({ projectUid }: ProjectRolesViewProps): JSX.Ele
 }
 
 function runtimeOptionLabel(runtime: RuntimeDescriptor): string {
-  return `${runtime.name} · ${runtime.status} · ${runtimeTaskReadiness(runtime)}`;
+  return `${runtime.name} · ${runtimeStatusLabel(runtime.status)} · ${runtimeTaskReadiness(runtime)}`;
+}
+
+function dispatchModeLabel(mode: DispatchMode): string {
+  if (mode === 'manual-only') return '仅手动';
+  if (mode === 'suggested') return '建议';
+  return '自主';
+}
+
+function taskStatusLabel(status: TaskRecord['status']): string {
+  if (status === 'backlog') return '积压';
+  if (status === 'waiting') return '等待';
+  if (status === 'todo') return '待办';
+  if (status === 'doing') return '进行中';
+  if (status === 'blocked') return '阻塞';
+  if (status === 'done') return '完成';
+  return status;
 }
 
 function runtimeTaskReadiness(runtime: RuntimeDescriptor): string {
-  if (runtime.status !== 'online') return 'needs attention';
-  if (!runtime.capabilities.supportsBackgroundRuns) return 'manual/session only';
-  return 'task runnable';
+  if (runtime.status !== 'online') return '需要关注';
+  if (!runtime.capabilities.supportsBackgroundRuns) return '仅手动/会话';
+  return '可运行任务';
 }
 
 function resolveBindingRuntime(
@@ -612,9 +628,9 @@ function modelDefaultLabel(
   runtime: RuntimeDescriptor | null,
   templateVersion: RoleTemplateVersion | null
 ): string {
-  if (templateVersion?.modelPreference) return `Role default (${templateVersion.modelPreference})`;
-  if (runtime?.defaultModel) return `Runtime default (${runtime.defaultModel})`;
-  return runtime ? 'Provider default' : 'Select a runtime first';
+  if (templateVersion?.modelPreference) return `角色默认（${templateVersion.modelPreference}）`;
+  if (runtime?.defaultModel) return `Runtime 默认（${runtime.defaultModel}）`;
+  return runtime ? 'Provider 默认' : '请先选择 Runtime';
 }
 
 function modelOptionLabel(option: RuntimeModelOption): string {
@@ -633,9 +649,16 @@ function HealthBadge({ health }: { health: BindingHealth }): JSX.Element {
 
   return (
     <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}>
-      {health}
+      {healthLabel(health)}
     </span>
   );
+}
+
+function healthLabel(health: BindingHealth): string {
+  if (health === 'healthy') return '健康';
+  if (health === 'degraded') return '降级';
+  if (health === 'paused') return '已暂停';
+  return '阻塞';
 }
 
 function ReportStatusBadge({ status }: { status: ImplementationReport['status'] }): JSX.Element {
@@ -652,9 +675,17 @@ function ReportStatusBadge({ status }: { status: ImplementationReport['status'] 
 
   return (
     <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}>
-      {status}
+      {reportStatusLabel(status)}
     </span>
   );
+}
+
+function reportStatusLabel(status: ImplementationReport['status']): string {
+  if (status === 'completed') return '已完成';
+  if (status === 'running') return '运行中';
+  if (status === 'needs_attention') return '需要关注';
+  if (status === 'failed') return '失败';
+  return status;
 }
 
 function RuntimeStatusBadge({ status }: { status: RuntimeDescriptor['status'] }): JSX.Element {
@@ -667,7 +698,13 @@ function RuntimeStatusBadge({ status }: { status: RuntimeDescriptor['status'] })
 
   return (
     <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}>
-      {status}
+      {runtimeStatusLabel(status)}
     </span>
   );
+}
+
+function runtimeStatusLabel(status: RuntimeDescriptor['status']): string {
+  if (status === 'online') return '在线';
+  if (status === 'degraded') return '降级';
+  return '离线';
 }
