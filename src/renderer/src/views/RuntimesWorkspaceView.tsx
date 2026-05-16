@@ -5,7 +5,10 @@ import type {
   RuntimeDescriptor,
   TaskLease
 } from '@shared/orchestration';
+import type { EvidenceSource, ExternalAISessionSettings } from '@shared/evidence';
+import { wholeSourceSelector } from '@shared/evidence';
 import type { SDKEndpointRegistrySnapshot, SDKEndpointView } from '@shared/runtime';
+import type { ExternalSessionDistillPayload, SynthesisArtifact } from '@shared/synthesis';
 import { useFiles } from '../store/files';
 import { usePara } from '../store/para';
 import { useWorkspace } from '../store/workspace';
@@ -15,10 +18,19 @@ export interface RuntimesWorkspaceSurfaceProps {
   loading: boolean;
   projects: Array<{ uid: string; name: string }>;
   sdkSnapshot?: SDKEndpointRegistrySnapshot | null;
+  externalSessions?: EvidenceSource[];
+  externalSessionSummaries?: Record<string, SynthesisArtifact<ExternalSessionDistillPayload>>;
+  externalSessionSettings?: ExternalAISessionSettings | null;
+  externalSessionsLoading?: boolean;
+  externalSessionMessage?: string | null;
+  busyExternalSessionId?: string | null;
   selectedRuntimeId: string | null;
   onRefresh(): void;
   onSelectRuntime(runtimeId: string): void;
   onOpenProjectRoles(projectUid: string): void;
+  onSyncExternalSessions?(): void;
+  onDistillExternalSession?(source: EvidenceSource): void;
+  onOpenMemory?(): void;
 }
 
 export function RuntimesWorkspaceView(): JSX.Element {
@@ -30,8 +42,50 @@ export function RuntimesWorkspaceView(): JSX.Element {
   const setView = usePara((s) => s.setView);
   const [snapshot, setSnapshot] = useState<DispatchSnapshot | null>(null);
   const [sdkSnapshot, setSdkSnapshot] = useState<SDKEndpointRegistrySnapshot | null>(null);
+  const [externalSessions, setExternalSessions] = useState<EvidenceSource[]>([]);
+  const [externalSessionSettings, setExternalSessionSettings] =
+    useState<ExternalAISessionSettings | null>(null);
+  const [externalSessionSummaries, setExternalSessionSummaries] = useState<
+    Record<string, SynthesisArtifact<ExternalSessionDistillPayload>>
+  >({});
+  const [externalSessionsLoading, setExternalSessionsLoading] = useState(false);
+  const [externalSessionMessage, setExternalSessionMessage] = useState<string | null>(null);
+  const [busyExternalSessionId, setBusyExternalSessionId] = useState<string | null>(null);
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const loadExternalSessions = useCallback(async () => {
+    setExternalSessionsLoading(true);
+    try {
+      const [sources, summaries, settings] = await Promise.all([
+        window.orbit.evidence.list({
+          kind: 'external_ai_session',
+          include_unavailable: true,
+          limit: 120
+        }),
+        window.orbit.synthesis.list({ kind: 'distill.external_session', limit: 160 }),
+        window.orbit.evidence.externalSessionSettings().catch(() => null)
+      ]);
+      setExternalSessions(sources);
+      setExternalSessionSettings(settings);
+      setExternalSessionSummaries(
+        Object.fromEntries(
+          summaries
+            .filter(
+              (
+                artifact
+              ): artifact is SynthesisArtifact<ExternalSessionDistillPayload> =>
+                artifact.kind === 'distill.external_session'
+            )
+            .map((artifact) => [artifact.payload.source_id, artifact])
+        )
+      );
+    } catch (error) {
+      setExternalSessionMessage(`本地 AI 会话加载失败：${(error as Error).message}`);
+    } finally {
+      setExternalSessionsLoading(false);
+    }
+  }, []);
 
   const refresh = useCallback(
     async (mode: 'status' | 'refresh' = 'status') => {
@@ -63,6 +117,10 @@ export function RuntimesWorkspaceView(): JSX.Element {
   }, [refresh]);
 
   useEffect(() => {
+    void loadExternalSessions();
+  }, [loadExternalSessions]);
+
+  useEffect(() => {
     const offRuntime = window.orbit.runtime.onEvent(() => {
       void refresh();
     });
@@ -83,16 +141,84 @@ export function RuntimesWorkspaceView(): JSX.Element {
     [setActiveProjectUid, setView]
   );
 
+  const syncExternalSessions = useCallback(async () => {
+    setExternalSessionsLoading(true);
+    setExternalSessionMessage('正在同步本地 AI 会话…');
+    try {
+      await window.orbit.evidence.sync({ includeExternalAISessions: true });
+      await loadExternalSessions();
+      setExternalSessionMessage('本地 AI 会话已同步到 PMIL 证据层。');
+    } catch (error) {
+      setExternalSessionMessage(`同步本地 AI 会话失败：${(error as Error).message}`);
+    } finally {
+      setExternalSessionsLoading(false);
+    }
+  }, [loadExternalSessions]);
+
+  const distillExternalSession = useCallback(async (source: EvidenceSource) => {
+    setBusyExternalSessionId(source.id);
+    setExternalSessionMessage(null);
+    try {
+      const selector = wholeSourceSelector(
+        source.id,
+        'safe_projection',
+        'runtime local AI session summary'
+      );
+      const read = await window.orbit.evidence.read(selector);
+      const text = read.excerpts.map((excerpt) => excerpt.text).join('\n\n');
+      const artifact = (await window.orbit.synthesis.ensure({
+        kind: 'distill.external_session',
+        scope_key: `distill.external_session:${source.id}`,
+        sources: [
+          {
+            kind: 'external_ai_session',
+            ref: source.id,
+            title: source.title,
+            excerpt: text.slice(0, 8000),
+            metadata: {
+              selector,
+              source_hash: source.fingerprint.value,
+              agent: stringMetadata(source, 'agent'),
+              project_name: stringMetadata(source, 'project_name')
+            }
+          }
+        ],
+        priority: 'interactive',
+        reason: 'manual',
+        force: true
+      })) as SynthesisArtifact<ExternalSessionDistillPayload>;
+      setExternalSessionSummaries((current) => ({ ...current, [source.id]: artifact }));
+      setExternalSessionMessage('会话摘要已生成。');
+    } catch (error) {
+      setExternalSessionMessage(`生成会话摘要失败：${(error as Error).message}`);
+    } finally {
+      setBusyExternalSessionId(null);
+    }
+  }, []);
+
+  const openMemory = useCallback(() => {
+    setView({ kind: 'memory' });
+  }, [setView]);
+
   return (
     <RuntimesWorkspaceSurface
       snapshot={snapshot}
       loading={loading}
       projects={projects}
       sdkSnapshot={sdkSnapshot}
+      externalSessions={externalSessions}
+      externalSessionSettings={externalSessionSettings}
+      externalSessionSummaries={externalSessionSummaries}
+      externalSessionsLoading={externalSessionsLoading}
+      externalSessionMessage={externalSessionMessage}
+      busyExternalSessionId={busyExternalSessionId}
       selectedRuntimeId={selectedRuntimeId}
       onRefresh={() => void refresh('refresh')}
       onSelectRuntime={setSelectedRuntimeId}
       onOpenProjectRoles={openProjectRoles}
+      onSyncExternalSessions={() => void syncExternalSessions()}
+      onDistillExternalSession={(source) => void distillExternalSession(source)}
+      onOpenMemory={openMemory}
     />
   );
 }
@@ -102,10 +228,19 @@ export function RuntimesWorkspaceSurface({
   loading,
   projects,
   sdkSnapshot,
+  externalSessions = [],
+  externalSessionSummaries = {},
+  externalSessionSettings = null,
+  externalSessionsLoading = false,
+  externalSessionMessage = null,
+  busyExternalSessionId = null,
   selectedRuntimeId,
   onRefresh,
   onSelectRuntime,
-  onOpenProjectRoles
+  onOpenProjectRoles,
+  onSyncExternalSessions,
+  onDistillExternalSession,
+  onOpenMemory
 }: RuntimesWorkspaceSurfaceProps): JSX.Element {
   const runtimes = snapshot?.runtimes ?? [];
   const sdkEndpoints = sdkSnapshot?.endpoints ?? [];
@@ -138,8 +273,13 @@ export function RuntimesWorkspaceSurface({
     online: runtimes.filter((runtime) => runtime.status === 'online').length,
     degraded: runtimes.filter((runtime) => runtime.status === 'degraded').length,
     sdkReady: sdkEndpoints.filter((endpoint) => endpoint.enabled && endpoint.keyConfigured).length,
-    roleBindings: (snapshot?.bindings ?? []).length
+    roleBindings: (snapshot?.bindings ?? []).length,
+    externalSessions: externalSessions.length,
+    externalSummaries: Object.keys(externalSessionSummaries).length
   };
+  const selectedRuntimeSessions = selectedRuntime
+    ? sessionsForRuntime(selectedRuntime, externalSessions)
+    : [];
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto px-6 py-5">
@@ -153,7 +293,7 @@ export function RuntimesWorkspaceSurface({
               AI 控制平面
             </h1>
             <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
-              观察 CLI Runtime、SDK endpoint、角色绑定，以及当前流经 Orbit 编排层的 lease / report。
+              观察 CLI Runtime、SDK endpoint、角色绑定、编排层 lease / report，以及这些 Runtime 在本机留下的 AI 会话证据。
             </p>
           </div>
           <button
@@ -164,7 +304,7 @@ export function RuntimesWorkspaceSurface({
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
           <WorkspaceStat
             label="在线"
             value={String(stats.online)}
@@ -184,6 +324,11 @@ export function RuntimesWorkspaceSurface({
             label="角色绑定"
             value={String(stats.roleBindings)}
             hint="已连接模板的项目角色"
+          />
+          <WorkspaceStat
+            label="本地会话"
+            value={`${stats.externalSessions}/${stats.externalSummaries}`}
+            hint="证据源 / 已摘要"
           />
         </div>
       </header>
@@ -309,6 +454,20 @@ export function RuntimesWorkspaceSurface({
                         </div>
                       </section>
 
+                      <ExternalSessionRuntimePanel
+                        busyExternalSessionId={busyExternalSessionId}
+                        externalSessionsLoading={externalSessionsLoading}
+                        message={externalSessionMessage}
+                        runtime={selectedRuntime}
+                        sessions={selectedRuntimeSessions}
+                        settings={externalSessionSettings}
+                        summaries={externalSessionSummaries}
+                        totalSessions={externalSessions.length}
+                        onDistill={onDistillExternalSession}
+                        onOpenMemory={onOpenMemory}
+                        onSync={onSyncExternalSessions}
+                      />
+
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-semibold">活跃 Lease</h3>
@@ -420,6 +579,12 @@ export function RuntimesWorkspaceSurface({
                         )}
                       </section>
 
+                      <PMILLocalSessionDigestCard
+                        sessions={externalSessions}
+                        settings={externalSessionSettings}
+                        summaries={externalSessionSummaries}
+                      />
+
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <h3 className="text-sm font-semibold">角色路由</h3>
                         <div className="mt-3 grid gap-2 text-sm">
@@ -486,6 +651,260 @@ export function RuntimesWorkspaceSurface({
           </main>
         </div>
       </section>
+    </div>
+  );
+}
+
+function ExternalSessionRuntimePanel({
+  runtime,
+  sessions,
+  summaries,
+  settings,
+  totalSessions,
+  externalSessionsLoading,
+  busyExternalSessionId,
+  message,
+  onSync,
+  onDistill,
+  onOpenMemory
+}: {
+  runtime: RuntimeDescriptor;
+  sessions: EvidenceSource[];
+  summaries: Record<string, SynthesisArtifact<ExternalSessionDistillPayload>>;
+  settings: ExternalAISessionSettings | null;
+  totalSessions: number;
+  externalSessionsLoading: boolean;
+  busyExternalSessionId: string | null;
+  message: string | null;
+  onSync?: () => void;
+  onDistill?: (source: EvidenceSource) => void;
+  onOpenMemory?: () => void;
+}): JSX.Element {
+  const summarized = sessions.filter((source) => summaries[source.id]).length;
+  const settingsLabel = settings?.enabled ? '已启用' : '未启用';
+  const indexLabel = settings?.indexLevel ?? '未配置';
+
+  return (
+    <section className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 dark:border-sky-900 dark:bg-sky-950/20">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-sky-900 dark:text-sky-100">
+            本地 AI 会话接入
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">
+            把 {runtime.provider} 在本机留下的对话作为 reference-truth 接入 PMIL，再按需生成会话摘要。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={!onSync || externalSessionsLoading}
+            className="rounded border border-sky-300 bg-white px-3 py-1.5 text-xs text-sky-700 disabled:opacity-50 dark:border-sky-900 dark:bg-neutral-950 dark:text-sky-300"
+          >
+            {externalSessionsLoading ? '同步中' : '同步会话'}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenMemory}
+            disabled={!onOpenMemory}
+            className="rounded border border-sky-300 bg-white px-3 py-1.5 text-xs text-sky-700 disabled:opacity-50 dark:border-sky-900 dark:bg-neutral-950 dark:text-sky-300"
+          >
+            打开 Memory
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs md:grid-cols-4">
+        <InfoPill label="来源设置" value={settingsLabel} />
+        <InfoPill label="索引级别" value={indexLabel} />
+        <InfoPill label="全部会话" value={String(totalSessions)} />
+        <InfoPill label="当前 Runtime" value={`${sessions.length}/${summarized}`} />
+      </div>
+      {message ? <p className="mt-3 text-xs text-neutral-500">{message}</p> : null}
+
+      <div className="mt-4 space-y-2">
+        {sessions.slice(0, 5).map((source) => (
+          <RuntimeExternalSessionCard
+            key={source.id}
+            busy={busyExternalSessionId === source.id}
+            source={source}
+            summary={summaries[source.id]}
+            onDistill={onDistill}
+          />
+        ))}
+        {!sessions.length ? (
+          <p className="rounded-xl border border-dashed border-sky-300 bg-white p-4 text-sm text-neutral-500 dark:border-sky-900 dark:bg-neutral-950">
+            当前 Runtime 还没有匹配到已索引的本地 AI 会话。先同步，或在设置里的「记忆源」调整 agent / 路径过滤。
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function RuntimeExternalSessionCard({
+  source,
+  summary,
+  busy,
+  onDistill
+}: {
+  source: EvidenceSource;
+  summary?: SynthesisArtifact<ExternalSessionDistillPayload>;
+  busy: boolean;
+  onDistill?: (source: EvidenceSource) => void;
+}): JSX.Element {
+  const payload = summary?.payload;
+  return (
+    <article className="rounded-xl border border-sky-200 bg-white p-3 text-sm dark:border-sky-900 dark:bg-neutral-950">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+              {stringMetadata(source, 'agent') ?? 'local-agent'}
+            </span>
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-neutral-800">
+              {source.privacy.index_level}
+            </span>
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-neutral-800">
+              {source.availability}
+            </span>
+          </div>
+          <h4 className="mt-2 truncate font-semibold">{source.title}</h4>
+          <p className="mt-1 truncate text-xs text-neutral-500">
+            {sourceProjectLabel(source)} · {formatMaybeDate(source.updated_at)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onDistill?.(source)}
+          disabled={!onDistill || busy}
+          className="rounded border border-sky-300 px-2.5 py-1.5 text-[11px] text-sky-700 disabled:opacity-50 dark:border-sky-900 dark:text-sky-300"
+        >
+          {busy ? '生成中' : payload ? '更新摘要' : '生成摘要'}
+        </button>
+      </div>
+      {payload ? (
+        <div className="mt-3 rounded-lg bg-sky-50 p-3 text-xs leading-5 text-neutral-700 dark:bg-sky-950/30 dark:text-neutral-200">
+          <p>{payload.summary}</p>
+          {payload.open_loops.length ? (
+            <p className="mt-2 text-neutral-500">
+              开放回路：{payload.open_loops.slice(0, 2).map((loop) => loop.title).join('；')}
+            </p>
+          ) : null}
+          {payload.next_actions.length ? (
+            <p className="mt-1 text-neutral-500">
+              下一步：{payload.next_actions.slice(0, 2).join('；')}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs leading-5 text-neutral-500">
+          {source.summary ?? '已作为证据源保存，尚未生成会话级摘要。'}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function PMILLocalSessionDigestCard({
+  sessions,
+  summaries,
+  settings
+}: {
+  sessions: EvidenceSource[];
+  summaries: Record<string, SynthesisArtifact<ExternalSessionDistillPayload>>;
+  settings: ExternalAISessionSettings | null;
+}): JSX.Element {
+  const summaryCount = Object.keys(summaries).length;
+  const stage = localSessionMaturityStage(settings, sessions, summaryCount);
+  return (
+    <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+            PMIL 消化链路
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">
+            从原始会话到可召回上下文的完整路径，目前属于 foundation 可演示状态。
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-neutral-950 dark:text-emerald-300">
+          {stage}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs">
+        <DigestStep
+          title="真相源接入"
+          status={settings?.enabled ? '已接入' : '待启用'}
+          detail={`${sessions.length} 条 external_ai_session EvidenceSource`}
+          active={Boolean(settings?.enabled)}
+        />
+        <DigestStep
+          title="安全投影与索引"
+          status={sessions.length ? '已接入' : '等待数据'}
+          detail="支持 metadata / safe_projection / full_text 策略，默认进入 evidence chunk index。"
+          active={sessions.length > 0}
+        />
+        <DigestStep
+          title="会话级摘要"
+          status={summaryCount ? '已生成' : '可生成'}
+          detail={`${summaryCount} 条 distill.external_session，包含摘要、决策、开放回路和下一步。`}
+          active={summaryCount > 0}
+        />
+        <DigestStep
+          title="进入 Orbit 上下文"
+          status="基础完成"
+          detail="Ask / Search / Review / Project Context 可以引用证据、图谱邻居和会话摘要。"
+          active
+        />
+        <DigestStep
+          title="仍需增强"
+          status="未完成"
+          detail="message-range selector、first-class snapshot store、更深的 LLM refinement 和专门浏览入口。"
+          active={false}
+        />
+      </div>
+    </section>
+  );
+}
+
+function DigestStep({
+  title,
+  status,
+  detail,
+  active
+}: {
+  title: string;
+  status: string;
+  detail: string;
+  active: boolean;
+}): JSX.Element {
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-white p-3 dark:border-emerald-900 dark:bg-neutral-950">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium text-neutral-800 dark:text-neutral-100">{title}</span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] ${
+            active
+              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+          }`}
+        >
+          {status}
+        </span>
+      </div>
+      <p className="mt-1 text-neutral-500">{detail}</p>
+    </div>
+  );
+}
+
+function InfoPill({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div className="rounded-lg border border-sky-200 bg-white px-3 py-2 dark:border-sky-900 dark:bg-neutral-950">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-neutral-500">{label}</div>
+      <div className="mt-1 truncate font-medium text-neutral-800 dark:text-neutral-100">{value}</div>
     </div>
   );
 }
@@ -620,6 +1039,63 @@ function InfoRow({ label, value }: { label: string; value: string }): JSX.Elemen
       <span className="font-medium text-neutral-800 dark:text-neutral-100">{value}</span>
     </div>
   );
+}
+
+function sessionsForRuntime(
+  runtime: RuntimeDescriptor,
+  sessions: EvidenceSource[]
+): EvidenceSource[] {
+  const provider = normalizeRuntimeToken(runtime.provider);
+  const runtimeName = normalizeRuntimeToken(runtime.name);
+  return sessions
+    .filter((source) => {
+      const agent = normalizeRuntimeToken(stringMetadata(source, 'agent'));
+      const providerId = normalizeRuntimeToken(source.provider_id);
+      const haystack = normalizeRuntimeToken(
+        [source.title, source.canonical_ref, stringMetadata(source, 'project_name')]
+          .filter(Boolean)
+          .join(' ')
+      );
+      return (
+        agent === provider ||
+        providerId === provider ||
+        haystack.includes(provider) ||
+        (runtimeName.length > 2 && haystack.includes(runtimeName))
+      );
+    })
+    .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+}
+
+function normalizeRuntimeToken(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
+}
+
+function stringMetadata(source: EvidenceSource, key: string): string | undefined {
+  const value = source.metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function sourceProjectLabel(source: EvidenceSource): string {
+  return stringMetadata(source, 'project_name') ?? '未关联项目';
+}
+
+function formatMaybeDate(value: string | undefined): string {
+  if (!value) return '未知时间';
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return value;
+  return new Date(time).toLocaleString();
+}
+
+function localSessionMaturityStage(
+  settings: ExternalAISessionSettings | null,
+  sessions: EvidenceSource[],
+  summaryCount: number
+): string {
+  if (!settings?.enabled) return '待启用';
+  if (sessions.length === 0) return '已配置';
+  if (summaryCount === 0) return '已接入';
+  return '可演示闭环';
 }
 
 function runtimeVersionLabel(runtime: RuntimeDescriptor): string {

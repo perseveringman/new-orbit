@@ -1,8 +1,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import type { EvidenceSource, ExternalAISessionSettings } from '../src/shared/evidence';
 import type { DispatchSnapshot } from '../src/shared/orchestration';
 import type { SDKEndpointRegistrySnapshot } from '../src/shared/runtime';
+import type { ExternalSessionDistillPayload, SynthesisArtifact } from '../src/shared/synthesis';
 import { AgentsLibrarySurface } from '../src/renderer/src/views/AgentsLibraryView';
 import { RuntimesWorkspaceSurface } from '../src/renderer/src/views/RuntimesWorkspaceView';
 
@@ -24,6 +26,69 @@ const sdkSnapshot: SDKEndpointRegistrySnapshot = {
       keyMasked: 'sk••••test'
     }
   ]
+};
+
+const externalSessionSettings: ExternalAISessionSettings = {
+  enabled: true,
+  limit: 80,
+  roots: [{ agent: 'claude', dir: '/Users/example/.claude/projects', enabled: true }],
+  includeAgents: [],
+  excludeAgents: [],
+  includeProjects: [],
+  excludeProjects: [],
+  includePathSubstrings: [],
+  excludePathSubstrings: [],
+  indexLevel: 'safe_projection',
+  includeToolOutputs: false
+};
+
+const externalSession: EvidenceSource = {
+  id: 'external_ai_session:claude:pmil-1',
+  kind: 'external_ai_session',
+  ownership: 'reference',
+  title: 'PMIL local agent strategy',
+  summary: 'Discussed local AI sessions as PMIL truth sources.',
+  provider_id: 'claude',
+  canonical_ref: '/Users/example/.claude/projects/new-orbit/session.jsonl',
+  updated_at: '2026-05-16T10:00:00.000Z',
+  observed_at: '2026-05-16T10:00:00.000Z',
+  fingerprint: { algorithm: 'sha256', value: 'hash-1' },
+  availability: 'available',
+  privacy: {
+    index_level: 'safe_projection',
+    allow_synthesis: true,
+    allow_tool_outputs: false
+  },
+  metadata: { agent: 'claude', project_name: 'new-orbit' }
+};
+
+const externalSessionSummary: SynthesisArtifact<ExternalSessionDistillPayload> = {
+  id: 'artifact-session-1',
+  kind: 'distill.external_session',
+  scope_key: 'distill.external_session:external_ai_session:claude:pmil-1',
+  sources: [],
+  provenance: {
+    runtime: 'local:heuristic',
+    model: 'deterministic',
+    prompt_version: 'v1',
+    generated_at: '2026-05-16T10:00:00.000Z'
+  },
+  payload: {
+    source_id: externalSession.id,
+    title: externalSession.title,
+    agent: 'claude',
+    project_ref: 'new-orbit',
+    summary: 'PMIL should keep local agent sessions as truth sources and summarize them on demand.',
+    key_points: ['reference-truth', 'safe projection'],
+    decisions: [],
+    open_loops: [{ title: 'Add runtime-side visibility', evidence: [] }],
+    next_actions: ['Show local AI sessions near Runtime'],
+    entities: ['PMIL'],
+    evidence: [],
+    source_hash: 'hash-1'
+  },
+  status: 'fresh',
+  created_at: '2026-05-16T10:00:00.000Z'
 };
 
 const snapshot: DispatchSnapshot = {
@@ -129,6 +194,9 @@ describe('orchestration workspace surfaces', () => {
       createElement(RuntimesWorkspaceSurface, {
         snapshot,
         sdkSnapshot,
+        externalSessions: [externalSession],
+        externalSessionSettings,
+        externalSessionSummaries: { [externalSession.id]: externalSessionSummary },
         loading: false,
         projects: [{ uid: 'project-1', name: 'Moonshot' }],
         selectedRuntimeId: 'claude:/usr/local/bin/claude',
@@ -141,6 +209,9 @@ describe('orchestration workspace surfaces', () => {
     expect(html).toContain('AI 控制平面');
     expect(html).toContain('CLI Runtime 注册表');
     expect(html).toContain('Runtime B SDK 端点');
+    expect(html).toContain('本地 AI 会话接入');
+    expect(html).toContain('PMIL 消化链路');
+    expect(html).toContain('PMIL local agent strategy');
     expect(html).toContain('claude-3-5-sonnet-latest');
     expect(html).toContain('Implement runtime page');
     expect(html).toContain('claude local runtime');
