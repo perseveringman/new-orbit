@@ -59,6 +59,28 @@ export interface EvidencePrivacy {
   redaction_profile?: 'default' | 'code' | 'strict';
 }
 
+export interface ExternalAISessionRootConfig {
+  agent: string;
+  dir: string;
+  source?: string;
+  enabled?: boolean;
+}
+
+export interface ExternalAISessionSettings {
+  enabled: boolean;
+  limit: number;
+  roots: ExternalAISessionRootConfig[];
+  includeAgents: string[];
+  excludeAgents: string[];
+  includeProjects: string[];
+  excludeProjects: string[];
+  includePathSubstrings: string[];
+  excludePathSubstrings: string[];
+  indexLevel: EvidencePrivacy['index_level'];
+  includeToolOutputs: boolean;
+  updated_at?: string;
+}
+
 export interface EvidenceSource {
   id: string;
   kind: EvidenceSourceKind;

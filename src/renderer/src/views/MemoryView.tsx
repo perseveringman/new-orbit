@@ -472,6 +472,7 @@ function synthesisSourceToEvidenceKind(kind: SynthesisSource['kind']): EvidenceS
   if (kind === 'library') return 'library_item';
   if (kind === 'event') return 'activity_event';
   if (kind === 'kb') return 'kb_doc';
+  if (kind === 'external_ai_session') return 'external_ai_session';
   if (kind === 'note' || kind === 'resource' || kind === 'project' || kind === 'area' || kind === 'task' || kind === 'conversation') {
     return kind;
   }

@@ -364,7 +364,14 @@ describe('IPC contract', () => {
 
   it('evidence namespace declares PMIL evidence drill-down channels', () => {
     const keys = Object.keys(IPC.evidence).sort();
-    expect(keys).toEqual(['get', 'list', 'read', 'sync'].sort());
+    expect(keys).toEqual([
+      'externalSessionSettings',
+      'get',
+      'list',
+      'read',
+      'sync',
+      'updateExternalSessionSettings'
+    ].sort());
     for (const v of Object.values(IPC.evidence)) expect(v.startsWith('evidence:')).toBe(true);
   });
 

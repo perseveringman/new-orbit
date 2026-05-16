@@ -14,6 +14,8 @@ import type { MemoryNode, RecallResult } from '@shared/memory';
 import type { SynthesisSource } from '@shared/synthesis';
 import { createEvidenceChunkIndexStore } from '../evidence/chunk-index';
 import { createEvidenceGraphStore } from '../evidence/graph-store';
+import { listEntityProfilesForResults } from './entity-profile';
+import { listExternalSessionDistillationsForResults } from './external-session-synthesis';
 import { ensurePersonalQA, listPersonalQAHits, type PersonalQAHitsResult } from './personal-qa';
 import { recallContext } from '../memory/recall-service';
 
@@ -51,11 +53,25 @@ export async function buildContextPacket(vaultPath: string, input: BuildContextP
     ? []
     : await listPersonalQAHits(vaultPath, { scope, query: input.query, limit: 4 });
   const personalQASection = buildPersonalQASection(personalQAHits);
+  const externalSessionDistillations = synthesisMode === 'off'
+    ? []
+    : await listExternalSessionDistillationsForResults(vaultPath, evidenceResults.filter(hasResultSource), {
+        ensure: synthesisMode === 'ensure',
+        limit: 3
+      });
+  const externalSessionSection = buildExternalSessionSection(externalSessionDistillations);
+  const entityProfiles = synthesisMode === 'off'
+    ? []
+    : await listEntityProfilesForResults(vaultPath, evidenceResults.filter(hasResultSource), {
+        ensure: synthesisMode === 'ensure',
+        limit: 2
+      });
+  const entityProfileSection = buildEntityProfileSection(entityProfiles);
   const memoryRecall = await buildMemoryRecall(vaultPath, input);
   const memorySection = buildMemorySection(memoryRecall);
   const graphSection = await buildGraphSection(graphStore, evidenceResults.map((result) => result.chunk), input.graph_limit ?? DEFAULT_GRAPH_LIMIT);
   const maxTokens = input.max_tokens ?? DEFAULT_MAX_TOKENS;
-  const sections = [buildScopeSection(scope), evidenceSection, personalQASection, memorySection, graphSection]
+  const sections = [buildScopeSection(scope), evidenceSection, personalQASection, externalSessionSection, entityProfileSection, memorySection, graphSection]
     .filter((section): section is ContextSection => Boolean(section))
     .sort((a, b) => a.priority - b.priority);
   const fittedSections = fitSections(sections, maxTokens);
@@ -85,9 +101,11 @@ export async function buildContextPacket(vaultPath: string, input: BuildContextP
     },
     sections: fittedSections,
     evidence,
-    synthesis_refs: personalQASection && fittedSections.includes(personalQASection)
-      ? personalQAHits.map((hit) => hit.artifact.id)
-      : [],
+    synthesis_refs: [
+      ...(personalQASection && fittedSections.includes(personalQASection) ? personalQAHits.map((hit) => hit.artifact.id) : []),
+      ...(externalSessionSection && fittedSections.includes(externalSessionSection) ? externalSessionDistillations.map((artifact) => artifact.id) : []),
+      ...(entityProfileSection && fittedSections.includes(entityProfileSection) ? entityProfiles.map((artifact) => artifact.id) : [])
+    ],
     memory_refs: memorySection && fittedSections.includes(memorySection)
       ? memoryRecall.memories.map((memory) => memory.id)
       : []
@@ -125,6 +143,10 @@ function sourceFromResult(result: PacketEvidenceResult): EvidenceSource | null {
   return 'source' in result ? result.source ?? null : null;
 }
 
+function hasResultSource(result: PacketEvidenceResult): result is EvidenceChunkSearchResult {
+  return 'source' in result;
+}
+
 function buildPersonalQASection(hits: PersonalQAHitsResult[]): ContextSection | null {
   if (!hits.length) return null;
   return {
@@ -138,6 +160,47 @@ function buildPersonalQASection(hits: PersonalQAHitsResult[]): ContextSection | 
       .join('\n\n'),
     citations: dedupeSelectors(hits.flatMap((hit) => hit.artifact.payload.evidence)),
     priority: 25
+  };
+}
+
+function buildExternalSessionSection(
+  artifacts: Awaited<ReturnType<typeof listExternalSessionDistillationsForResults>>
+): ContextSection | null {
+  if (!artifacts.length) return null;
+  return {
+    kind: 'synthesis',
+    title: 'Agent Session Summaries',
+    content: artifacts
+      .map((artifact, index) => {
+        const payload = artifact.payload;
+        const next = payload.next_actions.length ? `\nNext: ${payload.next_actions.slice(0, 3).join('; ')}` : '';
+        const openLoops = payload.open_loops.length ? `\nOpen loops: ${payload.open_loops.slice(0, 3).map((loop) => loop.title).join('; ')}` : '';
+        return `${index + 1}. ${payload.title}${payload.agent ? ` (${payload.agent})` : ''}\n${snippet(payload.summary)}${next}${openLoops}`;
+      })
+      .join('\n\n'),
+    citations: dedupeSelectors(artifacts.flatMap((artifact) => artifact.payload.evidence)),
+    priority: 26
+  };
+}
+
+function buildEntityProfileSection(
+  artifacts: Awaited<ReturnType<typeof listEntityProfilesForResults>>
+): ContextSection | null {
+  if (!artifacts.length) return null;
+  return {
+    kind: 'synthesis',
+    title: 'Entity Profiles',
+    content: artifacts
+      .map((artifact, index) => {
+        const payload = artifact.payload;
+        const related = payload.related_entities.length
+          ? `\nRelated: ${payload.related_entities.slice(0, 6).map((item) => `${item.entity} (${item.relation})`).join('; ')}`
+          : '';
+        return `${index + 1}. ${payload.entity}\n${snippet(payload.summary)}${related}`;
+      })
+      .join('\n\n'),
+    citations: dedupeSelectors(artifacts.flatMap((artifact) => artifact.payload.evidence)),
+    priority: 28
   };
 }
 
@@ -217,6 +280,7 @@ function synthesisSourceToEvidenceKind(kind: SynthesisSource['kind']): EvidenceS
   if (kind === 'library') return 'library_item';
   if (kind === 'event') return 'activity_event';
   if (kind === 'kb') return 'kb_doc';
+  if (kind === 'external_ai_session') return 'external_ai_session';
   if (kind === 'note' || kind === 'resource' || kind === 'project' || kind === 'area' || kind === 'task' || kind === 'conversation') {
     return kind;
   }

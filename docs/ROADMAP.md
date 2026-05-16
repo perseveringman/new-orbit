@@ -77,11 +77,13 @@ Delivered:
 - Project Room now has a PMIL context tab that summarizes current focus, active threads, open loops, decisions, and cited evidence for the active project.
 - Memory Explorer now exposes source evidence drill-down and recall feedback controls, so MemoryNode entries can be inspected and tuned.
 - Registered local Agent sessions are retained in the default evidence chunk index, keeping `external_ai_session` truth sources available to normal recall/search rebuilds.
+- Local Agent session sources now have vault-level settings and filters in Settings → 记忆源, covering enabled state, scan limit, agent/project/path include-exclude lists, index level, and tool-output projection policy.
+- `distill.external_session` and `entity.profile` synthesis foundations now summarize matched local Agent sessions and graph entities into cited ContextPacket sections, with local deterministic fallback and prompt templates for later LLM refinement.
 
 Remaining gaps:
 
-- Work Context / Open Loops are deterministic first-pass artifacts; LLM refinement and feedback loops remain future work.
-- Local Agent session providers are registered as reference truth and indexable by default after sync, but still need user-facing settings, filtering, and session-specific synthesis views.
+- Work Context / Open Loops are deterministic first-pass artifacts; richer LLM refinement and feedback loops remain future work.
+- Local Agent session providers still need richer browsing, per-session review actions, snapshot/materialize flows, and session-specific UI beyond context packet summaries.
 
 ---
 

@@ -3,10 +3,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  buildContextPacket,
+  ensureExternalSessionDistillation
+} from '../src/main/context';
+import {
   EXTERNAL_AI_SESSION_PROVIDER_ID,
   createEvidenceChunkIndexStore,
   createOrbitEvidenceProvider,
-  syncExternalAISessionEvidenceSources
+  syncExternalAISessionEvidenceSources,
+  updateExternalAISessionSettings
 } from '../src/main/evidence';
 import { wholeSourceSelector } from '../src/shared/evidence';
 
@@ -101,4 +106,82 @@ describe('external AI session evidence source', () => {
     expect(results[0].chunk.source_id).toBe(sources[0].id);
     expect(results[0].chunk.text).toContain('local agent sessions as raw evidence');
   });
+
+  it('applies user-facing external session filters before registry sync', async () => {
+    const claudeDir = path.join(sessionsRoot, 'claude', '-Users-ryan-Developer-new-orbit');
+    const codexDir = path.join(sessionsRoot, 'codex', '2026');
+    await fs.mkdir(claudeDir, { recursive: true });
+    await fs.mkdir(codexDir, { recursive: true });
+    await fs.writeFile(path.join(claudeDir, 'session.jsonl'), sessionLines('Claude session should be filtered out by agent settings.'), 'utf8');
+    await fs.writeFile(path.join(codexDir, 'session.jsonl'), sessionLines('Codex session should stay visible as metadata-only evidence.'), 'utf8');
+    await updateExternalAISessionSettings(vaultPath, {
+      includeAgents: ['codex'],
+      indexLevel: 'metadata_only',
+      includeToolOutputs: true
+    });
+
+    const sources = await syncExternalAISessionEvidenceSources(vaultPath, {
+      externalAISessionRoots: [
+        { agent: 'claude', source: 'claude-code', dir: path.join(sessionsRoot, 'claude') },
+        { agent: 'codex', source: 'codex', dir: path.join(sessionsRoot, 'codex') }
+      ]
+    });
+
+    expect(sources).toHaveLength(1);
+    expect(sources[0].metadata?.agent).toBe('codex');
+    expect(sources[0].privacy.index_level).toBe('metadata_only');
+    expect(sources[0].privacy.allow_tool_outputs).toBe(true);
+  });
+
+  it('distills external sessions into cited synthesis for context packets', async () => {
+    const projectDir = path.join(sessionsRoot, '-Users-ryan-Developer-new-orbit');
+    await fs.mkdir(projectDir, { recursive: true });
+    await fs.writeFile(
+      path.join(projectDir, 'session.jsonl'),
+      [
+        JSON.stringify({
+          type: 'user',
+          timestamp: '2026-05-15T10:00:00.000Z',
+          message: { role: 'user', content: 'Decide the PMIL session-specific synthesis strategy.' }
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2026-05-15T10:01:00.000Z',
+          message: { role: 'assistant', content: 'Next, summarize each external agent session with evidence selectors and open loops.' }
+        })
+      ].join('\n'),
+      'utf8'
+    );
+    const [source] = await syncExternalAISessionEvidenceSources(vaultPath, {
+      externalAISessionRoots: [{ agent: 'claude', source: 'claude-code', dir: sessionsRoot }]
+    });
+    const artifact = await ensureExternalSessionDistillation(vaultPath, source.id);
+    await createEvidenceChunkIndexStore(vaultPath).rebuild({ includeActivities: false });
+    const packet = await buildContextPacket(vaultPath, {
+      purpose: 'ask',
+      query: 'What is the PMIL session-specific synthesis strategy?',
+      synthesis_mode: 'ensure'
+    });
+
+    expect(artifact?.kind).toBe('distill.external_session');
+    expect(artifact?.payload.source_id).toBe(source.id);
+    expect(artifact?.payload.evidence[0]?.source_id).toBe(source.id);
+    expect(packet.sections.find((section) => section.title === 'Agent Session Summaries')?.content).toContain('session-specific synthesis');
+    expect(packet.synthesis_refs).toContain(artifact!.id);
+  });
 });
+
+function sessionLines(text: string): string {
+  return [
+    JSON.stringify({
+      type: 'user',
+      timestamp: '2026-05-15T08:00:00.000Z',
+      message: { role: 'user', content: text }
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      timestamp: '2026-05-15T08:01:00.000Z',
+      message: { role: 'assistant', content: `${text} Follow up with indexed evidence selectors.` }
+    })
+  ].join('\n');
+}

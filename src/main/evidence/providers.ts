@@ -41,6 +41,7 @@ import {
   readExternalAISessionSourceText,
   type ExternalAISessionRoot
 } from './external-ai-sessions';
+import { resolveExternalAISessionScanOptions } from './external-ai-session-settings';
 import { createEvidenceStore } from './store';
 
 export const ORBIT_EVIDENCE_PROVIDER_ID = 'orbit.local';
@@ -87,10 +88,7 @@ export async function collectOrbitEvidenceSources(
     includeActivities ? queryActivities(vaultPath, { limit: Math.max(1, options.activityLimit ?? 500) }) : Promise.resolve([]),
     listKnowledgeBaseDocSources(vaultPath),
     includeExternalAISessions
-      ? listExternalAISessionSources({
-          roots: options.externalAISessionRoots,
-          limit: options.externalAISessionLimit
-        })
+      ? resolveExternalAISessionScanOptions(vaultPath, options).then((scanOptions) => listExternalAISessionSources(scanOptions))
       : Promise.resolve([])
   ]);
 
@@ -410,10 +408,7 @@ export async function syncExternalAISessionEvidenceSources(
   vaultPath: string,
   options: Pick<CollectOrbitEvidenceOptions, 'externalAISessionLimit' | 'externalAISessionRoots'> = {}
 ): Promise<EvidenceSource[]> {
-  const sources = await listExternalAISessionSources({
-    roots: options.externalAISessionRoots,
-    limit: options.externalAISessionLimit
-  });
+  const sources = await listExternalAISessionSources(await resolveExternalAISessionScanOptions(vaultPath, options));
   await createEvidenceStore(vaultPath).replaceProviderSources(EXTERNAL_AI_SESSION_PROVIDER_ID, sources);
   return sources;
 }

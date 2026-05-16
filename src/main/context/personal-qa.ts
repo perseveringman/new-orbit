@@ -250,7 +250,7 @@ function synthesisSourceKind(chunk: EvidenceChunk): SynthesisSourceKind {
   if (raw === 'library_item') return 'library';
   if (raw === 'activity_event') return 'event';
   if (raw === 'kb_doc') return 'kb';
-  if (raw === 'external_ai_session' || raw === 'external_file') return 'raw';
+  if (raw === 'external_file') return 'raw';
   if (DIRECT_SYNTHESIS_SOURCE_KINDS.has(raw as SynthesisSourceKind)) return raw as SynthesisSourceKind;
   return 'raw';
 }
@@ -341,5 +341,6 @@ const DIRECT_SYNTHESIS_SOURCE_KINDS = new Set<SynthesisSourceKind>([
   'project',
   'area',
   'task',
-  'conversation'
+  'conversation',
+  'external_ai_session'
 ]);

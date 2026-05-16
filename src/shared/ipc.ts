@@ -302,7 +302,8 @@ import type {
   EvidenceReadResult,
   EvidenceSelector,
   EvidenceSource,
-  EvidenceSourceFilter
+  EvidenceSourceFilter,
+  ExternalAISessionSettings
 } from './evidence';
 import type {
   CreateMemoryInput,
@@ -730,7 +731,9 @@ export const IPC = {
     list: 'evidence:list',
     get: 'evidence:get',
     read: 'evidence:read',
-    sync: 'evidence:sync'
+    sync: 'evidence:sync',
+    externalSessionSettings: 'evidence:externalSessionSettings',
+    updateExternalSessionSettings: 'evidence:updateExternalSessionSettings'
   },
   memory: {
     list: 'memory:list',
@@ -1830,6 +1833,8 @@ export interface OrbitApi {
     get(sourceId: string): Promise<EvidenceSource | null>;
     read(selector: EvidenceSelector): Promise<EvidenceReadResult>;
     sync(options?: { includeExternalAISessions?: boolean; externalAISessionLimit?: number }): Promise<EvidenceSource[]>;
+    externalSessionSettings(): Promise<ExternalAISessionSettings>;
+    updateExternalSessionSettings(patch: Partial<ExternalAISessionSettings>): Promise<ExternalAISessionSettings>;
   };
   memory: {
     list(filter?: MemoryFilter): Promise<MemoryNode[]>;

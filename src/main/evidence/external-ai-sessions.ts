@@ -5,22 +5,28 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import type {
   EvidenceContentView,
+  EvidencePrivacy,
   EvidenceScopeRef,
+  ExternalAISessionRootConfig,
   EvidenceSource
 } from '@shared/evidence';
 import { evidenceSourceId } from '@shared/evidence';
 
 export const EXTERNAL_AI_SESSION_PROVIDER_ID = 'external.ai_sessions.local';
 
-export interface ExternalAISessionRoot {
-  agent: string;
-  dir: string;
-  source?: string;
-}
+export type ExternalAISessionRoot = ExternalAISessionRootConfig;
 
 export interface ExternalAISessionScanOptions {
   roots?: ExternalAISessionRoot[];
   limit?: number;
+  includeAgents?: string[];
+  excludeAgents?: string[];
+  includeProjects?: string[];
+  excludeProjects?: string[];
+  includePathSubstrings?: string[];
+  excludePathSubstrings?: string[];
+  indexLevel?: EvidencePrivacy['index_level'];
+  includeToolOutputs?: boolean;
 }
 
 interface SessionFileCandidate {
@@ -44,12 +50,16 @@ interface SessionPreview {
 export async function listExternalAISessionSources(
   options: ExternalAISessionScanOptions = {}
 ): Promise<EvidenceSource[]> {
-  const candidates = await listSessionFiles(options.roots ?? defaultSessionRoots());
+  const roots = (options.roots ?? defaultExternalAISessionRoots()).filter((root) => root.enabled !== false);
+  const candidates = await listSessionFiles(roots);
   const limited = candidates
+    .filter((candidate) => candidateMatchesOptions(candidate, options))
     .sort((a, b) => b.mtime.localeCompare(a.mtime))
     .slice(0, Math.max(1, options.limit ?? 300));
   const previews = await Promise.all(limited.map((candidate) => previewSession(candidate)));
   const observedAt = new Date().toISOString();
+  const indexLevel = options.indexLevel ?? 'safe_projection';
+  const includeToolOutputs = options.includeToolOutputs ?? false;
 
   return limited.map((candidate, index) => {
     const preview = previews[index];
@@ -72,9 +82,9 @@ export async function listExternalAISessionSources(
       },
       availability: 'available',
       privacy: {
-        index_level: 'safe_projection',
-        allow_synthesis: true,
-        allow_tool_outputs: false,
+        index_level: indexLevel,
+        allow_synthesis: indexLevel !== 'metadata_only',
+        allow_tool_outputs: includeToolOutputs,
         redaction_profile: 'code'
       },
       ...(preview.firstAt || preview.lastAt ? { time_range: { from: preview.firstAt, to: preview.lastAt } } : {}),
@@ -103,10 +113,10 @@ export async function readExternalAISessionSourceText(
   const raw = await fs.readFile(file, 'utf8').catch(() => '');
   if (!raw.trim()) return '';
   if (contentView === 'full') return raw;
-  return sessionJsonlToText(raw, { includeTools: false });
+  return sessionJsonlToText(raw, { includeTools: source.privacy.allow_tool_outputs });
 }
 
-function defaultSessionRoots(): ExternalAISessionRoot[] {
+export function defaultExternalAISessionRoots(): ExternalAISessionRoot[] {
   const home = os.homedir();
   const codexHome = process.env['CODEX_HOME'] || path.join(home, '.codex');
   return [
@@ -116,6 +126,33 @@ function defaultSessionRoots(): ExternalAISessionRoot[] {
     { agent: 'amp', source: 'amp', dir: path.join(home, '.local', 'share', 'amp', 'threads') },
     { agent: 'codebuddy', source: 'codebuddy', dir: path.join(home, '.codebuddy') }
   ];
+}
+
+function candidateMatchesOptions(candidate: SessionFileCandidate, options: ExternalAISessionScanOptions): boolean {
+  if (!matchesInclude(candidate.agent, options.includeAgents)) return false;
+  if (matchesAny(candidate.agent, options.excludeAgents)) return false;
+  const project = candidate.projectName ?? '';
+  if (!matchesInclude(project, options.includeProjects)) return false;
+  if (project && matchesAny(project, options.excludeProjects)) return false;
+  const pathText = [candidate.relPath, candidate.file, candidate.source, project].filter(Boolean).join('\n');
+  if (!matchesInclude(pathText, options.includePathSubstrings)) return false;
+  if (matchesAny(pathText, options.excludePathSubstrings)) return false;
+  return true;
+}
+
+function matchesInclude(value: string, patterns?: string[]): boolean {
+  const normalized = normalizeMatchText(value);
+  const active = patterns?.map(normalizeMatchText).filter(Boolean) ?? [];
+  return !active.length || active.some((pattern) => normalized.includes(pattern));
+}
+
+function matchesAny(value: string, patterns?: string[]): boolean {
+  const normalized = normalizeMatchText(value);
+  return (patterns ?? []).map(normalizeMatchText).filter(Boolean).some((pattern) => normalized.includes(pattern));
+}
+
+function normalizeMatchText(value: string): string {
+  return value.toLowerCase().trim();
 }
 
 async function listSessionFiles(roots: ExternalAISessionRoot[]): Promise<SessionFileCandidate[]> {

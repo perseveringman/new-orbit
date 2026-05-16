@@ -192,6 +192,29 @@ describe('PMIL recall foundation', () => {
     expect(packet.memory_refs).toContain(memory.id);
   });
 
+  it('adds entity profile synthesis to context packets for recurring graph entities', async () => {
+    await createNoteStore(vaultPath).create({
+      type: 'thought',
+      title: 'PMIL Graph Recall',
+      body: 'PMIL Graph Recall connects evidence chunks, entity profiles, and session summaries. PMIL Graph Recall still needs better relationship refinement.',
+      resource_refs: ['pmil']
+    });
+
+    await createEvidenceChunkIndexStore(vaultPath).rebuild({ includeActivities: false });
+    const packet = await buildContextPacket(vaultPath, {
+      purpose: 'ask',
+      scope: { kind: 'resource', ref: 'pmil' },
+      query: 'How does PMIL Graph Recall connect entity profiles?',
+      max_tokens: 1400,
+      synthesis_mode: 'ensure'
+    });
+    const entitySection = packet.sections.find((section) => section.title === 'Entity Profiles');
+
+    expect(entitySection?.content).toContain('PMIL');
+    expect(entitySection?.citations.length).toBeGreaterThan(0);
+    expect(packet.synthesis_refs.length).toBeGreaterThan(0);
+  });
+
   it('derives work context and open loops from evidence chunks', async () => {
     await createNoteStore(vaultPath).create({
       type: 'thought',

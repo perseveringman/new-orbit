@@ -17,7 +17,7 @@ related:
 
 > 目标：先建立一套稳定的个人记忆与上下文基础设施，再接入本地 Agent 会话源。这样 Codex / Claude Code / Amp / Copilot 等会话只是新的 truth source provider，不会迫使 Search、Memory、Synthesis、Review、Ask Anywhere 返工。
 
-Implementation status (2026-05-16): Phase A foundation 已落地。代码包含 shared evidence contracts、`.orbit/evidence/sources.json` registry、Orbit-owned Layer 1 provider shim、SemanticDocument evidence provenance，以及 registry/source projection 单元测试。第二轮 recall foundation 已补上 evidence chunk index、deterministic graph skeleton、minimal ContextPacket builder。第三轮已补上 `qa.personal` 最小闭环和本地 Agent session reference-truth provider foundation。第四轮已把 ContextPacket 接入 Semantic Search / Search UI / `search.answer` sources；普通搜索只 lookup 既有 synthesis，显式生成回答才 ensure QA，避免输入搜索时隐性写入大量 artifacts。第五轮已接入 Ask Anywhere prompt context、Evidence drill-down IPC/UI，以及 Review 的 `work.context` / `report.open_loops` artifacts 与 open-loop findings。第六轮已把 Ask ContextPacket 物化为 Stage artifact / PMIL context chips，并新增 `context:*` IPC 与 Project Room PMIL 上下文 tab，让项目级 current focus、active threads、open loops、decisions 与 evidence drill-down 可见。第七轮已补上 ContextPacket 中的 MemoryNode recall section、Memory Explorer evidence inspector / recall feedback，以及已登记 `external_ai_session` 在默认 chunk index 中的保留。剩余重点是 MemoryNode v2 extractor、entity profile、LLM refinement/feedback loop，以及更强的本地 Agent session UI/settings/filtering/synthesis views。
+Implementation status (2026-05-16): Phase A foundation 已落地。代码包含 shared evidence contracts、`.orbit/evidence/sources.json` registry、Orbit-owned Layer 1 provider shim、SemanticDocument evidence provenance，以及 registry/source projection 单元测试。第二轮 recall foundation 已补上 evidence chunk index、deterministic graph skeleton、minimal ContextPacket builder。第三轮已补上 `qa.personal` 最小闭环和本地 Agent session reference-truth provider foundation。第四轮已把 ContextPacket 接入 Semantic Search / Search UI / `search.answer` sources；普通搜索只 lookup 既有 synthesis，显式生成回答才 ensure QA，避免输入搜索时隐性写入大量 artifacts。第五轮已接入 Ask Anywhere prompt context、Evidence drill-down IPC/UI，以及 Review 的 `work.context` / `report.open_loops` artifacts 与 open-loop findings。第六轮已把 Ask ContextPacket 物化为 Stage artifact / PMIL context chips，并新增 `context:*` IPC 与 Project Room PMIL 上下文 tab，让项目级 current focus、active threads、open loops、decisions 与 evidence drill-down 可见。第七轮已补上 ContextPacket 中的 MemoryNode recall section、Memory Explorer evidence inspector / recall feedback，以及已登记 `external_ai_session` 在默认 chunk index 中的保留。第八轮已补上本地 Agent session 设置/过滤 UI、`distill.external_session` 会话专属 synthesis、`entity.profile` 实体画像 synthesis，以及 ContextPacket 对这些 artifact 的引用注入；LLM refinement 通过 prompt templates 保留入口，默认仍有 local deterministic fallback。剩余重点是 MemoryNode v2 extractor、Work Context/Open Loops 的 LLM refinement/feedback loop、session browser / snapshot / materialize as Conversation / save span as Note 等更完整操作面。
 
 ---
 
@@ -962,11 +962,13 @@ Status: implemented (runtime foundation), 2026-05-16.
 
 ### Phase D: Intelligence Artifacts
 
-Status: partially implemented (Personal QA + deterministic Work Context/Open Loops), 2026-05-16.
+Status: partially implemented (Personal QA + External Session Distill + Entity Profile + deterministic Work Context/Open Loops), 2026-05-16.
 
 范围：
 
 - `qa.personal`：已实现 kind / payload / deterministic chunk-based generator / semantic projection / ContextPacket injection
+- `distill.external_session`：已实现 kind / payload / prompt template / local fallback，并在 ContextPacket 命中外部会话时生成 cited session summary
+- `entity.profile`：已实现 kind / payload / prompt template / local fallback，可从 graph neighbors 与 evidence chunks 生成实体画像
 - `work.context`：已实现 deterministic artifact payload，并由 Review run 写入 SynthesisArtifact
 - `report.open_loops`：已实现 deterministic open-loop candidates，并转成 Review findings
 - MemoryNode extractor v2
@@ -998,7 +1000,7 @@ Status: implemented (foundation across Search + Ask + Review + Project Room + Me
 
 ### Phase F: Local Agent Session Source
 
-Status: implemented (provider + default recall foundation), 2026-05-16.
+Status: implemented (provider + settings/filtering + default recall foundation), 2026-05-16.
 
 范围：
 
@@ -1007,14 +1009,15 @@ Status: implemented (provider + default recall foundation), 2026-05-16.
 - Claude Code provider：已支持默认 `~/.claude/projects` / `~/.claude-internal/projects` JSONL scan foundation
 - session safe projection：已实现，safe projection 跳过 tool/system/tool-result 内容，`full` view 仍可按需读取原始文件
 - default chunk index retention：已登记的 `external_ai_session` sources 会在默认 chunk index rebuild/search 中保留，避免 sync 后的会话真相源脱离普通召回链路
+- settings/filtering：已新增 `.orbit/evidence/external-ai-sessions.settings.json`、IPC/preload、Settings → 记忆源，可配置启用、扫描上限、agent/project/path include-exclude、索引级别、tool output 策略
 - snapshot / materialize as Conversation / save span as Note
 
 验收：
 
-- Orbit 能列出本地 Codex / Claude sessions：provider foundation 已支持，尚未接入 UI / settings
+- Orbit 能列出本地 Codex / Claude sessions：provider foundation 已支持，并已接入基础 UI / settings
 - 不导入全文也能生成 EvidenceSource：已实现 reference-truth registry entry
-- Ask / Review / Project Room 能按需读取相关会话片段：chunk index 默认可消费已登记会话源，Ask/Project Room 已有通用 evidence read 入口；session-specific surface 仍待补齐
-- 所有提炼结果都引用 session selector：EvidenceChunk / ContextPacket path 已支持，session-specific distillation 尚未接入
+- Ask / Review / Project Room 能按需读取相关会话片段：chunk index 默认可消费已登记会话源，Ask/Project Room 已有通用 evidence read 入口；session browser / per-session action surface 仍待补齐
+- 所有提炼结果都引用 session selector：EvidenceChunk / ContextPacket path 已支持，`distill.external_session` 已引用 whole-source selector；message-range selector 可后续补强
 
 ---
 

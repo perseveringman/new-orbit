@@ -51,6 +51,50 @@ export interface PersonalQAPayload {
   useful_for: Array<'ask' | 'task_context' | 'review' | 'resource' | 'project' | 'area'>;
 }
 
+export interface ExternalSessionDistillPayload {
+  source_id: string;
+  title: string;
+  agent?: string;
+  project_ref?: string;
+  period?: { from?: string; to?: string };
+  summary: string;
+  key_points: string[];
+  decisions: Array<{
+    title: string;
+    evidence: EvidenceSelector[];
+  }>;
+  open_loops: Array<{
+    title: string;
+    evidence: EvidenceSelector[];
+  }>;
+  next_actions: string[];
+  entities: string[];
+  evidence: EvidenceSelector[];
+  source_hash: string;
+}
+
+export interface EntityProfilePayload {
+  entity: string;
+  summary: string;
+  aliases: string[];
+  related_entities: Array<{
+    entity: string;
+    relation: string;
+    weight: number;
+    evidence: EvidenceSelector[];
+  }>;
+  top_sources: Array<{
+    source_id: string;
+    title: string;
+    source_kind?: string;
+    reason: string;
+    evidence: EvidenceSelector[];
+  }>;
+  open_questions: string[];
+  evidence: EvidenceSelector[];
+  source_hash: string;
+}
+
 export interface WorkContextPayload {
   id: string;
   scope: { kind: 'global' | 'project' | 'area' | 'resource'; ref?: string };
@@ -100,6 +144,8 @@ export interface SynthesisPayloadMap {
   'relate.notes': { relations: NoteRelationSuggestion[] };
   'classify.area': AreaClassificationPayload;
   'qa.personal': PersonalQAPayload;
+  'distill.external_session': ExternalSessionDistillPayload;
+  'entity.profile': EntityProfilePayload;
   'work.context': WorkContextPayload;
   'report.open_loops': OpenLoopPayload;
   'feed.digest': FeedDigestPayload;

@@ -4,6 +4,7 @@ import { useWorkspace } from '../store/workspace';
 import type { BudgetSettings } from '@shared/schemas';
 import type { Theme } from '@shared/types';
 import type { DetectResult } from '@shared/agent';
+import type { ExternalAISessionSettings } from '@shared/evidence';
 import type {
   SDKEndpointDefaults,
   SDKEndpointInput,
@@ -19,7 +20,7 @@ import type {
 import type { ExternalGatewayCapability } from '@shared/external-gateway-protocol';
 
 type Numeric = 'perRunTokens' | 'perRunUSD' | 'dailyTokens' | 'dailyUSD';
-type TabId = 'general' | 'api' | 'endpoints' | 'externalGateway' | 'budget' | 'vectors' | 'advanced';
+type TabId = 'general' | 'api' | 'endpoints' | 'externalGateway' | 'memorySources' | 'budget' | 'vectors' | 'advanced';
 
 const BUDGET_FIELDS: Array<{ key: Numeric; label: string; step: number; unit: string }> = [
   { key: 'perRunTokens', label: '单次运行 tokens', step: 10_000, unit: 'tok' },
@@ -134,6 +135,8 @@ export function SettingsModal(): JSX.Element | null {
   const [externalRequestLog, setExternalRequestLog] = useState<ExternalGatewayRequestLogEntry[]>([]);
   const [externalAllowedUsers, setExternalAllowedUsers] = useState<string>('');
   const [externalMessage, setExternalMessage] = useState<string>('');
+  const [externalSessionSettings, setExternalSessionSettings] = useState<ExternalAISessionSettings | null>(null);
+  const [externalSessionMessage, setExternalSessionMessage] = useState<string>('');
   const endpointFormRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -151,6 +154,7 @@ export function SettingsModal(): JSX.Element | null {
     setResetMsg(null);
     void loadEndpoints();
     void loadExternalGateway();
+    void loadExternalSessionSettings();
   }, [open, budget, workspaceSettings]);
 
   useEffect(() => {
@@ -207,6 +211,19 @@ export function SettingsModal(): JSX.Element | null {
       setExternalAllowedUsers(config.allowed_users.map((user) => `${user.platform}:${user.userId}`).join('\n'));
     } catch (error) {
       setExternalMessage(`加载 External Gateway 失败：${(error as Error).message}`);
+    }
+  }
+
+  async function loadExternalSessionSettings(): Promise<void> {
+    if (!vault) {
+      setExternalSessionSettings(null);
+      return;
+    }
+    try {
+      setExternalSessionSettings(await window.orbit.evidence.externalSessionSettings());
+      setExternalSessionMessage('');
+    } catch (error) {
+      setExternalSessionMessage(`加载本地会话设置失败：${(error as Error).message}`);
     }
   }
 
@@ -448,11 +465,28 @@ export function SettingsModal(): JSX.Element | null {
     await loadExternalGateway();
   }
 
+  async function onSaveExternalSessionSettings(): Promise<void> {
+    if (!externalSessionSettings) return;
+    setExternalSessionMessage('保存本地会话设置…');
+    try {
+      const saved = await window.orbit.evidence.updateExternalSessionSettings(externalSessionSettings);
+      setExternalSessionSettings(saved);
+      await window.orbit.evidence.sync({
+        includeExternalAISessions: saved.enabled,
+        externalAISessionLimit: saved.limit
+      });
+      setExternalSessionMessage('本地会话设置已保存，证据源已同步。');
+    } catch (error) {
+      setExternalSessionMessage(`保存失败：${(error as Error).message}`);
+    }
+  }
+
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: 'general', label: '通用' },
     { id: 'api', label: 'API / CLI' },
     { id: 'endpoints', label: 'AI 端点' },
     { id: 'externalGateway', label: 'External Gateway' },
+    { id: 'memorySources', label: '记忆源' },
     { id: 'budget', label: '预算' },
     { id: 'vectors', label: '向量' },
     { id: 'advanced', label: '高级' }
@@ -944,6 +978,120 @@ export function SettingsModal(): JSX.Element | null {
                 </section>
               </div>
             )}
+            {tab === 'memorySources' && (
+              <div className="space-y-4">
+                {!vault && (
+                  <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    请先打开工作库。
+                  </p>
+                )}
+                {externalSessionSettings && (
+                  <>
+                    <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold">本地 Agent 会话</h3>
+                          <p className="text-xs text-neutral-500">Claude / Codex / Amp / CodeBuddy</p>
+                        </div>
+                        <label className="flex items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={externalSessionSettings.enabled}
+                            onChange={(event) => setExternalSessionSettings({ ...externalSessionSettings, enabled: event.target.checked })}
+                            className={FOCUS}
+                          />
+                          <span>{externalSessionSettings.enabled ? '已启用' : '已停用'}</span>
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-xs text-neutral-500">
+                          扫描上限
+                          <input
+                            type="number"
+                            min={1}
+                            max={5000}
+                            value={externalSessionSettings.limit}
+                            onChange={(event) => setExternalSessionSettings({
+                              ...externalSessionSettings,
+                              limit: Math.max(1, Number(event.target.value) || 1)
+                            })}
+                            className={`${INPUT} mt-1`}
+                          />
+                        </label>
+                        <label className="text-xs text-neutral-500">
+                          索引级别
+                          <select
+                            value={externalSessionSettings.indexLevel}
+                            onChange={(event) => setExternalSessionSettings({
+                              ...externalSessionSettings,
+                              indexLevel: event.target.value as ExternalAISessionSettings['indexLevel']
+                            })}
+                            className={`${INPUT} mt-1`}
+                          >
+                            <option value="metadata_only">仅元数据</option>
+                            <option value="safe_projection">安全投影</option>
+                            <option value="full_text">全文</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={externalSessionSettings.includeToolOutputs}
+                          onChange={(event) => setExternalSessionSettings({
+                            ...externalSessionSettings,
+                            includeToolOutputs: event.target.checked
+                          })}
+                          className={FOCUS}
+                        />
+                        <span>安全投影包含工具输出</span>
+                      </label>
+                    </section>
+                    <section className="grid gap-3 sm:grid-cols-2">
+                      <TextListEditor
+                        label="只包含 Agent"
+                        value={externalSessionSettings.includeAgents}
+                        onChange={(includeAgents) => setExternalSessionSettings({ ...externalSessionSettings, includeAgents })}
+                      />
+                      <TextListEditor
+                        label="排除 Agent"
+                        value={externalSessionSettings.excludeAgents}
+                        onChange={(excludeAgents) => setExternalSessionSettings({ ...externalSessionSettings, excludeAgents })}
+                      />
+                      <TextListEditor
+                        label="只包含项目"
+                        value={externalSessionSettings.includeProjects}
+                        onChange={(includeProjects) => setExternalSessionSettings({ ...externalSessionSettings, includeProjects })}
+                      />
+                      <TextListEditor
+                        label="排除项目"
+                        value={externalSessionSettings.excludeProjects}
+                        onChange={(excludeProjects) => setExternalSessionSettings({ ...externalSessionSettings, excludeProjects })}
+                      />
+                      <TextListEditor
+                        label="路径包含"
+                        value={externalSessionSettings.includePathSubstrings}
+                        onChange={(includePathSubstrings) => setExternalSessionSettings({ ...externalSessionSettings, includePathSubstrings })}
+                      />
+                      <TextListEditor
+                        label="路径排除"
+                        value={externalSessionSettings.excludePathSubstrings}
+                        onChange={(excludePathSubstrings) => setExternalSessionSettings({ ...externalSessionSettings, excludePathSubstrings })}
+                      />
+                    </section>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => void onSaveExternalSessionSettings()} className={BTN_PRIMARY}>
+                        保存并同步
+                      </button>
+                      {externalSessionMessage && <span className="text-xs text-neutral-500">{externalSessionMessage}</span>}
+                    </div>
+                  </>
+                )}
+                {!externalSessionSettings && externalSessionMessage && (
+                  <p className="text-xs text-red-500">{externalSessionMessage}</p>
+                )}
+              </div>
+            )}
             {tab === 'externalGateway' && (
               <div className="space-y-5">
                 {!vault && (
@@ -1259,4 +1407,31 @@ export function SettingsModal(): JSX.Element | null {
       </div>
     </div>
   );
+}
+
+function TextListEditor(props: {
+  label: string;
+  value: string[];
+  onChange(value: string[]): void;
+}): JSX.Element {
+  return (
+    <label className="text-xs text-neutral-500">
+      {props.label}
+      <textarea
+        value={props.value.join('\n')}
+        onChange={(event) => props.onChange(splitTextList(event.target.value))}
+        rows={3}
+        className={`${INPUT} mt-1 resize-y`}
+      />
+    </label>
+  );
+}
+
+function splitTextList(value: string): string[] {
+  return Array.from(new Set(
+    value
+      .split(/\r?\n|,/u)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ));
 }
