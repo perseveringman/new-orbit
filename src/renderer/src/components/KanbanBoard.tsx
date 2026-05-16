@@ -51,7 +51,7 @@ function Column({
       }
     >
       <header className="mb-2 flex items-center justify-between px-1 text-xs uppercase tracking-wide text-neutral-500">
-        <span>{status}</span>
+        <span>{taskStatusLabel(status)}</span>
         <span>{tasks.length}</span>
       </header>
       <ul className="flex-1 space-y-1">
@@ -89,4 +89,14 @@ function DraggableTask({
       <TaskRow task={task} onStatus={onStatus} />
     </div>
   );
+}
+
+function taskStatusLabel(status: TaskStatus): string {
+  if (status === 'backlog') return '待整理';
+  if (status === 'waiting') return '等待中';
+  if (status === 'todo') return '待办';
+  if (status === 'doing') return '进行中';
+  if (status === 'blocked') return '受阻';
+  if (status === 'done') return '已完成';
+  return status;
 }

@@ -54,14 +54,14 @@ export function agentEventToRuntimeEvent(
       return {
         ...base,
         kind,
-        payload: { toolName: event.toolName ?? 'unknown', toolInput: event.data, spanId }
+         payload: { toolName: event.toolName ?? '未知工具', toolInput: event.data, spanId }
       } as RuntimeEvent;
     case 'runtime.tool_result':
       return {
         ...base,
         kind,
         payload: {
-          toolName: event.toolName ?? 'unknown',
+           toolName: event.toolName ?? '未知工具',
           result: event.text ?? '',
           parentSpanId: spanId
         }
@@ -84,7 +84,7 @@ export function agentEventToRuntimeEvent(
       return {
         ...base,
         kind,
-        payload: { code: 'runtime_error', message: event.text ?? 'unknown error' }
+         payload: { code: 'runtime_error', message: event.text ?? '未知错误' }
       } as RuntimeEvent;
     default:
       return null;

@@ -39,13 +39,13 @@ export function KanbanView({ projectUid }: { projectUid: string | null }): JSX.E
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <header className="flex items-baseline gap-3 border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
-        <h1 className="text-lg font-semibold">Kanban</h1>
+        <h1 className="text-lg font-semibold">看板</h1>
         <select
           value={projectUid ?? ''}
           onChange={(e) => setView({ kind: 'kanban', projectUid: e.target.value || null })}
           className="rounded border border-neutral-300 bg-transparent px-2 py-1 text-sm dark:border-neutral-700"
         >
-          <option value="">Select a project…</option>
+          <option value="">选择项目…</option>
           {projects.map((p) => (
             <option key={p.uid} value={p.uid}>
               {p.title}
@@ -53,12 +53,12 @@ export function KanbanView({ projectUid }: { projectUid: string | null }): JSX.E
           ))}
         </select>
         {project && (
-          <span className="text-xs text-neutral-500">{tasks.length} tasks · {project.status ?? ''}</span>
+          <span className="text-xs text-neutral-500">{tasks.length} 个任务 · {project.status ?? ''}</span>
         )}
       </header>
       <div className="flex-1 overflow-auto p-4">
         {!projectUid ? (
-          <p className="text-sm text-neutral-500">Pick a project to see its board.</p>
+          <p className="text-sm text-neutral-500">选择一个项目以查看看板。</p>
         ) : tasks.length === 0 ? (
           <div className="grid grid-cols-5 gap-3">
             {TASK_STATUSES.map((s) => (
@@ -66,7 +66,7 @@ export function KanbanView({ projectUid }: { projectUid: string | null }): JSX.E
             ))}
           </div>
         ) : (
-          <Suspense fallback={<p className="text-sm text-neutral-500">Loading board…</p>}>
+          <Suspense fallback={<p className="text-sm text-neutral-500">看板加载中…</p>}>
             <KanbanBoard columns={cols} onDrop={onDrop} onStatus={updateStatus} />
           </Suspense>
         )}
@@ -87,7 +87,7 @@ export function StaticColumn({
   return (
     <section className="flex min-h-[120px] flex-col rounded border border-neutral-200 bg-neutral-50/50 p-2 dark:border-neutral-800 dark:bg-neutral-900/40">
       <header className="mb-2 flex items-center justify-between px-1 text-xs uppercase tracking-wide text-neutral-500">
-        <span>{status}</span>
+        <span>{taskStatusLabel(status)}</span>
         <span>{tasks.length}</span>
       </header>
       <ul className="space-y-1">
@@ -99,4 +99,14 @@ export function StaticColumn({
       </ul>
     </section>
   );
+}
+
+export function taskStatusLabel(status: TaskStatus): string {
+  if (status === 'backlog') return '待整理';
+  if (status === 'waiting') return '等待中';
+  if (status === 'todo') return '待办';
+  if (status === 'doing') return '进行中';
+  if (status === 'blocked') return '受阻';
+  if (status === 'done') return '已完成';
+  return status;
 }

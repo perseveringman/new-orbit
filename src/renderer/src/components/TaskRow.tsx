@@ -60,8 +60,8 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
   async function dispatch(e: React.MouseEvent): Promise<void> {
     e.stopPropagation();
     const res = await startForTask(task.id, { useWorktree });
-    if (res.kind === 'error') toast(`Agent: ${res.message}`);
-    else toast(`Agent dispatched${useWorktree ? ' (worktree)' : ''} (${res.runId})`);
+    if (res.kind === 'error') toast(`Agent：${res.message}`);
+    else toast(`Agent 已派发${useWorktree ? '（Worktree）' : ''}（${res.runId}）`);
   }
 
   return (
@@ -70,7 +70,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
         <input
           type="checkbox"
           checked={task.status === 'done'}
-          aria-label={`mark ${task.title} done`}
+          aria-label={`标记 ${task.title} 为已完成`}
           onChange={(e) => onStatus?.(task.id, e.target.checked ? 'done' : 'backlog')}
           className="mt-1 h-3.5 w-3.5"
         />
@@ -78,7 +78,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
           <span className="flex items-center gap-1.5">
             {task.origin && task.origin !== 'human' && (
               <span
-                title={`Origin: ${task.origin}`}
+                 title={`来源：${task.origin}`}
                 className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-300"
               >
                 {task.origin === 'agent' ? '🤖' : task.origin === 'system' ? '⚙️' : '📥'} {task.origin}
@@ -87,12 +87,12 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             <span
               title={
                 mode === 'agent'
-                  ? 'Agent can claim this task when it is ready.'
+                   ? '任务就绪后 Agent 可以领取。'
                   : mode === 'assisted'
-                    ? 'Human-led task that can use AI in conversation.'
+                     ? '人主导的任务，可在对话中使用 AI。'
                     : mode === 'scheduled'
-                      ? 'Schedule-triggered task.'
-                      : 'Human-led task.'
+                       ? '由计划触发的任务。'
+                       : '人主导的任务。'
               }
               className={
                 'rounded px-1.5 py-0.5 text-[10px] font-medium ' +
@@ -109,7 +109,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             </span>
             {task.owner_type && task.owner_id && (
               <span
-                title={`Owner: ${task.owner_type} (${task.owner_id})`}
+                 title={`负责人：${task.owner_type} (${task.owner_id})`}
                 className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-300"
               >
                 👤 {task.owner_type}
@@ -120,31 +120,31 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
                 title={task.blocked_reason}
                 className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-300"
               >
-                🚫 blocked
+                 🚫 受阻
               </span>
             )}
             {(task.depends_on ?? []).length > 0 && task.status !== 'done' && (
               <span
-                title={`Depends on ${(task.depends_on ?? []).join(', ')}`}
+                 title={`依赖 ${(task.depends_on ?? []).join(', ')}`}
                 className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
               >
-                🔒 deps {(task.depends_on ?? []).length}
+                 🔒 依赖 {(task.depends_on ?? []).length}
               </span>
             )}
             {task.ready && task.status === 'waiting' && (
               <span
-                title="All pre-conditions met, ready to start"
+                 title="所有前置条件已满足，可以开始"
                 className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300"
               >
-                ✓ ready
+                 ✓ 就绪
               </span>
             )}
             {task.recommended && (
               <span
-                title="Recommended by Orbit Daily Review"
+                 title="Orbit Daily Review 推荐"
                 className="rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-300"
               >
-                ✨ Recommended
+                 ✨ 推荐
               </span>
             )}
             <span
@@ -155,14 +155,14 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
                   : '')
               }
             >
-              {task.title || '(untitled)'}
+               {task.title || '（未命名）'}
             </span>
           </span>
           <span className="truncate text-[11px] text-neutral-500">
             {task.relPath}
-            {task.due ? ` · due ${task.due}` : ''}
+             {task.due ? ` · 截止 ${task.due}` : ''}
             {task.effort ? ` · ${task.effort}` : ''}
-            {task.recommended_role ? ` · role: ${task.recommended_role}` : ''}
+             {task.recommended_role ? ` · 角色：${task.recommended_role}` : ''}
           </span>
         </button>
         <button
@@ -170,15 +170,15 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             e.stopPropagation();
             setExpanded((v) => !v);
           }}
-          title="Relevant past experience"
+           title="相关历史经验"
           className="opacity-0 group-hover:opacity-100 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
-          {expanded ? '▾ experience' : '▸ experience'}
+           {expanded ? '▾ 经验' : '▸ 经验'}
         </button>
         {canDispatchAgent && (
           <label
             className="opacity-0 group-hover:opacity-100 flex items-center gap-1 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-300"
-            title="Run the agent in a fresh git worktree under .orbit/worktrees/"
+             title="在 .orbit/worktrees/ 下新的 Git Worktree 中运行 Agent"
             onClick={(e) => e.stopPropagation()}
           >
             <input
@@ -187,7 +187,7 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
               onChange={(e) => setUseWorktree(e.target.checked)}
               className="h-3 w-3"
             />
-            worktree
+             Worktree
           </label>
         )}
         {canDispatchAgent && (
@@ -196,12 +196,12 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             disabled={detect ? !detect.available : false}
             title={
               detect?.available
-                ? 'Dispatch this task to the Claude Code agent'
-                : 'Claude Code CLI not detected'
+                 ? '将此任务派发给 Claude Code Agent'
+                 : '未检测到 Claude Code CLI'
             }
             className="opacity-0 group-hover:opacity-100 disabled:opacity-40 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            ▶ Agent
+             ▶ Agent
           </button>
         )}
         {onStatus && task.status !== 'done' && (
@@ -210,23 +210,23 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
             onChange={(e) => onStatus(task.id, e.target.value as TaskStatus)}
             className="opacity-0 group-hover:opacity-100 rounded border border-neutral-300 bg-transparent px-1 py-0.5 text-[11px] dark:border-neutral-700"
           >
-            <option value="backlog">backlog</option>
-            <option value="waiting">waiting</option>
-            <option value="todo">todo</option>
-            <option value="doing">doing</option>
-            <option value="blocked">blocked</option>
+             <option value="backlog">{taskStatusLabel('backlog')}</option>
+             <option value="waiting">{taskStatusLabel('waiting')}</option>
+             <option value="todo">{taskStatusLabel('todo')}</option>
+             <option value="doing">{taskStatusLabel('doing')}</option>
+             <option value="blocked">{taskStatusLabel('blocked')}</option>
           </select>
         )}
       </div>
       {expanded && (
         <div className="mx-2 mb-1 rounded border border-neutral-200 bg-neutral-50/60 p-2 text-[11px] dark:border-neutral-800 dark:bg-neutral-900/60">
           <p className="mb-1 font-semibold text-neutral-600 dark:text-neutral-300">
-            Relevant past experience
+             相关历史经验
           </p>
           {hits === null ? (
-            <p className="text-neutral-500">Searching…</p>
+             <p className="text-neutral-500">搜索中…</p>
           ) : hits.length === 0 ? (
-            <p className="text-neutral-500">No related resources above threshold.</p>
+             <p className="text-neutral-500">没有达到阈值的相关资源。</p>
           ) : (
             <ul className="space-y-1">
               {hits.map((h) => (
@@ -234,11 +234,11 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
                   <button
                     onClick={() => void openPath(h.meta.relPath)}
                     className="text-left hover:underline"
-                    title={`score ${h.score.toFixed(3)}`}
+                     title={`分数 ${h.score.toFixed(3)}`}
                   >
                     <span className="font-semibold">{h.meta.title}</span>{' '}
                     <span className="text-neutral-500">
-                      — {h.meta.relPath} (score {h.score.toFixed(2)})
+                       — {h.meta.relPath}（分数 {h.score.toFixed(2)}）
                     </span>
                   </button>
                   <p className="ml-2 text-neutral-500">{h.meta.excerpt}</p>
@@ -250,4 +250,14 @@ export function TaskRow({ task, onStatus }: Props): JSX.Element {
       )}
     </div>
   );
+}
+
+function taskStatusLabel(status: TaskStatus): string {
+  if (status === 'backlog') return '待整理';
+  if (status === 'waiting') return '等待中';
+  if (status === 'todo') return '待办';
+  if (status === 'doing') return '进行中';
+  if (status === 'blocked') return '受阻';
+  if (status === 'done') return '已完成';
+  return status;
 }

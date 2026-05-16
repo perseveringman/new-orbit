@@ -86,7 +86,7 @@ export function TaskConversationTab({ task }: TaskConversationTabProps): JSX.Ele
   if (task.source !== 'file') {
     return (
       <div className="flex h-full items-center justify-center px-6 text-sm text-neutral-500">
-        Inline tasks do not have a persistent task conversation.
+        行内任务没有持久任务对话。
       </div>
     );
   }
@@ -236,7 +236,7 @@ export function TaskConversationTimeline({
             disabled={!task.uid || !runtimeId || switching}
             className="rounded bg-neutral-900 px-2 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
           >
-            {switching ? 'Switching…' : 'Switch Runtime'}
+            {switching ? '切换中…' : '切换 Runtime'}
           </button>
         </div>
       </div>
@@ -247,10 +247,10 @@ export function TaskConversationTimeline({
       >
         <div ref={contentRef} className="space-y-4">
           {loading && !conversation ? (
-            <p className="text-sm text-neutral-500">Loading conversation…</p>
+             <p className="text-sm text-neutral-500">对话加载中…</p>
           ) : timeline.length === 0 ? (
             <div className="flex h-full items-center justify-center rounded border border-dashed border-neutral-300 px-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
-              No task conversation yet. Send a message to start a focused task run.
+              暂无任务对话。发送消息即可启动一次聚焦任务运行。
             </div>
           ) : (
             timeline.map((entry) =>
@@ -278,7 +278,7 @@ export function TaskConversationTimeline({
             </div>
           </div>
         )}
-        <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">Activity</div>
+         <div className="mb-2 text-[11px] uppercase tracking-wide text-neutral-500">活动</div>
         <div className="flex gap-2">
           <textarea
             value={draft}
@@ -299,7 +299,7 @@ export function TaskConversationTimeline({
             disabled={sending || !draft.trim()}
             className="rounded bg-sky-600 px-3 py-2 text-sm text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {sending ? 'Sending…' : 'Send'}
+             {sending ? '发送中…' : '发送'}
           </button>
         </div>
       </div>
@@ -311,10 +311,10 @@ function LivePlaceholderCard(): JSX.Element {
   return (
     <div className="rounded border border-sky-400/40 bg-sky-500/5 p-3">
       <div className="mb-2 flex items-center gap-2 text-xs font-medium text-sky-600 dark:text-sky-300">
-        <span className="animate-pulse">●</span> Agent is starting…
+         <span className="animate-pulse">●</span> Agent 正在启动…
       </div>
       <div className="space-y-1 border-l-2 border-sky-400/60 pl-3">
-        <p className="text-xs text-neutral-500">Waiting for the first live event…</p>
+         <p className="text-xs text-neutral-500">等待第一个实时事件…</p>
       </div>
     </div>
   );
@@ -416,8 +416,8 @@ export function buildLiveStatus(
     .find((segment) => segment.status === 'running' && segment.runId);
   if (!runningSegment?.runId) return null;
   const run = runs[runningSegment.runId];
-  if (!run || run.summary.status !== 'running') return 'Agent is working…';
+  if (!run || run.summary.status !== 'running') return 'Agent 正在工作…';
   const events = eventsForSegment(runningSegment, run.events);
   const latest = [...events].reverse().find((event) => isDetailedSegmentEvent(event));
-  return latest ? describeAgentEvent(latest) : 'Agent is working…';
+  return latest ? describeAgentEvent(latest) : 'Agent 正在工作…';
 }

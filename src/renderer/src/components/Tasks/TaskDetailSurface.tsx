@@ -50,7 +50,7 @@ export function TaskDetailSurface({
         onTaskHydrated?.(hydrated);
       }
     } catch (error) {
-      toast(`Load task detail failed: ${(error as Error).message}`);
+       toast(`加载任务详情失败：${(error as Error).message}`);
     }
   }, [onTaskHydrated, projectUid, task, toast]);
 
@@ -67,7 +67,7 @@ export function TaskDetailSurface({
     return (
       <div className="space-y-3 rounded border border-neutral-200 bg-white/50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900/40">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-neutral-500">Inline task</p>
+           <p className="text-[11px] uppercase tracking-wide text-neutral-500">行内任务</p>
           <h3 className="mt-1 font-semibold text-neutral-900 dark:text-neutral-100">
             {activeTask.title}
           </h3>
@@ -75,11 +75,11 @@ export function TaskDetailSurface({
         </div>
         <dl className="grid grid-cols-2 gap-2 text-xs text-neutral-600 dark:text-neutral-300">
           <div>
-            <dt className="uppercase tracking-wide text-neutral-400">Status</dt>
-            <dd>{activeTask.status}</dd>
+             <dt className="uppercase tracking-wide text-neutral-400">状态</dt>
+             <dd>{taskStatusLabel(activeTask.status)}</dd>
           </div>
           <div>
-            <dt className="uppercase tracking-wide text-neutral-400">Source</dt>
+             <dt className="uppercase tracking-wide text-neutral-400">来源</dt>
             <dd>{activeTask.source}</dd>
           </div>
         </dl>
@@ -87,7 +87,7 @@ export function TaskDetailSurface({
           onClick={() => void openPath(activeTask.filePath).then(() => setView({ kind: 'editor' }))}
           className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
-          Open source note
+           打开源笔记
         </button>
       </div>
     );
@@ -102,4 +102,14 @@ export function TaskDetailSurface({
       onSectionsChanged={() => void refreshSiblings()}
     />
   );
+}
+
+function taskStatusLabel(status: TaskRecord['status']): string {
+  if (status === 'backlog') return '待整理';
+  if (status === 'waiting') return '等待中';
+  if (status === 'todo') return '待办';
+  if (status === 'doing') return '进行中';
+  if (status === 'blocked') return '受阻';
+  if (status === 'done') return '已完成';
+  return status;
 }

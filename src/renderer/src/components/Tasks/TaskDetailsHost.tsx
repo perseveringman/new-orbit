@@ -21,8 +21,8 @@ export function TaskDetailsHost(): JSX.Element | null {
       detail={task.relPath}
       onClose={close}
       tabs={[
-        { id: 'detail', label: 'Detail' },
-        { id: 'chat', label: 'Activity' }
+         { id: 'detail', label: '详情' },
+         { id: 'chat', label: '活动' }
       ]}
       activeTab={tab}
       onTabChange={(nextTab) => setTab(nextTab as 'detail' | 'chat')}

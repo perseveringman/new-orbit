@@ -33,10 +33,10 @@ const btnPrimary =
 
 const PRIORITIES = ['', 'low', 'med', 'high'] as const;
 const MODE_COPY: Record<TaskExecutionMode, string> = {
-  human: 'I do it myself',
-  assisted: 'I lead, AI helps in conversation',
-  agent: 'Agent may claim when ready',
-  scheduled: 'Triggered by a schedule'
+  human: '我自己执行',
+  assisted: '我主导，AI 在对话中辅助',
+  agent: '就绪后 Agent 可领取',
+  scheduled: '由计划触发'
 };
 
 export function NewTaskModal({
@@ -83,7 +83,7 @@ export function NewTaskModal({
     setBusy(true);
     setErr(null);
     try {
-      if (!projectUid && !areaUid && !resourceUid) throw new Error('Task owner is missing.');
+      if (!projectUid && !areaUid && !resourceUid) throw new Error('缺少任务归属。');
       const fm: Record<string, unknown> = {};
       if (priority) fm['priority'] = priority;
       fm['execution_mode'] = executionMode;
@@ -99,7 +99,7 @@ export function NewTaskModal({
         description: description || undefined,
         frontmatter: Object.keys(fm).length ? fm : undefined
       });
-      toast(`Task created → ${res.relPath}`);
+      toast(`任务已创建 → ${res.relPath}`);
       onCreated?.(res);
       onClose();
     } catch (e) {
@@ -129,12 +129,12 @@ export function NewTaskModal({
         aria-modal="true"
       >
         <div className="border-b border-neutral-200 px-4 py-2 text-sm font-semibold dark:border-neutral-800">
-          {resourceUid ? 'New Resource Task' : areaUid ? 'New Area Task' : 'New Task'}
+          {resourceUid ? '新建 Resource 任务' : areaUid ? '新建 Area 任务' : '新建任务'}
         </div>
         <div className="space-y-3 p-4 text-xs">
           <label className="block">
             <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
-              Title *
+              标题 *
             </span>
             <input
               autoFocus
@@ -144,25 +144,25 @@ export function NewTaskModal({
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void submit();
               }}
               className={input}
-              placeholder="What needs to happen?"
+              placeholder="需要完成什么？"
             />
           </label>
           <label className="block">
             <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
-              Description
+              描述
             </span>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               className={input + ' font-mono'}
-              placeholder="Optional — seeds the # Description section"
+              placeholder="可选 — 写入描述段落"
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
-                Priority
+                优先级
               </span>
               <select
                 value={priority}
@@ -171,14 +171,14 @@ export function NewTaskModal({
               >
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
-                    {p || '—'}
+                     {priorityLabel(p)}
                   </option>
                 ))}
               </select>
             </label>
             <label className="block">
               <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
-                Mode
+                模式
               </span>
               <select
                 value={executionMode}
@@ -194,7 +194,7 @@ export function NewTaskModal({
             </label>
             <label className="block">
               <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
-                Due
+                截止日期
               </span>
               <input
                 type="date"
@@ -206,7 +206,7 @@ export function NewTaskModal({
           </div>
           <div>
             <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
-              Tags
+              标签
             </span>
             <div className="flex flex-wrap items-center gap-1">
               {tags.map((t) => (
@@ -233,7 +233,7 @@ export function NewTaskModal({
                   }
                 }}
                 onBlur={() => addTag(tagInput)}
-                placeholder="+ tag"
+                placeholder="+ 标签"
                 className="min-w-[80px] flex-1 rounded border border-neutral-300 bg-white px-1.5 py-0.5 text-[11px] outline-none dark:border-neutral-700 dark:bg-neutral-900"
               />
             </div>
@@ -241,7 +241,7 @@ export function NewTaskModal({
           {siblings.length > 0 && (
             <div>
               <span className="mb-1 block text-[11px] uppercase tracking-wider text-neutral-500">
-                Pre-conditions
+                 前置条件
               </span>
               <div className="max-h-28 overflow-auto rounded border border-neutral-200 p-1 dark:border-neutral-800">
                 {siblings
@@ -263,7 +263,7 @@ export function NewTaskModal({
                           }}
                         />
                         <span className="truncate">{s.title}</span>
-                        <span className="ml-auto text-neutral-500">{s.status}</span>
+                         <span className="ml-auto text-neutral-500">{taskStatusLabel(s.status)}</span>
                       </label>
                     );
                   })}
@@ -278,17 +278,34 @@ export function NewTaskModal({
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-neutral-200 px-4 py-2 dark:border-neutral-800">
           <button className={btn} onClick={onClose} disabled={busy}>
-            Cancel
+             取消
           </button>
           <button
             className={btnPrimary}
             onClick={() => void submit()}
             disabled={!canSubmit}
           >
-            {busy ? 'Creating…' : 'Create'}
+             {busy ? '创建中…' : '创建'}
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+function priorityLabel(priority: (typeof PRIORITIES)[number]): string {
+  if (priority === 'low') return '低';
+  if (priority === 'med') return '中';
+  if (priority === 'high') return '高';
+  return '—';
+}
+
+function taskStatusLabel(status: TaskRecord['status']): string {
+  if (status === 'backlog') return '待整理';
+  if (status === 'waiting') return '等待中';
+  if (status === 'todo') return '待办';
+  if (status === 'doing') return '进行中';
+  if (status === 'blocked') return '受阻';
+  if (status === 'done') return '已完成';
+  return status;
 }

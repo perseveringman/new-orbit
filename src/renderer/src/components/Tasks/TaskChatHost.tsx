@@ -80,7 +80,7 @@ export function TaskChatHost({ task }: TaskChatHostProps): JSX.Element {
   if (task.source !== 'file') {
     return (
       <div className="flex h-full items-center justify-center px-6 text-sm text-neutral-500">
-        Inline tasks do not have a persistent task conversation.
+        行内任务没有持久任务对话。
       </div>
     );
   }
@@ -126,7 +126,7 @@ export function TaskChatHost({ task }: TaskChatHostProps): JSX.Element {
             disabled={!task.uid || !runtimeId || switching}
             className="rounded bg-neutral-900 px-2 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
           >
-            {switching ? 'Switching…' : 'Switch Runtime'}
+             {switching ? '切换中…' : '切换 Runtime'}
           </button>
         </div>
       </div>
@@ -137,7 +137,7 @@ export function TaskChatHost({ task }: TaskChatHostProps): JSX.Element {
           events={events}
           isLoading={loading && !conversation}
           onAction={(action) => void onAction(action)}
-          welcomeMessage={`No task conversation yet. Send a message to start "${task.title}".`}
+          welcomeMessage={`暂无任务对话。发送消息即可启动「${task.title}」。`}
         />
       </div>
     </div>

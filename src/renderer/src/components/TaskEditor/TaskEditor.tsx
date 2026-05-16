@@ -36,19 +36,36 @@ export interface TaskEditorProps {
 
 const PRIORITIES = ['', 'low', 'med', 'high'] as const;
 const MODE_COPY: Record<TaskExecutionMode, string> = {
-  human: 'I do it myself',
-  assisted: 'I lead, AI helps',
-  agent: 'Agent may claim',
-  scheduled: 'Schedule-triggered'
+  human: '我自己执行',
+  assisted: '我主导，AI 辅助',
+  agent: 'Agent 可领取',
+  scheduled: '由计划触发'
 };
 const SECTIONS: { key: TaskSectionName; label: string }[] = [
-  { key: 'description', label: 'Description' },
-  { key: 'thinking', label: 'Agent Thinking' },
-  { key: 'executionLog', label: 'Execution Log' },
-  { key: 'summary', label: 'Summary' }
+  { key: 'description', label: '描述' },
+  { key: 'thinking', label: 'Agent 思考' },
+  { key: 'executionLog', label: '执行日志' },
+  { key: 'summary', label: '总结' }
 ];
 
 const SAVE_DEBOUNCE_MS = 400;
+
+function taskStatusLabel(status: TaskStatus): string {
+  if (status === 'backlog') return '待整理';
+  if (status === 'waiting') return '等待中';
+  if (status === 'todo') return '待办';
+  if (status === 'doing') return '进行中';
+  if (status === 'blocked') return '受阻';
+  if (status === 'done') return '已完成';
+  return status;
+}
+
+function priorityLabel(priority: (typeof PRIORITIES)[number]): string {
+  if (priority === 'low') return '低';
+  if (priority === 'med') return '中';
+  if (priority === 'high') return '高';
+  return '—';
+}
 
 export function TaskEditor({
   task,
@@ -149,7 +166,7 @@ export function TaskEditor({
       void window.orbit.task
         .updateSection(path, section, value)
         .then(() => onSectionsChanged?.())
-        .catch((e) => toast(`Save failed: ${(e as Error).message}`));
+        .catch((e) => toast(`保存失败：${(e as Error).message}`));
     },
     [path, onSectionsChanged, toast]
   );
@@ -172,7 +189,7 @@ export function TaskEditor({
         .updateFrontmatter(path, patch)
         .then(() => onFrontmatterChanged?.())
         .catch((e) => {
-          toast(`Save failed: ${(e as Error).message}`);
+          toast(`保存失败：${(e as Error).message}`);
           void reloadTaskSnapshot().catch(() => undefined);
         });
     },
@@ -195,8 +212,8 @@ export function TaskEditor({
     try {
       const hits = await window.orbit.fs.rescueOrphan(path);
       setRescue(hits);
-      if (hits.length === 0) toast('No rescue candidates found');
-      else toast(`${hits.length} candidate${hits.length > 1 ? 's' : ''} found`);
+       if (hits.length === 0) toast('未找到可恢复候选');
+       else toast(`找到 ${hits.length} 个候选`);
       try {
         const list = await window.orbit.project.list();
         setProjects(list.filter((p) => !p.legacy));
@@ -204,7 +221,7 @@ export function TaskEditor({
         /* ignore */
       }
     } catch (e) {
-      toast(`Rescue failed: ${(e as Error).message}`);
+       toast(`恢复失败：${(e as Error).message}`);
     } finally {
       setRescuing(false);
     }
@@ -212,7 +229,7 @@ export function TaskEditor({
 
   const doRelink = useCallback(async () => {
     if (!relinkUid) {
-      toast('Pick a target project first');
+       toast('请先选择目标项目');
       return;
     }
     setRelinking(true);
@@ -220,13 +237,13 @@ export function TaskEditor({
       const res = await window.orbit.task.relink(path, relinkUid);
       toast(
         res.moved
-          ? `Relinked and moved to ${res.relPath}`
-          : `Relinked (project_uid updated)`
+           ? `已重新关联并移动到 ${res.relPath}`
+           : '已重新关联（project_uid 已更新）'
       );
       setRescue(null);
       onFrontmatterChanged?.();
     } catch (e) {
-      toast(`Relink failed: ${(e as Error).message}`);
+       toast(`重新关联失败：${(e as Error).message}`);
     } finally {
       setRelinking(false);
     }
@@ -272,7 +289,7 @@ export function TaskEditor({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-neutral-500">
-        Loading task…
+         任务加载中…
       </div>
     );
   }
@@ -294,35 +311,35 @@ export function TaskEditor({
             className={`rounded px-2 py-0.5 ${tab === 'structured' ? 'bg-neutral-200 dark:bg-neutral-800' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}
             onClick={() => setTab('structured')}
           >
-            Structured
+             结构化
           </button>
           <button
             className={`rounded px-2 py-0.5 ${tab === 'raw' ? 'bg-neutral-200 dark:bg-neutral-800' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}
             onClick={() => setTab('raw')}
           >
-            Raw Markdown
+             原始 Markdown
           </button>
         </div>
       </div>
 
       {task.lost && (
         <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
-          <span className="font-medium">Lost task</span>
+           <span className="font-medium">丢失任务</span>
           <span className="truncate">
-            Its project_uid cannot be resolved in this vault.
+             此任务的 project_uid 无法在当前 vault 中解析。
           </span>
           <button
             onClick={() => void doRescue()}
             disabled={rescuing}
             className="ml-auto rounded border border-amber-500/50 px-2 py-0.5 hover:bg-amber-500/20 disabled:opacity-40"
           >
-            {rescuing ? 'Searching…' : 'Try rescue'}
+             {rescuing ? '搜索中…' : '尝试恢复'}
           </button>
         </div>
       )}
       {rescue && rescue.length > 0 && (
         <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-[11px] text-amber-800 dark:text-amber-200">
-          <div className="mb-1 font-medium">Rescue candidates</div>
+           <div className="mb-1 font-medium">恢复候选</div>
           <ul className="space-y-0.5">
             {rescue.slice(0, 8).map((c) => (
               <li key={`${c.repo}:${c.commit}:${c.oldPath}`} className="truncate">
@@ -335,14 +352,14 @@ export function TaskEditor({
           </ul>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <label className="text-[11px] text-neutral-600 dark:text-neutral-300">
-              Relink to project:
+               重新关联到项目：
             </label>
             <select
               value={relinkUid}
               onChange={(e) => setRelinkUid(e.target.value)}
               className="rounded border border-amber-500/40 bg-white px-1 py-0.5 text-[11px] dark:bg-neutral-900"
             >
-              <option value="">— pick —</option>
+               <option value="">— 选择 —</option>
               {projects.map((p) => (
                 <option key={p.uid} value={p.uid}>
                   {p.name} ({p.slug})
@@ -354,11 +371,11 @@ export function TaskEditor({
               disabled={!relinkUid || relinking}
               className="rounded border border-emerald-600/50 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-500/20 disabled:opacity-40 dark:text-emerald-300"
             >
-              {relinking ? 'Relinking…' : 'Relink'}
+               {relinking ? '重新关联中…' : '重新关联'}
             </button>
             <span className="text-neutral-500">
-              Updates <code>project_uid</code> + moves file into the chosen project&apos;s
-              <code>.agent/tasks/</code>.
+               更新 <code>project_uid</code>，并将文件移动到所选项目的
+               <code>.agent/tasks/</code>。
             </span>
           </div>
         </div>
@@ -367,7 +384,7 @@ export function TaskEditor({
       {tab === 'structured' ? (
         <div className="flex-1 overflow-auto">
           <section className="grid grid-cols-2 gap-3 border-b border-neutral-200 p-4 text-xs dark:border-neutral-800 md:grid-cols-3">
-            <Field label="Status" className={label}>
+             <Field label="状态" className={label}>
               <select
                 value={status}
                 onChange={(e) => queueFrontmatter({ status: e.target.value })}
@@ -375,12 +392,12 @@ export function TaskEditor({
               >
                 {TASK_STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                     {taskStatusLabel(s)}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Priority" className={label}>
+             <Field label="优先级" className={label}>
               <select
                 value={priority}
                 onChange={(e) =>
@@ -392,12 +409,12 @@ export function TaskEditor({
               >
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
-                    {p || '—'}
+                     {priorityLabel(p)}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Due" className={label}>
+             <Field label="截止日期" className={label}>
               <input
                 type="date"
                 value={due}
@@ -409,7 +426,7 @@ export function TaskEditor({
                 className={ctrl}
               />
             </Field>
-            <Field label="Effort (hours)" className={label}>
+             <Field label="工作量（小时）" className={label}>
               <input
                 type="text"
                 value={effort === undefined ? '' : String(effort)}
@@ -419,11 +436,11 @@ export function TaskEditor({
                   const n = Number(v);
                   queueFrontmatter({ effort: Number.isFinite(n) ? n : v });
                 }}
-                placeholder="e.g. 2 or m"
+                 placeholder="例如 2 或 m"
                 className={ctrl}
               />
             </Field>
-            <Field label="Mode" className={label}>
+             <Field label="模式" className={label}>
               <select
                 value={executionMode}
                 onChange={(e) => {
@@ -442,13 +459,13 @@ export function TaskEditor({
                 ))}
               </select>
             </Field>
-            <Field label="Tags" className={label}>
+             <Field label="标签" className={label}>
               <TagChips
                 tags={tags}
                 onChange={(next) => queueFrontmatter({ tags: next.length ? next : undefined })}
               />
             </Field>
-            <Field label="Dependencies" className={label + ' md:col-span-3'}>
+             <Field label="依赖" className={label + ' md:col-span-3'}>
               <TaskRelationPicker
                 all={relationChoices}
                 value={dependsOn}
@@ -461,13 +478,13 @@ export function TaskEditor({
               ) : null}
             </Field>
             {derivedFrom ? (
-              <Field label="Derived from" className={label}>
+               <Field label="派生自" className={label}>
                 <div className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300">
                   {derivedFrom}
                 </div>
               </Field>
             ) : null}
-            <Field label="Pre-conditions" className={label + ' md:col-span-3'}>
+             <Field label="前置条件" className={label + ' md:col-span-3'}>
               <TaskRelationPicker
                 all={relationChoices}
                 value={preConditions}
@@ -508,7 +525,7 @@ export function TaskEditor({
                             }}
                             onClick={(e) => e.stopPropagation()}
                           />
-                          Raw edit
+                           原始编辑
                         </label>
                       </span>
                     )}
@@ -549,7 +566,7 @@ export function TaskEditor({
               if (rawTimer.current) window.clearTimeout(rawTimer.current);
               rawTimer.current = window.setTimeout(() => {
                 void window.orbit.fs.writeFile(path, next).catch((err) => {
-                  toast(`Save failed: ${(err as Error).message}`);
+                   toast(`保存失败：${(err as Error).message}`);
                 });
               }, SAVE_DEBOUNCE_MS);
             }}
@@ -608,7 +625,7 @@ function TagChips({
           <button
             onClick={() => onChange(tags.filter((x) => x !== t))}
             className="text-neutral-500 hover:text-red-500"
-            aria-label={`remove ${t}`}
+             aria-label={`移除 ${t}`}
           >
             ×
           </button>
@@ -626,7 +643,7 @@ function TagChips({
           }
         }}
         onBlur={() => commit(input)}
-        placeholder="+ tag"
+         placeholder="+ 标签"
         className="min-w-[60px] flex-1 rounded border border-neutral-300 bg-white px-1.5 py-0.5 text-[11px] outline-none focus:border-sky-500 dark:border-neutral-700 dark:bg-neutral-900"
       />
     </div>
@@ -669,13 +686,13 @@ export function describeDependencyState(state: {
   const parts: string[] = [];
   if (state.unmet.length > 0) {
     parts.push(
-      `Waiting on ${state.unmet.length} task${state.unmet.length > 1 ? 's' : ''}: ${state.unmet
+      `等待 ${state.unmet.length} 个任务：${state.unmet
         .map((task) => task.title)
         .join(', ')}`
     );
   }
   if (state.missing.length > 0) {
-    parts.push(`Missing dependency reference${state.missing.length > 1 ? 's' : ''}: ${state.missing.join(', ')}`);
+     parts.push(`缺少依赖引用：${state.missing.join(', ')}`);
   }
   return parts.join(' · ');
 }
@@ -692,7 +709,7 @@ export function TaskRelationPicker({
   if (all.length === 0) {
     return (
       <p className="text-[11px] text-neutral-500">
-        No other tasks in this project yet.
+         此项目暂无其他任务。
       </p>
     );
   }
@@ -714,7 +731,7 @@ export function TaskRelationPicker({
               }}
             />
             <span className="truncate">{t.title}</span>
-            <span className="ml-auto text-neutral-500">{t.status}</span>
+             <span className="ml-auto text-neutral-500">{taskStatusLabel(t.status)}</span>
           </label>
         );
       })}
@@ -727,7 +744,7 @@ function ExecutionLogList({ body }: { body: string }): JSX.Element {
   if (lines.length === 0) {
     return (
       <p className="px-2 py-1 text-[11px] text-neutral-500">
-        No execution log entries yet.
+         暂无执行日志条目。
       </p>
     );
   }
