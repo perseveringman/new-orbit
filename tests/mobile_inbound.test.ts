@@ -4,10 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configureEventReplay } from '../src/main/events/bus';
+import { createBuiltinContentConnector } from '../src/main/content-connectors';
 import { ingestCapture } from '../src/main/capture/mobile_inbound';
 import { iCloudContainerName } from '../src/main/capture/mobile_inbound/config';
 import { listCompleteCaptureDirs } from '../src/main/capture/mobile_inbound/watcher';
 import type { MobileCaptureManifest } from '../src/main/capture/mobile_inbound/types';
+import { createLibraryStore } from '../src/main/library/store';
 import { createNoteStore } from '../src/main/note/store';
 import { buildNoteWorkbench } from '../src/main/note/workbench';
 import { createTimelineStore } from '../src/main/timeline/store';
@@ -127,7 +129,7 @@ describe('mobile inbound ingest', () => {
     ).resolves.toBe(files['original-photo-1.heic']);
   });
 
-  it('uses mobile share context to parse WeChat articles on Mac without blocking ingest', async () => {
+  it('saves mobile link shares to Library and parses WeChat articles through content connectors', async () => {
     const vault = path.join(tmp, 'vault');
     const captureDir = await createCapture('mob_cap_wechat', {
       kind: 'share',
@@ -149,6 +151,7 @@ describe('mobile inbound ingest', () => {
 
     const result = await ingestCapture(vault, captureDir, {
       emitActivity: () => undefined,
+      contentConnectors: [createBuiltinContentConnector()],
       fetchSource: async () => ({
         ok: true,
         status: 200,
@@ -170,16 +173,33 @@ describe('mobile inbound ingest', () => {
       })
     });
 
-    expect(result).toMatchObject({ status: 'processed', noteId: 'note-mob_cap_wechat' });
-    const note = await createNoteStore(vault).get(result.noteId!);
-    expect(note?.body).toContain('## Source');
-    expect(note?.body).toContain('Platform: WeChat article');
-    expect(note?.body).toContain('Parsed on Mac: yes');
-    expect(note?.body).toContain('Mac 解析后的微信标题');
-    expect(note?.body).toContain('[source.md](.orbit/capture/enrichments/mob_cap_wechat/source.md)');
+    expect(result).toMatchObject({
+      status: 'processed',
+      libraryItemId: 'lib-mob_cap_wechat',
+      timelineEventId: 'mobile-capture-library:mob_cap_wechat'
+    });
+    const item = await createLibraryStore(vault).get(result.libraryItemId!);
+    expect(item?.path).toContain('library/articles/');
+    expect(item?.frontmatter.source).toMatchObject({
+      kind: 'share',
+      capture_id: 'mob_cap_wechat',
+      provider: 'wechat_article',
+      content_status: 'parsed',
+      content_connector_id: 'builtin.web-readable'
+    });
+    expect(item?.body).toContain('第一段正文，应该由 Mac 侧提取。');
+    expect(item?.frontmatter.source_snapshot_ref).toContain('.orbit/content/extracted/');
+    const ack = JSON.parse(await readFile(path.join(result.targetDir, '.acked'), 'utf8')) as Record<string, unknown>;
+    expect(ack).toMatchObject({
+      schema_version: 2,
+      artifact_kind: 'library_item',
+      library_item_id: item?.frontmatter.id,
+      library_item_path: item?.path
+    });
     await expect(
-      readFile(path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_wechat', 'source.md'), 'utf8')
+      readFile(path.join(vault, item?.frontmatter.source_snapshot_ref ?? ''), 'utf8')
     ).resolves.toContain('第一段正文，应该由 Mac 侧提取。');
+    expect(await createNoteStore(vault).list({ include_archived: true })).toHaveLength(0);
   });
 
   it('extracts WeChat article text from text_page_info when js_content is not rendered', async () => {
@@ -204,6 +224,7 @@ describe('mobile inbound ingest', () => {
 
     const result = await ingestCapture(vault, captureDir, {
       emitActivity: () => undefined,
+      contentConnectors: [createBuiltinContentConnector()],
       fetchSource: async () => ({
         ok: true,
         status: 200,
@@ -225,10 +246,11 @@ describe('mobile inbound ingest', () => {
       })
     });
 
-    const note = await createNoteStore(vault).get(result.noteId!);
-    expect(note?.body).toContain('Author: 人生算法');
+    const item = await createLibraryStore(vault).get(result.libraryItemId!);
+    expect(item?.body).toContain('第一段');
+    expect(item?.frontmatter.source).toMatchObject({ content_status: 'parsed' });
     const source = await readFile(
-      path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_wechat_text_page', 'source.md'),
+      path.join(vault, item?.frontmatter.source_snapshot_ref ?? ''),
       'utf8'
     );
     expect(source).toContain('第一段');
@@ -258,6 +280,7 @@ describe('mobile inbound ingest', () => {
 
     const result = await ingestCapture(vault, captureDir, {
       emitActivity: () => undefined,
+      contentConnectors: [createBuiltinContentConnector()],
       fetchSource: async (url) => {
         expect(url).toContain('publish.twitter.com/oembed');
         return {
@@ -272,11 +295,16 @@ describe('mobile inbound ingest', () => {
       }
     });
 
-    const note = await createNoteStore(vault).get(result.noteId!);
-    expect(note?.body).toContain('Platform: X post');
-    expect(note?.body).toContain('Author: Ryan');
+    const item = await createLibraryStore(vault).get(result.libraryItemId!);
+    expect(item?.frontmatter.source).toMatchObject({
+      kind: 'share',
+      provider: 'x',
+      content_status: 'parsed',
+      content_connector_id: 'builtin.web-readable'
+    });
+    expect(item?.body).toContain('Orbit capture should preserve the original post text.');
     await expect(
-      readFile(path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_x', 'source.md'), 'utf8')
+      readFile(path.join(vault, item?.frontmatter.source_snapshot_ref ?? ''), 'utf8')
     ).resolves.toContain('Orbit capture should preserve the original post text.');
   });
 
@@ -302,6 +330,7 @@ describe('mobile inbound ingest', () => {
 
     const result = await ingestCapture(vault, captureDir, {
       emitActivity: () => undefined,
+      contentConnectors: [createBuiltinContentConnector()],
       fetchSource: async () => ({
         ok: false,
         status: 403,
@@ -310,13 +339,16 @@ describe('mobile inbound ingest', () => {
     });
 
     expect(result.status).toBe('processed');
-    const note = await createNoteStore(vault).get(result.noteId!);
-    expect(note?.body).toContain('Platform: Xiaohongshu note');
-    expect(note?.body).toContain('Parsed on Mac: failed');
-    expect(note?.body).toContain('Error: source_fetch_failed:403');
-    await expect(
-      stat(path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_xhs', 'source.md'))
-    ).rejects.toMatchObject({ code: 'ENOENT' });
+    const item = await createLibraryStore(vault).get(result.libraryItemId!);
+    expect(item?.frontmatter.source).toMatchObject({
+      kind: 'share',
+      provider: 'xiaohongshu',
+      content_status: 'failed',
+      content_error: 'source_fetch_failed:403'
+    });
+    expect(item?.body).toContain('小红书笔记');
+    expect(item?.frontmatter.source_snapshot_ref).toBeUndefined();
+    expect(await createNoteStore(vault).list({ include_archived: true })).toHaveLength(0);
   });
 
   it('moves bad hashes to failed with retryable sha256_mismatch', async () => {
@@ -643,6 +675,57 @@ describe('mobile inbound ingest', () => {
       targetDir: processedDir
     });
     expect(await createNoteStore(vault).list({ include_archived: true })).toHaveLength(0);
+    await expect(stat(captureDir)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('drops duplicate Library share copies when processed ack v2 already exists', async () => {
+    const vault = path.join(tmp, 'vault');
+    const captureDir = await createCapture('mob_cap_library_duplicate', {
+      kind: 'share',
+      content: 'https://mp.weixin.qq.com/s/abc123',
+      context: {
+        share_context: {
+          capture_method: 'share_extension',
+          source_platform: 'wechat_article',
+          parser_hint: 'wechat_article',
+          source_url: 'https://mp.weixin.qq.com/s/abc123',
+          canonical_url: 'https://mp.weixin.qq.com/s/abc123',
+          raw_share_text: 'https://mp.weixin.qq.com/s/abc123',
+          source_title: '微信文章',
+          origin_app: null,
+          enrichment_state: 'pending'
+        }
+      }
+    });
+    const processedDir = path.join(tmp, 'icloud', 'Documents', 'processed', 'mob_cap_library_duplicate');
+    await mkdir(processedDir, { recursive: true });
+    await writeFile(
+      path.join(processedDir, '.acked'),
+      `${JSON.stringify({
+        schema_version: 2,
+        acked_at: '2026-05-15T00:00:00.000Z',
+        artifact_kind: 'library_item',
+        library_item_id: 'lib-existing',
+        library_item_path: 'library/articles/existing.md',
+        timeline_event_id: 'mobile-capture-library:mob_cap_library_duplicate',
+        vault_path: vault,
+        mac_identity: 'mac',
+        orbit_version: '1.0.0'
+      })}\n`,
+      'utf8'
+    );
+
+    const result = await ingestCapture(vault, captureDir, {
+      emitActivity: () => undefined
+    });
+
+    expect(result).toMatchObject({
+      status: 'processed',
+      libraryItemId: 'lib-existing',
+      libraryItemPath: 'library/articles/existing.md',
+      targetDir: processedDir
+    });
+    expect(await createLibraryStore(vault).list({ include_archived: true })).toHaveLength(0);
     await expect(stat(captureDir)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 

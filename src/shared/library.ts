@@ -15,10 +15,19 @@ export interface LibrarySource {
   canonical_url?: string;
   provider?: string;
   external_id?: string;
+  capture_id?: string;
   feed_item_id?: string;
   feed_source_id?: string;
   feed_fetch_run_id?: string;
   source_title?: string;
+  raw_share_text?: string;
+  origin_app?: string;
+  parser_hint?: string;
+  content_status?: 'pending' | 'parsed' | 'failed' | 'skipped';
+  content_connector_id?: string;
+  content_connector_version?: string;
+  content_error?: string;
+  content_fetched_at?: string;
   channel_name?: string;
   channel_id?: string;
   duration_seconds?: number;
@@ -105,6 +114,7 @@ export interface LibraryFilter {
 }
 
 export interface SaveLibraryItemInput {
+  id?: string;
   kind?: LibraryKind;
   title?: string;
   url?: string;

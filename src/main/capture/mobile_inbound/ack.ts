@@ -1,7 +1,11 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { MobileAckInfoV2, MobileFailedInfo } from './types';
+import type { MobileFailedInfo, MobileLibraryAckInfoV2, MobileNoteAckInfoV2 } from './types';
+
+type MobileAckInfoV2Input =
+  | Omit<MobileNoteAckInfoV2, 'acked_at' | 'mac_identity'>
+  | Omit<MobileLibraryAckInfoV2, 'acked_at' | 'mac_identity'>;
 
 async function moveCaptureDir(captureDir: string, bucket: 'processed' | 'failed'): Promise<string> {
   const id = path.basename(captureDir);
@@ -19,10 +23,10 @@ async function moveCaptureDir(captureDir: string, bucket: 'processed' | 'failed'
 
 export async function moveToProcessed(
   captureDir: string,
-  info: Omit<MobileAckInfoV2, 'acked_at' | 'mac_identity'>
+  info: MobileAckInfoV2Input
 ): Promise<string> {
   const targetDir = await moveCaptureDir(captureDir, 'processed');
-  const ack: MobileAckInfoV2 = {
+  const ack = {
     acked_at: new Date().toISOString(),
     mac_identity: os.hostname(),
     ...info

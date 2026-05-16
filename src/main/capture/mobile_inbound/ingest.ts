@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { TraceableEvent } from '@shared/events';
+import type { LibraryItem, SaveLibraryItemInput } from '@shared/library';
 import type {
   CreateNoteInput,
   Note,
@@ -11,20 +12,21 @@ import type {
 } from '@shared/note';
 import type { SynthesisProvenance, SynthesisSource } from '@shared/synthesis';
 import { emitActivity, type ActivityEventInput } from '../../activity';
+import {
+  parseContentSource,
+  writeParsedContentArtifact,
+  type ContentConnector,
+  type FetchLike,
+  type ParsedContent
+} from '../../content-connectors';
 import { currentEventReplayStore, publishTraceableEvent } from '../../events/bus';
+import { createLibraryStore } from '../../library/store';
 import { createNoteStore, type NoteStore } from '../../note/store';
 import { noteWorkbenchEntityScope } from '../../note/workbench';
 import { createSynthesisStore } from '../../synthesis/store';
 import { assertSafeRelativePath, copyAttachments, type CopiedAttachment } from './attachments';
 import { moveToFailed, moveToProcessed } from './ack';
-import {
-  enrichMobileShareSource,
-  sourcePlatformLabel,
-  writeSourceEnrichmentArtifact,
-  type FetchLike,
-  type MobileSourceEnrichment
-} from './source-enrichment';
-import type { MobileAckInfo, MobileCaptureAttachment, MobileCaptureManifest, MobileFailedInfo } from './types';
+import type { MobileAckInfo, MobileCaptureAttachment, MobileCaptureManifest, MobileFailedInfo, MobileShareContext } from './types';
 
 type PublishEventInput = Parameters<typeof publishTraceableEvent>[0];
 
@@ -34,7 +36,8 @@ export interface MobileIngestOptions {
   publishEvent?: (input: PublishEventInput) => TraceableEvent;
   emitActivity?: (input: ActivityEventInput) => unknown;
   fetchSource?: FetchLike;
-  sourceEnrichmentTimeoutMs?: number;
+  contentConnectors?: ContentConnector[];
+  contentConnectorTimeoutMs?: number;
 }
 
 export interface MobileIngestResult {
@@ -42,6 +45,8 @@ export interface MobileIngestResult {
   status: 'processed' | 'failed';
   noteId?: string;
   notePath?: string;
+  libraryItemId?: string;
+  libraryItemPath?: string;
   timelineEventId?: string;
   inboxItemId?: string;
   targetDir: string;
@@ -79,7 +84,6 @@ interface DerivativeArtifact {
 interface MobileCaptureArtifacts {
   transcript?: FinalTranscriptArtifact;
   derivatives: DerivativeArtifact[];
-  sourceEnrichment?: MobileSourceEnrichment;
 }
 
 class MobileIngestError extends Error {
@@ -115,14 +119,48 @@ export async function ingestCapture(
     await verifyAttachmentFiles(captureDir, manifest);
     const attachments = await copyAttachments(vaultPath, captureDir, manifest);
     const artifacts = await readCaptureArtifacts(captureDir, manifest);
-    artifacts.sourceEnrichment = await writeSourceEnrichmentArtifact(
-      vaultPath,
-      manifest,
-      await enrichMobileShareSource(manifest, {
-        fetch: options.fetchSource,
-        timeoutMs: options.sourceEnrichmentTimeoutMs
-      })
-    );
+
+    if (isLinkShareCapture(manifest)) {
+      const libraryResult = await ingestLinkShareAsLibrary(vaultPath, manifest, options);
+      const targetDir = await moveToProcessed(captureDir, {
+        schema_version: 2,
+        artifact_kind: 'library_item',
+        library_item_id: libraryResult.item.frontmatter.id,
+        library_item_path: libraryResult.item.path,
+        timeline_event_id: libraryResult.event.id,
+        vault_path: vaultPath,
+        orbit_version: orbitVersion
+      });
+
+      activity({
+        actor: 'user',
+        actor_id: `ios:${manifest.device_id}`,
+        action: 'mobile_capture.ingested',
+        context: {
+          capture_id: manifest.id,
+          library_item_id: libraryResult.item.frontmatter.id,
+          timeline_event_id: libraryResult.event.id
+        },
+        payload: {
+          source: manifest.source,
+          kind: manifest.kind,
+          artifact_kind: 'library_item',
+          source_platform: libraryResult.parsed.platform,
+          content_parse_status: libraryResult.parsed.status,
+          content_connector_id: libraryResult.parsed.connector_id
+        },
+        summary: `Ingested mobile share as Library item: ${libraryResult.item.frontmatter.title}`
+      });
+
+      return {
+        captureId,
+        status: 'processed',
+        libraryItemId: libraryResult.item.frontmatter.id,
+        libraryItemPath: libraryResult.item.path,
+        timelineEventId: libraryResult.event.id,
+        targetDir
+      };
+    }
 
     const noteStore = createNoteStore(vaultPath);
     const existingNote = await findExistingMobileNote(noteStore, manifest.id);
@@ -154,9 +192,7 @@ export async function ingestCapture(
         kind: manifest.kind,
         note_type: note.frontmatter.type,
         attachment_count: manifest.attachments.length,
-        derivative_count: artifacts.derivatives.length,
-        source_platform: artifacts.sourceEnrichment?.platform,
-        source_enrichment_status: artifacts.sourceEnrichment?.status
+        derivative_count: artifacts.derivatives.length
       },
       summary: `Ingested mobile capture as note: ${note.frontmatter.title ?? note.path}`
     });
@@ -235,8 +271,6 @@ export function buildNoteContent(
   artifacts: MobileCaptureArtifacts = { derivatives: [] }
 ): string {
   const sections = [formatManifestBody(manifest, artifacts.transcript)];
-  const sourceSection = formatSourceEnrichment(artifacts.sourceEnrichment);
-  if (sourceSection) sections.push(sourceSection);
   const transcript = formatTranscript(artifacts.transcript);
   if (transcript) sections.push(transcript);
 
@@ -274,6 +308,91 @@ export async function verifyAttachmentFiles(
       );
     }
   }
+}
+
+function isLinkShareCapture(manifest: MobileCaptureManifest): boolean {
+  if (manifest.kind !== 'share') return false;
+  const context = shareContextForManifest(manifest);
+  return Boolean(context?.source_url || firstUrl(manifest.content));
+}
+
+async function ingestLinkShareAsLibrary(
+  vaultPath: string,
+  manifest: MobileCaptureManifest,
+  options: MobileIngestOptions
+): Promise<{ item: LibraryItem; parsed: ParsedContent; event: TraceableEvent }> {
+  const context = shareContextForManifest(manifest);
+  const parsed = await parseContentSource(
+    {
+      url: context?.source_url ?? firstUrl(manifest.content),
+      canonicalUrl: context?.canonical_url,
+      title: context?.source_title,
+      text: context?.raw_share_text ?? manifest.content,
+      platformHint: context?.source_platform,
+      parserHint: context?.parser_hint,
+      sourceKind: 'mobile_share'
+    },
+    {
+      fetch: options.fetchSource,
+      connectors: options.contentConnectors,
+      timeoutMs: options.contentConnectorTimeoutMs
+    }
+  );
+  const artifact = await writeParsedContentArtifact(vaultPath, parsed, manifest.id);
+  const item = await createLibraryStore(vaultPath).save(libraryInputForMobileShare(manifest, parsed, artifact?.path));
+  const event = await publishMobileLibraryItemAdded(item, manifest, options.publishEvent);
+  return { item, parsed, event };
+}
+
+function libraryInputForMobileShare(
+  manifest: MobileCaptureManifest,
+  parsed: ParsedContent,
+  sourceSnapshotRef?: string
+): SaveLibraryItemInput {
+  const context = shareContextForManifest(manifest);
+  const url = parsed.canonical_url ?? parsed.source_url ?? context?.canonical_url ?? context?.source_url ?? firstUrl(manifest.content) ?? undefined;
+  const title = parsed.title ?? context?.source_title ?? titleForManifest(manifest);
+  const body = parsed.content_markdown?.trim() || fallbackLibraryBody(title, manifest, url);
+  return {
+    id: libraryIdForCapture(manifest.id),
+    kind: 'article',
+    title,
+    url,
+    body,
+    tags: manifest.tags,
+    source: {
+      kind: 'share',
+      url: parsed.source_url ?? context?.source_url ?? undefined,
+      canonical_url: parsed.canonical_url ?? context?.canonical_url ?? undefined,
+      provider: parsed.platform,
+      capture_id: manifest.id,
+      source_title: context?.source_title ?? parsed.title,
+      raw_share_text: context?.raw_share_text ?? manifest.content,
+      origin_app: context?.origin_app ?? undefined,
+      parser_hint: parsed.parser_hint,
+      content_status: parsed.status === 'success' ? 'parsed' : parsed.status,
+      content_connector_id: parsed.connector_id,
+      content_connector_version: parsed.connector_version,
+      content_error: parsed.error,
+      content_fetched_at: parsed.fetched_at,
+      language: detectLanguage(body)
+    },
+    ...(sourceSnapshotRef ? { source_snapshot_ref: sourceSnapshotRef } : {})
+  };
+}
+
+function fallbackLibraryBody(title: string, manifest: MobileCaptureManifest, url?: string): string {
+  const parts = [`# ${title}`, manifest.content.trim(), url ? `Source: ${url}` : ''];
+  return `${parts.filter(Boolean).join('\n\n')}\n`;
+}
+
+function shareContextForManifest(manifest: MobileCaptureManifest): MobileShareContext | null {
+  const context = manifest.context?.share_context;
+  return context && typeof context === 'object' ? context : null;
+}
+
+function libraryIdForCapture(captureId: string): string {
+  return `lib-${captureId.replace(/[^A-Za-z0-9_-]/g, '-')}`;
 }
 
 async function findExistingMobileNote(store: NoteStore, captureId: string): Promise<Note | null> {
@@ -539,17 +658,45 @@ async function publishMobileNoteCreated(
   return event;
 }
 
-async function findPersistedEvent(eventId: string): Promise<TraceableEvent | null> {
+async function publishMobileLibraryItemAdded(
+  item: LibraryItem,
+  manifest: MobileCaptureManifest,
+  publishEvent: MobileIngestOptions['publishEvent']
+): Promise<TraceableEvent> {
+  const eventId = `mobile-capture-library:${manifest.id}`;
+  const existing = await findPersistedEvent(eventId, 'library.item.added');
+  if (existing) return existing;
+  const event = (publishEvent ?? publishTraceableEvent)({
+    id: eventId,
+    at: manifest.created_at,
+    source: 'activity',
+    kind: 'library.item.added',
+    traceId: `mobile-capture:${manifest.id}`,
+    spanId: `library:${item.frontmatter.id}`,
+    summary: `Mobile share saved to Library: ${item.frontmatter.title}`,
+    payload: {
+      item_id: item.frontmatter.id,
+      path: item.path,
+      title: item.frontmatter.title,
+      url: item.frontmatter.url,
+      status: item.frontmatter.status
+    }
+  });
+  await waitForPersistedEvent(event.id, 'library.item.added');
+  return event;
+}
+
+async function findPersistedEvent(eventId: string, type = 'note.created'): Promise<TraceableEvent | null> {
   const store = currentEventReplayStore();
   if (!store) return null;
-  const result = await store.query({ type: 'note.created', limit: 5000 });
+  const result = await store.query({ type, limit: 5000 });
   return result.events.find((event) => event.id === eventId) ?? null;
 }
 
-async function waitForPersistedEvent(eventId: string): Promise<void> {
+async function waitForPersistedEvent(eventId: string, type = 'note.created'): Promise<void> {
   if (!currentEventReplayStore()) return;
   for (let i = 0; i < 6; i += 1) {
-    if (await findPersistedEvent(eventId)) return;
+    if (await findPersistedEvent(eventId, type)) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
@@ -616,27 +763,6 @@ function isSupportedKind(value: string): value is MobileCaptureManifest['kind'] 
 
 function isSupportedAttachmentType(value: string): value is MobileCaptureAttachment['type'] {
   return ['audio', 'image', 'file', 'transcript', 'transcript-partial', 'derivative'].includes(value);
-}
-
-function formatSourceEnrichment(enrichment: MobileSourceEnrichment | undefined): string | null {
-  if (!enrichment) return null;
-  const lines = [
-    '## Source',
-    '',
-    `- Platform: ${sourcePlatformLabel(enrichment.platform)}`,
-    enrichment.canonical_url || enrichment.source_url
-      ? `- URL: ${enrichment.canonical_url ?? enrichment.source_url}`
-      : null,
-    enrichment.status === 'success' ? '- Parsed on Mac: yes' : `- Parsed on Mac: ${enrichment.status}`,
-    enrichment.status !== 'success' && enrichment.error ? `- Error: ${enrichment.error}` : null,
-    enrichment.title ? `- Title: ${enrichment.title}` : null,
-    enrichment.author ? `- Author: ${enrichment.author}` : null,
-    enrichment.artifact_path ? `- Parsed source: [source.md](${enrichment.artifact_path})` : null
-  ].filter((line): line is string => line !== null);
-  if (enrichment.excerpt) {
-    lines.push('', '### Source excerpt', '', clip(enrichment.excerpt, 1200));
-  }
-  return lines.join('\n');
 }
 
 function formatTranscript(transcript: FinalTranscriptArtifact | undefined): string | null {
@@ -762,6 +888,16 @@ function formatDuration(ms: number): string {
 
 function processedResultFromAck(captureId: string, targetDir: string, ack: MobileAckInfo): MobileIngestResult {
   if (ack.schema_version === 2) {
+    if (ack.artifact_kind === 'library_item') {
+      return {
+        captureId,
+        status: 'processed',
+        libraryItemId: ack.library_item_id,
+        libraryItemPath: ack.library_item_path,
+        timelineEventId: ack.timeline_event_id,
+        targetDir
+      };
+    }
     return {
       captureId,
       status: 'processed',
@@ -787,6 +923,17 @@ function classifyError(error: unknown): MobileIngestError {
   return new MobileIngestError('fs_error', error instanceof Error ? error.message : String(error), true);
 }
 
+function firstUrl(value: string): string | null {
+  return value.match(/https?:\/\/[^\s)）]+/i)?.[0] ?? null;
+}
+
+function detectLanguage(content: string): string {
+  const zh = (content.match(/[\u4e00-\u9fff]/g) ?? []).length;
+  const latin = (content.match(/[A-Za-z]/g) ?? []).length;
+  if (zh > latin * 0.4) return 'zh';
+  return 'unknown';
+}
+
 async function readExistingProcessedAck(
   captureDir: string
 ): Promise<{ targetDir: string; ack: MobileAckInfo } | null> {
@@ -797,6 +944,9 @@ async function readExistingProcessedAck(
     const raw = await fs.readFile(path.join(targetDir, '.acked'), 'utf8');
     const ack = JSON.parse(raw) as MobileAckInfo;
     if (ack.schema_version === 2 && ack.artifact_kind === 'note' && typeof ack.note_id === 'string') {
+      return { targetDir, ack };
+    }
+    if (ack.schema_version === 2 && ack.artifact_kind === 'library_item' && typeof ack.library_item_id === 'string') {
       return { targetDir, ack };
     }
     if (ack.schema_version === 1 && typeof ack.inbox_item_id === 'string') {

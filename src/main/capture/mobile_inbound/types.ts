@@ -91,16 +91,27 @@ export interface MobileAckInfoV1 {
   orbit_version: string;
 }
 
-export interface MobileAckInfoV2 {
+export type MobileAckInfoV2 = MobileNoteAckInfoV2 | MobileLibraryAckInfoV2;
+
+export interface MobileAckInfoV2Base {
   schema_version: 2;
   acked_at: string;
-  artifact_kind: 'note';
-  note_id: string;
-  note_path: string;
   timeline_event_id: string;
   vault_path: string;
   mac_identity: string;
   orbit_version: string;
+}
+
+export interface MobileNoteAckInfoV2 extends MobileAckInfoV2Base {
+  artifact_kind: 'note';
+  note_id: string;
+  note_path: string;
+}
+
+export interface MobileLibraryAckInfoV2 extends MobileAckInfoV2Base {
+  artifact_kind: 'library_item';
+  library_item_id: string;
+  library_item_path: string;
 }
 
 export interface MobileFailedInfo {

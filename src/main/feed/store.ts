@@ -30,6 +30,7 @@ import type {
 } from '@shared/feed';
 import { createLibraryStore } from '../library/store';
 import { createSynthesisStore } from '../synthesis/store';
+import { parseContentSource } from '../content-connectors';
 import { parseRss } from '../capture/feed/rss';
 import {
   defaultYouTubeFeedProvider,
@@ -228,9 +229,30 @@ export class FeedStore {
     let rawRef = item.raw_ref;
     let markdown = '';
     try {
-      const html = await this.fetchReadableText(item.url);
-      rawRef = await this.writeAsset('raw', `${item.id}.html`, html, 'article_html', fetchedAt);
-      markdown = extractReadableMarkdown(html, item.url, item.title);
+      const parsed = await parseContentSource(
+        {
+          url: item.url,
+          canonicalUrl: item.canonical_url,
+          title: item.title,
+          text: item.summary ?? item.excerpt,
+          platformHint: 'web',
+          sourceKind: 'feed'
+        },
+        {
+          now: this.now,
+          fetch: async (url, init) => {
+            const html = await this.fetchReadableText(url);
+            rawRef = await this.writeAsset('raw', `${item.id}.html`, html, 'article_html', fetchedAt);
+            return {
+              ok: true,
+              status: 200,
+              text: async () => html,
+              json: async () => JSON.parse(html)
+            };
+          }
+        }
+      );
+      markdown = parsed.content_markdown ?? '';
     } catch {
       markdown = fallbackReadableMarkdown(item);
     }

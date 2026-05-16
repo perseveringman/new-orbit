@@ -44,12 +44,16 @@ export class LibraryStore {
 
   async save(input: SaveLibraryItemInput): Promise<LibraryItem> {
     await this.ensureDirs();
+    if (input.id) {
+      const existing = await this.get(input.id);
+      if (existing) return existing;
+    }
     const now = new Date().toISOString();
     const kind = input.kind ?? inferKind(input.url, input.local_path);
     const title = input.title?.trim() || titleFromUrl(input.url) || labelForKind(kind);
     const body = normalizeBody(input.body ?? defaultBody(title, input.url), title);
     const fm: LibraryItemFrontmatter = normalizeFrontmatter({
-      id: `lib-${randomUUID()}`,
+      id: input.id?.trim() || `lib-${randomUUID()}`,
       kind,
       title,
       ...(input.url ? { url: input.url } : {}),

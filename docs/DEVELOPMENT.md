@@ -128,6 +128,7 @@ must be added there (or the test will fail typecheck).
 - Shared contracts live in `src/shared/library.ts`.
 - Main-process store/IPC live in `src/main/library/store.ts` and `src/main/library/ipc.ts`; renderer API is `window.orbit.library`.
 - Library items are Markdown files under `<vault>/library/{articles,pdfs,videos,bookmarks}`. Archive moves them to `<vault>/04_Archives/library/...`.
+- URL shares from Orbit Mobile materialize as Library items, not Notes; source parsing goes through `src/main/content-connectors/` and stores snapshots under `<vault>/.orbit/content/extracted/`.
 - `library.distill(id)` writes a `distill.library` SynthesisArtifact; it must not create a Note.
 - `library.acceptDistillation({ artifact_id })` is the explicit user promotion gate to materialize a Note with `source.kind = library` and `synthesis_ref`.
 - The older `capture.library` API remains for Inbox/Capture compatibility; new workstation features should prefer the top-level `library` API.
@@ -138,6 +139,7 @@ must be added there (or the test will fail typecheck).
 - Shared contracts live in `src/shared/feed.ts`.
 - Main-process store/IPC live in `src/main/feed/store.ts` and `src/main/feed/ipc.ts`; renderer API is `window.orbit.feeds`.
 - Feed sources are stored in `<vault>/feeds/_sources.json`; raw feed items are Layer 0 JSON files under `<vault>/feeds/<source-id>/`.
+- Feed readable extraction calls the shared content connector registry before writing `<vault>/.orbit/feed/extracted/` refs.
 - Fetching feeds must stay Layer 0: do not create Notes, LibraryItems, Resources, Resource refs, or main search truth during raw fetch.
 - `feeds.items.saveToLibrary(id)` is the explicit promotion gate. It creates a first-class Library item and emits `promote.feed_to_library`.
 - `feeds.digest(date)` and `feeds.cluster(scope)` write feed-scoped SynthesisArtifacts and must not materialize Layer 1 truth automatically.
