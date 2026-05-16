@@ -129,7 +129,7 @@ Remaining gaps:
 | Activity Log infrastructure | completed |
 | Capture tri-partition | completed |
 | Quick Capture MVP | completed |
-| Orbit Mobile inbound ingest | completed; materializes Notes + `note.created` Timeline |
+| Orbit Mobile inbound ingest | completed; materializes Notes + `note.created` Timeline; WeChat/Xiaohongshu/X share context now triggers best-effort Mac-side source enrichment without blocking ACK |
 
 ### Phase 3 — Agent Observability & Resilience
 

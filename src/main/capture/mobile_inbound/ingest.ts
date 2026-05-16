@@ -17,6 +17,13 @@ import { noteWorkbenchEntityScope } from '../../note/workbench';
 import { createSynthesisStore } from '../../synthesis/store';
 import { assertSafeRelativePath, copyAttachments, type CopiedAttachment } from './attachments';
 import { moveToFailed, moveToProcessed } from './ack';
+import {
+  enrichMobileShareSource,
+  sourcePlatformLabel,
+  writeSourceEnrichmentArtifact,
+  type FetchLike,
+  type MobileSourceEnrichment
+} from './source-enrichment';
 import type { MobileAckInfo, MobileCaptureAttachment, MobileCaptureManifest, MobileFailedInfo } from './types';
 
 type PublishEventInput = Parameters<typeof publishTraceableEvent>[0];
@@ -26,6 +33,8 @@ export interface MobileIngestOptions {
   createNote?: (input: CreateNoteInput) => Promise<Note>;
   publishEvent?: (input: PublishEventInput) => TraceableEvent;
   emitActivity?: (input: ActivityEventInput) => unknown;
+  fetchSource?: FetchLike;
+  sourceEnrichmentTimeoutMs?: number;
 }
 
 export interface MobileIngestResult {
@@ -70,6 +79,7 @@ interface DerivativeArtifact {
 interface MobileCaptureArtifacts {
   transcript?: FinalTranscriptArtifact;
   derivatives: DerivativeArtifact[];
+  sourceEnrichment?: MobileSourceEnrichment;
 }
 
 class MobileIngestError extends Error {
@@ -105,6 +115,14 @@ export async function ingestCapture(
     await verifyAttachmentFiles(captureDir, manifest);
     const attachments = await copyAttachments(vaultPath, captureDir, manifest);
     const artifacts = await readCaptureArtifacts(captureDir, manifest);
+    artifacts.sourceEnrichment = await writeSourceEnrichmentArtifact(
+      vaultPath,
+      manifest,
+      await enrichMobileShareSource(manifest, {
+        fetch: options.fetchSource,
+        timeoutMs: options.sourceEnrichmentTimeoutMs
+      })
+    );
 
     const noteStore = createNoteStore(vaultPath);
     const existingNote = await findExistingMobileNote(noteStore, manifest.id);
@@ -136,7 +154,9 @@ export async function ingestCapture(
         kind: manifest.kind,
         note_type: note.frontmatter.type,
         attachment_count: manifest.attachments.length,
-        derivative_count: artifacts.derivatives.length
+        derivative_count: artifacts.derivatives.length,
+        source_platform: artifacts.sourceEnrichment?.platform,
+        source_enrichment_status: artifacts.sourceEnrichment?.status
       },
       summary: `Ingested mobile capture as note: ${note.frontmatter.title ?? note.path}`
     });
@@ -215,6 +235,8 @@ export function buildNoteContent(
   artifacts: MobileCaptureArtifacts = { derivatives: [] }
 ): string {
   const sections = [formatManifestBody(manifest, artifacts.transcript)];
+  const sourceSection = formatSourceEnrichment(artifacts.sourceEnrichment);
+  if (sourceSection) sections.push(sourceSection);
   const transcript = formatTranscript(artifacts.transcript);
   if (transcript) sections.push(transcript);
 
@@ -594,6 +616,27 @@ function isSupportedKind(value: string): value is MobileCaptureManifest['kind'] 
 
 function isSupportedAttachmentType(value: string): value is MobileCaptureAttachment['type'] {
   return ['audio', 'image', 'file', 'transcript', 'transcript-partial', 'derivative'].includes(value);
+}
+
+function formatSourceEnrichment(enrichment: MobileSourceEnrichment | undefined): string | null {
+  if (!enrichment) return null;
+  const lines = [
+    '## Source',
+    '',
+    `- Platform: ${sourcePlatformLabel(enrichment.platform)}`,
+    enrichment.canonical_url || enrichment.source_url
+      ? `- URL: ${enrichment.canonical_url ?? enrichment.source_url}`
+      : null,
+    enrichment.status === 'success' ? '- Parsed on Mac: yes' : `- Parsed on Mac: ${enrichment.status}`,
+    enrichment.status !== 'success' && enrichment.error ? `- Error: ${enrichment.error}` : null,
+    enrichment.title ? `- Title: ${enrichment.title}` : null,
+    enrichment.author ? `- Author: ${enrichment.author}` : null,
+    enrichment.artifact_path ? `- Parsed source: [source.md](${enrichment.artifact_path})` : null
+  ].filter((line): line is string => line !== null);
+  if (enrichment.excerpt) {
+    lines.push('', '### Source excerpt', '', clip(enrichment.excerpt, 1200));
+  }
+  return lines.join('\n');
 }
 
 function formatTranscript(transcript: FinalTranscriptArtifact | undefined): string | null {

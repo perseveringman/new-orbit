@@ -12,6 +12,7 @@ export interface MobileCaptureManifest {
   attachments: MobileCaptureAttachment[];
   recording?: MobileRecordingInfo;
   derivatives?: MobileDerivativeRef[];
+  context?: MobileCaptureContext;
 }
 
 export type MobileCaptureKind = 'thought' | 'voice' | 'photo' | 'share' | 'mixed' | 'recording';
@@ -56,6 +57,26 @@ export interface MobileDerivativeRef {
   kind: string;
   filename: string;
   template_id?: string;
+}
+
+export interface MobileCaptureContext {
+  clipboard_hint?: string | null;
+  share_context?: MobileShareContext | null;
+  location?: Record<string, unknown> | null;
+  network?: string | null;
+  battery?: number | null;
+}
+
+export interface MobileShareContext {
+  capture_method?: 'share_extension' | 'clipboard' | 'manual_url' | string;
+  source_platform?: 'wechat_article' | 'xiaohongshu' | 'x' | 'web' | 'unknown' | string;
+  parser_hint?: 'wechat_article' | 'xiaohongshu_note' | 'x_post' | 'generic_url' | string;
+  source_url?: string | null;
+  canonical_url?: string | null;
+  raw_share_text?: string | null;
+  source_title?: string | null;
+  origin_app?: string | null;
+  enrichment_state?: 'pending' | 'enriched' | 'failed' | string;
 }
 
 export type MobileAckInfo = MobileAckInfoV1 | MobileAckInfoV2;

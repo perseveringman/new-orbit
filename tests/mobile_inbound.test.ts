@@ -127,6 +127,198 @@ describe('mobile inbound ingest', () => {
     ).resolves.toBe(files['original-photo-1.heic']);
   });
 
+  it('uses mobile share context to parse WeChat articles on Mac without blocking ingest', async () => {
+    const vault = path.join(tmp, 'vault');
+    const captureDir = await createCapture('mob_cap_wechat', {
+      kind: 'share',
+      content: '微信文章标题\n\nhttps://mp.weixin.qq.com/s/abc123',
+      context: {
+        share_context: {
+          capture_method: 'share_extension',
+          source_platform: 'wechat_article',
+          parser_hint: 'wechat_article',
+          source_url: 'https://mp.weixin.qq.com/s/abc123',
+          canonical_url: 'https://mp.weixin.qq.com/s/abc123',
+          raw_share_text: '微信文章标题',
+          source_title: '微信文章标题',
+          origin_app: null,
+          enrichment_state: 'pending'
+        }
+      }
+    });
+
+    const result = await ingestCapture(vault, captureDir, {
+      emitActivity: () => undefined,
+      fetchSource: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => `
+          <html>
+            <head>
+              <meta property="og:title" content="Mac 解析后的微信标题">
+              <meta name="description" content="这是一段微信文章摘要">
+            </head>
+            <body>
+              <div id="js_content">
+                <p>第一段正文，应该由 Mac 侧提取。</p>
+                <p>第二段正文继续保留。</p>
+              </div>
+              <script></script>
+            </body>
+          </html>
+        `
+      })
+    });
+
+    expect(result).toMatchObject({ status: 'processed', noteId: 'note-mob_cap_wechat' });
+    const note = await createNoteStore(vault).get(result.noteId!);
+    expect(note?.body).toContain('## Source');
+    expect(note?.body).toContain('Platform: WeChat article');
+    expect(note?.body).toContain('Parsed on Mac: yes');
+    expect(note?.body).toContain('Mac 解析后的微信标题');
+    expect(note?.body).toContain('[source.md](.orbit/capture/enrichments/mob_cap_wechat/source.md)');
+    await expect(
+      readFile(path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_wechat', 'source.md'), 'utf8')
+    ).resolves.toContain('第一段正文，应该由 Mac 侧提取。');
+  });
+
+  it('extracts WeChat article text from text_page_info when js_content is not rendered', async () => {
+    const vault = path.join(tmp, 'vault');
+    const captureDir = await createCapture('mob_cap_wechat_text_page', {
+      kind: 'share',
+      content: 'https://mp.weixin.qq.com/s/abc123',
+      context: {
+        share_context: {
+          capture_method: 'share_extension',
+          source_platform: 'wechat_article',
+          parser_hint: 'wechat_article',
+          source_url: 'https://mp.weixin.qq.com/s/abc123',
+          canonical_url: 'https://mp.weixin.qq.com/s/abc123',
+          raw_share_text: 'https://mp.weixin.qq.com/s/abc123',
+          source_title: null,
+          origin_app: null,
+          enrichment_state: 'pending'
+        }
+      }
+    });
+
+    const result = await ingestCapture(vault, captureDir, {
+      emitActivity: () => undefined,
+      fetchSource: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => `
+          <html>
+            <head><meta property="og:title" content="微信标题"></head>
+            <body>
+              <script>
+                window.cgiData = {
+                  text_page_info: {
+                    content_noencode: '第一段\\x0a\\x0a第二段\\x22保留引号\\x22',
+                  },
+                  nickname: '人生算法'
+                };
+              </script>
+            </body>
+          </html>
+        `
+      })
+    });
+
+    const note = await createNoteStore(vault).get(result.noteId!);
+    expect(note?.body).toContain('Author: 人生算法');
+    const source = await readFile(
+      path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_wechat_text_page', 'source.md'),
+      'utf8'
+    );
+    expect(source).toContain('第一段');
+    expect(source).toContain('第二段"保留引号"');
+    expect(source).not.toContain('window.cgiData');
+  });
+
+  it('routes X post shares through oEmbed parsing on Mac', async () => {
+    const vault = path.join(tmp, 'vault');
+    const captureDir = await createCapture('mob_cap_x', {
+      kind: 'share',
+      content: 'https://x.com/ryan/status/12345',
+      context: {
+        share_context: {
+          capture_method: 'share_extension',
+          source_platform: 'x',
+          parser_hint: 'x_post',
+          source_url: 'https://twitter.com/ryan/status/12345',
+          canonical_url: 'https://x.com/ryan/status/12345',
+          raw_share_text: null,
+          source_title: null,
+          origin_app: null,
+          enrichment_state: 'pending'
+        }
+      }
+    });
+
+    const result = await ingestCapture(vault, captureDir, {
+      emitActivity: () => undefined,
+      fetchSource: async (url) => {
+        expect(url).toContain('publish.twitter.com/oembed');
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({
+            author_name: 'Ryan',
+            html: '<blockquote>Orbit capture should preserve the original post text.</blockquote>'
+          })
+        };
+      }
+    });
+
+    const note = await createNoteStore(vault).get(result.noteId!);
+    expect(note?.body).toContain('Platform: X post');
+    expect(note?.body).toContain('Author: Ryan');
+    await expect(
+      readFile(path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_x', 'source.md'), 'utf8')
+    ).resolves.toContain('Orbit capture should preserve the original post text.');
+  });
+
+  it('keeps Xiaohongshu parsing best-effort and still ingests the capture', async () => {
+    const vault = path.join(tmp, 'vault');
+    const captureDir = await createCapture('mob_cap_xhs', {
+      kind: 'share',
+      content: '小红书笔记\n\nhttps://www.xiaohongshu.com/explore/abc',
+      context: {
+        share_context: {
+          capture_method: 'share_extension',
+          source_platform: 'xiaohongshu',
+          parser_hint: 'xiaohongshu_note',
+          source_url: 'https://www.xiaohongshu.com/explore/abc',
+          canonical_url: 'https://www.xiaohongshu.com/explore/abc',
+          raw_share_text: '小红书笔记',
+          source_title: '小红书笔记',
+          origin_app: null,
+          enrichment_state: 'pending'
+        }
+      }
+    });
+
+    const result = await ingestCapture(vault, captureDir, {
+      emitActivity: () => undefined,
+      fetchSource: async () => ({
+        ok: false,
+        status: 403,
+        text: async () => ''
+      })
+    });
+
+    expect(result.status).toBe('processed');
+    const note = await createNoteStore(vault).get(result.noteId!);
+    expect(note?.body).toContain('Platform: Xiaohongshu note');
+    expect(note?.body).toContain('Parsed on Mac: failed');
+    expect(note?.body).toContain('Error: source_fetch_failed:403');
+    await expect(
+      stat(path.join(vault, '.orbit', 'capture', 'enrichments', 'mob_cap_xhs', 'source.md'))
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('moves bad hashes to failed with retryable sha256_mismatch', async () => {
     const vault = path.join(tmp, 'vault');
     const captureDir = await createCapture('mob_cap_bad_hash', { content: 'Corrupted' });
