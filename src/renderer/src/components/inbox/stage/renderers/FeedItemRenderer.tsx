@@ -7,13 +7,13 @@ export function FeedItemRenderer({ item }: { item: InboxItem }): JSX.Element {
 
   async function save(): Promise<void> {
     await window.orbit.capture.feed.saveToLibrary(item.id);
-    toast('Saved feed item to Library');
+    toast('信息流条目已保存到资料库');
   }
 
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-sky-500">Feed · {payload.source}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-sky-500">信息流 · {payload.source}</p>
         <h2 className="mt-2 text-xl font-semibold">{payload.article_title}</h2>
         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{payload.article_excerpt}</p>
       </div>
@@ -25,7 +25,7 @@ export function FeedItemRenderer({ item }: { item: InboxItem }): JSX.Element {
         onClick={() => void save()}
         className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
       >
-        Save to Library
+        保存到资料库
       </button>
     </div>
   );

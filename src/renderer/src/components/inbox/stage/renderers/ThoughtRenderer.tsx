@@ -18,18 +18,18 @@ export function ThoughtRenderer({ item }: { item: InboxItem }): JSX.Element {
       content,
       tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean)
     });
-    toast('Thought updated');
+    toast('想法已更新');
   }
 
   async function promote(): Promise<void> {
     await window.orbit.capture.thought.promote(item.id);
-    toast('Promoted thought to Resources');
+    toast('想法已提升为 Resource');
   }
 
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-fuchsia-500">Thought</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-fuchsia-500">想法</p>
         <h2 className="mt-2 text-xl font-semibold">{item.title}</h2>
       </div>
       <textarea
@@ -40,15 +40,15 @@ export function ThoughtRenderer({ item }: { item: InboxItem }): JSX.Element {
       <input
         value={tags}
         onChange={(event) => setTags(event.target.value)}
-        placeholder="tags, comma separated"
+        placeholder="标签，用逗号分隔"
         className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none focus:border-fuchsia-400 dark:border-neutral-800 dark:bg-neutral-950"
       />
       <div className="flex gap-2">
         <button type="button" onClick={() => void save()} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium dark:border-neutral-700">
-          Save edits
+          保存修改
         </button>
         <button type="button" onClick={() => void promote()} className="rounded-lg bg-fuchsia-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-fuchsia-500">
-          Promote to Resource
+          提升为 Resource
         </button>
       </div>
     </div>

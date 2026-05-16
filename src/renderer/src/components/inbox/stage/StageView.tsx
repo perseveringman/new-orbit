@@ -17,7 +17,7 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
   if (!item) {
     return (
       <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-        Select an Inbox item to open its Stage View.
+        选择一个收件箱条目以打开阶段视图。
       </div>
     );
   }
@@ -33,7 +33,7 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
               onClick={() => onResolve?.(item, 'approve')}
               className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
             >
-              Approve
+              批准
             </button>
           )}
           {item.category === 'message' && item.subtype.startsWith('A') && (
@@ -42,7 +42,7 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
               onClick={() => onResolve?.(item, 'reject')}
               className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
             >
-              Reject
+              拒绝
             </button>
           )}
           {item.category === 'message' && item.subtype === 'B3' && (
@@ -51,7 +51,7 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
               onClick={() => void tryOtherRuntime(item, () => onResolve?.(item, 'done'))}
               className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
             >
-              尝试用其他 runtime
+              尝试其他 Runtime
             </button>
           )}
           <button
@@ -59,14 +59,14 @@ export function StageView({ item, onResolve, onDismiss }: StageViewProps): JSX.E
             onClick={() => onResolve?.(item, item.category === 'capture' ? 'processed' : 'done')}
             className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Resolve
+            完成处理
           </button>
           <button
             type="button"
             onClick={() => onDismiss?.(item)}
             className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Dismiss
+            忽略
           </button>
         </div>
       )}

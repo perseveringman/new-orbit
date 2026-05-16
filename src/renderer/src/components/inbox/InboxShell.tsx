@@ -118,12 +118,12 @@ export function InboxShellContent({
       <header className="border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold">Inbox v2</h1>
+            <h1 className="text-lg font-semibold">收件箱 v2</h1>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Capture + Messages + Archive with a right-side Stage View.
+              汇总捕获、消息与归档，右侧集中处理阶段内容。
             </p>
           </div>
-          {loading && <span className="text-xs text-neutral-500">Refreshing…</span>}
+          {loading && <span className="text-xs text-neutral-500">刷新中…</span>}
         </div>
         {error && (
           <div className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
@@ -132,34 +132,34 @@ export function InboxShellContent({
         )}
         <nav className="mt-4 flex flex-wrap gap-2">
           <PrimaryTabButton
-            label="Capture"
+            label="捕获"
             count={counts.captureLibraryUnread}
             active={activePrimary === 'capture'}
             onClick={() => onPrimaryChange('capture')}
           />
           <PrimaryTabButton
-            label="Messages"
+            label="消息"
             count={counts.messagesPending}
             active={activePrimary === 'messages'}
             onClick={() => onPrimaryChange('messages')}
           />
           <PrimaryTabButton
-            label="Archive"
+            label="归档"
             active={activePrimary === 'archive'}
             onClick={() => onPrimaryChange('archive')}
           />
         </nav>
         {activePrimary === 'capture' && (
           <nav className="mt-3 flex flex-wrap gap-2">
-            <CaptureTabButton label="Feed" active={activeCapture === 'feed'} onClick={() => onCaptureChange('feed')} />
+            <CaptureTabButton label="信息流" active={activeCapture === 'feed'} onClick={() => onCaptureChange('feed')} />
             <CaptureTabButton
-              label="Library"
+              label="资料库"
               count={counts.captureLibraryUnread}
               active={activeCapture === 'library'}
               onClick={() => onCaptureChange('library')}
             />
             <CaptureTabButton
-              label="Thoughts"
+              label="想法"
               active={activeCapture === 'thoughts'}
               onClick={() => onCaptureChange('thoughts')}
             />

@@ -28,7 +28,7 @@ export function LibraryArticleRenderer({ item }: { item: InboxItem }): JSX.Eleme
 
   async function promote(): Promise<void> {
     await window.orbit.capture.library.promote(item.id, { noAiSummary: true });
-    toast('Promoted article to Resources');
+    toast('文章已提升为 Resource');
   }
 
   function onScroll(event: UIEvent<HTMLDivElement>): void {
@@ -45,7 +45,7 @@ export function LibraryArticleRenderer({ item }: { item: InboxItem }): JSX.Eleme
   return (
     <div className="flex h-full flex-col gap-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-500">Library</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-500">资料库</p>
         <h2 className="mt-2 text-xl font-semibold">{payload.title ?? item.title}</h2>
         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{item.summary}</p>
         <a className="mt-2 block break-all text-sm text-sky-600 dark:text-sky-300" href={payload.url}>
@@ -56,7 +56,7 @@ export function LibraryArticleRenderer({ item }: { item: InboxItem }): JSX.Eleme
         {error ? (
           <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
         ) : (
-          <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-neutral-800 dark:text-neutral-100">{content || 'Loading article…'}</pre>
+          <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-neutral-800 dark:text-neutral-100">{content || '文章加载中…'}</pre>
         )}
       </div>
       <button
@@ -64,7 +64,7 @@ export function LibraryArticleRenderer({ item }: { item: InboxItem }): JSX.Eleme
         onClick={() => void promote()}
         className="self-start rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
       >
-        Promote to Resource
+        提升为 Resource
       </button>
     </div>
   );

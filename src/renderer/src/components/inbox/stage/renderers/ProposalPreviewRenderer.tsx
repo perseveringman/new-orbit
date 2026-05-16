@@ -17,10 +17,10 @@ export function ProposalPreviewRenderer({ item }: { item: InboxItem }): JSX.Elem
         {description && <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{description}</p>}
       </div>
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950/50">
-        <p className="text-sm font-medium">Authorization chain</p>
+        <p className="text-sm font-medium">授权链</p>
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-          This card is linked by proposal_id. Resolving it here updates the shared proposal store,
-          so chat approval cards disappear from the same state source.
+          这张卡片通过 proposal_id 关联。这里处理后会更新共享提案存储，
+          对话中的审批卡片也会从同一个状态源消失。
         </p>
       </div>
     </div>
