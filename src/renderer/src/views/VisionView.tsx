@@ -34,9 +34,9 @@ export function VisionView(): JSX.Element {
   }, []);
 
   async function createGoal(): Promise<void> {
-    const title = window.prompt('Goal title');
+    const title = window.prompt('目标标题');
     if (!title) return;
-    const area = window.prompt('Area slug for this goal');
+    const area = window.prompt('这个目标对应的 Area slug');
     await window.orbit.vision.createGoal({
       title,
       horizon: 'quarter',
@@ -82,13 +82,13 @@ export function VisionContent(props: {
         <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Vision Dashboard</p>
-              <h1 className="mt-1 text-2xl font-semibold">Goals, alignment, and drift</h1>
-              <p className="mt-2 max-w-3xl text-sm text-neutral-500">Trace Areas, Projects, Resources, and milestones back to long-term goals.</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">愿景仪表盘</p>
+              <h1 className="mt-1 text-2xl font-semibold">目标、对齐与漂移</h1>
+              <p className="mt-2 max-w-3xl text-sm text-neutral-500">将 Area、项目、Resource 与里程碑追溯到长期目标。</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={props.onReview} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">Quarterly review</button>
-              <button onClick={props.onCreate} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">+ Goal</button>
+              <button onClick={props.onReview} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700">季度复盘</button>
+              <button onClick={props.onCreate} className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-950">+ 目标</button>
             </div>
           </div>
         </section>
@@ -96,19 +96,19 @@ export function VisionContent(props: {
         {props.state === 'loading' ? (
           <div className="h-36 animate-pulse rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900" />
         ) : props.state === 'error' ? (
-          <StateCard title="Vision failed to load" body={props.error ?? 'Unknown vision error.'} actionLabel="Retry" onAction={props.onReload} />
+          <StateCard title="愿景加载失败" body={props.error ?? '未知愿景错误。'} actionLabel="重试" onAction={props.onReload} />
         ) : props.state === 'empty' ? (
-          <StateCard title="No structured goals yet" body="Create a goal to connect Vision to Areas, Projects, Resources, and milestone reviews." actionLabel="Create goal" onAction={props.onCreate} />
+          <StateCard title="暂无结构化目标" body="创建一个目标，把 Vision 与 Area、项目、Resource 和里程碑复盘连接起来。" actionLabel="创建目标" onAction={props.onCreate} />
         ) : (
           <>
             <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-              <h2 className="font-semibold">Goal tree</h2>
+              <h2 className="font-semibold">目标树</h2>
               <div className="mt-3 grid gap-3">
                 {props.goals.map((goal) => <GoalCard key={goal.id} goal={goal} alignment={props.alignment.find((item) => item.goal_id === goal.id)} />)}
               </div>
             </section>
             <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-              <h2 className="font-semibold">Drift warnings</h2>
+              <h2 className="font-semibold">漂移提醒</h2>
               {props.drift.length ? (
                 <div className="mt-3 grid gap-3">
                   {props.drift.map((warning) => (
@@ -119,7 +119,7 @@ export function VisionContent(props: {
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-neutral-500">No drift detected.</p>
+                <p className="mt-3 text-sm text-neutral-500">未检测到漂移。</p>
               )}
             </section>
           </>
@@ -138,11 +138,11 @@ function GoalCard({ goal, alignment }: { goal: VisionGoal; alignment?: VisionAli
         <span className="rounded-full border border-neutral-300 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-700">{goal.status}</span>
       </div>
       <h3 className="mt-3 font-semibold">{goal.title}</h3>
-      <p className="mt-1 text-sm text-neutral-500">{goal.description || goal.target_outcome || 'No description yet.'}</p>
+      <p className="mt-1 text-sm text-neutral-500">{goal.description || goal.target_outcome || '暂无描述。'}</p>
       <div className="mt-3 h-2 rounded-full bg-neutral-200 dark:bg-neutral-800">
         <div className="h-2 rounded-full bg-violet-500" style={{ width: `${Math.min(100, score)}%` }} />
       </div>
-      <p className="mt-2 text-xs text-neutral-500">Alignment {score}% · Areas: {goal.area_refs.join(', ') || 'none'}</p>
+      <p className="mt-2 text-xs text-neutral-500">对齐度 {score}% · Areas：{goal.area_refs.join(', ') || '无'}</p>
     </article>
   );
 }
