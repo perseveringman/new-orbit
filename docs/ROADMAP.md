@@ -79,11 +79,12 @@ Delivered:
 - Registered local Agent sessions are retained in the default evidence chunk index, keeping `external_ai_session` truth sources available to normal recall/search rebuilds.
 - Local Agent session sources now have vault-level settings and filters in Settings → 记忆源, covering enabled state, scan limit, agent/project/path include-exclude lists, index level, and tool-output projection policy.
 - `distill.external_session` and `entity.profile` synthesis foundations now summarize matched local Agent sessions and graph entities into cited ContextPacket sections, with local deterministic fallback and prompt templates for later LLM refinement.
+- Memory Explorer now includes a local Agent session center and entity profile workspace, so users can sync sessions, inspect safe projections, generate per-session summaries, and turn recurring themes into browsable profiles.
 
 Remaining gaps:
 
 - Work Context / Open Loops are deterministic first-pass artifacts; richer LLM refinement and feedback loops remain future work.
-- Local Agent session providers still need richer browsing, per-session review actions, snapshot/materialize flows, and session-specific UI beyond context packet summaries.
+- Local Agent session providers still need deeper per-session review actions, snapshot/materialize flows, save-span-as-Note, and timeline/project-room dedicated browsing beyond the Memory Explorer foundation.
 
 ---
 

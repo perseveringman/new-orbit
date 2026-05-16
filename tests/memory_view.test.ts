@@ -18,6 +18,8 @@ describe('MemoryContent', () => {
     expect(html).toContain('Transparent long-term memory');
     expect(html).toContain('Read source first');
     expect(html).toContain('Memory graph');
+    expect(html).toContain('本地 Agent 会话中心');
+    expect(html).toContain('实体画像');
     expect(html).toContain('来源证据');
     expect(html).toContain('查看证据');
     expect(html).toContain('不相关');

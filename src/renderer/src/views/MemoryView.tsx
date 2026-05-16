@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { EvidenceReadResult, EvidenceSelector, EvidenceSourceKind } from '@shared/evidence';
-import { evidenceSourceId } from '@shared/evidence';
+import type { EvidenceReadResult, EvidenceSelector, EvidenceSource, EvidenceSourceKind } from '@shared/evidence';
+import { evidenceSourceId, wholeSourceSelector } from '@shared/evidence';
 import type { MemoryDigestResult, MemoryGraph, MemoryKind, MemoryLayer, MemoryNode } from '@shared/memory';
 import { MEMORY_KINDS, MEMORY_LAYERS } from '@shared/memory';
-import type { SynthesisSource } from '@shared/synthesis';
+import type { EntityProfilePayload, ExternalSessionDistillPayload, SynthesisArtifact, SynthesisSource } from '@shared/synthesis';
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
 interface ManualMemoryDraft {
@@ -251,6 +251,8 @@ export function MemoryContent(props: {
         )}
 
         {props.graph ? <MemoryGraphPanel graph={props.graph} /> : null}
+        <MemoryAgentSessionsPanel />
+        <MemoryEntityProfilesPanel graph={props.graph} nodes={props.nodes} />
 
         {props.state === 'loading' ? (
           <MemorySkeleton />
@@ -274,6 +276,341 @@ export function MemoryContent(props: {
         )}
       </div>
     </main>
+  );
+}
+
+function MemoryAgentSessionsPanel(): JSX.Element {
+  const [sessions, setSessions] = useState<EvidenceSource[]>([]);
+  const [artifacts, setArtifacts] = useState<Record<string, SynthesisArtifact<ExternalSessionDistillPayload>>>({});
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [busySource, setBusySource] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function loadSessions(): Promise<void> {
+    setLoading(true);
+    setMessage(null);
+    try {
+      const [sources, summaries] = await Promise.all([
+        window.orbit.evidence.list({ kind: 'external_ai_session', include_unavailable: true, limit: 80 }),
+        window.orbit.synthesis.list({ kind: 'distill.external_session', limit: 120 })
+      ]);
+      setSessions(sources);
+      setArtifacts(Object.fromEntries(
+        summaries
+          .filter((artifact): artifact is SynthesisArtifact<ExternalSessionDistillPayload> => artifact.kind === 'distill.external_session')
+          .map((artifact) => [artifact.payload.source_id, artifact])
+      ));
+    } catch (error) {
+      setMessage(`本地会话加载失败：${(error as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadSessions();
+  }, []);
+
+  async function syncSessions(): Promise<void> {
+    setLoading(true);
+    setMessage('同步本地 Agent 会话…');
+    try {
+      await window.orbit.evidence.sync({ includeExternalAISessions: true });
+      await loadSessions();
+      setMessage('本地 Agent 会话已同步。');
+    } catch (error) {
+      setMessage(`同步失败：${(error as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function distillSession(source: EvidenceSource): Promise<void> {
+    setBusySource(source.id);
+    setMessage(null);
+    try {
+      const selector = wholeSourceSelector(source.id, 'safe_projection', 'memory session center');
+      const read = await window.orbit.evidence.read(selector);
+      const text = read.excerpts.map((excerpt) => excerpt.text).join('\n\n');
+      const artifact = await window.orbit.synthesis.ensure({
+        kind: 'distill.external_session',
+        scope_key: `distill.external_session:${source.id}`,
+        sources: [
+          {
+            kind: 'external_ai_session',
+            ref: source.id,
+            title: source.title,
+            excerpt: text.slice(0, 8000),
+            metadata: {
+              selector,
+              source_hash: source.fingerprint.value,
+              agent: stringMetadata(source, 'agent'),
+              project_name: stringMetadata(source, 'project_name')
+            }
+          }
+        ],
+        priority: 'interactive',
+        reason: 'manual',
+        force: true
+      }) as SynthesisArtifact<ExternalSessionDistillPayload>;
+      setArtifacts((current) => ({ ...current, [source.id]: artifact }));
+      setMessage('会话摘要已生成。');
+    } catch (error) {
+      setMessage(`摘要失败：${(error as Error).message}`);
+    } finally {
+      setBusySource(null);
+    }
+  }
+
+  const filtered = sessions.filter((source) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return [source.title, source.summary, source.canonical_ref, stringMetadata(source, 'agent'), stringMetadata(source, 'project_name')]
+      .filter(Boolean)
+      .join('\n')
+      .toLowerCase()
+      .includes(needle);
+  });
+
+  return (
+    <section className="rounded-2xl border border-sky-200 bg-sky-50 p-5 dark:border-sky-900 dark:bg-sky-950/30">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">本地 Agent 会话中心</h2>
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+            {sessions.length} 条 reference-truth 会话 · {Object.keys(artifacts).length} 条会话摘要
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder="筛选 agent / project / title"
+            className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 dark:border-sky-900 dark:bg-neutral-950"
+          />
+          <button
+            type="button"
+            onClick={() => void syncSessions()}
+            disabled={loading}
+            className="rounded-lg border border-sky-300 bg-white px-3 py-2 text-sm text-sky-700 disabled:opacity-60 dark:border-sky-900 dark:bg-neutral-950 dark:text-sky-300"
+          >
+            {loading ? '同步中' : '同步会话'}
+          </button>
+        </div>
+      </div>
+      {message ? <p className="mt-3 text-xs text-neutral-500">{message}</p> : null}
+      <div className="mt-4 grid gap-3">
+        {filtered.slice(0, 8).map((source) => (
+          <AgentSessionCard
+            key={source.id}
+            artifact={artifacts[source.id]}
+            busy={busySource === source.id}
+            source={source}
+            onDistill={() => void distillSession(source)}
+          />
+        ))}
+        {!filtered.length ? (
+          <p className="rounded-xl border border-dashed border-sky-300 bg-white p-4 text-sm text-neutral-500 dark:border-sky-900 dark:bg-neutral-950">
+            还没有匹配的本地 Agent 会话。先在设置里的「记忆源」启用并同步，或调整筛选条件。
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function AgentSessionCard(props: {
+  source: EvidenceSource;
+  artifact?: SynthesisArtifact<ExternalSessionDistillPayload>;
+  busy: boolean;
+  onDistill(): void;
+}): JSX.Element {
+  const payload = props.artifact?.payload;
+  const selector = wholeSourceSelector(props.source.id, 'safe_projection', 'session center preview');
+  return (
+    <article className="rounded-xl border border-sky-200 bg-white p-4 text-sm dark:border-sky-900 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-sky-100 px-2 py-1 text-[11px] text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+              {stringMetadata(props.source, 'agent') ?? 'agent'}
+            </span>
+            <span className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] text-neutral-500 dark:bg-neutral-800">
+              {props.source.privacy.index_level}
+            </span>
+            <span className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] text-neutral-500 dark:bg-neutral-800">
+              {props.source.availability}
+            </span>
+          </div>
+          <h3 className="mt-2 truncate text-base font-semibold">{props.source.title}</h3>
+          <p className="mt-1 text-xs text-neutral-500">{props.source.canonical_ref}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <MemoryEvidenceButton selector={selector} />
+          <button
+            type="button"
+            onClick={props.onDistill}
+            disabled={props.busy}
+            className="rounded-lg border border-sky-300 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60 dark:border-sky-900 dark:text-sky-300"
+          >
+            {props.busy ? '生成中' : payload ? '重新摘要' : '生成摘要'}
+          </button>
+        </div>
+      </div>
+      {payload ? (
+        <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50 p-3 dark:border-sky-900 dark:bg-sky-950/30">
+          <p className="text-sm leading-6 text-neutral-700 dark:text-neutral-200">{payload.summary}</p>
+          {payload.open_loops.length ? (
+            <div className="mt-2 text-xs text-neutral-500">
+              开放回路：{payload.open_loops.slice(0, 3).map((loop) => loop.title).join('；')}
+            </div>
+          ) : null}
+          {payload.next_actions.length ? (
+            <div className="mt-1 text-xs text-neutral-500">
+              下一步：{payload.next_actions.slice(0, 3).join('；')}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-neutral-500">还没有会话摘要。生成后，这段会话会变成可召回的中间地图，原始会话仍然是证据源。</p>
+      )}
+    </article>
+  );
+}
+
+function MemoryEntityProfilesPanel({ graph, nodes }: { graph: MemoryGraph | null; nodes: MemoryNode[] }): JSX.Element {
+  const candidates = useMemo(() => entityCandidates(nodes), [nodes]);
+  const [profiles, setProfiles] = useState<Record<string, SynthesisArtifact<EntityProfilePayload>>>({});
+  const [busyEntity, setBusyEntity] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function loadProfiles(): Promise<void> {
+    try {
+      const artifacts = await window.orbit.synthesis.list({ kind: 'entity.profile', limit: 80 });
+      setProfiles(Object.fromEntries(
+        artifacts
+          .filter((artifact): artifact is SynthesisArtifact<EntityProfilePayload> => artifact.kind === 'entity.profile')
+          .map((artifact) => [normalizeEntityKey(artifact.payload.entity), artifact])
+      ));
+    } catch (error) {
+      setMessage(`实体画像加载失败：${(error as Error).message}`);
+    }
+  }
+
+  useEffect(() => {
+    void loadProfiles();
+  }, []);
+
+  async function generateProfile(entity: string): Promise<void> {
+    setBusyEntity(entity);
+    setMessage(null);
+    try {
+      const evidence = dedupeMemorySelectors(nodes.flatMap((node) => node.related_entities?.includes(entity) ? evidenceSelectorsFromMemory(node) : []));
+      const related = relatedEntitiesFor(entity, graph);
+      const relevant = nodes.filter((node) => node.related_entities?.includes(entity) || node.title.includes(entity) || node.summary.includes(entity));
+      const artifact = await window.orbit.synthesis.ensure({
+        kind: 'entity.profile',
+        scope_key: `entity.profile:${slugKey(entity)}`,
+        sources: [
+          {
+            kind: 'raw',
+            ref: `entity:${entity}`,
+            title: `Entity profile: ${entity}`,
+            excerpt: relevant.map((node) => `${node.title}\n${node.summary}`).join('\n\n').slice(0, 6000),
+            metadata: {
+              entity,
+              evidence,
+              related_entities: related,
+              top_sources: topSourcesForEntity(entity, nodes),
+              source_hash: profileHash(entity, relevant)
+            }
+          }
+        ],
+        priority: 'interactive',
+        reason: 'manual',
+        force: true
+      }) as SynthesisArtifact<EntityProfilePayload>;
+      setProfiles((current) => ({ ...current, [normalizeEntityKey(entity)]: artifact }));
+      setMessage('实体画像已生成。');
+    } catch (error) {
+      setMessage(`生成失败：${(error as Error).message}`);
+    } finally {
+      setBusyEntity(null);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 dark:border-indigo-900 dark:bg-indigo-950/30">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700 dark:text-indigo-300">实体画像</h2>
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+            把反复出现的主题变成可浏览的上下文主页。
+          </p>
+        </div>
+        {message ? <span className="text-xs text-neutral-500">{message}</span> : null}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {candidates.slice(0, 8).map((entity) => (
+          <EntityProfileCard
+            key={entity}
+            busy={busyEntity === entity}
+            entity={entity}
+            artifact={profiles[normalizeEntityKey(entity)]}
+            onGenerate={() => void generateProfile(entity)}
+          />
+        ))}
+        {!candidates.length ? (
+          <p className="rounded-xl border border-dashed border-indigo-300 bg-white p-4 text-sm text-neutral-500 dark:border-indigo-900 dark:bg-neutral-950">
+            还没有足够的相关实体。随着 Memory 和证据来源增加，这里会出现可生成画像的主题。
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function EntityProfileCard(props: {
+  entity: string;
+  artifact?: SynthesisArtifact<EntityProfilePayload>;
+  busy: boolean;
+  onGenerate(): void;
+}): JSX.Element {
+  const payload = props.artifact?.payload;
+  return (
+    <article className="rounded-xl border border-indigo-200 bg-white p-4 text-sm dark:border-indigo-900 dark:bg-neutral-900">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold">{props.entity}</h3>
+          <p className="mt-1 text-xs text-neutral-500">{payload ? `${payload.related_entities.length} 个关联实体 · ${payload.top_sources.length} 个来源` : '尚未生成画像'}</p>
+        </div>
+        <button
+          type="button"
+          onClick={props.onGenerate}
+          disabled={props.busy}
+          className="rounded-lg border border-indigo-300 px-3 py-1.5 text-xs text-indigo-700 disabled:opacity-60 dark:border-indigo-900 dark:text-indigo-300"
+        >
+          {props.busy ? '生成中' : payload ? '更新画像' : '生成画像'}
+        </button>
+      </div>
+      {payload ? (
+        <div className="mt-3">
+          <p className="text-sm leading-6 text-neutral-700 dark:text-neutral-200">{payload.summary}</p>
+          {payload.related_entities.length ? (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {payload.related_entities.slice(0, 6).map((item) => (
+                <span key={`${item.entity}:${item.relation}`} className="rounded-full bg-indigo-100 px-2 py-1 text-[11px] text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                  {item.entity}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-neutral-500">画像会汇总这个主题的含义、关联实体、证据来源和未解问题。</p>
+      )}
+    </article>
   );
 }
 
@@ -498,6 +835,107 @@ function memoryEvidenceSelectorKey(selector: EvidenceSelector): string {
 function shortEvidenceLabel(selector: EvidenceSelector): string {
   const id = selector.source_id.split(':').slice(-2).join(':') || selector.source_id;
   return id.length > 22 ? `${id.slice(0, 22)}...` : id;
+}
+
+function stringMetadata(source: EvidenceSource, key: string): string | undefined {
+  const value = source.metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function entityCandidates(nodes: MemoryNode[]): string[] {
+  const counts = new Map<string, { label: string; count: number }>();
+  for (const node of nodes) {
+    const entities = node.related_entities?.length ? node.related_entities : fallbackEntitiesFromMemory(node);
+    for (const entity of entities) {
+      const key = normalizeEntityKey(entity);
+      if (!key) continue;
+      const current = counts.get(key);
+      counts.set(key, { label: current?.label ?? entity, count: (current?.count ?? 0) + 1 });
+    }
+  }
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .map((item) => item.label);
+}
+
+function fallbackEntitiesFromMemory(node: MemoryNode): string[] {
+  return [node.title, ...node.sources.map((source) => source.title ?? source.ref ?? '')]
+    .flatMap((value) => value.match(/\b[A-Z][A-Za-z0-9_.:-]{1,40}(?:\s+[A-Z][A-Za-z0-9_.:-]{1,40}){0,2}\b/g) ?? [])
+    .filter((value) => value.length > 2);
+}
+
+function relatedEntitiesFor(entity: string, graph: MemoryGraph | null): EntityProfilePayload['related_entities'] {
+  if (!graph) return [];
+  const key = normalizeEntityKey(entity);
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const related = new Map<string, EntityProfilePayload['related_entities'][number]>();
+  for (const relation of graph.relations) {
+    const from = nodesById.get(relation.from_id);
+    const to = nodesById.get(relation.to_id);
+    if (!from || !to) continue;
+    const fromMatches = memoryMentionsEntity(from, key) || relation.evidence.some((item) => normalizeEntityKey(item) === key);
+    const toMatches = memoryMentionsEntity(to, key) || relation.evidence.some((item) => normalizeEntityKey(item) === key);
+    const targets = fromMatches ? [to] : toMatches ? [from] : [];
+    for (const target of targets) {
+      const label = target.related_entities?.find((item) => normalizeEntityKey(item) !== key) ?? target.title;
+      const existing = related.get(normalizeEntityKey(label));
+      const next = {
+        entity: label,
+        relation: relation.kind,
+        weight: Math.max(existing?.weight ?? 0, relation.strength),
+        evidence: []
+      };
+      related.set(normalizeEntityKey(label), next);
+    }
+  }
+  return Array.from(related.values()).sort((a, b) => b.weight - a.weight).slice(0, 8);
+}
+
+function topSourcesForEntity(entity: string, nodes: MemoryNode[]): EntityProfilePayload['top_sources'] {
+  const out: EntityProfilePayload['top_sources'] = [];
+  const key = normalizeEntityKey(entity);
+  for (const node of nodes.filter((item) => memoryMentionsEntity(item, key))) {
+    for (const source of node.sources) {
+      const selector = evidenceSelectorsFromSource(source)[0];
+      if (!selector) continue;
+      out.push({
+        source_id: selector.source_id,
+        title: source.title ?? node.title,
+        source_kind: source.kind,
+        reason: `supports memory: ${node.title}`,
+        evidence: [selector]
+      });
+    }
+  }
+  return out.slice(0, 8);
+}
+
+function memoryMentionsEntity(node: MemoryNode, normalizedEntity: string): boolean {
+  return Boolean(
+    node.related_entities?.some((item) => normalizeEntityKey(item) === normalizedEntity) ||
+    normalizeEntityKey(node.title).includes(normalizedEntity) ||
+    normalizeEntityKey(node.summary).includes(normalizedEntity)
+  );
+}
+
+function profileHash(entity: string, nodes: MemoryNode[]): string {
+  return simpleHash(`${entity}:${nodes.map((node) => `${node.id}:${node.updated_at}:${node.recall_count}`).join('|')}`);
+}
+
+function slugKey(value: string): string {
+  return normalizeEntityKey(value).replace(/[^a-z0-9\u4e00-\u9fff._:-]+/gu, '_').slice(0, 80) || 'entity';
+}
+
+function normalizeEntityKey(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim().toLowerCase();
+}
+
+function simpleHash(value: string): string {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (Math.imul(31, hash) + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(16);
 }
 
 function summarize(nodes: MemoryNode[]): { total: number; stable: number; core: number; recalls: number; semantic: number; episodic: number; procedural: number } {
