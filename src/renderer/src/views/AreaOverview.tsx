@@ -96,7 +96,7 @@ export function AreaOverview({ areaUid }: Props): JSX.Element {
     // Phase E.3：先复用该 area 的最近活跃会话；没有才新建。与 AreaRoomView.openChat 一致。
     const existing = await window.orbit.chat.getLastActiveConversation(scope).catch(() => null);
     if (existing) {
-      setScopedChatMessage(`Resuming area-scoped chat: ${existing.title ?? existing.id}`);
+      setScopedChatMessage(`正在继续 Area 限定对话：${existing.title ?? existing.id}`);
       setView({ kind: 'askAnywhere', activeId: existing.id });
       return;
     }
@@ -110,14 +110,14 @@ export function AreaOverview({ areaUid }: Props): JSX.Element {
       title: `Area: ${dashboard.area.name}`
     });
     await window.orbit.chat.setLastActiveConversation(scope, conversation.id);
-    setScopedChatMessage(`Area-scoped chat ready: ${conversation.title ?? conversation.id}`);
+    setScopedChatMessage(`Area 限定对话已就绪：${conversation.title ?? conversation.id}`);
     setView({ kind: 'askAnywhere', activeId: conversation.id });
   }
 
   if (!areaUid) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-        Pick an Area to inspect its dashboard.
+        请选择一个 Area 以查看仪表盘。
       </div>
     );
   }
@@ -125,7 +125,7 @@ export function AreaOverview({ areaUid }: Props): JSX.Element {
   if (!dashboard) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-        {error ? `Area dashboard failed: ${error}` : 'Loading Area dashboard…'}
+        {error ? `Area 仪表盘加载失败：${error}` : '正在加载 Area 仪表盘…'}
       </div>
     );
   }
@@ -173,10 +173,10 @@ export function AreaDashboardContent({
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <header className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-200 px-6 py-4 dark:border-neutral-800">
         <div>
-          <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">Area Dashboard</div>
+          <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">Area 仪表盘</div>
           <h1 className="mt-1 text-xl font-semibold">{dashboard.area.name}</h1>
           <p className="mt-1 max-w-3xl text-sm text-neutral-500">
-            {dashboard.area.description || 'A long-term coordinate assembled from projects, notes, resources, feeds, and reviews.'}
+            {dashboard.area.description || '由项目、笔记、资源、订阅源和复盘组装出的长期坐标。'}
           </p>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-neutral-500">
             <span className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-700">{dashboard.area.slug}</span>
@@ -188,14 +188,14 @@ export function AreaDashboardContent({
         </div>
         <div className="flex shrink-0 gap-2">
           <button onClick={onOpenScopedChat} className="rounded bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-500">
-            Area chat
+             Area 对话
           </button>
           <button onClick={onCreateProject} className="rounded border border-neutral-300 px-3 py-2 text-xs dark:border-neutral-700">
-            Create project
+             创建项目
           </button>
           {onOpenRoom ? (
             <button onClick={onOpenRoom} className="rounded border border-neutral-300 px-3 py-2 text-xs dark:border-neutral-700">
-              Room
+               房间
             </button>
           ) : null}
         </div>
@@ -208,13 +208,13 @@ export function AreaDashboardContent({
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
-              <MetricCard label="Health" value={`${dashboard.health.score}`} detail={dashboard.health.state} />
-              <MetricCard label="Projects" value={dashboard.stats.active_projects} detail={`${dashboard.stats.open_tasks} open tasks`} />
-              <MetricCard label="Resources" value={dashboard.stats.resources} detail={`${dashboard.stats.recent_notes} notes`} />
-              <MetricCard label="Radar" value={dashboard.stats.feed_sources} detail={`${dashboard.stats.scheduled_reviews} reviews`} />
+               <MetricCard label="健康度" value={`${dashboard.health.score}`} detail={dashboard.health.state} />
+               <MetricCard label="项目" value={dashboard.stats.active_projects} detail={`${dashboard.stats.open_tasks} 个开放任务`} />
+               <MetricCard label="资源" value={dashboard.stats.resources} detail={`${dashboard.stats.recent_notes} 条笔记`} />
+               <MetricCard label="雷达" value={dashboard.stats.feed_sources} detail={`${dashboard.stats.scheduled_reviews} 个复盘`} />
             </div>
 
-            <Panel title="Health signals">
+             <Panel title="健康信号">
               <ul className="space-y-1 text-sm text-neutral-600 dark:text-neutral-300">
                 {dashboard.health.reasons.map((reason) => (
                   <li key={reason}>• {reason}</li>
@@ -222,15 +222,15 @@ export function AreaDashboardContent({
               </ul>
             </Panel>
 
-            <Panel title={`Active projects (${dashboard.active_projects.length})`}>
+             <Panel title={`活跃项目（${dashboard.active_projects.length}）`}>
               {dashboard.active_projects.length === 0 ? (
-                <Empty label="No active projects assigned to this area." />
+                 <Empty label="还没有活跃项目分配到这个 Area。" />
               ) : (
                 <div className="grid gap-2 md:grid-cols-2">
                   {dashboard.active_projects.map((project) => (
                     <div key={project.uid} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
                       <div className="text-sm font-medium">{project.name}</div>
-                      <div className="mt-1 text-xs text-neutral-500">{project.status} · {project.task_count ?? 0} open task(s)</div>
+                       <div className="mt-1 text-xs text-neutral-500">{project.status} · {project.task_count ?? 0} 个开放任务</div>
                       <div className="mt-1 truncate font-mono text-[11px] text-neutral-400">{project.relPath}</div>
                     </div>
                   ))}
@@ -238,16 +238,16 @@ export function AreaDashboardContent({
               )}
             </Panel>
 
-            <Panel title={`Resources (${dashboard.resources.length})`}>
+             <Panel title={`资源（${dashboard.resources.length}）`}>
               {dashboard.resources.length === 0 ? (
-                <Empty label="No resources assigned yet." />
+                 <Empty label="还没有分配资源。" />
               ) : (
                 <div className="grid gap-2 md:grid-cols-2">
                   {dashboard.resources.map((resource) => (
                     <div key={resource.frontmatter.id} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
                       <div className="text-sm font-medium">{resource.frontmatter.title}</div>
                       <div className="mt-1 text-xs text-neutral-500">
-                        {resource.frontmatter.depth} · {resource.frontmatter.engagement_count} engagement(s)
+                         {resource.frontmatter.depth} · {resource.frontmatter.engagement_count} 次互动
                       </div>
                     </div>
                   ))}
@@ -255,9 +255,9 @@ export function AreaDashboardContent({
               )}
             </Panel>
 
-            <Panel title={`Recent notes (${dashboard.recent_notes.length})`}>
+             <Panel title={`最近笔记（${dashboard.recent_notes.length}）`}>
               {dashboard.recent_notes.length === 0 ? (
-                <Empty label="No notes assigned yet." />
+                 <Empty label="还没有分配笔记。" />
               ) : (
                 <ul className="space-y-2">
                   {dashboard.recent_notes.map((note) => (
@@ -272,9 +272,9 @@ export function AreaDashboardContent({
           </div>
 
           <aside className="space-y-4">
-            <Panel title="Feed radar">
+             <Panel title="Feed 雷达">
               {dashboard.feed_sources.length === 0 ? (
-                <Empty label="No feed sources assigned." />
+                 <Empty label="还没有分配 Feed 来源。" />
               ) : (
                 <ul className="space-y-2 text-sm">
                   {dashboard.feed_sources.map((source) => (
@@ -287,24 +287,24 @@ export function AreaDashboardContent({
               )}
             </Panel>
 
-            <Panel title="Scheduled reviews">
+             <Panel title="计划复盘">
               {dashboard.scheduled_reviews.length === 0 ? (
-                <Empty label="No area review schedule found." />
+                 <Empty label="未找到 Area 复盘计划。" />
               ) : (
                 <ul className="space-y-2 text-sm">
                   {dashboard.scheduled_reviews.map((task) => (
                     <li key={task.id} className="rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">
                       <div className="font-medium">{task.name}</div>
-                      <div className="text-xs text-neutral-500">{task.status} · next {task.next_run_at?.slice(0, 16) ?? 'unscheduled'}</div>
+                       <div className="text-xs text-neutral-500">{task.status} · 下次 {task.next_run_at?.slice(0, 16) ?? '未计划'}</div>
                     </li>
                   ))}
                 </ul>
               )}
             </Panel>
 
-            <Panel title={`Unassigned queue (${dashboard.unassigned_queue.length})`}>
+             <Panel title={`未分配队列（${dashboard.unassigned_queue.length}）`}>
               {dashboard.unassigned_queue.length === 0 ? (
-                <Empty label="Everything visible has an area assignment." />
+                 <Empty label="所有可见内容都已分配 Area。" />
               ) : (
                 <ul className="space-y-3">
                   {dashboard.unassigned_queue.map((entity) => {
@@ -322,7 +322,7 @@ export function AreaDashboardContent({
                             disabled={busyEntity === key}
                             className="rounded border border-neutral-300 px-2 py-1 text-[11px] dark:border-neutral-700"
                           >
-                            {busyEntity === key ? '…' : 'Suggest'}
+                             {busyEntity === key ? '…' : '建议'}
                           </button>
                         </div>
                         {items.length > 0 ? (
@@ -333,7 +333,7 @@ export function AreaDashboardContent({
                                 onClick={() => void onAssign(entity, suggestion.area_slug, 'synthesis')}
                                 className="w-full rounded bg-emerald-50 px-2 py-1.5 text-left text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
                               >
-                                Assign to {suggestion.area_slug} · {Math.round(suggestion.confidence * 100)}%
+                                 分配到 {suggestion.area_slug} · {Math.round(suggestion.confidence * 100)}%
                                 <div className="text-[11px] opacity-80">{suggestion.reason}</div>
                               </button>
                             ))}
@@ -343,7 +343,7 @@ export function AreaDashboardContent({
                           onClick={() => void onAssign(entity, dashboard.area.slug)}
                           className="mt-2 w-full rounded border border-neutral-300 px-2 py-1.5 text-xs dark:border-neutral-700"
                         >
-                          Assign here
+                           分配到这里
                         </button>
                       </li>
                     );

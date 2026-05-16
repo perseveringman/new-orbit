@@ -4,13 +4,13 @@ import { TRACEABLE_EVENT_SOURCES } from '@shared/events';
 import { ArtifactDebugPanel } from '../components/synthesis';
 
 const SOURCE_LABELS: Record<TraceableEventSource, string> = {
-  activity: 'Activity',
+  activity: '活动',
   agent: 'Agent',
-  inbox: 'Inbox',
+  inbox: '收件箱',
   runtime: 'Runtime',
-  synthesis: 'Synthesis',
+  synthesis: '合成',
   ipc: 'IPC',
-  conversation: 'Conversation'
+  conversation: '对话'
 };
 
 export function DeveloperConsoleView(): JSX.Element {
@@ -57,21 +57,21 @@ export function DeveloperConsoleView(): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col bg-neutral-50 text-sm text-neutral-800 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="border-b border-neutral-200 bg-white/70 px-6 py-4 dark:border-neutral-800 dark:bg-neutral-900/70">
-        <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">Developer Console</p>
-        <h2 className="mt-1 text-xl font-semibold">Event Replay</h2>
+        <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">开发者控制台</p>
+        <h2 className="mt-1 text-xl font-semibold">事件回放</h2>
         <p className="mt-1 max-w-2xl text-sm text-neutral-500">
-          Inspect traceable Activity, Agent, Inbox, and IPC events with trace/run filters.
+          使用 trace / run 过滤器检查可追踪的活动、Agent、收件箱与 IPC 事件。
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap items-end gap-3 border-b border-neutral-200 bg-white/50 px-6 py-3 dark:border-neutral-800 dark:bg-neutral-900/40">
         <label className="flex flex-col gap-1 text-xs text-neutral-500">
-          Source
+          来源
           <select
             value={source}
             onChange={(event) => setSource(event.target.value as TraceableEventSource | 'all')}
             className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           >
-            <option value="all">All sources</option>
+            <option value="all">全部来源</option>
             {TRACEABLE_EVENT_SOURCES.map((item) => (
               <option key={item} value={item}>
                 {SOURCE_LABELS[item]}
@@ -80,11 +80,11 @@ export function DeveloperConsoleView(): JSX.Element {
           </select>
         </label>
         <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs text-neutral-500">
-          Kind
+          类型
           <input
             value={eventType}
             onChange={(event) => setEventType(event.target.value)}
-            placeholder="event type"
+            placeholder="事件类型"
             className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-800 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           />
         </label>
@@ -107,7 +107,7 @@ export function DeveloperConsoleView(): JSX.Element {
           />
         </label>
         <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs text-neutral-500">
-          Task
+          任务
           <input
             value={taskUid}
             onChange={(event) => setTaskUid(event.target.value)}
@@ -120,7 +120,7 @@ export function DeveloperConsoleView(): JSX.Element {
           onClick={() => setPlaybackIndex(playbackIndex === null ? 0 : null)}
           className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
         >
-          {playbackIndex === null ? 'Start playback' : 'Stop playback'}
+          {playbackIndex === null ? '开始回放' : '停止回放'}
         </button>
         {playbackIndex !== null && (
           <button
@@ -128,7 +128,7 @@ export function DeveloperConsoleView(): JSX.Element {
             onClick={() => setPlaybackIndex((index) => Math.min((index ?? 0) + 1, Math.max(events.length - 1, 0)))}
             className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200"
           >
-            Next event
+            下一个事件
           </button>
         )}
       </div>
@@ -163,13 +163,13 @@ export function DeveloperConsoleView(): JSX.Element {
             ))}
             {visibleEvents.length === 0 && (
               <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900">
-                No replay events match the current filters.
+                没有符合当前过滤器的回放事件。
               </div>
             )}
           </div>
         </div>
         <aside className="min-h-0 overflow-y-auto border-l border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-          <h3 className="text-sm font-semibold">Payload</h3>
+          <h3 className="text-sm font-semibold">载荷</h3>
           <div className="mt-3">
             <ArtifactDebugPanel filter={{ limit: 20 }} />
           </div>
@@ -178,7 +178,7 @@ export function DeveloperConsoleView(): JSX.Element {
               {JSON.stringify(selected, null, 2)}
             </pre>
           ) : (
-            <p className="mt-3 text-sm text-neutral-500">Select an event to inspect its payload.</p>
+            <p className="mt-3 text-sm text-neutral-500">请选择一个事件以查看载荷。</p>
           )}
         </aside>
       </div>

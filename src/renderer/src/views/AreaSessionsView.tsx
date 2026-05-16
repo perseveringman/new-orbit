@@ -35,7 +35,7 @@ export function AreaSessionsView({ areaUid, onOpenSession }: Props): JSX.Element
         sessionId: nextSelected
       });
     } catch (error) {
-      toast(`Load area sessions failed: ${(error as Error).message}`);
+      toast(`加载 Area 会话失败：${(error as Error).message}`);
     }
   }, [areaUid, selectedSessionId, setSidebarFocus, toast]);
 
@@ -65,7 +65,7 @@ export function AreaSessionsView({ areaUid, onOpenSession }: Props): JSX.Element
       .catch((error) => {
         if (!cancelled) {
           setDetail(null);
-          toast(`Load area session detail failed: ${(error as Error).message}`);
+          toast(`加载 Area 会话详情失败：${(error as Error).message}`);
         }
       });
     return () => {
@@ -83,8 +83,7 @@ export function AreaSessionsView({ areaUid, onOpenSession }: Props): JSX.Element
       <div className="min-h-0 flex-1">
         {sessions.length === 0 ? (
           <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500">
-            No area sessions yet. Start Claude or Codex in the area terminal and Orbit will build a
-            reusable history here.
+            还没有 Area 会话。在 Area 终端中启动 Claude 或 Codex 后，Orbit 会在这里构建可复用的历史。
           </div>
         ) : selected ? (
           <ProjectSessionsDetailPane
@@ -94,7 +93,7 @@ export function AreaSessionsView({ areaUid, onOpenSession }: Props): JSX.Element
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-sm text-neutral-500">
-            Pick a session from the right sidebar to inspect the transcript for{' '}
+            请从右侧边栏选择一个会话，以查看以下会话的记录：{' '}
             {getTerminalSessionDisplayTitle(sessions[0]!)}.
           </div>
         )}
