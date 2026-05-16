@@ -29,12 +29,12 @@ const RESOURCE_STATUSES: ResourceStatus[] = ['active', 'dormant', 'evolved', 'ar
 export type ResourceRoomTab = 'overview' | 'kanban' | 'materials' | 'outputs' | 'chat' | 'timeline';
 
 export const RESOURCE_ROOM_TABS: Array<{ id: ResourceRoomTab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'kanban', label: 'Kanban' },
-  { id: 'materials', label: 'Materials' },
-  { id: 'outputs', label: 'Outputs' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'timeline', label: 'Timeline' }
+  { id: 'overview', label: '概览' },
+  { id: 'kanban', label: '看板' },
+  { id: 'materials', label: '素材' },
+  { id: 'outputs', label: '产出' },
+  { id: 'chat', label: '对话' },
+  { id: 'timeline', label: '时间线' }
 ];
 
 function isResourceRoomTab(value: string | null): value is ResourceRoomTab {
@@ -109,7 +109,7 @@ export function ResourceView({
     try {
       setTasks(await window.orbit.para.listTasks({ resource_uid: active.frontmatter.id }));
     } catch (err) {
-      toast(`Load resource tasks failed: ${(err as Error).message}`);
+      toast(`加载 Resource 任务失败：${(err as Error).message}`);
     }
   }, [active, toast]);
 
@@ -145,7 +145,7 @@ export function ResourceView({
   async function createResource(): Promise<void> {
     const trimmed = createTitle.trim();
     if (!trimmed) {
-      setError('Resource title is required.');
+      setError('请填写 Resource 标题。');
       return;
     }
     setBusy(true);
@@ -153,7 +153,7 @@ export function ResourceView({
     try {
       const created = await window.orbit.resources.create({
         title: trimmed,
-        body: `# ${trimmed}\n\n## Why this matters\n\n\n## Current understanding\n\n`
+        body: `# ${trimmed}\n\n## 为什么重要\n\n\n## 当前理解\n\n`
       });
       setCreateTitle('');
       await reload(created.frontmatter.slug);
@@ -203,7 +203,7 @@ export function ResourceView({
       if (task.source === 'file') await window.orbit.task.updateFrontmatter(task.filePath, { status: target });
       else await window.orbit.para.updateTaskStatus(task.id, target);
     } catch (err) {
-      toast(`Status update failed: ${(err as Error).message}`);
+      toast(`状态更新失败：${(err as Error).message}`);
       await refreshTasks();
     }
   }
@@ -219,7 +219,7 @@ export function ResourceView({
         .getLastActiveConversation(scope)
         .catch(() => null);
       if (existing) {
-        setScopedChatMessage(`Resuming scoped chat: ${existing.title ?? existing.id}`);
+        setScopedChatMessage(`正在恢复限定范围对话：${existing.title ?? existing.id}`);
         setView({ kind: 'askAnywhere', activeId: existing.id });
         return;
       }
@@ -233,7 +233,7 @@ export function ResourceView({
         title: `Resource: ${active.frontmatter.title}`
       });
       await window.orbit.chat.setLastActiveConversation(scope, conversation.id);
-      setScopedChatMessage(`Scoped chat ready: ${conversation.title ?? conversation.id}`);
+      setScopedChatMessage(`限定范围对话已准备好：${conversation.title ?? conversation.id}`);
       setView({ kind: 'askAnywhere', activeId: conversation.id });
     } catch (err) {
       setError((err as Error).message);
@@ -251,21 +251,21 @@ export function ResourceView({
           <div className="space-y-3 border-b border-neutral-200 p-4 dark:border-neutral-800">
             <div>
               <h1 className="text-lg font-semibold">Resources</h1>
-              <p className="text-xs text-neutral-500">Knowledge Spaces for long-lived interests.</p>
+              <p className="text-xs text-neutral-500">承载长期兴趣的知识空间。</p>
             </div>
             <div className="flex gap-2">
               <input
                 value={createTitle}
                 onChange={(event) => setCreateTitle(event.target.value)}
-                placeholder="New resource title"
+                placeholder="新 Resource 标题"
                 className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900"
               />
               <button onClick={() => void createResource()} className="rounded bg-sky-600 px-3 py-2 text-xs text-white">
-                Create
+                创建
               </button>
             </div>
             <button onClick={() => void loadSuggestions()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
-              Suggest from Notes
+              从笔记建议
             </button>
             {error ? <div className="rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div> : null}
           </div>
@@ -280,20 +280,20 @@ export function ResourceView({
               >
                 <div className="truncate font-medium">{resource.frontmatter.title}</div>
                 <div className="mt-1 text-[11px] text-neutral-500">
-                  {resource.frontmatter.depth} · {resource.frontmatter.engagement_count} engagements · {resource.counts.distilled} distilled
+                  {resourceDepthLabel(resource.frontmatter.depth)} · {resource.frontmatter.engagement_count} 次互动 · {resource.counts.distilled} 条提炼
                 </div>
               </button>
             ))}
             {suggestions.length > 0 ? (
               <div className="mt-3 space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-                <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Emerging topics</div>
+                <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">浮现主题</div>
                 {suggestions.map((suggestion) => (
                   <SynthesisActionCard
                     key={suggestion.tag}
                     artifact={suggestion.synthesis_ref ? suggestionArtifacts[suggestion.synthesis_ref] : null}
                     title={suggestion.topic}
-                    description={`${suggestion.note_count} notes · ${Math.round(suggestion.confidence * 100)}% confidence`}
-                    primaryLabel="Create"
+                    description={`${suggestion.note_count} 条笔记 · ${Math.round(suggestion.confidence * 100)}% 置信度`}
+                    primaryLabel="创建"
                     onPrimary={() => void createFromSuggestion(suggestion)}
                     onRefresh={() => void loadSuggestions()}
                   />
@@ -343,16 +343,16 @@ export function ResourceView({
             </div>
             <div className={`min-h-0 flex-1 flex-col overflow-hidden p-4 ${tab === 'kanban' ? 'flex' : 'hidden'}`}>
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm text-neutral-500">{tasks.length} resource task(s)</div>
+                <div className="text-sm text-neutral-500">{tasks.length} 个 Resource 任务</div>
                 <button
                   onClick={() => setNewTaskOpen(true)}
                   className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                 >
-                  Create task
+                  创建任务
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
-                <Suspense fallback={<p className="text-sm text-neutral-500">Loading board...</p>}>
+                <Suspense fallback={<p className="text-sm text-neutral-500">正在加载看板...</p>}>
                   <KanbanBoard columns={columns} onDrop={onDropTask} onStatus={onDropTask} />
                 </Suspense>
               </div>
@@ -378,7 +378,7 @@ export function ResourceView({
             />
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">Select a Resource from the sidebar.</div>
+           <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">请从侧边栏选择一个 Resource。</div>
         )}
       </section>
     </div>
@@ -401,7 +401,7 @@ function ResourceHeader({
   return (
     <header className="flex items-center gap-2 border-b border-neutral-200 bg-white/80 p-3 dark:border-neutral-800 dark:bg-neutral-950/80">
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Resource Room</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Resource 房间</div>
         <h2 className="truncate text-lg font-semibold">{resource.frontmatter.title}</h2>
         <p className="text-xs text-neutral-500">{resource.frontmatter.slug}</p>
       </div>
@@ -411,7 +411,7 @@ function ResourceHeader({
         className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
       >
         {RESOURCE_STATUSES.map((status) => (
-          <option key={status} value={status}>{status}</option>
+          <option key={status} value={status}>{resourceStatusLabel(status)}</option>
         ))}
       </select>
       <select
@@ -420,13 +420,13 @@ function ResourceHeader({
         className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
       >
         {['exploring', 'practicing', 'mastered', 'teaching'].map((depth) => (
-          <option key={depth} value={depth}>{depth}</option>
+          <option key={depth} value={depth}>{resourceDepthLabel(depth as Resource['frontmatter']['depth'])}</option>
         ))}
       </select>
       <button onClick={() => void onArchive()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">
-        Archive
+        归档
       </button>
-      {busy ? <span className="text-xs text-neutral-500">Working...</span> : null}
+      {busy ? <span className="text-xs text-neutral-500">处理中...</span> : null}
     </header>
   );
 }
@@ -500,7 +500,7 @@ export function ResourceOverview({
   async function recordEngagement(): Promise<void> {
     try {
       await window.orbit.resources.engage(resource.frontmatter.slug, {
-        title: engagementTitle.trim() || 'Resource engagement',
+        title: engagementTitle.trim() || 'Resource 互动',
         summary: engagementSummary.trim() || undefined
       });
       setEngagementTitle('');
@@ -522,13 +522,13 @@ export function ResourceOverview({
             {error ? <div className="mb-3 rounded bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div> : null}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-400">Resource Space</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-400">Resource 空间</div>
                 <h2 className="mt-1 truncate text-2xl font-semibold">{resource.frontmatter.title}</h2>
                 <p className="mt-1 font-mono text-xs text-neutral-500">03_Resources/{resource.frontmatter.slug}</p>
               </div>
               <div className="flex flex-wrap gap-1">
                 {resource.frontmatter.tags.length === 0 ? (
-                  <span className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-500 dark:bg-neutral-900">untagged</span>
+                  <span className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-500 dark:bg-neutral-900">未打标签</span>
                 ) : (
                   resource.frontmatter.tags.map((tag) => (
                     <span key={tag} className="rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">#{tag}</span>
@@ -537,10 +537,10 @@ export function ResourceOverview({
               </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <ResourceStat label="Depth" value={resource.frontmatter.depth} />
-              <ResourceStat label="Engagements" value={String(resource.frontmatter.engagement_count)} />
-              <ResourceStat label="References" value={String(resource.refs.length)} />
-              <ResourceStat label="Primary Area" value={primaryArea?.area_slug ?? 'none'} />
+              <ResourceStat label="深度" value={resourceDepthLabel(resource.frontmatter.depth)} />
+              <ResourceStat label="互动" value={String(resource.frontmatter.engagement_count)} />
+              <ResourceStat label="引用" value={String(resource.refs.length)} />
+              <ResourceStat label="主 Area" value={primaryArea?.area_slug ?? '无'} />
             </div>
             {scopedChatMessage ? <div className="mt-4 rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:bg-sky-950/30 dark:text-sky-200">{scopedChatMessage}</div> : null}
           </section>
@@ -548,20 +548,20 @@ export function ResourceOverview({
           <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold">Current understanding</h3>
-                <p className="text-xs text-neutral-500">The durable Info layer for this Resource.</p>
+                 <h3 className="text-sm font-semibold">当前理解</h3>
+                 <p className="text-xs text-neutral-500">这个 Resource 的持久信息层。</p>
               </div>
-              <button onClick={() => void saveResource()} className="rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">Save</button>
+               <button onClick={() => void saveResource()} className="rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">保存</button>
             </div>
             <textarea value={body} onChange={(event) => setBody(event.target.value)} className="h-72 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 p-4 font-mono text-sm leading-6 outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900/60" />
             <details className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
-              <summary className="cursor-pointer text-xs font-medium text-neutral-600 dark:text-neutral-300">Edit metadata</summary>
+              <summary className="cursor-pointer text-xs font-medium text-neutral-600 dark:text-neutral-300">编辑元数据</summary>
               <div className="mt-3 space-y-2">
-                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900" />
-                <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="tags, comma separated" className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="标题" className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-900" />
+                <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="标签，用英文逗号分隔" className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
                 <div className="grid gap-2 md:grid-cols-2">
-                  <input value={areas} onChange={(event) => setAreas(event.target.value)} placeholder="areas, comma separated" className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-                  <input value={evolvedTo} onChange={(event) => setEvolvedTo(event.target.value)} placeholder="evolved to resource slug" className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+                  <input value={areas} onChange={(event) => setAreas(event.target.value)} placeholder="Areas，用英文逗号分隔" className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+                  <input value={evolvedTo} onChange={(event) => setEvolvedTo(event.target.value)} placeholder="演化到的 Resource slug" className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
                 </div>
               </div>
             </details>
@@ -576,31 +576,31 @@ export function ResourceOverview({
 
         <aside className="space-y-4">
           <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
-            <h2 className="text-sm font-semibold">Link material</h2>
-            <p className="mt-1 text-xs text-neutral-500">Attach Layer 1 notes, library items, projects, areas, people, or URLs.</p>
+             <h2 className="text-sm font-semibold">链接素材</h2>
+             <p className="mt-1 text-xs text-neutral-500">关联 Layer 1 笔记、资料库条目、项目、Area、人物或 URL。</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <select value={linkKind} onChange={(event) => setLinkKind(event.target.value as ResourceRefKind)} className="rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900">
-                {REF_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+                 {REF_KINDS.map((kind) => <option key={kind} value={kind}>{resourceRefKindLabel(kind)}</option>)}
               </select>
               <select value={linkSection} onChange={(event) => setLinkSection(event.target.value as ResourceSection)} className="rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900">
                 {RESOURCE_SECTIONS.map((section) => <option key={section} value={section}>{labelForSection(section)}</option>)}
               </select>
             </div>
-            <input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} placeholder="Optional title" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-            <input value={linkRef} onChange={(event) => setLinkRef(event.target.value)} placeholder="Path, URL, or id" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-            <button onClick={() => void addRef()} className="mt-3 rounded bg-sky-600 px-3 py-1.5 text-xs text-white">Link</button>
+             <input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} placeholder="可选标题" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+             <input value={linkRef} onChange={(event) => setLinkRef(event.target.value)} placeholder="路径、URL 或 ID" className="mt-2 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+             <button onClick={() => void addRef()} className="mt-3 rounded bg-sky-600 px-3 py-1.5 text-xs text-white">链接</button>
           </section>
 
           <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
-            <h2 className="text-sm font-semibold">Record engagement</h2>
-            <p className="mt-1 text-xs text-neutral-500">Capture a meaningful touch so this Resource keeps a trail.</p>
-            <input value={engagementTitle} onChange={(event) => setEngagementTitle(event.target.value)} placeholder="What changed?" className="mt-3 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-            <textarea value={engagementSummary} onChange={(event) => setEngagementSummary(event.target.value)} placeholder="Short note" className="mt-2 h-20 w-full resize-none rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
-            <button onClick={() => void recordEngagement()} className="mt-3 rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">Record</button>
+             <h2 className="text-sm font-semibold">记录互动</h2>
+             <p className="mt-1 text-xs text-neutral-500">捕捉一次有意义的触达，让这个 Resource 保留轨迹。</p>
+             <input value={engagementTitle} onChange={(event) => setEngagementTitle(event.target.value)} placeholder="发生了什么变化？" className="mt-3 w-full rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+             <textarea value={engagementSummary} onChange={(event) => setEngagementSummary(event.target.value)} placeholder="简短记录" className="mt-2 h-20 w-full resize-none rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900" />
+             <button onClick={() => void recordEngagement()} className="mt-3 rounded bg-neutral-900 px-3 py-1.5 text-xs text-white dark:bg-neutral-100 dark:text-neutral-900">记录</button>
           </section>
 
           <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
-            <h2 className="text-sm font-semibold">Latest movement</h2>
+             <h2 className="text-sm font-semibold">最新动态</h2>
             {latestTimeline ? (
               <div className="mt-3 rounded-xl bg-neutral-50 p-3 text-xs dark:bg-neutral-900">
                 <div className="font-medium">{latestTimeline.title}</div>
@@ -608,7 +608,7 @@ export function ResourceOverview({
                 {latestTimeline.summary ? <p className="mt-2 text-neutral-600 dark:text-neutral-300">{latestTimeline.summary}</p> : null}
               </div>
             ) : (
-              <p className="mt-3 text-xs text-neutral-500">No movement yet.</p>
+               <p className="mt-3 text-xs text-neutral-500">暂无动态。</p>
             )}
           </section>
         </aside>
@@ -641,7 +641,7 @@ function ResourceRefsSection({
     <div className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{labelForSection(section)}</div>
       <div className="mt-2 space-y-2">
-        {refs.length === 0 ? <p className="text-xs text-neutral-500">No references yet.</p> : null}
+        {refs.length === 0 ? <p className="text-xs text-neutral-500">暂无引用。</p> : null}
         {refs.map((ref) => (
           <div key={ref.id} className="rounded-lg bg-neutral-50 p-2 text-xs dark:bg-neutral-900">
             <div className="font-medium">{ref.title ?? ref.ref}</div>
@@ -651,14 +651,14 @@ function ResourceRefsSection({
                 onClick={() => void window.orbit.resources.promoteRef(resource.frontmatter.slug, { ref_id: ref.id }).then(() => onReload())}
                 className="mt-1 mr-2 text-[11px] text-sky-600"
               >
-                Promote canonical
+                 提升为 canonical
               </button>
             ) : null}
             <button
               onClick={() => void window.orbit.resources.unlinkRef(resource.frontmatter.slug, ref.id).then(() => onReload())}
               className="mt-1 text-[11px] text-red-500"
             >
-              Unlink
+               取消链接
             </button>
           </div>
         ))}
@@ -681,13 +681,13 @@ function ResourceChatTab({
   return (
     <section className="flex min-h-0 flex-1 items-center justify-center p-6">
       <div className="max-w-md rounded-xl border border-neutral-200 bg-white p-6 text-center dark:border-neutral-800 dark:bg-neutral-950">
-        <h2 className="text-base font-semibold">Resource-scoped Chat</h2>
+        <h2 className="text-base font-semibold">Resource 限定对话</h2>
         <p className="mt-2 text-sm text-neutral-500">
-          Start a conversation scoped to {resource.frontmatter.title}; Orbit will use this Resource as context.
+          启动限定到 {resource.frontmatter.title} 的对话；Orbit 会将这个 Resource 作为上下文。
         </p>
         {error ? <p className="mt-3 text-xs text-red-500">{error}</p> : null}
         <button onClick={onOpen} disabled={busy} className="mt-4 rounded bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500 disabled:opacity-50">
-          {busy ? 'Opening...' : 'Open Resource Chat'}
+          {busy ? '打开中...' : '打开 Resource 对话'}
         </button>
       </div>
     </section>
@@ -698,8 +698,8 @@ function ResourceTimeline({ resource }: { resource: Resource }): JSX.Element {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <header className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-        <h2 className="text-sm font-semibold">Timeline</h2>
-        <p className="text-xs text-neutral-500">Engagement and curation history for this Resource.</p>
+        <h2 className="text-sm font-semibold">时间线</h2>
+        <p className="text-xs text-neutral-500">这个 Resource 的互动与整理历史。</p>
       </header>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="space-y-2">
@@ -741,6 +741,45 @@ function splitAreas(value: string): NonNullable<CreateResourceInput['areas']> {
 }
 
 function labelForSection(section: ResourceSection): string {
-  if (section === 'projects_touched') return 'projects touched';
-  return section;
+  const labels: Record<ResourceSection, string> = {
+    canonical: 'canonical',
+    distilled: '已提炼',
+    related: '相关',
+    people: '人物',
+    projects_touched: '触达项目'
+  };
+  return labels[section];
+}
+
+function resourceStatusLabel(status: ResourceStatus): string {
+  const labels: Record<ResourceStatus, string> = {
+    active: '活跃',
+    dormant: '沉睡',
+    evolved: '已演化',
+    archived: '已归档'
+  };
+  return labels[status];
+}
+
+function resourceDepthLabel(depth: Resource['frontmatter']['depth']): string {
+  const labels: Record<Resource['frontmatter']['depth'], string> = {
+    exploring: '探索中',
+    practicing: '练习中',
+    mastered: '已掌握',
+    teaching: '可教学'
+  };
+  return labels[depth] ?? depth;
+}
+
+function resourceRefKindLabel(kind: ResourceRefKind): string {
+  const labels: Record<ResourceRefKind, string> = {
+    note: '笔记',
+    library_item: '资料库条目',
+    kb_item: '知识库条目',
+    project: '项目',
+    area: 'Area',
+    person: '人物',
+    url: 'URL'
+  };
+  return labels[kind];
 }
