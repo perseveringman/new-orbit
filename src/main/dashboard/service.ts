@@ -164,9 +164,18 @@ async function directorySize(root: string, ignored: Set<string>): Promise<number
     if (ignored.has(entry.name)) continue;
     const fullPath = path.join(root, entry.name);
     if (entry.isDirectory()) total += await directorySize(fullPath, ignored);
-    else if (entry.isFile()) total += (await fs.stat(fullPath)).size;
+    else if (entry.isFile()) total += await fileSizeOrZero(fullPath);
   }
   return total;
+}
+
+async function fileSizeOrZero(filePath: string): Promise<number> {
+  try {
+    return (await fs.stat(filePath)).size;
+  } catch (error) {
+    if (isNotFoundError(error)) return 0;
+    throw error;
+  }
 }
 
 async function listThinkingTrails(vaultPath: string): Promise<string[]> {
