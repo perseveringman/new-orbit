@@ -20,7 +20,7 @@ export function getTerminalSessionAction(
   if (session.status === 'active') {
     return {
       disabled: false,
-      hint: 'Jump to active terminal',
+      hint: '跳转到活跃终端',
       navigation: {
         projectUid: session.projectUid,
         roomKind,
@@ -34,7 +34,7 @@ export function getTerminalSessionAction(
   if (session.resumeCommand) {
     return {
       disabled: false,
-      hint: 'Resume in new tab',
+      hint: '在新标签页继续',
       navigation: {
         projectUid: session.projectUid,
         roomKind,
@@ -47,7 +47,7 @@ export function getTerminalSessionAction(
 
   return {
     disabled: false,
-      hint: 'Open a fresh terminal with session context',
+      hint: '带会话上下文打开新终端',
       navigation: {
         projectUid: session.projectUid,
         roomKind,

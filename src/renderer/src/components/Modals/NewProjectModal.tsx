@@ -184,10 +184,10 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
       setActiveProjectUid(res.uid);
       toast(
         creationMode === 'github-import'
-          ? `Imported ${githubOwner}/${githubRepo} → ${res.slug}`
+          ? `已导入 ${githubOwner}/${githubRepo} → ${res.slug}`
           : creationMode === 'link-existing'
-            ? `Linked project ${res.slug}`
-          : `Created project ${res.slug}`
+            ? `已关联项目 ${res.slug}`
+          : `已创建项目 ${res.slug}`
       );
       // Open README for instant editing (R3 will route to Project Room)
       const readmePath = `${res.projectPath}/README.md`;
@@ -235,7 +235,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
     <div className={overlay} role="dialog" aria-modal="true" onClick={onClose}>
       <div className={panel} onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-          <h2 className="text-sm font-semibold">New project — step {step} of 2</h2>
+          <h2 className="text-sm font-semibold">新建项目 — 第 {step} / 2 步</h2>
           <button className={btn} onClick={onClose} disabled={busy}>
             ✕
           </button>
@@ -245,7 +245,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
           {step === 1 && (
             <>
               <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Source</span>
+                  <span className="mb-1 block text-xs text-neutral-500">来源</span>
                 <select
                   className={input}
                   value={creationMode}
@@ -255,9 +255,9 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                     )
                   }
                 >
-                  <option value="link-existing">Link existing code directory</option>
-                  <option value="scaffold-new">Create new code directory</option>
-                  <option value="github-import">Import from GitHub repository</option>
+                  <option value="link-existing">关联已有代码目录</option>
+                  <option value="scaffold-new">创建新的代码目录</option>
+                  <option value="github-import">从 GitHub 仓库导入</option>
                 </select>
               </label>
               {creationMode === 'github-import' ? (
@@ -273,7 +273,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                       />
                     </label>
                     <label className="block">
-                      <span className="mb-1 block text-xs text-neutral-500">Repository</span>
+                      <span className="mb-1 block text-xs text-neutral-500">仓库</span>
                       <input
                         className={input}
                         value={githubRepo}
@@ -283,73 +283,73 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                     </label>
                   </div>
                   <PathPicker
-                    label="Clone parent directory"
+                    label="克隆父目录"
                     value={githubParentDir}
-                    buttonLabel="Choose"
+                    buttonLabel="选择"
                     onChoose={() => void chooseParentDir('github')}
                   />
                 </>
               ) : creationMode === 'link-existing' ? (
                 <>
                   <label className="block">
-                    <span className="mb-1 block text-xs text-neutral-500">Name</span>
+                    <span className="mb-1 block text-xs text-neutral-500">名称</span>
                     <input
                       className={input}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Orbit Docs Site"
+                      placeholder="例如：Orbit 文档站点"
                       autoFocus
                     />
                   </label>
                   <PathPicker
-                    label="Existing workdir"
+                    label="已有 Workdir"
                     value={workdirPath}
-                    buttonLabel="Choose"
+                    buttonLabel="选择"
                     onChoose={() => void chooseExistingWorkdir()}
                   />
                   {workdirProbe && (
                     <p className="text-[11px] text-neutral-500">
                       {workdirProbe.exists && workdirProbe.isDirectory
                         ? workdirProbe.git?.is_repo
-                          ? `Git repo detected · ${workdirProbe.recommendedExecutionContext}`
-                          : `Directory detected · ${workdirProbe.recommendedExecutionContext}`
-                        : 'Directory is not readable.'}
+                            ? `检测到 Git 仓库 · ${workdirProbe.recommendedExecutionContext}`
+                            : `检测到目录 · ${workdirProbe.recommendedExecutionContext}`
+                        : '目录不可读。'}
                     </p>
                   )}
                 </>
               ) : (
                 <>
                   <label className="block">
-                    <span className="mb-1 block text-xs text-neutral-500">Name</span>
+                      <span className="mb-1 block text-xs text-neutral-500">名称</span>
                     <input
                       className={input}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Orbit Docs Site"
+                        placeholder="例如：Orbit 文档站点"
                       autoFocus
                     />
                   </label>
                   <PathPicker
-                    label="Workdir parent directory"
+                    label="Workdir 父目录"
                     value={parentDir}
-                    buttonLabel="Choose"
+                    buttonLabel="选择"
                     onChoose={() => void chooseParentDir('scaffold')}
                   />
                 </>
               )}
               {creationMode === 'github-import' && (
                 <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">Project name</span>
+                  <span className="mb-1 block text-xs text-neutral-500">项目名称</span>
                   <input
                     className={input}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Optional display name override"
+                    placeholder="可选的显示名称覆盖"
                   />
                 </label>
               )}
               <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Agent exposure</span>
+                  <span className="mb-1 block text-xs text-neutral-500">Agent 暴露方式</span>
                 <select
                   className={input}
                   value={agentExposureMode}
@@ -359,14 +359,14 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                     )
                   }
                 >
-                  <option value="isolated">Orbit isolated (.orbit only)</option>
-                  <option value="bridge">Bridge root files when safe</option>
-                  <option value="compatible">Bridge + consume community agent files</option>
+                  <option value="isolated">Orbit 隔离（仅 .orbit）</option>
+                  <option value="bridge">安全时桥接根目录文件</option>
+                  <option value="compatible">桥接并消费社区 Agent 文件</option>
                 </select>
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs text-neutral-500">
-                  Slug <span className="text-neutral-400">(auto from name, editable)</span>
+                  Slug <span className="text-neutral-400">（根据名称自动生成，可编辑）</span>
                 </span>
                 <input
                   className={
@@ -385,39 +385,39 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                 />
                 {slug && !slugValid && (
                   <p className="mt-1 text-[11px] text-red-500">
-                    Must be lowercase kebab-case ASCII, 1–64 chars, no `--`.
+                    必须是小写 kebab-case ASCII，1–64 个字符，且不能包含 `--`。
                   </p>
                 )}
                 {slugValid && slugConflict && (
                   <p className="mt-1 text-[11px] text-red-500">
-                    A project with this slug already exists.
+                    已有项目使用这个 slug。
                   </p>
                 )}
               </label>
               {creationMode === 'link-existing' && (
                 <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">Description</span>
+                  <span className="mb-1 block text-xs text-neutral-500">描述</span>
                   <textarea
                     className={input + ' min-h-[88px] resize-y'}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Short project note. Orbit keeps this in the coordination README."
+                    placeholder="简短项目说明。Orbit 会将它保存在协调 README 中。"
                   />
                 </label>
               )}
               {creationMode === 'scaffold-new' && (
                 <>
                   <label className="block">
-                    <span className="mb-1 block text-xs text-neutral-500">Description</span>
+                      <span className="mb-1 block text-xs text-neutral-500">描述</span>
                     <textarea
                       className={input + ' min-h-[88px] resize-y'}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="One-liner or longer. Lands in the new workdir README."
+                        placeholder="一句话或更长说明，会写入新 Workdir 的 README。"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs text-neutral-500">Template</span>
+                      <span className="mb-1 block text-xs text-neutral-500">模板</span>
                     <select
                       className={input}
                       value={template}
@@ -439,14 +439,14 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
             <>
               <label className="block">
                 <span className="mb-1 block text-xs text-neutral-500">
-                  Area (optional)
+                  Area（可选）
                 </span>
                 <select
                   className={input}
                   value={areaUid}
                   onChange={(e) => setAreaUid(e.target.value)}
                 >
-                  <option value="">— none —</option>
+                  <option value="">— 无 —</option>
                   {areas.map((a) => (
                     <option key={a.uid} value={a.uid}>
                       {a.title} ({a.relPath})
@@ -455,14 +455,14 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                 </select>
               </label>
               <div>
-                <span className="mb-1 block text-xs text-neutral-500">Tags</span>
+                <span className="mb-1 block text-xs text-neutral-500">标签</span>
                 <div className="flex flex-wrap items-center gap-1">
                   {tags.map((t) => (
                     <button
                       key={t}
                       onClick={() => setTags(tags.filter((x) => x !== t))}
                       className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] text-neutral-700 hover:bg-red-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-red-900/50"
-                      title="Click to remove"
+                       title="点击移除"
                     >
                       #{t} ✕
                     </button>
@@ -479,37 +479,37 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                         setTags(tags.slice(0, -1));
                       }
                     }}
-                    placeholder="type + Enter"
+                    placeholder="输入后按 Enter"
                   />
                 </div>
               </div>
               <div className="rounded border border-dashed border-neutral-300 p-3 text-xs text-neutral-500 dark:border-neutral-700">
                 <div>
-                  <b>Slug:</b> {slug}
+                  <b>Slug：</b> {slug}
                 </div>
                 <div>
-                  <b>Source:</b>{' '}
+                   <b>来源：</b>{' '}
                   {creationMode === 'github-import'
                     ? `${githubOwner || 'owner'}/${githubRepo || 'repo'}`
                     : creationMode === 'link-existing'
-                      ? 'linked workdir'
+                       ? '已关联 Workdir'
                       : `template:${template}`}
                 </div>
                 <div>
-                  <b>Coordination:</b> 01_Projects/{slug}/
+                   <b>协调目录：</b> 01_Projects/{slug}/
                 </div>
                 <div className="truncate">
-                  <b>Workdir:</b>{' '}
+                   <b>Workdir：</b>{' '}
                   {creationMode === 'github-import'
-                    ? githubTargetDir || 'choose a clone parent'
+                     ? githubTargetDir || '请选择克隆父目录'
                     : creationMode === 'link-existing'
-                      ? workdirPath || 'choose an existing directory'
+                       ? workdirPath || '请选择已有目录'
                       : parentDir
                         ? joinPath(parentDir, slug)
-                        : 'choose a parent directory'}
+                         : '请选择父目录'}
                 </div>
                 <div>
-                  <b>Exposure:</b> {agentExposureMode}
+                   <b>暴露方式：</b> {agentExposureMode}
                 </div>
               </div>
             </>
@@ -523,12 +523,12 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
 
         <footer className="flex items-center justify-between border-t border-neutral-200 px-4 py-3 dark:border-neutral-700">
           <button className={btn} onClick={onClose} disabled={busy}>
-            Cancel
+             取消
           </button>
           <div className="flex items-center gap-2">
             {step === 2 && (
               <button className={btn} onClick={() => setStep(1)} disabled={busy}>
-                ← Back
+                 ← 返回
               </button>
             )}
             {step === 1 ? (
@@ -537,21 +537,21 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                 onClick={() => setStep(2)}
                 disabled={!canNext || busy}
               >
-                Next →
+                 下一步 →
               </button>
             ) : (
               <button className={btnPrimary} onClick={submit} disabled={!canCreate || busy}>
                  {busy
                    ? creationMode === 'github-import'
-                     ? 'Importing…'
+                      ? '导入中…'
                      : creationMode === 'link-existing'
-                       ? 'Linking…'
-                       : 'Creating…'
+                        ? '关联中…'
+                        : '创建中…'
                    : creationMode === 'github-import'
-                     ? 'Import project'
+                      ? '导入项目'
                      : creationMode === 'link-existing'
-                       ? 'Link project'
-                       : 'Create project'}
+                        ? '关联项目'
+                        : '创建项目'}
                </button>
              )}
           </div>
@@ -580,7 +580,7 @@ function PathPicker({
           className={input + ' font-mono text-xs'}
           value={value}
           onChange={() => undefined}
-          placeholder="No directory selected"
+          placeholder="未选择目录"
           readOnly
         />
         <button className={btn} type="button" onClick={onChoose}>

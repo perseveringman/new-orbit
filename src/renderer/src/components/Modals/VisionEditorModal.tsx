@@ -46,7 +46,7 @@ export function VisionEditorModal({ open, onClose }: Props): JSX.Element | null 
     try {
       await window.orbit.vision.update(raw);
       await refreshVision();
-      toast('Vision saved');
+      toast('愿景已保存');
       onClose();
     } catch (e) {
       setErr((e as Error).message);
@@ -61,17 +61,17 @@ export function VisionEditorModal({ open, onClose }: Props): JSX.Element | null 
     <div className={overlay} role="dialog" aria-modal="true" onClick={onClose}>
       <div className={panel} onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-          <h2 className="text-sm font-semibold">Edit Vision — your North Star</h2>
+          <h2 className="text-sm font-semibold">编辑愿景 — 你的北极星</h2>
           <button className={btn} onClick={onClose} disabled={saving}>
             ✕
           </button>
         </header>
         <div className="space-y-2 px-4 py-4">
           <p className="text-xs text-neutral-500">
-            Keep it aspirational but concrete — this is injected as the North Star section.
+            保持有抱负但具体可感 — 这会作为北极星片段注入上下文。
           </p>
           {loading ? (
-            <p className="text-sm text-neutral-500">Loading…</p>
+            <p className="text-sm text-neutral-500">加载中…</p>
           ) : (
             <textarea
               className="h-[50vh] w-full rounded border border-neutral-300 bg-white p-2 font-mono text-xs outline-none focus:border-sky-500 dark:border-neutral-700 dark:bg-neutral-950"
@@ -87,10 +87,10 @@ export function VisionEditorModal({ open, onClose }: Props): JSX.Element | null 
         </div>
         <footer className="flex items-center justify-end gap-2 border-t border-neutral-200 px-4 py-3 dark:border-neutral-700">
           <button className={btn} onClick={onClose} disabled={saving}>
-            Cancel
+            取消
           </button>
           <button className={btnPrimary} onClick={save} disabled={saving || loading}>
-            {saving ? 'Saving…' : 'Save Vision'}
+            {saving ? '保存中…' : '保存愿景'}
           </button>
         </footer>
       </div>

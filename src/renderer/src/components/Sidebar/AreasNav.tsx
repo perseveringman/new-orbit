@@ -55,25 +55,25 @@ export function AreasNav(): JSX.Element {
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between px-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-          Areas
+          领域
         </h2>
         <button
           onClick={openNewArea}
-          title="New area"
+          title="新建领域"
           className="rounded px-1.5 py-0.5 text-[11px] text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-neutral-300"
         >
-          Create
+          创建
         </button>
       </div>
 
       {areas.length === 0 ? (
         <div className="mt-2 flex flex-col items-center gap-3 px-2 text-center">
-          <span className="text-xs text-neutral-400 dark:text-neutral-500">No areas yet</span>
+          <span className="text-xs text-neutral-400 dark:text-neutral-500">还没有领域</span>
           <button
             onClick={openNewArea}
             className="rounded bg-neutral-200/80 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-300/60 dark:bg-neutral-800/80 dark:text-neutral-300 dark:hover:bg-neutral-700/60"
           >
-            Create area
+            创建领域
           </button>
         </div>
       ) : (

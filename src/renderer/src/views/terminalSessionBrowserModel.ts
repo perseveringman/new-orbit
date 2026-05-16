@@ -60,13 +60,13 @@ export function getTerminalSessionAgentMeta(agentType: string): TerminalSessionA
     case 'unknown':
       return {
         id: 'unknown',
-        title: 'Unknown',
+        title: '未知',
         badgeClassName:
           'bg-neutral-500/15 text-neutral-700 dark:text-neutral-300',
         dotClassName: 'bg-neutral-400'
       };
     default: {
-      const title = agentType.trim() || 'Unknown';
+      const title = agentType.trim() || '未知';
       return {
         id: title.toLowerCase(),
         title: title.charAt(0).toUpperCase() + title.slice(1),
@@ -79,14 +79,14 @@ export function getTerminalSessionAgentMeta(agentType: string): TerminalSessionA
 }
 
 export function getTerminalSessionDisplayTitle(session: TerminalAgentSessionDTO): string {
-  return session.title?.trim() || session.summary?.trim() || `${getTerminalSessionAgentMeta(session.agentType).title} session`;
+  return session.title?.trim() || session.summary?.trim() || `${getTerminalSessionAgentMeta(session.agentType).title} 会话`;
 }
 
 export function getTerminalSessionSubtitle(session: TerminalAgentSessionDTO): string {
   if (session.summary?.trim() && session.summary.trim() !== getTerminalSessionDisplayTitle(session)) {
     return session.summary.trim();
   }
-  return `${getTerminalSessionAgentMeta(session.agentType).title} · ${session.status}`;
+  return `${getTerminalSessionAgentMeta(session.agentType).title} · ${terminalSessionStatusLabel(session.status)}`;
 }
 
 function sortSessions(sessions: TerminalAgentSessionDTO[]): TerminalAgentSessionDTO[] {
@@ -107,13 +107,19 @@ export function getTerminalSessionAgentFilters(
   }
 
   return [
-    { id: 'all', title: 'All', count: sessions.length },
+    { id: 'all', title: '全部', count: sessions.length },
     ...orderedIds.map((id) => ({
       id,
       title: getTerminalSessionAgentMeta(id).title,
       count: counts.get(id) ?? 0
     }))
   ];
+}
+
+function terminalSessionStatusLabel(status: TerminalAgentSessionDTO['status']): string {
+  if (status === 'active') return '活跃';
+  if (status === 'completed') return '已完成';
+  return '失败';
 }
 
 export function filterTerminalSessions(

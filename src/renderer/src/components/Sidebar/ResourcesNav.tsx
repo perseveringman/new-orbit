@@ -34,7 +34,7 @@ export function ResourcesNav(): JSX.Element {
   async function createResource(): Promise<void> {
     const trimmed = createTitle.trim();
     if (!trimmed) {
-      setError('Resource title is required.');
+      setError('资源标题不能为空。');
       return;
     }
     setError(null);
@@ -55,14 +55,14 @@ export function ResourcesNav(): JSX.Element {
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between px-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-          Resources
+          资源
         </h2>
         <button
           onClick={() => createInputRef.current?.focus()}
-          title="New resource"
+          title="新建资源"
           className="rounded px-1.5 py-0.5 text-[11px] text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-neutral-300"
         >
-          Create
+          创建
         </button>
       </div>
 
@@ -74,21 +74,21 @@ export function ResourcesNav(): JSX.Element {
           onKeyDown={(event) => {
             if (event.key === 'Enter') void createResource();
           }}
-          placeholder="New resource"
+          placeholder="新建资源"
           className="min-w-0 flex-1 rounded border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900"
         />
         <button
           onClick={() => void createResource()}
           className="rounded bg-neutral-200/80 px-2 py-1 text-[11px] text-neutral-700 hover:bg-neutral-300/60 dark:bg-neutral-800/80 dark:text-neutral-300 dark:hover:bg-neutral-700/60"
         >
-          Add
+          添加
         </button>
       </div>
       {error ? <div className="px-2 text-[11px] text-red-500">{error}</div> : null}
 
       {resources.length === 0 ? (
         <div className="mt-2 flex flex-col items-center gap-3 px-2 text-center">
-          <span className="text-xs text-neutral-400 dark:text-neutral-500">No resources yet</span>
+          <span className="text-xs text-neutral-400 dark:text-neutral-500">还没有资源</span>
         </div>
       ) : (
         <ul className="mt-1 space-y-0.5 text-sm">

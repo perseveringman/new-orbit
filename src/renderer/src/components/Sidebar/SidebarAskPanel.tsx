@@ -32,17 +32,17 @@ export function deriveSidebarAskContext(input: {
     if (!uid) {
       return {
         scope: { kind: 'global' },
-        label: 'Kanban',
-        detail: 'Global task flow across the vault.',
-        title: 'Ask · Kanban'
+        label: '看板',
+        detail: '整个 vault 的全局任务流。',
+        title: '提问 · 看板'
       };
     }
     const project = projects.find((item) => item.uid === uid || item.slug === uid);
     return {
       scope: { kind: 'project', project_id: uid },
-      label: project?.name ?? 'Project',
-      detail: 'Project tasks, materials, outputs, and recent context.',
-      title: `Ask · ${project?.name ?? 'Project'}`
+      label: project?.name ?? '项目',
+      detail: '项目任务、素材、产出与最近上下文。',
+      title: `提问 · ${project?.name ?? '项目'}`
     };
   }
 
@@ -51,9 +51,9 @@ export function deriveSidebarAskContext(input: {
     if (!areaUid) {
       return {
         scope: { kind: 'global' },
-        label: 'Areas',
-        detail: 'Global Area context across responsibilities and resources.',
-        title: 'Ask · Areas'
+        label: '领域',
+        detail: '横跨职责与资源的全局 Area 上下文。',
+        title: '提问 · 领域'
       };
     }
     const area = areas.find((item) => item.uid === areaUid || item.slug === areaUid);
@@ -61,8 +61,8 @@ export function deriveSidebarAskContext(input: {
     return {
       scope: { kind: 'area', area_slug: slug },
       label: area?.name ?? slug,
-      detail: 'Area dashboard, active responsibilities, resources, and notes.',
-      title: `Ask · ${area?.name ?? slug}`
+      detail: 'Area 仪表盘、活跃职责、资源与笔记。',
+      title: `提问 · ${area?.name ?? slug}`
     };
   }
 
@@ -70,8 +70,8 @@ export function deriveSidebarAskContext(input: {
     return {
       scope: { kind: 'resource', resource_slug: view.resourceSlug },
       label: view.resourceSlug,
-      detail: 'Resource overview, refs, tasks, materials, outputs, and timeline.',
-      title: `Ask · ${view.resourceSlug}`
+      detail: '资源概览、引用、任务、素材、产出与时间线。',
+      title: `提问 · ${view.resourceSlug}`
     };
   }
 
@@ -80,7 +80,7 @@ export function deriveSidebarAskContext(input: {
       scope: { kind: 'note', note_id: activeFile.relPath },
       label: activeFile.relPath.split('/').at(-1) ?? activeFile.relPath,
       detail: activeFile.relPath,
-      title: `Ask · ${activeFile.relPath.split('/').at(-1) ?? 'Note'}`
+      title: `提问 · ${activeFile.relPath.split('/').at(-1) ?? '笔记'}`
     };
   }
 
@@ -88,8 +88,8 @@ export function deriveSidebarAskContext(input: {
   return {
     scope: { kind: 'global' },
     label,
-    detail: 'Global vault context, Vision, active Projects, Areas, Resources, and Timeline.',
-    title: `Ask · ${label}`
+    detail: '全局 vault 上下文、愿景、活跃项目、Area、资源与时间线。',
+    title: `提问 · ${label}`
   };
 }
 
@@ -123,7 +123,7 @@ export function SidebarAskPanel(): JSX.Element {
   return (
     <div className="flex h-full min-h-[32rem] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
       <div className="shrink-0 border-b border-neutral-200 bg-violet-50/70 px-3 py-2 text-xs dark:border-neutral-800 dark:bg-violet-950/20">
-        <div className="font-semibold text-violet-800 dark:text-violet-200">Ask in context</div>
+        <div className="font-semibold text-violet-800 dark:text-violet-200">基于上下文提问</div>
         <div className="mt-1 truncate text-neutral-600 dark:text-neutral-300">{askContext.label}</div>
         <div className="mt-0.5 line-clamp-2 text-[11px] text-neutral-500">{askContext.detail}</div>
       </div>
@@ -152,22 +152,22 @@ export function SidebarAskPanel(): JSX.Element {
 function workspaceLabel(kind: WorkspaceView['kind']): string {
   switch (kind) {
     case 'dashboard':
-      return 'Dashboard';
+      return '仪表盘';
     case 'resources':
-      return 'Resources';
+      return '资源';
     case 'inbox':
-      return 'Inbox';
+      return '收件箱';
     case 'timeline':
-      return 'Timeline';
+      return '时间线';
     case 'review':
-      return 'Review';
+      return '复盘';
     case 'library':
-      return 'Library';
+      return '资料库';
     case 'notes':
-      return 'Notes';
+      return '笔记';
     case 'search':
-      return 'Search';
+      return '搜索';
     default:
-      return 'Workspace';
+      return '工作区';
   }
 }

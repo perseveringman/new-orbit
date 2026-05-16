@@ -22,29 +22,29 @@ export function WorktreesPanel(): JSX.Element {
   }, [init, teardown]);
 
   async function onReset(): Promise<void> {
-    if (!window.confirm('Remove every unmerged ghost worktree? Commits on those branches will be lost.'))
+    if (!window.confirm('移除所有未合并的 ghost worktree？这些分支上的提交会丢失。'))
       return;
     const r = await resetAll();
-    if (r) toast(`Reset: ${r.removed} removed${r.errors ? `, ${r.errors} errors` : ''}`);
+    if (r) toast(`已重置：移除 ${r.removed} 个${r.errors ? `，${r.errors} 个错误` : ''}`);
   }
 
   async function onCheck(id: string): Promise<void> {
     const r = await preMergeCheck(id);
     if (!r) {
-      toast('Check failed to run');
+      toast('检查未能运行');
       return;
     }
-    if (r.build.ok && r.secrets.ok) toast('Pre-merge check: OK');
+    if (r.build.ok && r.secrets.ok) toast('合并前检查：通过');
     else
       toast(
-        `Check failed: ${!r.build.ok ? 'build' : ''}${!r.build.ok && !r.secrets.ok ? ' + ' : ''}${!r.secrets.ok ? `secrets (${r.secrets.findings.length})` : ''}`
+        `检查失败：${!r.build.ok ? '构建' : ''}${!r.build.ok && !r.secrets.ok ? ' + ' : ''}${!r.secrets.ok ? `密钥（${r.secrets.findings.length}）` : ''}`
       );
   }
 
   async function onMerge(id: string): Promise<void> {
     const sha = await merge(id, 'fast-forward');
-    if (sha) toast(`Merged → ${sha.slice(0, 8)}`);
-    else toast('Merge failed (re-run pre-merge check?)');
+    if (sha) toast(`已合并 → ${sha.slice(0, 8)}`);
+    else toast('合并失败（要重新运行合并前检查吗？）');
   }
 
   async function onOpen(p: string): Promise<void> {
@@ -62,30 +62,30 @@ export function WorktreesPanel(): JSX.Element {
     <div className="flex h-full flex-col">
       <div className="mb-2 flex items-center justify-between px-1">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-          Worktrees ({active.length} active)
+          Worktree（{active.length} 个活跃）
         </h3>
         <div className="flex gap-1">
           <button
             onClick={() => void refresh()}
             className="rounded border border-neutral-300 px-1.5 py-0.5 text-[10px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Refresh
+            刷新
           </button>
           <button
             onClick={() => void onReset()}
             className="rounded border border-red-400/50 px-1.5 py-0.5 text-[10px] text-red-600 hover:bg-red-500/10 dark:text-red-300"
           >
-            Reset all
+            全部重置
           </button>
         </div>
       </div>
       {env.active && (
         <p className="mb-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-300">
-          install running: {env.active} (queue {env.queued})
+          安装运行中：{env.active}（队列 {env.queued}）
         </p>
       )}
       {list.length === 0 ? (
-        <p className="px-1 text-xs text-neutral-500">No worktrees yet.</p>
+        <p className="px-1 text-xs text-neutral-500">还没有 worktree。</p>
       ) : (
         <ul className="space-y-2">
           {list.map((w) => {
@@ -105,7 +105,7 @@ export function WorktreesPanel(): JSX.Element {
                 <p className="truncate text-[10px] text-neutral-500">{w.branch}</p>
                 {w.taskId && (
                   <p className="truncate text-[10px] text-neutral-500">
-                    task: {w.taskId}
+                    任务：{w.taskId}
                   </p>
                 )}
                 {r && (
@@ -117,9 +117,9 @@ export function WorktreesPanel(): JSX.Element {
                         : 'text-red-600 dark:text-red-400')
                     }
                   >
-                    check: build={r.build.ok ? '✓' : '✗'} secrets={r.secrets.ok ? '✓' : '✗'}
+                     检查：构建={r.build.ok ? '✓' : '✗'} 密钥={r.secrets.ok ? '✓' : '✗'}
                     {r.secrets.findings.length > 0
-                      ? ` (${r.secrets.findings.length} findings)`
+                       ? `（${r.secrets.findings.length} 个发现）`
                       : ''}
                   </p>
                 )}
@@ -128,28 +128,28 @@ export function WorktreesPanel(): JSX.Element {
                     onClick={() => void onOpen(w.path)}
                     className="rounded border border-neutral-300 px-1.5 py-0.5 text-[10px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   >
-                    Path
+                     路径
                   </button>
                   <button
                     onClick={() => void onCheck(w.id)}
                     disabled={busyId === w.id}
                     className="rounded border border-neutral-300 px-1.5 py-0.5 text-[10px] hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   >
-                    Check
+                     检查
                   </button>
                   <button
                     onClick={() => void onMerge(w.id)}
                     disabled={!canMerge || busyId === w.id}
                     className="rounded border border-emerald-400/50 px-1.5 py-0.5 text-[10px] text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-40 dark:text-emerald-300"
                   >
-                    Merge ff
+                     快进合并
                   </button>
                   <button
                     onClick={() => void remove(w.id, true)}
                     disabled={busyId === w.id}
                     className="rounded border border-red-400/50 px-1.5 py-0.5 text-[10px] text-red-600 hover:bg-red-500/10 disabled:opacity-40 dark:text-red-300"
                   >
-                    Abort
+                     中止
                   </button>
                 </div>
               </li>

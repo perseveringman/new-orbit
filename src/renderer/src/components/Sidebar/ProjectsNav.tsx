@@ -106,7 +106,7 @@ export function ProjectsNav(): JSX.Element {
   return (
     <div className="flex flex-col gap-1">
       <h2 className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-        Workspace
+        工作区
       </h2>
       <ul className="space-y-0.5 text-sm">
         {primaryDestinations.map((it) => {
@@ -139,25 +139,25 @@ export function ProjectsNav(): JSX.Element {
 
       <div className="flex items-center justify-between px-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-          Projects
+          项目
         </h2>
         <button
           onClick={openNewProject}
-          title="New project"
+          title="新建项目"
           className="rounded px-1.5 py-0.5 text-[11px] text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800/60 dark:hover:text-neutral-300"
         >
-          Create
+          创建
         </button>
       </div>
 
       {projects.length === 0 ? (
         <div className="mt-4 flex flex-col items-center gap-3 px-2 text-center">
-          <span className="text-xs text-neutral-400 dark:text-neutral-500">No projects yet</span>
+          <span className="text-xs text-neutral-400 dark:text-neutral-500">还没有项目</span>
           <button
             onClick={openNewProject}
             className="rounded bg-neutral-200/80 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-300/60 dark:bg-neutral-800/80 dark:text-neutral-300 dark:hover:bg-neutral-700/60"
           >
-            Create project
+            创建项目
           </button>
         </div>
       ) : (
@@ -222,7 +222,7 @@ export function WorkspaceOverflowMenu({
         }
       >
         <span className="w-4 shrink-0 text-neutral-500">⋯</span>
-        <span className="min-w-0 flex-1 truncate">More</span>
+        <span className="min-w-0 flex-1 truncate">更多</span>
       </summary>
       <ul className="mt-1 space-y-0.5 pl-3">
         {destinations.map((destination) => (
@@ -287,7 +287,7 @@ export function WorkspaceQuickItem({
       {badgeCount > 0 ? (
         <span
           className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium leading-none text-white"
-          title={`${badgeCount} pending inbox messages`}
+          title={`${badgeCount} 条待处理收件箱消息`}
         >
           {badgeCount}
         </span>

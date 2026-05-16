@@ -5,7 +5,7 @@ export function BacklinksPanel(): JSX.Element {
   const openPath = useFiles((s) => s.openPath);
 
   if (backlinks.length === 0) {
-    return <p className="text-xs text-neutral-500">No backlinks yet.</p>;
+    return <p className="text-xs text-neutral-500">还没有反向链接。</p>;
   }
 
   return (

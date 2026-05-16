@@ -129,7 +129,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }): JSX.Eleme
 
   async function onDelete(): Promise<void> {
     setMenu(null);
-    if (!window.confirm(`Move ${node.name} to trash?`)) return;
+    if (!window.confirm(`将 ${node.name} 移到废纸篓？`)) return;
     await deletePath(node.path);
   }
 
@@ -173,7 +173,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }): JSX.Eleme
       {open && inlineAction === 'create' && (
         <div style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }} className="py-0.5">
           <InlineInput
-            placeholder="filename"
+            placeholder="文件名"
             onSubmit={handleCreate}
             onCancel={() => setInlineAction(null)}
           />
@@ -185,9 +185,9 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }): JSX.Eleme
           style={{ top: menu.y, left: menu.x }}
           onMouseLeave={() => setMenu(null)}
         >
-          <MenuItem label="New file" onClick={onCreate} />
-          {!node.isDir && <MenuItem label="Rename…" onClick={onRename} />}
-          {!node.isDir && <MenuItem label="Delete" onClick={onDelete} danger />}
+          <MenuItem label="新建文件" onClick={onCreate} />
+          {!node.isDir && <MenuItem label="重命名…" onClick={onRename} />}
+          {!node.isDir && <MenuItem label="删除" onClick={onDelete} danger />}
         </div>
       )}
     </div>

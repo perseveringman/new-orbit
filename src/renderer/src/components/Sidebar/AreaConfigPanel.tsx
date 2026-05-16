@@ -36,7 +36,7 @@ export function AreaConfigPanel(): JSX.Element {
         setTagInput(next.tags.join(', '));
       })
       .catch((error) => {
-        if (!cancelled) toast(`Load area config failed: ${(error as Error).message}`);
+        if (!cancelled) toast(`加载 Area 配置失败：${(error as Error).message}`);
       });
     return () => {
       cancelled = true;
@@ -55,16 +55,16 @@ export function AreaConfigPanel(): JSX.Element {
       setConfig(updated);
       setTagInput(updated.tags.join(', '));
       await refreshAreas();
-      toast('Area tags updated');
+      toast('Area 标签已更新');
     } catch (error) {
-      toast(`Save area tags failed: ${(error as Error).message}`);
+      toast(`保存 Area 标签失败：${(error as Error).message}`);
     } finally {
       setSaving(false);
     }
   }
 
   if (!area || !config) {
-    return <div className="text-xs text-neutral-500">Open an Area Room to edit its tags.</div>;
+    return <div className="text-xs text-neutral-500">打开 Area 房间即可编辑标签。</div>;
   }
 
   return (
@@ -73,13 +73,13 @@ export function AreaConfigPanel(): JSX.Element {
         <div className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">{config.name}</div>
         <div className="mt-1 text-xs text-neutral-500">
           <span className="font-mono">{config.slug}</span>
-          {config.template ? ` · template: ${config.template}` : ''}
+          {config.template ? ` · 模板：${config.template}` : ''}
         </div>
       </div>
 
       <label className="block">
         <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-          Tags
+          标签
         </span>
         <input
           className={input}
@@ -91,18 +91,18 @@ export function AreaConfigPanel(): JSX.Element {
               void saveTags();
             }
           }}
-          placeholder="e.g. work, health"
+          placeholder="例如：工作，健康"
         />
       </label>
 
       <div className="flex items-center justify-between text-[11px] text-neutral-500">
-        <span>Comma-separated tags are used for sidebar grouping.</span>
+        <span>使用逗号分隔标签；侧边栏会按标签分组。</span>
         <button
           onClick={() => void saveTags()}
           disabled={saving}
           className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? '保存中…' : '保存'}
         </button>
       </div>
     </div>

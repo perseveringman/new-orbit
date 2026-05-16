@@ -61,7 +61,7 @@ export function MigrationDialog({ open, onClose }: Props): JSX.Element | null {
       setRealReport(r);
       setPhase('done');
       await refreshProjects();
-      toast(`Migrated ${r.migrated.length} project${r.migrated.length === 1 ? '' : 's'}`);
+      toast(`已迁移 ${r.migrated.length} 个项目`);
     } catch (e) {
       setErr((e as Error).message);
       setPhase('error');
@@ -78,10 +78,10 @@ export function MigrationDialog({ open, onClose }: Props): JSX.Element | null {
         <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
           <h2 className="text-sm font-semibold">
             {phase === 'done'
-              ? 'Migration complete'
-              : phase === 'running'
-                ? 'Migrating…'
-                : 'Migrate legacy projects → folders'}
+               ? '迁移完成'
+               : phase === 'running'
+                 ? '迁移中…'
+                 : '迁移旧版项目 → 文件夹'}
           </h2>
           {phase !== 'running' && (
             <button className={btn} onClick={onClose}>
@@ -91,24 +91,24 @@ export function MigrationDialog({ open, onClose }: Props): JSX.Element | null {
         </header>
         <div className="space-y-3 px-4 py-4 text-sm">
           {phase === 'preview' && !dryReport && !err && (
-            <p className="text-neutral-500">Analyzing vault…</p>
+             <p className="text-neutral-500">正在分析 vault…</p>
           )}
           {report && (
             <>
               <p className="text-xs text-neutral-500">
                 {phase === 'preview'
-                  ? 'The following changes will be applied. Each project becomes a folder with its own git repo.'
-                  : phase === 'done'
-                    ? 'All done. You can now create tasks inside each project.'
+                   ? '将应用以下变更。每个项目都会成为带独立 git 仓库的文件夹。'
+                   : phase === 'done'
+                     ? '全部完成。现在可以在每个项目内创建任务。'
                     : ''}
               </p>
               <section>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-neutral-500">
-                  Will migrate ({report.migrated.length})
+                   将迁移（{report.migrated.length}）
                 </h3>
                 <ul className="max-h-40 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900/70">
                   {report.migrated.length === 0 && (
-                    <li className="text-neutral-400">(none)</li>
+                     <li className="text-neutral-400">（无）</li>
                   )}
                   {report.migrated.map((m) => (
                     <li key={m} className="font-mono">
@@ -120,7 +120,7 @@ export function MigrationDialog({ open, onClose }: Props): JSX.Element | null {
               {report.skipped.length > 0 && (
                 <section>
                   <h3 className="mb-1 text-xs font-semibold uppercase text-neutral-500">
-                    Skipped ({report.skipped.length})
+                     已跳过（{report.skipped.length}）
                   </h3>
                   <ul className="max-h-32 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900/70">
                     {report.skipped.map((m) => (
@@ -140,7 +140,7 @@ export function MigrationDialog({ open, onClose }: Props): JSX.Element | null {
               {report.failed && report.failed.length > 0 && (
                 <section>
                   <h3 className="mb-1 text-xs font-semibold uppercase text-red-600 dark:text-red-400">
-                    Failed ({report.failed.length})
+                     失败（{report.failed.length}）
                   </h3>
                   <ul className="max-h-32 overflow-auto rounded border border-red-500/30 bg-red-500/5 p-2 text-xs">
                     {report.failed.map((f) => (
@@ -157,7 +157,7 @@ export function MigrationDialog({ open, onClose }: Props): JSX.Element | null {
           {phase === 'running' && (
             <div className="flex items-center gap-3 text-neutral-500">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
-              Migrating files and creating git repos…
+               正在迁移文件并创建 git 仓库…
             </div>
           )}
           {err && (
@@ -170,26 +170,25 @@ export function MigrationDialog({ open, onClose }: Props): JSX.Element | null {
           {phase === 'preview' && dryReport && (
             <>
               <button className={btn} onClick={onClose}>
-                Not now
+                 暂不处理
               </button>
               <button
                 className={btnPrimary}
                 onClick={confirm}
                 disabled={dryReport.migrated.length === 0}
               >
-                Migrate {dryReport.migrated.length} project
-                {dryReport.migrated.length === 1 ? '' : 's'}
+                 迁移 {dryReport.migrated.length} 个项目
               </button>
             </>
           )}
           {phase === 'done' && (
             <button className={btn} onClick={onClose}>
-              Close
+               关闭
             </button>
           )}
           {phase === 'error' && (
             <button className={btn} onClick={onClose}>
-              Close
+               关闭
             </button>
           )}
         </footer>

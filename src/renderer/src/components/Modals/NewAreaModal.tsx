@@ -119,8 +119,8 @@ export function NewAreaModal(): JSX.Element | null {
       }
       toast(
         creationMode === 'github-import'
-          ? `Imported ${githubOwner}/${githubRepo} → ${result.slug}`
-          : `Created area ${result.slug}`
+          ? `已导入 ${githubOwner}/${githubRepo} → ${result.slug}`
+          : `已创建 Area ${result.slug}`
       );
       onClose();
     } catch (e) {
@@ -136,7 +136,7 @@ export function NewAreaModal(): JSX.Element | null {
     <div className={overlay} role="dialog" aria-modal="true" onClick={onClose}>
       <div className={panel} onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-          <h2 className="text-sm font-semibold">New Area</h2>
+          <h2 className="text-sm font-semibold">新建 Area</h2>
           <button className={btn} onClick={onClose} disabled={busy}>
             ✕
           </button>
@@ -144,37 +144,37 @@ export function NewAreaModal(): JSX.Element | null {
 
         <div className="space-y-3 px-4 py-4 text-sm">
           <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">Source</span>
+            <span className="mb-1 block text-xs text-neutral-500">来源</span>
             <select
               className={input}
               value={creationMode}
               onChange={(e) => setCreationMode(e.target.value as 'local' | 'github-import')}
             >
-              <option value="local">Create local area</option>
-              <option value="github-import">Import from GitHub repository</option>
+              <option value="local">创建本地 Area</option>
+              <option value="github-import">从 GitHub 仓库导入</option>
             </select>
           </label>
 
           {creationMode === 'local' ? (
             <>
               <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Template</span>
+                <span className="mb-1 block text-xs text-neutral-500">模板</span>
                 <select
                   className={input}
                   value={template}
                   onChange={(e) => setTemplate(e.target.value as 'blank' | 'vision')}
                 >
-                  <option value="blank">Blank area</option>
-                  <option value="vision">Vision area</option>
+                  <option value="blank">空白 Area</option>
+                  <option value="vision">愿景 Area</option>
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Name</span>
+                <span className="mb-1 block text-xs text-neutral-500">名称</span>
                 <input
                   className={input}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder={template === 'vision' ? 'e.g. Career Vision' : 'e.g. Health'}
+                  placeholder={template === 'vision' ? '例如：职业愿景' : '例如：健康'}
                   autoFocus
                 />
               </label>
@@ -193,7 +193,7 @@ export function NewAreaModal(): JSX.Element | null {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">Repository</span>
+                  <span className="mb-1 block text-xs text-neutral-500">仓库</span>
                   <input
                     className={input}
                     value={githubRepo}
@@ -203,12 +203,12 @@ export function NewAreaModal(): JSX.Element | null {
                 </label>
               </div>
               <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">Area name</span>
+                <span className="mb-1 block text-xs text-neutral-500">Area 名称</span>
                 <input
                   className={input}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Optional display name override"
+                  placeholder="可选的显示名称覆盖"
                 />
               </label>
             </>
@@ -216,7 +216,7 @@ export function NewAreaModal(): JSX.Element | null {
 
           <label className="block">
             <span className="mb-1 block text-xs text-neutral-500">
-              Slug <span className="text-neutral-400">(auto from name, editable)</span>
+              Slug <span className="text-neutral-400">（根据名称自动生成，可编辑）</span>
             </span>
             <input
               className={
@@ -233,23 +233,23 @@ export function NewAreaModal(): JSX.Element | null {
             />
             {slug && !slugValid && (
               <p className="mt-1 text-[11px] text-red-500">
-                Must be lowercase kebab-case ASCII, 1–64 chars, no `--`.
+                必须是小写 kebab-case ASCII，1–64 个字符，且不能包含 `--`。
               </p>
             )}
             {slugValid && slugConflict && (
-              <p className="mt-1 text-[11px] text-red-500">An area with this slug already exists.</p>
+              <p className="mt-1 text-[11px] text-red-500">已有 Area 使用这个 slug。</p>
             )}
           </label>
 
           <label className="block">
             <span className="mb-1 block text-xs text-neutral-500">
-              Tags <span className="text-neutral-400">(comma-separated, optional)</span>
+              标签 <span className="text-neutral-400">（逗号分隔，可选）</span>
             </span>
             <input
               className={input}
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
-              placeholder="e.g. work, personal"
+              placeholder="例如：工作，个人"
             />
           </label>
 
@@ -262,10 +262,10 @@ export function NewAreaModal(): JSX.Element | null {
 
         <footer className="flex items-center justify-between border-t border-neutral-200 px-4 py-3 dark:border-neutral-700">
           <button className={btn} onClick={onClose} disabled={busy}>
-            Cancel
+            取消
           </button>
           <button className={btnPrimary} onClick={() => void submit()} disabled={!canCreate || busy}>
-            {busy ? 'Creating…' : 'Create area'}
+            {busy ? '创建中…' : '创建 Area'}
           </button>
         </footer>
       </div>

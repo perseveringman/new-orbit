@@ -3,6 +3,14 @@ import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import { useSidebar } from '../../store/sidebar';
 
 const STATUS_ORDER: TaskStatus[] = ['backlog', 'waiting', 'todo', 'doing', 'blocked', 'done'];
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  backlog: '积压',
+  waiting: '等待',
+  todo: '待办',
+  doing: '进行中',
+  blocked: '阻塞',
+  done: '完成'
+};
 
 export function ProjectTaskTreePanel({
   projectUid
@@ -52,7 +60,7 @@ export function ProjectTaskTreePanel({
   if (!projectUid) {
     return (
       <div className="flex h-full items-center justify-center rounded border border-dashed border-neutral-300 px-4 text-center text-sm text-neutral-500 dark:border-neutral-700">
-        Pick a project to see its task tree.
+        请选择一个项目以查看任务树。
       </div>
     );
   }
@@ -60,15 +68,15 @@ export function ProjectTaskTreePanel({
   return (
     <div className="flex h-full flex-col gap-3">
       <header className="border-b border-neutral-200 pb-3 dark:border-neutral-800">
-        <div className="text-[11px] uppercase tracking-wide text-neutral-500">Project task tree</div>
+        <div className="text-[11px] uppercase tracking-wide text-neutral-500">项目任务树</div>
         <div className="mt-1 text-sm text-neutral-700 dark:text-neutral-200">
-          {loading ? 'Refreshing...' : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`}
+          {loading ? '刷新中…' : `${tasks.length} 个任务`}
         </div>
       </header>
       <div className="flex-1 overflow-auto">
         {tasks.length === 0 && !loading ? (
           <div className="flex h-full items-center justify-center rounded border border-dashed border-neutral-300 px-4 text-center text-sm text-neutral-500 dark:border-neutral-700">
-            No tasks in this project yet.
+            这个项目还没有任务。
           </div>
         ) : (
           <div className="space-y-3">
@@ -77,11 +85,11 @@ export function ProjectTaskTreePanel({
               return (
                 <section key={status} className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
                   <header className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wide text-neutral-500">
-                    <span>{status}</span>
+                    <span>{STATUS_LABELS[status]}</span>
                     <span>{rows.length}</span>
                   </header>
                   {rows.length === 0 ? (
-                    <p className="px-1 pb-1 text-xs text-neutral-400">No tasks</p>
+                    <p className="px-1 pb-1 text-xs text-neutral-400">没有任务</p>
                   ) : (
                     <ul className="space-y-1">
                       {rows.map((task) => (

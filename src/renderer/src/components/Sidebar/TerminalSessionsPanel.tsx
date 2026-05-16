@@ -47,7 +47,7 @@ export function TerminalSessionsPanel(): JSX.Element {
         sessionId: nextSelected
       });
     } catch (e) {
-      toast(`Load terminal sessions failed: ${(e as Error).message}`);
+      toast(`加载终端会话失败：${(e as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -86,16 +86,16 @@ export function TerminalSessionsPanel(): JSX.Element {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-neutral-200 pb-3 text-xs dark:border-neutral-800">
         <div>
-          <div className="font-medium text-neutral-700 dark:text-neutral-200">Session History</div>
+          <div className="font-medium text-neutral-700 dark:text-neutral-200">会话历史</div>
           <div className="text-neutral-500">
-            {loading ? 'Refreshing...' : `${sessions.length} recorded sessions`}
+            {loading ? '刷新中…' : `${sessions.length} 个已记录会话`}
           </div>
         </div>
         <button
           onClick={() => void refresh()}
           className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
-          Refresh
+          刷新
         </button>
       </div>
       <div className="border-b border-neutral-200 py-3 dark:border-neutral-800">
@@ -117,7 +117,7 @@ export function TerminalSessionsPanel(): JSX.Element {
         <input
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search sessions…"
+          placeholder="搜索会话…"
           className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs outline-none transition focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
         />
       </div>
@@ -125,8 +125,8 @@ export function TerminalSessionsPanel(): JSX.Element {
         {visibleSessions.length === 0 ? (
           <div className="flex h-full items-center justify-center px-2 text-center text-xs text-neutral-500">
             {sessions.length === 0
-              ? 'No terminal agent sessions yet. Start `claude` or `codex` in a pane and Orbit will record it here.'
-              : 'No sessions match the current agent filter.'}
+              ? '还没有终端 Agent 会话。在面板中启动 `claude` 或 `codex` 后，Orbit 会在这里记录。'
+              : '没有会话匹配当前 Agent 过滤器。'}
           </div>
         ) : (
           <div className="space-y-2">
@@ -172,7 +172,7 @@ export function TerminalSessionsPanel(): JSX.Element {
                           : 'bg-red-500/15 text-red-700 dark:text-red-300'
                     }`}
                   >
-                    {session.status}
+                    {sessionStatusLabel(session.status)}
                   </span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-neutral-500">
@@ -180,13 +180,13 @@ export function TerminalSessionsPanel(): JSX.Element {
                       {agent.title}
                     </span>
                     <span>{formatRelativeTs(session.lastActivityAt)}</span>
-                    <span>Prompts {session.stats.promptCount}</span>
-                    <span>Permissions {session.stats.permissionCount}</span>
+                    <span>提示 {session.stats.promptCount}</span>
+                    <span>权限 {session.stats.permissionCount}</span>
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-neutral-500">
                     <span className="truncate font-mono">{session.sessionId}</span>
                     <span className="shrink-0 text-sky-600 dark:text-sky-400">
-                      {selectionMode ? 'Show details' : action.hint}
+                      {selectionMode ? '显示详情' : terminalSessionActionLabel(action.hint)}
                     </span>
                   </div>
                 </button>
@@ -203,10 +203,23 @@ function formatRelativeTs(value: string): string {
   const delta = Date.now() - Date.parse(value);
   if (!Number.isFinite(delta)) return value;
   const minutes = Math.round(delta / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
+  if (hours < 48) return `${hours} 小时前`;
   const days = Math.round(hours / 24);
-  return `${days}d ago`;
+  return `${days} 天前`;
+}
+
+function sessionStatusLabel(status: TerminalAgentSessionDTO['status']): string {
+  if (status === 'active') return '活跃';
+  if (status === 'completed') return '已完成';
+  return '失败';
+}
+
+function terminalSessionActionLabel(hint: string): string {
+  if (hint === 'Jump to active terminal') return '跳转到活跃终端';
+  if (hint === 'Resume in new tab') return '在新标签页继续';
+  if (hint === 'Open a fresh terminal with session context') return '带会话上下文打开新终端';
+  return hint;
 }
