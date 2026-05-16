@@ -1,9 +1,15 @@
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '@shared/chat-protocol';
 import type { Conversation } from '@shared/conversation';
+import type { ComposerSourceSurface, RuntimeSelection } from '@shared/ai-composer';
 import type { RecallResult } from '@shared/memory';
 import type { ConversationStage } from '@shared/stage';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  patchFromSelection,
+  selectionFromConversation,
+  useRuntimeCatalog
+} from '../ai-composer';
 import { ConversationHeader } from './ConversationHeader';
 import { RuntimeStatusBar } from './RuntimeStatusBar';
 import { MessageTimeline } from './MessageTimeline';
@@ -24,6 +30,7 @@ export function ConversationShell({
   onAction,
   onArtifactAction,
   actions,
+  composerSourceSurface = 'ask_full',
   welcomeMessage
 }: {
   conversations: Conversation[];
@@ -39,13 +46,38 @@ export function ConversationShell({
   onAction(action: ChatAction): void;
   onArtifactAction(artifactId: string, actionId: string): void;
   actions?: ReactNode;
+  composerSourceSurface?: ComposerSourceSurface;
   welcomeMessage?: string;
 }): JSX.Element {
   const showStage = variant === 'full';
+  const runtimeCatalog = useRuntimeCatalog();
+  const [pendingSelection, setPendingSelection] = useState<RuntimeSelection | null>(null);
   const capabilities = {
     ...DEFAULT_CHAT_HOST_CAPABILITIES,
     canApproveTool: true
   };
+  const composerSelection = useMemo(
+    () =>
+      pendingSelection ??
+      selectionFromConversation(activeConversation, runtimeCatalog.options.defaultSelection),
+    [activeConversation, pendingSelection, runtimeCatalog.options.defaultSelection]
+  );
+  const handleComposerSelectionChange = useCallback(
+    (selection: RuntimeSelection) => {
+      setPendingSelection(selection);
+      if (!activeId) return;
+      void window.orbit.chat.updateConversation(
+        activeId,
+        patchFromSelection(selection, runtimeCatalog.options)
+      );
+    },
+    [activeId, runtimeCatalog.options]
+  );
+
+  useEffect(() => {
+    setPendingSelection(null);
+  }, [activeId]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ConversationHeader
@@ -73,6 +105,10 @@ export function ConversationShell({
             isLoading={isLoading}
             onAction={onAction}
             welcomeMessage={welcomeMessage}
+            composerOptions={runtimeCatalog.options}
+            composerSelection={composerSelection}
+            composerSourceSurface={composerSourceSurface}
+            onComposerSelectionChange={handleComposerSelectionChange}
           />
           {showStage ? <ArtifactStage stage={stage} onAction={onArtifactAction} /> : null}
         </div>

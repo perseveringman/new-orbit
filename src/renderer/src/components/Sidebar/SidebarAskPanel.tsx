@@ -141,7 +141,8 @@ export function SidebarAskPanel(): JSX.Element {
           onArchive={(id) => void handleArchive(id)}
           onAction={(action) => void handleAction(action)}
           onArtifactAction={(artifactId, actionId) => void handleArtifactAction(artifactId, actionId)}
-          welcomeMessage={`Ask about ${askContext.label}. Orbit will include the current context in this conversation.`}
+          composerSourceSurface="sidebar_ask"
+          welcomeMessage={`围绕 ${askContext.label} 提问，Orbit 会自动带上当前上下文。`}
         />
       </div>
     </div>

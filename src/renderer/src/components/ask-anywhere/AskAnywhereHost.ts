@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Conversation, ConversationScope } from '@shared/conversation';
 import { conversationScopeKey } from '@shared/conversation';
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
+import type { ComposerDraft } from '@shared/ai-composer';
 import type { Proposal } from '@shared/approval';
 import type { ConversationStage } from '@shared/stage';
 import { conversationTurnsToRuntimeEvents } from '../chat/historyEvents';
@@ -68,7 +69,7 @@ export interface UseAskAnywhereSessionResult {
   isLoading: boolean;
   selectActiveId(id: string | null): void;
   reload(): Promise<void>;
-  handleNew(): Promise<Conversation>;
+  handleNew(input?: { draft?: ComposerDraft }): Promise<Conversation>;
   handleArchive(id: string): Promise<void>;
   handleAction(action: ChatAction): Promise<void>;
   handleArtifactAction(artifactId: string, actionId: string): Promise<void>;
@@ -225,7 +226,8 @@ export function useAskAnywhereSession(
     };
   }, [enabled, reload]);
 
-  const handleNew = useCallback(async () => {
+  const handleNew = useCallback(async (input: { draft?: ComposerDraft } = {}) => {
+    const selection = input.draft?.selection;
     const conv = await window.orbit.chat.createConversation({
       anchor: {
         kind: 'ask_anywhere_session',
@@ -234,7 +236,10 @@ export function useAskAnywhereSession(
       },
       scope: sessionScope,
       title,
-      runtimeHint: 'claude'
+      runtimeHint: runtimeHintFromDraft(input.draft) ?? 'claude',
+      ...(selection?.endpointId ? { runtimeEndpointHint: selection.endpointId } : {}),
+      ...(selection?.model ? { runtimeModelHint: selection.model } : {}),
+      ...(selection ? { runtimeSelection: selection } : {})
     });
     selectActiveId(conv.id);
     await reload();
@@ -262,7 +267,7 @@ export function useAskAnywhereSession(
   const handleAction = useCallback(async (action: ChatAction) => {
     if (!activeIdRef.current) return;
     if (isSendMessageAction(action)) {
-      const text = action.payload.text.trim();
+      const text = (action.payload.draft?.text ?? action.payload.text).trim();
       if (!text) return;
       const localId = `local-user-${Date.now()}`;
       setEvents((current) => [
@@ -394,4 +399,16 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
+}
+
+function runtimeHintFromDraft(draft?: ComposerDraft): string | null {
+  const selection = draft?.selection;
+  if (!selection) return null;
+  if (selection.track === 'cli') return selection.runtimeId ?? 'claude';
+  if (selection.endpointId && selection.model) {
+    return `${selection.track ?? 'sdk_agent'}:${selection.endpointId}/${selection.model}`;
+  }
+  if (selection.endpointId) return `${selection.track ?? 'sdk_agent'}:${selection.endpointId}`;
+  if (selection.model) return `${selection.track ?? 'sdk_agent'}:auto/${selection.model}`;
+  return null;
 }

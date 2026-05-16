@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Conversation, ConversationMeta, ConversationAnchor } from '@shared/conversation';
+import type { RuntimeSelection } from '@shared/ai-composer';
 import type {
   ChatAction,
   ChatHostCapabilities,
@@ -19,6 +20,11 @@ import type {
 } from '@shared/chat-protocol';
 import { ChatView } from '../components/chat/ChatView';
 import { conversationTurnsToRuntimeEvents } from '../components/chat/historyEvents';
+import {
+  patchFromSelection,
+  selectionFromConversation,
+  useRuntimeCatalog
+} from '../components/ai-composer';
 
 function describeAnchor(a: ConversationAnchor): string {
   switch (a.kind) {
@@ -68,7 +74,9 @@ export function computeConversationsViewCapabilities(
 export function ConversationsView(): JSX.Element {
   const [list, setList] = useState<ConversationMeta[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
+  const runtimeCatalog = useRuntimeCatalog();
 
   useEffect(() => {
     let cancelled = false;
@@ -85,12 +93,14 @@ export function ConversationsView(): JSX.Element {
 
   useEffect(() => {
     if (!activeId) {
+      setActiveConversation(null);
       setEvents([]);
       return;
     }
     let cancelled = false;
     void window.orbit.chat.getConversation(activeId).then((conv) => {
       if (cancelled || !conv) return;
+      setActiveConversation(conv);
       setEvents(buildHistoryEvents(conv));
     });
     return () => {
@@ -98,7 +108,10 @@ export function ConversationsView(): JSX.Element {
     };
   }, [activeId]);
 
-  const activeMeta = useMemo(() => list.find((c) => c.id === activeId) ?? null, [list, activeId]);
+  const activeMeta = useMemo(
+    () => activeConversation ?? list.find((c) => c.id === activeId) ?? null,
+    [activeConversation, activeId, list]
+  );
 
   const capabilities: ChatHostCapabilities = useMemo(
     () => computeConversationsViewCapabilities(activeMeta),
@@ -123,6 +136,25 @@ export function ConversationsView(): JSX.Element {
       void window.orbit.chat.sendAction(action);
     },
     [canContinue]
+  );
+  const handleComposerSelectionChange = useCallback(
+    (selection: RuntimeSelection) => {
+      if (!activeId) return;
+      const patch = patchFromSelection(selection, runtimeCatalog.options);
+      setActiveConversation((current) =>
+        current
+          ? {
+              ...current,
+              runtimeHint: patch.runtimeHint ?? undefined,
+              runtimeEndpointHint: patch.runtimeEndpointHint ?? undefined,
+              runtimeModelHint: patch.runtimeModelHint ?? undefined,
+              runtimeSelection: selection
+            }
+          : current
+      );
+      void window.orbit.chat.updateConversation(activeId, patch);
+    },
+    [activeId, runtimeCatalog.options]
   );
 
   return (
@@ -170,7 +202,14 @@ export function ConversationsView(): JSX.Element {
                 events={events}
                 isLoading={false}
                 onAction={handleAction}
-                welcomeMessage={canContinue ? 'Continue this Ask-Anywhere conversation.' : 'Read-only history.'}
+                welcomeMessage={canContinue ? '继续这个 Ask Anywhere 会话。' : '只读历史。'}
+                composerOptions={runtimeCatalog.options}
+                composerSelection={selectionFromConversation(
+                  activeConversation,
+                  runtimeCatalog.options.defaultSelection
+                )}
+                composerSourceSurface="conversation_center"
+                onComposerSelectionChange={handleComposerSelectionChange}
               />
             </div>
           </div>

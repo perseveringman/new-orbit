@@ -2,7 +2,7 @@ import { Sparkles } from 'lucide-react';
 import { usePara } from '../../store/para';
 
 /**
- * 右下角悬浮球 — 打开/关闭 Ask-Anywhere 轻量弹层。
+ * 底部居中悬浮球 — 打开 Ask Anywhere 轻量输入栏。
  */
 export function FloatingBall({
   open,
@@ -14,18 +14,16 @@ export function FloatingBall({
   const view = usePara((s) => s.view);
 
   if (view.kind === 'askAnywhere') return null;
+  if (open) return null;
 
   return (
     <button
       type="button"
       onClick={onToggle}
-      title={open ? 'Close Ask Anywhere' : 'Ask Anywhere'}
-      aria-label={open ? 'Close Ask Anywhere' : 'Open Ask Anywhere'}
+      title="打开 Ask Anywhere"
+      aria-label="打开 Ask Anywhere"
       aria-pressed={open}
-      className={
-        'fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg ring-1 ring-black/10 transition-transform hover:scale-105 active:scale-95 dark:from-indigo-400 dark:to-purple-500 ' +
-        (open ? 'scale-105 shadow-violet-500/30' : '')
-      }
+      className="fixed bottom-6 left-1/2 z-50 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full bg-neutral-950 text-white shadow-xl ring-1 ring-black/10 transition duration-200 hover:scale-105 active:scale-95 dark:bg-white dark:text-neutral-950"
     >
       <Sparkles size={22} />
     </button>

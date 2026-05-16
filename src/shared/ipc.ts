@@ -44,6 +44,7 @@ import type {
 } from './dashboard';
 import type { TraceableEvent, TraceableEventFilter, TraceableEventQueryResult } from './events';
 import type { ChatAction, RuntimeEvent as ChatRuntimeEvent } from './chat-protocol';
+import type { ComposerDraft, RuntimeSelection } from './ai-composer';
 import type { AgentToolRegistrySnapshot } from './agent-tools';
 import type {
   Conversation as ChatConversation,
@@ -59,6 +60,9 @@ export interface ChatCreateConversationInput {
   anchor: ChatConversationAnchor;
   scope?: ChatConversationScope;
   runtimeHint?: string;
+  runtimeEndpointHint?: string;
+  runtimeModelHint?: string;
+  runtimeSelection?: RuntimeSelection;
   title?: string;
 }
 
@@ -66,6 +70,7 @@ export interface ChatAppendTurnInput {
   conversationId: string;
   role: ChatConversationTurnRole;
   content: string;
+  input?: ComposerDraft;
   runtimeEventIds?: string[];
   artifactRefs?: string[];
 }
@@ -76,6 +81,10 @@ export interface ChatUpdateConversationInput {
   tags?: string[];
   archived?: boolean;
   scope?: ChatConversationScope;
+  runtimeHint?: string | null;
+  runtimeEndpointHint?: string | null;
+  runtimeModelHint?: string | null;
+  runtimeSelection?: RuntimeSelection | null;
 }
 import type {
   Proposal,

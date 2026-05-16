@@ -21,6 +21,7 @@ import type {
   ConversationTurn,
   ConversationTurnRole
 } from '@shared/conversation';
+import type { ComposerDraft, RuntimeSelection } from '@shared/ai-composer';
 import type { ToolTraceBlock } from '@shared/agent-tools';
 import { conversationScopeKey } from '@shared/conversation';
 import type { SDKInvocationMessage } from '@shared/runtime';
@@ -31,6 +32,7 @@ export interface AppendTurnInput {
   conversationId: string;
   role: ConversationTurnRole;
   content: string;
+  input?: ComposerDraft;
   runtimeEventIds?: string[];
   artifactRefs?: string[];
   /** Phase B：assistant turn 的 tool_use/tool_result 轨迹。 */
@@ -45,6 +47,7 @@ export interface CreateConversationInput {
   runtimeHint?: string;
   runtimeEndpointHint?: string;
   runtimeModelHint?: string;
+  runtimeSelection?: RuntimeSelection;
   title?: string;
 }
 
@@ -64,6 +67,7 @@ export class ConversationOrchestrator {
       ...(input.runtimeHint ? { runtimeHint: input.runtimeHint } : {}),
       ...(input.runtimeEndpointHint ? { runtimeEndpointHint: input.runtimeEndpointHint } : {}),
       ...(input.runtimeModelHint ? { runtimeModelHint: input.runtimeModelHint } : {}),
+      ...(input.runtimeSelection ? { runtimeSelection: input.runtimeSelection } : {}),
       ...(input.title ? { title: input.title } : {})
     });
     publishTraceableEvent({
@@ -81,6 +85,7 @@ export class ConversationOrchestrator {
       at: new Date().toISOString(),
       role: input.role,
       content: input.content,
+      ...(input.input ? { input: input.input } : {}),
       ...(input.runtimeEventIds ? { runtimeEventIds: input.runtimeEventIds } : {}),
       ...(input.artifactRefs ? { artifactRefs: input.artifactRefs } : {}),
       ...(input.toolTrace && input.toolTrace.length > 0 ? { toolTrace: input.toolTrace } : {}),
@@ -134,6 +139,7 @@ export class ConversationOrchestrator {
       runtimeHint?: string | null;
       runtimeEndpointHint?: string | null;
       runtimeModelHint?: string | null;
+      runtimeSelection?: RuntimeSelection | null;
       vendorSessionId?: string | null;
     }
   ): Promise<void> {
@@ -161,6 +167,10 @@ export class ConversationOrchestrator {
       tags?: string[];
       archived?: boolean;
       scope?: ConversationScope;
+      runtimeHint?: string | null;
+      runtimeEndpointHint?: string | null;
+      runtimeModelHint?: string | null;
+      runtimeSelection?: RuntimeSelection | null;
     }
   ): Promise<Conversation | null> {
     const conv = await this.store.updateMeta(conversationId, patch);

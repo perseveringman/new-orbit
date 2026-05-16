@@ -12,6 +12,12 @@ import type {
   RuntimeEvent,
   ActionBarItem
 } from '@shared/chat-protocol';
+import type {
+  ComposerCapabilities,
+  ComposerOptions,
+  ComposerSourceSurface,
+  RuntimeSelection
+} from '@shared/ai-composer';
 
 export interface ChatProps {
   conversationId: string;
@@ -25,6 +31,11 @@ export interface ChatProps {
   placeholder?: string;
   welcomeMessage?: string;
   actionBarItems?: ActionBarItem[];
+  composerOptions?: ComposerOptions;
+  composerSelection?: RuntimeSelection;
+  composerSourceSurface?: ComposerSourceSurface;
+  composerCapabilities?: Partial<ComposerCapabilities>;
+  onComposerSelectionChange?: (selection: RuntimeSelection) => void;
 
   /** Host 自定义顶栏（M5/P2.3 visual parity）：渲染在 ActionBar 之上。 */
   headerSlot?: import('react').ReactNode;

@@ -5,6 +5,7 @@
  */
 
 import type { ToolTraceBlock } from '@shared/agent-tools/tool-trace';
+import type { ComposerDraft, RuntimeSelection } from '@shared/ai-composer';
 import type { SDKInvocationMessage } from '@shared/runtime';
 
 export const CONVERSATION_ANCHOR_KINDS = [
@@ -34,6 +35,7 @@ export interface ConversationTurn {
   at: string;
   role: ConversationTurnRole;
   content: string;
+  input?: ComposerDraft;
   runtimeEventIds?: string[];
   artifactRefs?: string[];
   /**
@@ -89,6 +91,7 @@ export interface ConversationMeta {
   runtimeHint?: string;
   runtimeEndpointHint?: string;
   runtimeModelHint?: string;
+  runtimeSelection?: RuntimeSelection;
   vendorSessionId?: string;
   title?: string;
   titleSource?: ConversationTitleSource;

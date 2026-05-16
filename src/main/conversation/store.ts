@@ -20,6 +20,7 @@ import type {
   ConversationStatus,
   ConversationTurn
 } from '@shared/conversation';
+import type { RuntimeSelection } from '@shared/ai-composer';
 import { anchorToConversationScope, conversationScopeKey } from '@shared/conversation';
 
 export function conversationsDir(vaultPath: string): string {
@@ -56,8 +57,26 @@ export interface CreateConversationInput {
   runtimeHint?: string;
   runtimeEndpointHint?: string;
   runtimeModelHint?: string;
+  runtimeSelection?: RuntimeSelection;
   title?: string;
   tags?: string[];
+}
+
+interface ConversationMetaPatch {
+  title?: string;
+  titleSource?: ConversationTitleSource;
+  titleGeneratedFromTurnId?: string;
+  titleConfidence?: number;
+  titleUpdatedAt?: string;
+  summary?: string;
+  tags?: string[];
+  archived?: boolean;
+  scope?: ConversationScope;
+  status?: ConversationStatus;
+  runtimeHint?: string | null;
+  runtimeEndpointHint?: string | null;
+  runtimeModelHint?: string | null;
+  runtimeSelection?: RuntimeSelection | null;
 }
 
 export class ConversationStore {
@@ -75,6 +94,7 @@ export class ConversationStore {
       ...(input.runtimeHint ? { runtimeHint: input.runtimeHint } : {}),
       ...(input.runtimeEndpointHint ? { runtimeEndpointHint: input.runtimeEndpointHint } : {}),
       ...(input.runtimeModelHint ? { runtimeModelHint: input.runtimeModelHint } : {}),
+      ...(input.runtimeSelection ? { runtimeSelection: input.runtimeSelection } : {}),
       ...(input.title ? { title: input.title } : {}),
       ...(input.tags ? { tags: input.tags } : {})
     };
@@ -124,24 +144,16 @@ export class ConversationStore {
     await this.writeMeta(meta);
   }
 
-  async updateMeta(id: string, patch: {
-    title?: string;
-    titleSource?: ConversationTitleSource;
-    titleGeneratedFromTurnId?: string;
-    titleConfidence?: number;
-    titleUpdatedAt?: string;
-    summary?: string;
-    tags?: string[];
-    archived?: boolean;
-    scope?: ConversationScope;
-    status?: ConversationStatus;
-  }): Promise<Conversation | null> {
+  async updateMeta(id: string, patch: ConversationMetaPatch): Promise<Conversation | null> {
     const meta = await this.readMeta(id);
     if (!meta) return null;
     const titlePatch = normalizeTitlePatch(patch);
+    const runtimePatch = normalizeRuntimePatch(patch);
+    const metaPatch = stripRuntimePatch(patch);
     const next: ConversationMeta = {
       ...meta,
-      ...patch,
+      ...metaPatch,
+      ...runtimePatch,
       ...titlePatch,
       updatedAt: new Date().toISOString()
     };
@@ -161,6 +173,7 @@ export class ConversationStore {
       runtimeHint?: string | null;
       runtimeEndpointHint?: string | null;
       runtimeModelHint?: string | null;
+      runtimeSelection?: RuntimeSelection | null;
       vendorSessionId?: string | null;
     }
   ): Promise<void> {
@@ -181,6 +194,10 @@ export class ConversationStore {
     if (patch.runtimeModelHint !== undefined) {
       if (patch.runtimeModelHint === null) delete meta.runtimeModelHint;
       else meta.runtimeModelHint = patch.runtimeModelHint;
+    }
+    if (patch.runtimeSelection !== undefined) {
+      if (patch.runtimeSelection === null) delete meta.runtimeSelection;
+      else meta.runtimeSelection = patch.runtimeSelection;
     }
     if (patch.vendorSessionId !== undefined) {
       if (patch.vendorSessionId === null) delete meta.vendorSessionId;
@@ -299,4 +316,49 @@ function normalizeTitlePatch(patch: {
     titleSource: patch.titleSource ?? 'manual',
     titleUpdatedAt: patch.titleUpdatedAt ?? new Date().toISOString()
   };
+}
+
+function stripRuntimePatch(
+  patch: ConversationMetaPatch
+): Omit<
+  ConversationMetaPatch,
+  'runtimeHint' | 'runtimeEndpointHint' | 'runtimeModelHint' | 'runtimeSelection'
+> {
+  const next: Omit<
+    ConversationMetaPatch,
+    'runtimeHint' | 'runtimeEndpointHint' | 'runtimeModelHint' | 'runtimeSelection'
+  > = {};
+  if (patch.title !== undefined) next.title = patch.title;
+  if (patch.titleSource !== undefined) next.titleSource = patch.titleSource;
+  if (patch.titleGeneratedFromTurnId !== undefined) {
+    next.titleGeneratedFromTurnId = patch.titleGeneratedFromTurnId;
+  }
+  if (patch.titleConfidence !== undefined) next.titleConfidence = patch.titleConfidence;
+  if (patch.titleUpdatedAt !== undefined) next.titleUpdatedAt = patch.titleUpdatedAt;
+  if (patch.summary !== undefined) next.summary = patch.summary;
+  if (patch.tags !== undefined) next.tags = patch.tags;
+  if (patch.archived !== undefined) next.archived = patch.archived;
+  if (patch.scope !== undefined) next.scope = patch.scope;
+  if (patch.status !== undefined) next.status = patch.status;
+  return next;
+}
+
+function normalizeRuntimePatch(patch: {
+  runtimeHint?: string | null;
+  runtimeEndpointHint?: string | null;
+  runtimeModelHint?: string | null;
+  runtimeSelection?: RuntimeSelection | null;
+}): Partial<ConversationMeta> {
+  const next: Partial<ConversationMeta> = {};
+  if (patch.runtimeHint !== undefined) next.runtimeHint = patch.runtimeHint ?? undefined;
+  if (patch.runtimeEndpointHint !== undefined) {
+    next.runtimeEndpointHint = patch.runtimeEndpointHint ?? undefined;
+  }
+  if (patch.runtimeModelHint !== undefined) {
+    next.runtimeModelHint = patch.runtimeModelHint ?? undefined;
+  }
+  if (patch.runtimeSelection !== undefined) {
+    next.runtimeSelection = patch.runtimeSelection ?? undefined;
+  }
+  return next;
 }

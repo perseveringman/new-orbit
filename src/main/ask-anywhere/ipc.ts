@@ -14,6 +14,7 @@
 import { ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { ChatAction } from '@shared/chat-protocol';
+import type { ComposerDraft } from '@shared/ai-composer';
 import { currentSession } from '../fs';
 import { detectClaude } from '../agent/cli';
 import { getPool } from '../agent/pool';
@@ -137,8 +138,8 @@ export function registerAskAnywhereChatIpc(): void {
 
       switch (action.kind) {
         case 'chat.send_message': {
-          const payload = action.payload as { text: string };
-          await orch.send(action.conversationId, payload.text);
+          const payload = action.payload as { text: string; draft?: ComposerDraft };
+          await orch.send(action.conversationId, payload.draft ?? payload.text);
           break;
         }
         case 'chat.stop':

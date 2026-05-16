@@ -4,6 +4,8 @@
  * 设计参考：docs/thinking-trail/2026-04-29-chat-unification-decoupling/03-chat-runtime-protocol.md §3
  */
 
+import type { ComposerDraft } from '@shared/ai-composer';
+
 export const CHAT_ACTION_KINDS = [
   'chat.send_message',
   'chat.stop',
@@ -20,6 +22,7 @@ export type ChatActionKind = (typeof CHAT_ACTION_KINDS)[number];
 
 export interface ChatSendMessagePayload {
   text: string;
+  draft?: ComposerDraft;
 }
 
 export interface ChatStopPayload {

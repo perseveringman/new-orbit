@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { ChatAction } from '@shared/chat-protocol';
+import type { ComposerDraft } from '@shared/ai-composer';
 
 export interface UseChatActionsOptions {
   conversationId: string;
@@ -7,7 +8,7 @@ export interface UseChatActionsOptions {
 }
 
 export interface ChatActionDispatchers {
-  sendMessage(text: string): void;
+  sendMessage(text: string, draft?: ComposerDraft): void;
   stop(reason?: string): void;
   retry(turnId?: string): void;
   copy(turnId: string, text: string): void;
@@ -23,8 +24,12 @@ export function useChatActions(options: UseChatActionsOptions): ChatActionDispat
 
   return useMemo<ChatActionDispatchers>(
     () => ({
-      sendMessage: (text) =>
-        onAction({ kind: 'chat.send_message', conversationId, payload: { text } }),
+      sendMessage: (text, draft) =>
+        onAction({
+          kind: 'chat.send_message',
+          conversationId,
+          payload: draft ? { text, draft } : { text }
+        }),
       stop: (reason) =>
         onAction({
           kind: 'chat.stop',

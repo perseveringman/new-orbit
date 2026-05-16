@@ -25,6 +25,8 @@ import type {
 } from '@shared/conversation';
 import { conversationScopeKey } from '@shared/conversation';
 import type { RuntimeEvent } from '@shared/chat-protocol';
+import type { ComposerDraft, RuntimeSelection } from '@shared/ai-composer';
+import { legacyTextToComposerDraft, normalizeRuntimeSelection } from '@shared/ai-composer';
 import type { ContextPacket, ContextPacketScope, ContextSection } from '@shared/context';
 import type { EvidenceSelector } from '@shared/evidence';
 import type { SpaceContextBundle } from '@shared/space';
@@ -189,8 +191,9 @@ export class AskAnywhereOrchestrator {
    *  3) spawn Claude run（带 conversationId）
    *  4) 订阅 runner，聚合 assistant 文本 → on exit append assistant turn
    */
-  async send(conversationId: string, text: string): Promise<{ runId: string }> {
-    const trimmed = text.trim();
+  async send(conversationId: string, input: string | ComposerDraft): Promise<{ runId: string }> {
+    const draft = typeof input === 'string' ? legacyTextToComposerDraft(input) : input;
+    const trimmed = draft.text.trim();
     if (!trimmed) throw new Error('empty_message');
 
     const conv = await this.deps.conversations.getConversation(conversationId);
@@ -202,6 +205,17 @@ export class AskAnywhereOrchestrator {
       // 并发哨兵：已有 run 在跑，拒绝
       throw new Error('already_running');
     }
+    const selection = normalizeRuntimeSelection(draft.selection ?? conv.runtimeSelection);
+    const selectedTrack = selection.track;
+    const forceCli = selectedTrack === 'cli';
+    if (draft.selection) {
+      await this.deps.conversations.bindRuntime(conversationId, {
+        runtimeSelection: selection,
+        ...(selection.endpointId ? { runtimeEndpointHint: selection.endpointId } : {}),
+        ...(selection.model ? { runtimeModelHint: selection.model } : {}),
+        runtimeHint: runtimeHintFromSelection(selection)
+      });
+    }
 
     const vault = this.deps.getVaultPath();
     if (!vault) {
@@ -209,7 +223,7 @@ export class AskAnywhereOrchestrator {
       throw new Error('no_vault');
     }
 
-    const runtimeCommand = await this.handleRuntimeCommand(conversationId, conv, trimmed);
+    const runtimeCommand = await this.handleRuntimeCommand(conversationId, conv, trimmed, draft);
     if (runtimeCommand.handled) return { runId: runtimeCommand.runId };
 
     // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
@@ -229,13 +243,21 @@ export class AskAnywhereOrchestrator {
     const prompt = buildPrompt({ systemPrompt, scopedContext, history, userText: trimmed });
     const router = this.deps.getRuntimeRouter?.() ?? null;
     const agentTools = this.deps.getAgentTools?.() ?? null;
-    const agentReady = Boolean(router && agentTools);
-    const decision = router
+    const agentReady = Boolean(router && agentTools && !forceCli);
+    const decision = forceCli
+      ? {
+          mode: 'ask' as const,
+          track: 'cli' as const,
+          runtime: selection.runtimeId ?? 'claude-cli',
+          reason: 'conversation selected a CLI runtime'
+        }
+      : router
       ? await router.decide({
           mode: 'ask',
           agentMode: agentReady,
-          endpointHint: conv.runtimeEndpointHint,
-          modelHint: conv.runtimeModelHint
+          endpointHint: selection.endpointId ?? conv.runtimeEndpointHint,
+          modelHint: selection.model ?? conv.runtimeModelHint,
+          modelTier: selection.modelTier
         })
       : { track: 'cli' as const, runtime: 'claude-cli', reason: 'SDK router unavailable' };
 
@@ -243,14 +265,23 @@ export class AskAnywhereOrchestrator {
     await this.deps.conversations.appendTurn({
       conversationId,
       role: 'user',
-      content: trimmed
+      content: trimmed,
+      input: draft
     });
 
     if (router && agentTools && decision.track === 'sdk_agent') {
       const runId = `sdk-agent-${randomUUID()}`;
       await this.deps.conversations.bindRuntime(conversationId, {
         currentRunId: runId,
-        runtimeHint: runtimeHintLabel(decision.runtime, decision.model)
+        runtimeHint: runtimeHintLabel(decision.runtime, decision.model),
+        ...(decision.endpointId ? { runtimeEndpointHint: decision.endpointId } : {}),
+        ...(decision.model ? { runtimeModelHint: decision.model } : {}),
+        runtimeSelection: {
+          ...selection,
+          track: 'sdk_agent',
+          ...(decision.endpointId ? { endpointId: decision.endpointId } : {}),
+          ...(decision.model ? { model: decision.model } : {})
+        }
       });
       void this.runSdkAgentLoop({
         router,
@@ -283,7 +314,15 @@ export class AskAnywhereOrchestrator {
       const runId = `sdk-${randomUUID()}`;
       await this.deps.conversations.bindRuntime(conversationId, {
         currentRunId: runId,
-        runtimeHint: runtimeHintLabel(decision.runtime, decision.model)
+        runtimeHint: runtimeHintLabel(decision.runtime, decision.model),
+        ...(decision.endpointId ? { runtimeEndpointHint: decision.endpointId } : {}),
+        ...(decision.model ? { runtimeModelHint: decision.model } : {}),
+        runtimeSelection: {
+          ...selection,
+          track: 'sdk',
+          ...(decision.endpointId ? { endpointId: decision.endpointId } : {}),
+          ...(decision.model ? { model: decision.model } : {})
+        }
       });
       void this.runSdk({
         router,
@@ -343,7 +382,12 @@ export class AskAnywhereOrchestrator {
 
     await this.deps.conversations.bindRuntime(conversationId, {
       currentRunId: runner.runId,
-      runtimeHint: 'claude'
+      runtimeHint: 'claude',
+      runtimeSelection: {
+        ...selection,
+        track: 'cli',
+        runtimeId: selection.runtimeId ?? 'claude'
+      }
     });
 
     // 聚合 assistant 文本：直接订阅 runner（同步、早于 broadcastPool）
@@ -380,7 +424,8 @@ export class AskAnywhereOrchestrator {
   private async handleRuntimeCommand(
     conversationId: string,
     conv: Conversation,
-    text: string
+    text: string,
+    draft?: ComposerDraft
   ): Promise<{ handled: false; runId: '' } | { handled: true; runId: string }> {
     const match = text.match(/^\/(model|endpoint)\b(?:\s+([\s\S]+))?$/i);
     if (!match) return { handled: false, runId: '' };
@@ -391,7 +436,8 @@ export class AskAnywhereOrchestrator {
     await this.deps.conversations.appendTurn({
       conversationId,
       role: 'user',
-      content: text
+      content: text,
+      ...(draft ? { input: draft } : {})
     });
 
     const router = this.deps.getRuntimeRouter?.() ?? null;
@@ -426,7 +472,8 @@ export class AskAnywhereOrchestrator {
     if (arg === 'auto' || arg === 'clear' || arg === 'default') {
       await this.deps.conversations.bindRuntime(conversationId, {
         ...(command === 'endpoint' ? { runtimeEndpointHint: null } : { runtimeModelHint: null }),
-        runtimeHint: null
+        runtimeHint: null,
+        runtimeSelection: null
       });
       await this.deps.conversations.appendTurn({
         conversationId,
@@ -451,7 +498,13 @@ export class AskAnywhereOrchestrator {
       }
       await this.deps.conversations.bindRuntime(conversationId, {
         runtimeEndpointHint: endpoint.id,
-        runtimeHint: `sdk_agent:${endpoint.provider}/${conv.runtimeModelHint ?? endpoint.defaultModel}`
+        runtimeHint: `sdk_agent:${endpoint.provider}/${conv.runtimeModelHint ?? endpoint.defaultModel}`,
+        runtimeSelection: {
+          ...normalizeRuntimeSelection(conv.runtimeSelection),
+          endpointId: endpoint.id,
+          model: conv.runtimeModelHint ?? endpoint.defaultModel,
+          track: 'sdk_agent'
+        }
       });
       await this.deps.conversations.appendTurn({
         conversationId,
@@ -476,7 +529,13 @@ export class AskAnywhereOrchestrator {
     await this.deps.conversations.bindRuntime(conversationId, {
       ...(endpoint ? { runtimeEndpointHint: endpoint.id } : {}),
       runtimeModelHint: modelPart,
-      runtimeHint: endpoint ? `sdk_agent:${endpoint.provider}/${modelPart}` : `sdk_agent:auto/${modelPart}`
+      runtimeHint: endpoint ? `sdk_agent:${endpoint.provider}/${modelPart}` : `sdk_agent:auto/${modelPart}`,
+      runtimeSelection: {
+        ...normalizeRuntimeSelection(conv.runtimeSelection),
+        ...(endpoint ? { endpointId: endpoint.id } : {}),
+        model: modelPart,
+        track: 'sdk_agent'
+      }
     });
     await this.deps.conversations.appendTurn({
       conversationId,
@@ -1106,6 +1165,16 @@ function renderSkillsSection(skills: LoadedSkill[]): string {
 
 function runtimeHintLabel(runtime: string, model?: string): string {
   return model ? `${runtime}/${model}` : runtime;
+}
+
+function runtimeHintFromSelection(selection: RuntimeSelection): string | null {
+  if (selection.track === 'cli') return selection.runtimeId ?? 'claude';
+  if (selection.endpointId && selection.model) {
+    return `${selection.track ?? 'sdk_agent'}:${selection.endpointId}/${selection.model}`;
+  }
+  if (selection.endpointId) return `${selection.track ?? 'sdk_agent'}:${selection.endpointId}`;
+  if (selection.model) return `${selection.track ?? 'sdk_agent'}:auto/${selection.model}`;
+  return null;
 }
 
 function findEndpoint(snapshot: SDKEndpointRegistrySnapshot, query: string): SDKEndpointView | null {

@@ -12,8 +12,8 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import type { RuntimeEvent } from '@shared/chat-protocol';
+import { AIComposer } from '../ai-composer';
 import { ActionBar } from './ActionBar';
-import { InputArea } from './InputArea';
 import { MessageBubble } from './MessageBubble';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCard } from './ToolCard';
@@ -35,6 +35,11 @@ export function ChatView(props: ChatProps): JSX.Element {
     placeholder,
     welcomeMessage,
     actionBarItems,
+    composerOptions,
+    composerSelection,
+    composerSourceSurface,
+    composerCapabilities,
+    onComposerSelectionChange,
     headerSlot,
     beforeEventsSlot
   } = props;
@@ -74,11 +79,25 @@ export function ChatView(props: ChatProps): JSX.Element {
           <div key={item.key}>{item.node}</div>
         ))}
       </div>
-      <InputArea
-        conversationId={conversationId}
+      <AIComposer
         disabled={!capabilities.canSendMessage}
+        submitting={isLoading}
+        density="compact"
         placeholder={placeholder}
-        onSubmit={(text) => actions.sendMessage(text)}
+        sourceSurface={composerSourceSurface}
+        options={composerOptions}
+        selection={composerSelection}
+        capabilities={{
+          canSend: capabilities.canSendMessage,
+          canAttachFiles: capabilities.canSendMessage,
+          canRecordVoice: capabilities.canSendMessage,
+          canSwitchModel: capabilities.canSendMessage,
+          canSwitchRuntime: capabilities.canSendMessage,
+          canSwitchProfile: capabilities.canSendMessage,
+          ...composerCapabilities
+        }}
+        onSelectionChange={onComposerSelectionChange}
+        onSubmit={(draft) => actions.sendMessage(draft.text, draft)}
       />
     </div>
   );

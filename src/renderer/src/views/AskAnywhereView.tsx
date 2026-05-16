@@ -47,7 +47,8 @@ export function AskAnywhereView({ initialActiveId = null }: AskAnywhereViewProps
         onArchive={(id) => void handleArchive(id)}
         onAction={(action) => void handleAction(action)}
         onArtifactAction={(artifactId, actionId) => void handleArtifactAction(artifactId, actionId)}
-        welcomeMessage="Ask anything. Each session persists as a conversation."
+        composerSourceSurface="ask_full"
+        welcomeMessage="可以直接提问，也可以交给智能体执行。每个会话都会保留。"
         actions={
           artifactCount > 0 ? (
             <button
