@@ -65,12 +65,12 @@ export function CommandPalette({ open, onClose }: Props): JSX.Element | null {
             else if (e.key === 'ArrowUp') setI((v) => Math.max(v - 1, 0));
             else if (e.key === 'Enter') choose(hits[i]);
           }}
-          placeholder="Search files…"
+          placeholder="搜索文件…"
           className="w-full border-b border-neutral-200 bg-transparent px-4 py-3 text-sm outline-none dark:border-neutral-700"
         />
         <ul className="max-h-72 overflow-auto py-1 text-sm">
           {hits.length === 0 && (
-            <li className="px-4 py-2 text-xs text-neutral-500">No results.</li>
+            <li className="px-4 py-2 text-xs text-neutral-500">没有结果。</li>
           )}
           {hits.map((h, idx) => (
             <li key={h.path}>

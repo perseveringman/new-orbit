@@ -8,13 +8,13 @@ interface Item {
 }
 
 const ITEMS: Item[] = [
-  { label: 'Dashboard', view: { kind: 'dashboard' }, icon: '◎' },
-  { label: 'AI Control', view: { kind: 'runtimes' }, icon: '◫' },
-  { label: 'Tools', view: { kind: 'tools' }, icon: '⌘' },
-  { label: 'Role Templates', view: { kind: 'agents' }, icon: '◌' },
-  { label: 'Inbox', view: { kind: 'inbox' }, icon: '📥' },
-  { label: 'Conversations', view: { kind: 'conversations' }, icon: '💬' },
-  { label: 'Kanban', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
+  { label: '仪表盘', view: { kind: 'dashboard' }, icon: '◎' },
+  { label: 'AI 控制台', view: { kind: 'runtimes' }, icon: '◫' },
+  { label: '工具', view: { kind: 'tools' }, icon: '⌘' },
+  { label: '角色模板', view: { kind: 'agents' }, icon: '◌' },
+  { label: '收件箱', view: { kind: 'inbox' }, icon: '📥' },
+  { label: '对话', view: { kind: 'conversations' }, icon: '💬' },
+  { label: '看板', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
 ];
 
 const ASK_ANYWHERE_VIEW: WorkspaceView = { kind: 'askAnywhere' };
@@ -39,12 +39,12 @@ export function WorkspaceSidebar(): JSX.Element {
           }
         >
           <Sparkles size={16} className="shrink-0 text-violet-500 dark:text-violet-300" />
-          <span className="font-medium">Ask Anywhere</span>
+          <span className="font-medium">随处问</span>
         </button>
       </section>
       <section>
         <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-          Workspace
+          工作台
         </h2>
         <ul className="space-y-0.5 text-sm">
           {ITEMS.map((it) => {

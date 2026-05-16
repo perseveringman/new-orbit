@@ -131,226 +131,226 @@ const PANEL_META: Record<
   Omit<SidebarPanelTab, 'id'>
 > = {
   inspector: {
-    title: 'Inspector',
+    title: '检查器',
     icon: 'inspector',
     widthPreset: 'normal',
-    description: 'Inspect files, changes, and workspace context.'
+    description: '检查文件、变更和工作区上下文。'
   },
   'dashboard-focus': {
-    title: 'Focus',
+    title: '聚焦',
     icon: 'dashboard-focus',
     widthPreset: 'normal',
-    description: 'Choose the next dashboard action from inbox, blockers, tasks, and active projects.'
+    description: '从收件箱、阻塞项、任务和活跃项目中选择下一步行动。'
   },
   'dashboard-rhythm': {
-    title: 'Rhythm',
+    title: '节奏',
     icon: 'dashboard-rhythm',
     widthPreset: 'normal',
-    description: 'Review vision cadence, knowledge movement, recent activity, and system pulse.'
+    description: '复盘愿景节奏、知识流动、近期活动和系统脉搏。'
   },
   files: {
-    title: 'Files',
+    title: '文件',
     icon: 'files',
     widthPreset: 'narrow',
-    description: 'Browse vault files without leaving the main workspace.'
+    description: '不离开主工作区即可浏览 vault 文件。'
   },
   'area-config': {
-    title: 'Area',
+    title: '领域',
     icon: 'area',
     widthPreset: 'normal',
-    description: 'Tune the active area and its working context.'
+    description: '调整活跃领域及其工作上下文。'
   },
   backlinks: {
-    title: 'Backlinks',
+    title: '反向链接',
     icon: 'backlinks',
     widthPreset: 'narrow',
-    description: 'See connected notes and references for the focused item.'
+    description: '查看聚焦条目的相关笔记和引用。'
   },
   'task-detail': {
-    title: 'Task Detail',
+    title: '任务详情',
     icon: 'task',
     widthPreset: 'normal',
-    description: 'Edit the selected task beside the current workspace.'
+    description: '在当前工作区旁编辑所选任务。'
   },
   'task-tree': {
-    title: 'Task Tree',
+    title: '任务树',
     icon: 'task-tree',
     widthPreset: 'normal',
-    description: 'Scan project tasks while another project surface stays open.'
+    description: '在保持其他项目界面打开时浏览项目任务。'
   },
   agent: {
     title: 'Agent',
     icon: 'agent',
     widthPreset: 'normal',
-    description: 'Launch or monitor the execution agent for the active project.'
+    description: '启动或监控活跃项目的执行 agent。'
   },
   worktrees: {
     title: 'Worktrees',
     icon: 'worktrees',
     widthPreset: 'normal',
-    description: 'Review isolated execution contexts and linked code workdirs.'
+    description: '查看隔离执行上下文和已链接代码工作目录。'
   },
   review: {
-    title: 'Review',
+    title: '审核',
     icon: 'review',
     widthPreset: 'wide',
-    description: 'Approve, reject, or inspect pending human-review items.'
+    description: '批准、拒绝或检查待人工审核条目。'
   },
   runlog: {
-    title: 'Run Log',
+    title: '运行日志',
     icon: 'runlog',
     widthPreset: 'wide',
-    description: 'Follow execution events and terminal activity.'
+    description: '跟踪执行事件和终端活动。'
   },
   diff: {
-    title: 'Diff',
+    title: '差异',
     icon: 'diff',
     widthPreset: 'wide',
-    description: 'Review file changes as a second workspace pane.'
+    description: '在第二工作区面板中审阅文件变更。'
   },
   sessions: {
-    title: 'Sessions',
+    title: '会话',
     icon: 'sessions',
     widthPreset: 'normal',
-    description: 'Inspect project or area sessions without leaving the flow.'
+    description: '不离开当前流程即可检查项目或领域会话。'
   },
   ask: {
-    title: 'Ask',
+    title: '提问',
     icon: 'ask',
     widthPreset: 'wide',
-    description: 'Open a scoped Ask companion next to the current work.'
+    description: '在当前工作旁打开带范围的提问助手。'
   }
 };
 
 const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   editor: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks', 'inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files', 'backlinks', 'inspector'] }]
   },
   github: {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['worktrees'] },
-      { id: 'execution', title: 'Execution', panels: ['review'] }
+      { id: 'overview', title: '概览', panels: ['worktrees'] },
+      { id: 'execution', title: '执行', panels: ['review'] }
     ]
   },
   inbox: {
-    intents: [{ id: 'focus', title: 'Focus', panels: ['task-detail'] }]
+    intents: [{ id: 'focus', title: '聚焦', panels: ['task-detail'] }]
   },
   notes: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks', 'inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files', 'backlinks', 'inspector'] }]
   },
   library: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files', 'inspector'] }]
   },
   search: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['inspector'] }]
   },
   memory: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['inspector'] }]
   },
   review: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['review', 'inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['review', 'inspector'] }]
   },
   feeds: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['inspector'] }]
   },
   resources: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'backlinks', 'inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files', 'backlinks', 'inspector'] }]
   },
   knowledgeBase: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files', 'inspector'] }]
   },
   scheduled: {
-    intents: [{ id: 'execution', title: 'Execution', panels: ['runlog', 'inspector'] }]
+    intents: [{ id: 'execution', title: '执行', panels: ['runlog', 'inspector'] }]
   },
   timeline: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['inspector'] }]
   },
   gateway: {
-    intents: [{ id: 'execution', title: 'Execution', panels: ['inspector', 'runlog'] }]
+    intents: [{ id: 'execution', title: '执行', panels: ['inspector', 'runlog'] }]
   },
   askAnywhere: {
-    intents: [{ id: 'focus', title: 'Focus', panels: ['inspector'] }]
+    intents: [{ id: 'focus', title: '聚焦', panels: ['inspector'] }]
   },
   conversations: {
-    intents: [{ id: 'focus', title: 'Focus', panels: ['inspector'] }]
+    intents: [{ id: 'focus', title: '聚焦', panels: ['inspector'] }]
   },
   dashboard: {
     intents: [
-      { id: 'overview', title: 'Command', panels: ['dashboard-focus', 'dashboard-rhythm'] },
-      { id: 'execution', title: 'Ops', panels: ['review', 'agent', 'runlog'] }
+      { id: 'overview', title: '指挥', panels: ['dashboard-focus', 'dashboard-rhythm'] },
+      { id: 'execution', title: '运维', panels: ['review', 'agent', 'runlog'] }
     ]
   },
   vision: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files', 'inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files', 'inspector'] }]
   },
   agents: {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['inspector', 'review'] },
-      { id: 'execution', title: 'Execution', panels: ['runlog', 'diff'] }
+      { id: 'overview', title: '概览', panels: ['inspector', 'review'] },
+      { id: 'execution', title: '执行', panels: ['runlog', 'diff'] }
     ]
   },
   tools: {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['inspector'] },
-      { id: 'execution', title: 'Execution', panels: ['runlog', 'review'] }
+      { id: 'overview', title: '概览', panels: ['inspector'] },
+      { id: 'execution', title: '执行', panels: ['runlog', 'review'] }
     ]
   },
   developerConsole: {
-    intents: [{ id: 'execution', title: 'Execution', panels: ['runlog', 'inspector'] }]
+    intents: [{ id: 'execution', title: '执行', panels: ['runlog', 'inspector'] }]
   },
   journals: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files'] }]
   },
   kanban: {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree'] },
-      { id: 'focus', title: 'Focus', panels: ['task-detail'] }
+      { id: 'overview', title: '概览', panels: ['task-tree'] },
+      { id: 'focus', title: '聚焦', panels: ['task-detail'] }
     ]
   },
   runtimes: {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['inspector', 'worktrees'] },
-      { id: 'execution', title: 'Execution', panels: ['runlog', 'review'] }
+      { id: 'overview', title: '概览', panels: ['inspector', 'worktrees'] },
+      { id: 'execution', title: '执行', panels: ['runlog', 'review'] }
     ]
   },
   area: {
-    intents: [{ id: 'overview', title: 'Overview', panels: ['files'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['files'] }]
   },
   areaRoom: {
     intents: [
       {
         id: 'overview',
-        title: 'Overview',
+        title: '概览',
         panels: ['area-config', 'files', 'sessions', 'inspector']
       }
     ]
   },
   'project.kanban': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree', 'inspector'] },
-      { id: 'focus', title: 'Focus', panels: ['task-detail'] },
-      { id: 'execution', title: 'Execution', panels: ['agent', 'review', 'diff'] }
+      { id: 'overview', title: '概览', panels: ['task-tree', 'inspector'] },
+      { id: 'focus', title: '聚焦', panels: ['task-detail'] },
+      { id: 'execution', title: '执行', panels: ['agent', 'review', 'diff'] }
     ]
   },
   'project.terminal': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree', 'inspector'] },
-      { id: 'focus', title: 'Focus', panels: ['task-detail'] },
-      { id: 'execution', title: 'Execution', panels: ['sessions', 'runlog', 'diff'] }
+      { id: 'overview', title: '概览', panels: ['task-tree', 'inspector'] },
+      { id: 'focus', title: '聚焦', panels: ['task-detail'] },
+      { id: 'execution', title: '执行', panels: ['sessions', 'runlog', 'diff'] }
     ]
   },
   'project.sessions': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree', 'inspector'] },
-      { id: 'focus', title: 'Focus', panels: ['task-detail'] },
-      { id: 'execution', title: 'Execution', panels: ['sessions', 'runlog', 'diff'] }
+      { id: 'overview', title: '概览', panels: ['task-tree', 'inspector'] },
+      { id: 'focus', title: '聚焦', panels: ['task-detail'] },
+      { id: 'execution', title: '执行', panels: ['sessions', 'runlog', 'diff'] }
     ]
   },
   'project.github': {
     intents: [
-      { id: 'overview', title: 'Overview', panels: ['task-tree', 'worktrees', 'inspector'] },
-      { id: 'focus', title: 'Focus', panels: ['task-detail'] },
-      { id: 'execution', title: 'Execution', panels: ['review', 'diff'] }
+      { id: 'overview', title: '概览', panels: ['task-tree', 'worktrees', 'inspector'] },
+      { id: 'focus', title: '聚焦', panels: ['task-detail'] },
+      { id: 'execution', title: '执行', panels: ['review', 'diff'] }
     ]
   }
 };

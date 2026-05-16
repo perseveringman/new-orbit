@@ -50,22 +50,22 @@ export function TopBar(): JSX.Element {
           {vault && (
             <span
               className="rounded-full border border-neutral-200 bg-white/70 px-2.5 py-1 text-[11px] text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400"
-              title={`install: ${env.active ? `running ${env.active}` : 'idle'}, queued=${env.queued}`}
+              title={`安装：${env.active ? `运行中 ${env.active}` : '空闲'}，排队=${env.queued}`}
             >
-              {env.active ? `Install ${env.active}` : `${activeWt} worktrees`}
+              {env.active ? `安装 ${env.active}` : `${activeWt} 个 worktree`}
             </span>
           )}
           {vault && costToday && <BudgetMeter onClick={openSettings} />}
           <button
             onClick={() => setAboutOpen(true)}
-            title="About Orbit"
+            title="关于 Orbit"
             className={btn}
           >
-            About
+            关于
           </button>
           <button
             onClick={openSettings}
-            title="Settings"
+            title="设置"
             className={btn}
           >
             ⚙
@@ -74,14 +74,14 @@ export function TopBar(): JSX.Element {
             onClick={() => void setTheme(nextTheme)}
             className={btn}
           >
-            {settings.theme === 'dark' ? '☾ Dark' : settings.theme === 'light' ? '☀ Light' : '⌘ System'}
+            {settings.theme === 'dark' ? '☾ 深色' : settings.theme === 'light' ? '☀ 浅色' : '⌘ 跟随系统'}
           </button>
           {vault && (
             <button
               onClick={() => void closeVault()}
               className={btn}
             >
-              Open another vault
+              打开其他 vault
             </button>
           )}
         </div>
@@ -92,7 +92,7 @@ export function TopBar(): JSX.Element {
           onClick={() => setMigrateOpen(true)}
           className="no-drag w-full border-b border-amber-500/40 bg-amber-500/10 px-4 py-1.5 text-left text-xs font-medium text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
         >
-          发现 {legacyCount} 个旧格式项目，点击迁移 → folder-based projects
+          发现 {legacyCount} 个旧格式项目，点击迁移为文件夹项目
         </button>
       )}
       <MigrationDialog open={migrateOpen} onClose={() => setMigrateOpen(false)} />
@@ -113,10 +113,10 @@ function BudgetMeter({ onClick }: { onClick: () => void }): JSX.Element | null {
     return (
       <button
         onClick={onClick}
-        title={`today: ${costToday.runs} run(s), source=${costToday.source}, daily cap: unlimited`}
+        title={`今日：${costToday.runs} 次运行，来源=${costToday.source}，每日上限：无限制`}
         className="rounded px-2 py-0.5 text-[11px] text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
       >
-        Today: ${used.toFixed(4)} · {tokens} tok
+        今日：${used.toFixed(4)} · {tokens} tok
       </button>
     );
   }
@@ -134,7 +134,7 @@ function BudgetMeter({ onClick }: { onClick: () => void }): JSX.Element | null {
   return (
     <button
       onClick={onClick}
-      title={`today: $${used.toFixed(4)} / $${dailyUSD.toFixed(2)} (${tokens.toLocaleString()} tok), source=${costToday.source}. Click to configure.`}
+      title={`今日：$${used.toFixed(4)} / $${dailyUSD.toFixed(2)}（${tokens.toLocaleString()} tok），来源=${costToday.source}。点击配置。`}
       className="flex items-center gap-2 rounded px-2 py-0.5 text-[11px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
     >
       <span className="tabular-nums">

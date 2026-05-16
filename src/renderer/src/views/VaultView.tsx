@@ -131,11 +131,11 @@ const COMPANION_PANEL_ICONS: Record<SidebarPanelIconId, LucideIcon> = {
 };
 
 function getCompanionSurfaceLabel(surface: string): string {
-  if (surface.startsWith('project.')) return `Project ${surface.replace('project.', '')}`;
-  if (surface === 'areaRoom') return 'Area Room';
-  if (surface === 'askAnywhere') return 'Ask Anywhere';
-  if (surface === 'developerConsole') return 'Developer Console';
-  if (surface === 'knowledgeBase') return 'Knowledge Base';
+  if (surface.startsWith('project.')) return `项目 ${surface.replace('project.', '')}`;
+  if (surface === 'areaRoom') return '领域空间';
+  if (surface === 'askAnywhere') return '随处问';
+  if (surface === 'developerConsole') return '开发者控制台';
+  if (surface === 'knowledgeBase') return '知识库';
   return surface.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
 }
 
@@ -365,7 +365,7 @@ export function VaultView(): JSX.Element {
       await openPath(chosen.path);
       setView({ kind: 'editor' });
     } else {
-      toast(`No file matches [[${target}]]`);
+      toast(`没有文件匹配 [[${target}]]`);
     }
   }
 
@@ -379,17 +379,17 @@ export function VaultView(): JSX.Element {
     if (!active) return;
     try {
       const res = await window.orbit.para.closeProject(active.path);
-      toast(`Archived → ${res.newRelPath}`);
+      toast(`已归档 → ${res.newRelPath}`);
       await openPath(res.newPath);
       if (opts.distill) {
-        toast('Distilling project…');
+        toast('正在提炼项目…');
         openSidebarPanel({ panel: 'agent' });
         try {
           const out = await window.orbit.distill.project(res.uid);
-          toast(`Distilled → ${out.resourceRelPath}`);
+          toast(`已提炼 → ${out.resourceRelPath}`);
           await openPath(out.resourcePath);
         } catch (error) {
-          toast(`Distillation failed: ${(error as Error).message}`);
+          toast(`提炼失败：${(error as Error).message}`);
         }
       }
     } catch (error) {
@@ -405,7 +405,7 @@ export function VaultView(): JSX.Element {
       return tree ? (
         <FileTree root={tree} />
       ) : (
-        <p className="text-xs text-neutral-500">Scanning…</p>
+        <p className="text-xs text-neutral-500">正在扫描…</p>
       );
     }
     if (sidebarPanel === 'area-config') return <AreaConfigPanel />;
@@ -502,19 +502,19 @@ export function VaultView(): JSX.Element {
                   {active.dirty && <span className="text-amber-500">●</span>}
                 </>
               ) : (
-                <span>No file open</span>
+                 <span>未打开文件</span>
               )}
               <div className="ml-auto flex items-center gap-2">
                 {isProject && (
                   <button
                     onClick={() => void onCloseProject()}
                     className="rounded border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                    title="Archive this project (keeps uid, moves to 04_Archives/)"
+                    title="归档这个项目（保留 uid，并移动到 04_Archives/）"
                   >
-                    结项 / Close project
+                    结项
                   </button>
                 )}
-                <span>⌘K to search</span>
+                <span>⌘K 搜索</span>
               </div>
             </div>
             <div className="flex-1 min-h-0">
@@ -583,7 +583,7 @@ export function VaultView(): JSX.Element {
           <button
             onClick={() => setCompanionPaneMode('expanded')}
             className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-            title="Show companion pane"
+            title="显示辅助面板"
           >
             <ChevronLeft size={16} />
           </button>
@@ -593,7 +593,7 @@ export function VaultView(): JSX.Element {
           <button
             onClick={() => setCompanionPaneMode('expanded')}
             className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-            title="Expand companion pane"
+            title="展开辅助面板"
           >
             <PanelRight size={17} />
           </button>
@@ -630,7 +630,7 @@ export function VaultView(): JSX.Element {
               setCompanionResizing(true);
             }}
             className="absolute left-0 top-0 z-10 flex h-full w-2 cursor-col-resize items-center justify-center text-transparent transition-colors hover:bg-neutral-200/60 hover:text-neutral-500 dark:hover:bg-neutral-800/70"
-            title="Resize companion pane"
+            title="调整辅助面板宽度"
           >
             <GripVertical size={14} />
           </button>
@@ -639,7 +639,7 @@ export function VaultView(): JSX.Element {
             <PanelRight size={17} className="shrink-0 text-neutral-500" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                Companion
+                 辅助面板
               </div>
               <div className="truncate text-[11px] text-neutral-500">
                 {getCompanionSurfaceLabel(sidebarSurface)}
@@ -654,7 +654,7 @@ export function VaultView(): JSX.Element {
                   ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-950'
                   : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100')
               }
-              title={companionPinned ? 'Unpin companion pane' : 'Pin companion pane'}
+               title={companionPinned ? '取消固定辅助面板' : '固定辅助面板'}
             >
               <Pin size={15} />
             </button>
@@ -662,21 +662,21 @@ export function VaultView(): JSX.Element {
               onClick={() => promoteSidebarPanelToMain(sidebarPanel)}
               disabled={!canPromoteSidebarPanel(sidebarPanel)}
               className="rounded p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-              title="Open this pane in the main workspace"
+               title="在主工作区打开此面板"
             >
               <Maximize2 size={15} />
             </button>
             <button
               onClick={() => setCompanionPaneMode('rail')}
               className="rounded p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-              title="Collapse to rail"
+               title="折叠为窄栏"
             >
               <ChevronRight size={16} />
             </button>
             <button
               onClick={() => setCompanionPaneMode('hidden')}
               className="rounded p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-              title="Hide companion pane"
+               title="隐藏辅助面板"
             >
               <X size={15} />
             </button>

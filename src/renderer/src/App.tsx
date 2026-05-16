@@ -20,7 +20,7 @@ export function App(): JSX.Element {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center bg-neutral-50 text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
-        Loading Orbit…
+        正在加载 Orbit…
       </div>
     );
   }
