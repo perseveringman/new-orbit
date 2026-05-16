@@ -9,7 +9,6 @@ export function WorkspaceInspectorPane(): JSX.Element {
 
   return (
     <div className={`flex h-full flex-col ${INSPECTOR_THEME.panel}`}>
-      {/* Tab bar */}
       <div className={`flex flex-row ${INSPECTOR_THEME.tabBar}`}>
         <button
           className={`flex items-center gap-1 px-3 py-2 text-xs font-medium ${
@@ -18,7 +17,7 @@ export function WorkspaceInspectorPane(): JSX.Element {
           onClick={() => selectTab('files')}
         >
           <Folder size={12} />
-          Files
+          文件
         </button>
         <button
           className={`flex items-center gap-1 px-3 py-2 text-xs font-medium ${
@@ -27,17 +26,12 @@ export function WorkspaceInspectorPane(): JSX.Element {
           onClick={() => selectTab('changes')}
         >
           <GitBranch size={12} />
-          Changes
+          变更
         </button>
       </div>
 
-      {/* Tab body */}
       <div className={`flex-1 overflow-hidden ${INSPECTOR_THEME.body}`}>
-        {activeTab === 'files' ? (
-          <FilesPanel />
-        ) : (
-          <ChangesPanel />
-        )}
+        {activeTab === 'files' ? <FilesPanel /> : <ChangesPanel />}
       </div>
     </div>
   );

@@ -20,9 +20,9 @@ export function getApprovalCardState(proposal: Proposal): ApprovalCardState {
     statusLabel: labelForStatus(proposal.status),
     isPending,
     actions: [
-      { decision: 'approved', label: 'Approve', disabled: !isPending },
-      { decision: 'rejected', label: 'Reject', disabled: !isPending },
-      { decision: 'dismissed', label: 'Dismiss', disabled: !isPending }
+      { decision: 'approved', label: '批准', disabled: !isPending },
+      { decision: 'rejected', label: '拒绝', disabled: !isPending },
+      { decision: 'dismissed', label: '忽略', disabled: !isPending }
     ]
   };
 }
@@ -30,12 +30,12 @@ export function getApprovalCardState(proposal: Proposal): ApprovalCardState {
 function labelForStatus(status: Proposal['status']): string {
   switch (status) {
     case 'pending':
-      return 'Pending approval';
+      return '待审批';
     case 'approved':
-      return 'Approved';
+      return '已批准';
     case 'rejected':
-      return 'Rejected';
+      return '已拒绝';
     case 'dismissed':
-      return 'Dismissed';
+      return '已忽略';
   }
 }

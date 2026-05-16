@@ -11,8 +11,7 @@ interface Props {
   onCreated?(result: { uid: string; slug: string; readmePath: string }): void;
 }
 
-const overlay =
-  'fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm';
+const overlay = 'fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm';
 const panel =
   'w-[min(560px,92vw)] rounded-lg border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900';
 const btn =
@@ -42,9 +41,9 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
   const [githubParentDir, setGithubParentDir] = useState('');
   const [githubOwner, setGithubOwner] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
-  const [agentExposureMode, setAgentExposureMode] = useState<
-    'isolated' | 'bridge' | 'compatible'
-  >('isolated');
+  const [agentExposureMode, setAgentExposureMode] = useState<'isolated' | 'bridge' | 'compatible'>(
+    'isolated'
+  );
   const [templates, setTemplates] = useState<TemplateMetaDTO[]>([]);
   const [template, setTemplate] = useState('blank');
   const [areas, setAreas] = useState<EntitySummary[]>([]);
@@ -105,7 +104,9 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
 
   const slugValid = isValidSlug(slug);
   const slugConflict = useMemo(() => existingSlugs.includes(slug), [existingSlugs, slug]);
-  const githubTargetDir = githubParentDir ? joinPath(githubParentDir, slug || githubRepo.trim()) : '';
+  const githubTargetDir = githubParentDir
+    ? joinPath(githubParentDir, slug || githubRepo.trim())
+    : '';
 
   const canNext =
     creationMode === 'github-import'
@@ -132,11 +133,9 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
     if (!canCreate) return;
     setBusy(true);
     setErr(null);
-      try {
+    try {
       const effectiveName =
-        creationMode === 'github-import'
-          ? (name.trim() || githubRepo.trim())
-          : name.trim();
+        creationMode === 'github-import' ? name.trim() || githubRepo.trim() : name.trim();
       const parsed = NewProjectForm.parse({
         name: effectiveName,
         description: description.trim(),
@@ -187,7 +186,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
           ? `已导入 ${githubOwner}/${githubRepo} → ${res.slug}`
           : creationMode === 'link-existing'
             ? `已关联项目 ${res.slug}`
-          : `已创建项目 ${res.slug}`
+            : `已创建项目 ${res.slug}`
       );
       // Open README for instant editing (R3 will route to Project Room)
       const readmePath = `${res.projectPath}/README.md`;
@@ -245,7 +244,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
           {step === 1 && (
             <>
               <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">来源</span>
+                <span className="mb-1 block text-xs text-neutral-500">来源</span>
                 <select
                   className={input}
                   value={creationMode}
@@ -264,7 +263,9 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
-                      <span className="mb-1 block text-xs text-neutral-500">GitHub Owner / 组织</span>
+                      <span className="mb-1 block text-xs text-neutral-500">
+                        GitHub Owner / 组织
+                      </span>
                       <input
                         className={input}
                         value={githubOwner}
@@ -311,8 +312,8 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                     <p className="text-[11px] text-neutral-500">
                       {workdirProbe.exists && workdirProbe.isDirectory
                         ? workdirProbe.git?.is_repo
-                            ? `检测到 Git 仓库 · ${workdirProbe.recommendedExecutionContext}`
-                            : `检测到目录 · ${workdirProbe.recommendedExecutionContext}`
+                          ? `检测到 Git 仓库 · ${workdirProbe.recommendedExecutionContext}`
+                          : `检测到目录 · ${workdirProbe.recommendedExecutionContext}`
                         : '目录不可读。'}
                     </p>
                   )}
@@ -320,12 +321,12 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
               ) : (
                 <>
                   <label className="block">
-                      <span className="mb-1 block text-xs text-neutral-500">名称</span>
+                    <span className="mb-1 block text-xs text-neutral-500">名称</span>
                     <input
                       className={input}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                        placeholder="例如：Orbit 文档站点"
+                      placeholder="例如：Orbit 文档站点"
                       autoFocus
                     />
                   </label>
@@ -349,14 +350,12 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                 </label>
               )}
               <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">Agent 暴露方式</span>
+                <span className="mb-1 block text-xs text-neutral-500">Agent 暴露方式</span>
                 <select
                   className={input}
                   value={agentExposureMode}
                   onChange={(e) =>
-                    setAgentExposureMode(
-                      e.target.value as 'isolated' | 'bridge' | 'compatible'
-                    )
+                    setAgentExposureMode(e.target.value as 'isolated' | 'bridge' | 'compatible')
                   }
                 >
                   <option value="isolated">Orbit 隔离（仅 .orbit）</option>
@@ -366,15 +365,13 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs text-neutral-500">
-                  Slug <span className="text-neutral-400">（根据名称自动生成，可编辑）</span>
+                  路径标识 <span className="text-neutral-400">（根据名称自动生成，可编辑）</span>
                 </span>
                 <input
                   className={
                     input +
                     ' ' +
-                    (!slugValid || slugConflict
-                      ? 'border-red-500 dark:border-red-500'
-                      : '')
+                    (!slugValid || slugConflict ? 'border-red-500 dark:border-red-500' : '')
                   }
                   value={slug}
                   onChange={(e) => {
@@ -389,9 +386,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                   </p>
                 )}
                 {slugValid && slugConflict && (
-                  <p className="mt-1 text-[11px] text-red-500">
-                    已有项目使用这个 slug。
-                  </p>
+                  <p className="mt-1 text-[11px] text-red-500">已有项目使用这个 slug。</p>
                 )}
               </label>
               {creationMode === 'link-existing' && (
@@ -408,16 +403,16 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
               {creationMode === 'scaffold-new' && (
                 <>
                   <label className="block">
-                      <span className="mb-1 block text-xs text-neutral-500">描述</span>
+                    <span className="mb-1 block text-xs text-neutral-500">描述</span>
                     <textarea
                       className={input + ' min-h-[88px] resize-y'}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                        placeholder="一句话或更长说明，会写入新 Workdir 的 README。"
+                      placeholder="一句话或更长说明，会写入新 Workdir 的 README。"
                     />
                   </label>
                   <label className="block">
-                      <span className="mb-1 block text-xs text-neutral-500">模板</span>
+                    <span className="mb-1 block text-xs text-neutral-500">模板</span>
                     <select
                       className={input}
                       value={template}
@@ -438,9 +433,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
           {step === 2 && (
             <>
               <label className="block">
-                <span className="mb-1 block text-xs text-neutral-500">
-                  Area（可选）
-                </span>
+                <span className="mb-1 block text-xs text-neutral-500">Area（可选）</span>
                 <select
                   className={input}
                   value={areaUid}
@@ -462,7 +455,7 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
                       key={t}
                       onClick={() => setTags(tags.filter((x) => x !== t))}
                       className="rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] text-neutral-700 hover:bg-red-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-red-900/50"
-                       title="点击移除"
+                      title="点击移除"
                     >
                       #{t} ✕
                     </button>
@@ -485,31 +478,31 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
               </div>
               <div className="rounded border border-dashed border-neutral-300 p-3 text-xs text-neutral-500 dark:border-neutral-700">
                 <div>
-                  <b>Slug：</b> {slug}
+                  <b>路径标识：</b> {slug}
                 </div>
                 <div>
-                   <b>来源：</b>{' '}
+                  <b>来源：</b>{' '}
                   {creationMode === 'github-import'
                     ? `${githubOwner || 'owner'}/${githubRepo || 'repo'}`
                     : creationMode === 'link-existing'
-                       ? '已关联 Workdir'
+                      ? '已关联 Workdir'
                       : `template:${template}`}
                 </div>
                 <div>
-                   <b>协调目录：</b> 01_Projects/{slug}/
+                  <b>协调目录：</b> 01_Projects/{slug}/
                 </div>
                 <div className="truncate">
-                   <b>Workdir：</b>{' '}
+                  <b>工作目录：</b>{' '}
                   {creationMode === 'github-import'
-                     ? githubTargetDir || '请选择克隆父目录'
+                    ? githubTargetDir || '请选择克隆父目录'
                     : creationMode === 'link-existing'
-                       ? workdirPath || '请选择已有目录'
+                      ? workdirPath || '请选择已有目录'
                       : parentDir
                         ? joinPath(parentDir, slug)
-                         : '请选择父目录'}
+                        : '请选择父目录'}
                 </div>
                 <div>
-                   <b>暴露方式：</b> {agentExposureMode}
+                  <b>暴露方式：</b> {agentExposureMode}
                 </div>
               </div>
             </>
@@ -523,37 +516,33 @@ export function NewProjectModal({ open, onClose, onCreated }: Props): JSX.Elemen
 
         <footer className="flex items-center justify-between border-t border-neutral-200 px-4 py-3 dark:border-neutral-700">
           <button className={btn} onClick={onClose} disabled={busy}>
-             取消
+            取消
           </button>
           <div className="flex items-center gap-2">
             {step === 2 && (
               <button className={btn} onClick={() => setStep(1)} disabled={busy}>
-                 ← 返回
+                ← 返回
               </button>
             )}
             {step === 1 ? (
-              <button
-                className={btnPrimary}
-                onClick={() => setStep(2)}
-                disabled={!canNext || busy}
-              >
-                 下一步 →
+              <button className={btnPrimary} onClick={() => setStep(2)} disabled={!canNext || busy}>
+                下一步 →
               </button>
             ) : (
               <button className={btnPrimary} onClick={submit} disabled={!canCreate || busy}>
-                 {busy
-                   ? creationMode === 'github-import'
-                      ? '导入中…'
-                     : creationMode === 'link-existing'
-                        ? '关联中…'
-                        : '创建中…'
-                   : creationMode === 'github-import'
-                      ? '导入项目'
-                     : creationMode === 'link-existing'
-                        ? '关联项目'
-                        : '创建项目'}
-               </button>
-             )}
+                {busy
+                  ? creationMode === 'github-import'
+                    ? '导入中…'
+                    : creationMode === 'link-existing'
+                      ? '关联中…'
+                      : '创建中…'
+                  : creationMode === 'github-import'
+                    ? '导入项目'
+                    : creationMode === 'link-existing'
+                      ? '关联项目'
+                      : '创建项目'}
+              </button>
+            )}
           </div>
         </footer>
       </div>

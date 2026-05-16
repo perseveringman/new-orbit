@@ -99,8 +99,8 @@ export const useReviewQueue = create<ReviewQueueStore>((set) => ({
         : typeof payload.tool_name === 'string'
           ? payload.tool_name
           : event.agentType
-            ? `${event.agentType} waiting for approval`
-            : 'Approval needed';
+            ? `${event.agentType} 正在等待审批`
+            : '需要审批';
     set((state) => ({
       items: upsert(
         removeItemsById(
@@ -110,7 +110,7 @@ export const useReviewQueue = create<ReviewQueueStore>((set) => ({
         {
           id,
           source: 'permission',
-          title: 'Terminal permission request',
+          title: '终端权限请求',
           detail,
           runId: event.sessionId,
           projectUid,

@@ -5,8 +5,7 @@ import { useFiles } from '../../store/files';
 import { useWorkspace } from '../../store/workspace';
 import { usePara } from '../../store/para';
 
-const overlay =
-  'fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm';
+const overlay = 'fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm';
 const panel =
   'w-[min(560px,92vw)] rounded-lg border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900';
 const btn =
@@ -216,7 +215,7 @@ export function NewAreaModal(): JSX.Element | null {
 
           <label className="block">
             <span className="mb-1 block text-xs text-neutral-500">
-              Slug <span className="text-neutral-400">（根据名称自动生成，可编辑）</span>
+              路径标识 <span className="text-neutral-400">（根据名称自动生成，可编辑）</span>
             </span>
             <input
               className={
@@ -264,7 +263,11 @@ export function NewAreaModal(): JSX.Element | null {
           <button className={btn} onClick={onClose} disabled={busy}>
             取消
           </button>
-          <button className={btnPrimary} onClick={() => void submit()} disabled={!canCreate || busy}>
+          <button
+            className={btnPrimary}
+            onClick={() => void submit()}
+            disabled={!canCreate || busy}
+          >
             {busy ? '创建中…' : '创建 Area'}
           </button>
         </footer>

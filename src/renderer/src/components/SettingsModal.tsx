@@ -20,7 +20,15 @@ import type {
 import type { ExternalGatewayCapability } from '@shared/external-gateway-protocol';
 
 type Numeric = 'perRunTokens' | 'perRunUSD' | 'dailyTokens' | 'dailyUSD';
-type TabId = 'general' | 'api' | 'endpoints' | 'externalGateway' | 'memorySources' | 'budget' | 'vectors' | 'advanced';
+type TabId =
+  | 'general'
+  | 'api'
+  | 'endpoints'
+  | 'externalGateway'
+  | 'memorySources'
+  | 'budget'
+  | 'vectors'
+  | 'advanced';
 
 const BUDGET_FIELDS: Array<{ key: Numeric; label: string; step: number; unit: string }> = [
   { key: 'perRunTokens', label: '单次运行 tokens', step: 10_000, unit: 'tok' },
@@ -42,17 +50,17 @@ function parseField(raw: string): number | null {
 }
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500';
-const INPUT =
-  `w-full rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950 ${FOCUS}`;
-const BTN =
-  `rounded border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800 ${FOCUS}`;
-const BTN_PRIMARY =
-  `rounded bg-neutral-900 px-3 py-1 text-xs text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300 ${FOCUS}`;
+const INPUT = `w-full rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-950 ${FOCUS}`;
+const BTN = `rounded border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800 ${FOCUS}`;
+const BTN_PRIMARY = `rounded bg-neutral-900 px-3 py-1 text-xs text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300 ${FOCUS}`;
 
 const ENDPOINT_PROVIDERS: SDKEndpointProvider[] = ['anthropic', 'minimax', 'deepseek', 'custom'];
 
 function endpointDraft(provider: SDKEndpointProvider = 'anthropic'): SDKEndpointInput {
-  const presets: Record<SDKEndpointProvider, Pick<SDKEndpointInput, 'label' | 'baseURL' | 'defaultModel' | 'fastModel' | 'heavyModel'>> = {
+  const presets: Record<
+    SDKEndpointProvider,
+    Pick<SDKEndpointInput, 'label' | 'baseURL' | 'defaultModel' | 'fastModel' | 'heavyModel'>
+  > = {
     anthropic: {
       label: 'Anthropic',
       baseURL: 'https://api.anthropic.com',
@@ -105,9 +113,7 @@ export function SettingsModal(): JSX.Element | null {
   const [vectorThreshold, setVectorThreshold] = useState<number>(
     workspaceSettings.vectorWakeThreshold
   );
-  const [autoReview, setAutoReview] = useState<boolean>(
-    Boolean(workspaceSettings.autoDailyReview)
-  );
+  const [autoReview, setAutoReview] = useState<boolean>(Boolean(workspaceSettings.autoDailyReview));
   const [autoReviewAt, setAutoReviewAt] = useState<string>(
     workspaceSettings.autoDailyReviewAt ?? '22:00'
   );
@@ -118,7 +124,9 @@ export function SettingsModal(): JSX.Element | null {
   const [lastReindex, setLastReindex] = useState<{ count: number } | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetMsg, setResetMsg] = useState<string | null>(null);
-  const [endpointSnapshot, setEndpointSnapshot] = useState<SDKEndpointRegistrySnapshot | null>(null);
+  const [endpointSnapshot, setEndpointSnapshot] = useState<SDKEndpointRegistrySnapshot | null>(
+    null
+  );
   const [endpointForm, setEndpointForm] = useState<SDKEndpointInput>(() => endpointDraft());
   const [endpointKeyInputs, setEndpointKeyInputs] = useState<Record<string, string>>({});
   const [endpointStatus, setEndpointStatus] = useState<Record<string, string>>({});
@@ -132,10 +140,13 @@ export function SettingsModal(): JSX.Element | null {
   const [externalConfig, setExternalConfig] = useState<ExternalGatewayConfig | null>(null);
   const [externalStatus, setExternalStatus] = useState<ExternalGatewayStatus | null>(null);
   const [externalSessions, setExternalSessions] = useState<ExternalGatewaySessionMapping[]>([]);
-  const [externalRequestLog, setExternalRequestLog] = useState<ExternalGatewayRequestLogEntry[]>([]);
+  const [externalRequestLog, setExternalRequestLog] = useState<ExternalGatewayRequestLogEntry[]>(
+    []
+  );
   const [externalAllowedUsers, setExternalAllowedUsers] = useState<string>('');
   const [externalMessage, setExternalMessage] = useState<string>('');
-  const [externalSessionSettings, setExternalSessionSettings] = useState<ExternalAISessionSettings | null>(null);
+  const [externalSessionSettings, setExternalSessionSettings] =
+    useState<ExternalAISessionSettings | null>(null);
   const [externalSessionMessage, setExternalSessionMessage] = useState<string>('');
   const endpointFormRef = useRef<HTMLElement | null>(null);
 
@@ -208,7 +219,9 @@ export function SettingsModal(): JSX.Element | null {
       if (status) setExternalStatus(status);
       setExternalSessions(sessions);
       setExternalRequestLog(requestLog);
-      setExternalAllowedUsers(config.allowed_users.map((user) => `${user.platform}:${user.userId}`).join('\n'));
+      setExternalAllowedUsers(
+        config.allowed_users.map((user) => `${user.platform}:${user.userId}`).join('\n')
+      );
     } catch (error) {
       setExternalMessage(`加载 External Gateway 失败：${(error as Error).message}`);
     }
@@ -312,7 +325,10 @@ export function SettingsModal(): JSX.Element | null {
       setEndpointStatus((s) => ({ ...s, [endpointId]: '密钥已保存。' }));
       await loadEndpoints();
     } catch (error) {
-      setEndpointStatus((s) => ({ ...s, [endpointId]: `保存密钥失败:${(error as Error).message}` }));
+      setEndpointStatus((s) => ({
+        ...s,
+        [endpointId]: `保存密钥失败:${(error as Error).message}`
+      }));
     }
   }
 
@@ -331,7 +347,9 @@ export function SettingsModal(): JSX.Element | null {
     }
   }
 
-  async function onToggleEndpointEnabled(endpoint: SDKEndpointRegistrySnapshot['endpoints'][number]): Promise<void> {
+  async function onToggleEndpointEnabled(
+    endpoint: SDKEndpointRegistrySnapshot['endpoints'][number]
+  ): Promise<void> {
     setEndpointStatus((s) => ({ ...s, [endpoint.id]: endpoint.enabled ? '禁用中…' : '启用中…' }));
     try {
       await window.orbit.runtime.sdk.upsertEndpoint({
@@ -346,7 +364,10 @@ export function SettingsModal(): JSX.Element | null {
         costProfile: endpoint.costProfile,
         enabled: !endpoint.enabled
       });
-      setEndpointStatus((s) => ({ ...s, [endpoint.id]: endpoint.enabled ? '已禁用。' : '已启用。' }));
+      setEndpointStatus((s) => ({
+        ...s,
+        [endpoint.id]: endpoint.enabled ? '已禁用。' : '已启用。'
+      }));
       await loadEndpoints();
     } catch (error) {
       setEndpointStatus((s) => ({ ...s, [endpoint.id]: `操作失败：${(error as Error).message}` }));
@@ -420,7 +441,9 @@ export function SettingsModal(): JSX.Element | null {
   async function onToggleExternalGateway(nextEnabled: boolean): Promise<void> {
     setExternalMessage(nextEnabled ? '启动 External Gateway…' : '停止 External Gateway…');
     try {
-      const status = nextEnabled ? await window.orbit.externalGateway.start() : await window.orbit.externalGateway.stop();
+      const status = nextEnabled
+        ? await window.orbit.externalGateway.start()
+        : await window.orbit.externalGateway.stop();
       setExternalStatus(status);
       await loadExternalGateway();
       setExternalMessage(nextEnabled ? 'External Gateway 已启动。' : 'External Gateway 已停止。');
@@ -469,7 +492,8 @@ export function SettingsModal(): JSX.Element | null {
     if (!externalSessionSettings) return;
     setExternalSessionMessage('保存本地会话设置…');
     try {
-      const saved = await window.orbit.evidence.updateExternalSessionSettings(externalSessionSettings);
+      const saved =
+        await window.orbit.evidence.updateExternalSessionSettings(externalSessionSettings);
       setExternalSessionSettings(saved);
       await window.orbit.evidence.sync({
         includeExternalAISessions: saved.enabled,
@@ -485,7 +509,7 @@ export function SettingsModal(): JSX.Element | null {
     { id: 'general', label: '通用' },
     { id: 'api', label: 'API / CLI' },
     { id: 'endpoints', label: 'AI 端点' },
-    { id: 'externalGateway', label: 'External Gateway' },
+    { id: 'externalGateway', label: '外部网关' },
     { id: 'memorySources', label: '记忆源' },
     { id: 'budget', label: '预算' },
     { id: 'vectors', label: '向量' },
@@ -543,11 +567,7 @@ export function SettingsModal(): JSX.Element | null {
                 <div>
                   <label className="mb-1 block text-xs text-neutral-500">工作库</label>
                   <div className="flex items-center gap-2">
-                    <input
-                      readOnly
-                      value={vault?.path ?? '（未打开工作库）'}
-                      className={INPUT}
-                    />
+                    <input readOnly value={vault?.path ?? '（未打开工作库）'} className={INPUT} />
                     <button
                       type="button"
                       onClick={() => {
@@ -677,7 +697,10 @@ export function SettingsModal(): JSX.Element | null {
                           <div>
                             <div className="font-medium">{endpoint.label}</div>
                             <div className="text-xs text-neutral-500">
-                              {endpoint.provider} · 默认 {endpoint.defaultModel} · 快速 {endpoint.fastModel ?? endpoint.defaultModel} · 重度 {endpoint.heavyModel ?? endpoint.defaultModel} · {endpoint.enabled ? '已启用' : '已禁用'}
+                              {endpoint.provider} · 默认 {endpoint.defaultModel} · 快速{' '}
+                              {endpoint.fastModel ?? endpoint.defaultModel} · 重度{' '}
+                              {endpoint.heavyModel ?? endpoint.defaultModel} ·{' '}
+                              {endpoint.enabled ? '已启用' : '已禁用'}
                             </div>
                             <div className="mt-1 break-all text-[11px] text-neutral-500">
                               {endpoint.baseURL}
@@ -729,7 +752,11 @@ export function SettingsModal(): JSX.Element | null {
                             onChange={(e) =>
                               setEndpointKeyInputs((s) => ({ ...s, [endpoint.id]: e.target.value }))
                             }
-                            placeholder={endpoint.keyConfigured ? `已配置（${endpoint.keyMasked ?? '已脱敏'}）` : 'API 密钥'}
+                            placeholder={
+                              endpoint.keyConfigured
+                                ? `已配置（${endpoint.keyMasked ?? '已脱敏'}）`
+                                : 'API 密钥'
+                            }
                             autoComplete="off"
                             className={INPUT}
                           />
@@ -745,7 +772,9 @@ export function SettingsModal(): JSX.Element | null {
                             className={BTN}
                             onClick={() => {
                               if (!confirm(`清除 ${endpoint.label} 的密钥？`)) return;
-                              void window.orbit.runtime.sdk.deleteApiKey(endpoint.id).then(loadEndpoints);
+                              void window.orbit.runtime.sdk
+                                .deleteApiKey(endpoint.id)
+                                .then(loadEndpoints);
                             }}
                             disabled={!endpoint.keyConfigured}
                           >
@@ -753,7 +782,9 @@ export function SettingsModal(): JSX.Element | null {
                           </button>
                         </div>
                         {endpointStatus[endpoint.id] && (
-                          <p className="mt-2 text-xs text-neutral-500">{endpointStatus[endpoint.id]}</p>
+                          <p className="mt-2 text-xs text-neutral-500">
+                            {endpointStatus[endpoint.id]}
+                          </p>
                         )}
                       </div>
                     ))}
@@ -775,11 +806,15 @@ export function SettingsModal(): JSX.Element | null {
                       提供商
                       <select
                         value={endpointForm.provider}
-                        onChange={(e) => setEndpointForm(endpointDraft(e.target.value as SDKEndpointProvider))}
+                        onChange={(e) =>
+                          setEndpointForm(endpointDraft(e.target.value as SDKEndpointProvider))
+                        }
                         className={`${INPUT} mt-1`}
                       >
                         {ENDPOINT_PROVIDERS.map((provider) => (
-                          <option key={provider} value={provider}>{provider}</option>
+                          <option key={provider} value={provider}>
+                            {provider}
+                          </option>
                         ))}
                       </select>
                     </label>
@@ -795,7 +830,9 @@ export function SettingsModal(): JSX.Element | null {
                       Base URL
                       <input
                         value={endpointForm.baseURL}
-                        onChange={(e) => setEndpointForm((f) => ({ ...f, baseURL: e.target.value }))}
+                        onChange={(e) =>
+                          setEndpointForm((f) => ({ ...f, baseURL: e.target.value }))
+                        }
                         className={`${INPUT} mt-1`}
                       />
                     </label>
@@ -803,7 +840,9 @@ export function SettingsModal(): JSX.Element | null {
                       默认模型
                       <input
                         value={endpointForm.defaultModel}
-                        onChange={(e) => setEndpointForm((f) => ({ ...f, defaultModel: e.target.value }))}
+                        onChange={(e) =>
+                          setEndpointForm((f) => ({ ...f, defaultModel: e.target.value }))
+                        }
                         className={`${INPUT} mt-1`}
                       />
                     </label>
@@ -811,7 +850,9 @@ export function SettingsModal(): JSX.Element | null {
                       快速模型
                       <input
                         value={endpointForm.fastModel ?? ''}
-                        onChange={(e) => setEndpointForm((f) => ({ ...f, fastModel: e.target.value }))}
+                        onChange={(e) =>
+                          setEndpointForm((f) => ({ ...f, fastModel: e.target.value }))
+                        }
                         placeholder={endpointForm.defaultModel || '未填则使用默认模型'}
                         className={`${INPUT} mt-1`}
                       />
@@ -820,7 +861,9 @@ export function SettingsModal(): JSX.Element | null {
                       重度模型
                       <input
                         value={endpointForm.heavyModel ?? ''}
-                        onChange={(e) => setEndpointForm((f) => ({ ...f, heavyModel: e.target.value }))}
+                        onChange={(e) =>
+                          setEndpointForm((f) => ({ ...f, heavyModel: e.target.value }))
+                        }
                         placeholder={endpointForm.defaultModel || '未填则使用默认模型'}
                         className={`${INPUT} mt-1`}
                       />
@@ -829,7 +872,9 @@ export function SettingsModal(): JSX.Element | null {
                       <input
                         type="checkbox"
                         checked={Boolean(endpointForm.enabled)}
-                        onChange={(e) => setEndpointForm((f) => ({ ...f, enabled: e.target.checked }))}
+                        onChange={(e) =>
+                          setEndpointForm((f) => ({ ...f, enabled: e.target.checked }))
+                        }
                         className={FOCUS}
                       />
                       启用
@@ -847,13 +892,23 @@ export function SettingsModal(): JSX.Element | null {
                     </label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" className={BTN_PRIMARY} onClick={() => void onSaveEndpoint()}>
+                    <button
+                      type="button"
+                      className={BTN_PRIMARY}
+                      onClick={() => void onSaveEndpoint()}
+                    >
                       保存端点
                     </button>
-                    <button type="button" className={BTN} onClick={() => setEndpointForm(endpointDraft())}>
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => setEndpointForm(endpointDraft())}
+                    >
                       新建
                     </button>
-                    {endpointStatus.form && <span className="text-xs text-neutral-500">{endpointStatus.form}</span>}
+                    {endpointStatus.form && (
+                      <span className="text-xs text-neutral-500">{endpointStatus.form}</span>
+                    )}
                   </div>
                 </section>
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
@@ -881,7 +936,11 @@ export function SettingsModal(): JSX.Element | null {
                     </label>
                   ))}
                   <div className="flex items-center gap-2">
-                    <button type="button" className={BTN} onClick={() => void onSaveEndpointDefaults()}>
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => void onSaveEndpointDefaults()}
+                    >
                       保存默认
                     </button>
                     {endpointStatus.defaults && (
@@ -893,7 +952,8 @@ export function SettingsModal(): JSX.Element | null {
                   <div>
                     <h3 className="text-sm font-semibold">测试端点</h3>
                     <p className="text-xs text-neutral-500">
-                      发送一条提示词，验证端点和模型是否可用。使用已保存的 API 密钥，端点处于「禁用」状态时也能测试。
+                      发送一条提示词，验证端点和模型是否可用。使用已保存的 API
+                      密钥，端点处于「禁用」状态时也能测试。
                     </p>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
@@ -926,8 +986,8 @@ export function SettingsModal(): JSX.Element | null {
                         value={chatModel}
                         onChange={(e) => setChatModel(e.target.value)}
                         placeholder={
-                          endpointSnapshot?.endpoints.find((e) => e.id === chatEndpointId)?.defaultModel ??
-                          '使用端点默认模型'
+                          endpointSnapshot?.endpoints.find((e) => e.id === chatEndpointId)
+                            ?.defaultModel ?? '使用端点默认模型'
                         }
                         className={`${INPUT} mt-1`}
                       />
@@ -971,7 +1031,7 @@ export function SettingsModal(): JSX.Element | null {
                         回复
                       </div>
                       <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
-{chatResponse}
+                        {chatResponse}
                       </pre>
                     </div>
                   )}
@@ -991,13 +1051,20 @@ export function SettingsModal(): JSX.Element | null {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <h3 className="text-sm font-semibold">本地 Agent 会话</h3>
-                          <p className="text-xs text-neutral-500">Claude / Codex / Amp / CodeBuddy</p>
+                          <p className="text-xs text-neutral-500">
+                            Claude / Codex / Amp / CodeBuddy
+                          </p>
                         </div>
                         <label className="flex items-center gap-2 text-xs">
                           <input
                             type="checkbox"
                             checked={externalSessionSettings.enabled}
-                            onChange={(event) => setExternalSessionSettings({ ...externalSessionSettings, enabled: event.target.checked })}
+                            onChange={(event) =>
+                              setExternalSessionSettings({
+                                ...externalSessionSettings,
+                                enabled: event.target.checked
+                              })
+                            }
                             className={FOCUS}
                           />
                           <span>{externalSessionSettings.enabled ? '已启用' : '已停用'}</span>
@@ -1011,10 +1078,12 @@ export function SettingsModal(): JSX.Element | null {
                             min={1}
                             max={5000}
                             value={externalSessionSettings.limit}
-                            onChange={(event) => setExternalSessionSettings({
-                              ...externalSessionSettings,
-                              limit: Math.max(1, Number(event.target.value) || 1)
-                            })}
+                            onChange={(event) =>
+                              setExternalSessionSettings({
+                                ...externalSessionSettings,
+                                limit: Math.max(1, Number(event.target.value) || 1)
+                              })
+                            }
                             className={`${INPUT} mt-1`}
                           />
                         </label>
@@ -1022,10 +1091,13 @@ export function SettingsModal(): JSX.Element | null {
                           索引级别
                           <select
                             value={externalSessionSettings.indexLevel}
-                            onChange={(event) => setExternalSessionSettings({
-                              ...externalSessionSettings,
-                              indexLevel: event.target.value as ExternalAISessionSettings['indexLevel']
-                            })}
+                            onChange={(event) =>
+                              setExternalSessionSettings({
+                                ...externalSessionSettings,
+                                indexLevel: event.target
+                                  .value as ExternalAISessionSettings['indexLevel']
+                              })
+                            }
                             className={`${INPUT} mt-1`}
                           >
                             <option value="metadata_only">仅元数据</option>
@@ -1038,10 +1110,12 @@ export function SettingsModal(): JSX.Element | null {
                         <input
                           type="checkbox"
                           checked={externalSessionSettings.includeToolOutputs}
-                          onChange={(event) => setExternalSessionSettings({
-                            ...externalSessionSettings,
-                            includeToolOutputs: event.target.checked
-                          })}
+                          onChange={(event) =>
+                            setExternalSessionSettings({
+                              ...externalSessionSettings,
+                              includeToolOutputs: event.target.checked
+                            })
+                          }
                           className={FOCUS}
                         />
                         <span>安全投影包含工具输出</span>
@@ -1051,39 +1125,69 @@ export function SettingsModal(): JSX.Element | null {
                       <TextListEditor
                         label="只包含 Agent"
                         value={externalSessionSettings.includeAgents}
-                        onChange={(includeAgents) => setExternalSessionSettings({ ...externalSessionSettings, includeAgents })}
+                        onChange={(includeAgents) =>
+                          setExternalSessionSettings({ ...externalSessionSettings, includeAgents })
+                        }
                       />
                       <TextListEditor
                         label="排除 Agent"
                         value={externalSessionSettings.excludeAgents}
-                        onChange={(excludeAgents) => setExternalSessionSettings({ ...externalSessionSettings, excludeAgents })}
+                        onChange={(excludeAgents) =>
+                          setExternalSessionSettings({ ...externalSessionSettings, excludeAgents })
+                        }
                       />
                       <TextListEditor
                         label="只包含项目"
                         value={externalSessionSettings.includeProjects}
-                        onChange={(includeProjects) => setExternalSessionSettings({ ...externalSessionSettings, includeProjects })}
+                        onChange={(includeProjects) =>
+                          setExternalSessionSettings({
+                            ...externalSessionSettings,
+                            includeProjects
+                          })
+                        }
                       />
                       <TextListEditor
                         label="排除项目"
                         value={externalSessionSettings.excludeProjects}
-                        onChange={(excludeProjects) => setExternalSessionSettings({ ...externalSessionSettings, excludeProjects })}
+                        onChange={(excludeProjects) =>
+                          setExternalSessionSettings({
+                            ...externalSessionSettings,
+                            excludeProjects
+                          })
+                        }
                       />
                       <TextListEditor
                         label="路径包含"
                         value={externalSessionSettings.includePathSubstrings}
-                        onChange={(includePathSubstrings) => setExternalSessionSettings({ ...externalSessionSettings, includePathSubstrings })}
+                        onChange={(includePathSubstrings) =>
+                          setExternalSessionSettings({
+                            ...externalSessionSettings,
+                            includePathSubstrings
+                          })
+                        }
                       />
                       <TextListEditor
                         label="路径排除"
                         value={externalSessionSettings.excludePathSubstrings}
-                        onChange={(excludePathSubstrings) => setExternalSessionSettings({ ...externalSessionSettings, excludePathSubstrings })}
+                        onChange={(excludePathSubstrings) =>
+                          setExternalSessionSettings({
+                            ...externalSessionSettings,
+                            excludePathSubstrings
+                          })
+                        }
                       />
                     </section>
                     <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => void onSaveExternalSessionSettings()} className={BTN_PRIMARY}>
+                      <button
+                        type="button"
+                        onClick={() => void onSaveExternalSessionSettings()}
+                        className={BTN_PRIMARY}
+                      >
                         保存并同步
                       </button>
-                      {externalSessionMessage && <span className="text-xs text-neutral-500">{externalSessionMessage}</span>}
+                      {externalSessionMessage && (
+                        <span className="text-xs text-neutral-500">{externalSessionMessage}</span>
+                      )}
                     </div>
                   </>
                 )}
@@ -1129,19 +1233,27 @@ export function SettingsModal(): JSX.Element | null {
                   <div className="grid gap-2 text-xs md:grid-cols-2">
                     <div className="rounded bg-neutral-50 p-2 dark:bg-neutral-950">
                       <div className="text-neutral-500">状态</div>
-                      <div className="font-medium">{externalStatus?.running ? 'running' : 'stopped'}</div>
+                      <div className="font-medium">
+                        {externalStatus?.running ? 'running' : 'stopped'}
+                      </div>
                     </div>
                     <div className="rounded bg-neutral-50 p-2 dark:bg-neutral-950">
                       <div className="text-neutral-500">连接 / 请求 / Session</div>
                       <div className="font-medium">
-                        {externalStatus?.connected_clients ?? 0} / {externalStatus?.active_requests ?? 0} / {externalStatus?.active_sessions ?? 0}
+                        {externalStatus?.connected_clients ?? 0} /{' '}
+                        {externalStatus?.active_requests ?? 0} /{' '}
+                        {externalStatus?.active_sessions ?? 0}
                       </div>
                     </div>
                     <label className="md:col-span-2 text-xs text-neutral-500">
-                      Socket path
+                      Socket 路径
                       <input
                         value={externalConfig?.socket_path ?? ''}
-                        onChange={(e) => setExternalConfig((config) => config ? { ...config, socket_path: e.target.value } : config)}
+                        onChange={(e) =>
+                          setExternalConfig((config) =>
+                            config ? { ...config, socket_path: e.target.value } : config
+                          )
+                        }
                         className={`${INPUT} mt-1 font-mono text-[11px]`}
                         disabled={!externalConfig}
                       />
@@ -1161,7 +1273,11 @@ export function SettingsModal(): JSX.Element | null {
                     <input
                       type="checkbox"
                       checked={Boolean(externalConfig?.require_allowed_user)}
-                      onChange={(e) => setExternalConfig((config) => config ? { ...config, require_allowed_user: e.target.checked } : config)}
+                      onChange={(e) =>
+                        setExternalConfig((config) =>
+                          config ? { ...config, require_allowed_user: e.target.checked } : config
+                        )
+                      }
                       className={FOCUS}
                     />
                     仅允许绑定用户访问
@@ -1177,7 +1293,10 @@ export function SettingsModal(): JSX.Element | null {
                   </label>
                   <div className="grid gap-2 md:grid-cols-2">
                     {externalStatus?.capabilities.map((item) => (
-                      <label key={item.capability} className="flex items-center gap-2 rounded border border-neutral-200 px-2 py-1 text-xs dark:border-neutral-800">
+                      <label
+                        key={item.capability}
+                        className="flex items-center gap-2 rounded border border-neutral-200 px-2 py-1 text-xs dark:border-neutral-800"
+                      >
                         <input
                           type="checkbox"
                           checked={Boolean(externalConfig?.capability_permissions[item.capability])}
@@ -1192,7 +1311,16 @@ export function SettingsModal(): JSX.Element | null {
                     <input
                       type="checkbox"
                       checked={Boolean(externalConfig?.delegate.enabled)}
-                      onChange={(e) => setExternalConfig((config) => config ? { ...config, delegate: { ...config.delegate, enabled: e.target.checked } } : config)}
+                      onChange={(e) =>
+                        setExternalConfig((config) =>
+                          config
+                            ? {
+                                ...config,
+                                delegate: { ...config.delegate, enabled: e.target.checked }
+                              }
+                            : config
+                        )
+                      }
                       className={FOCUS}
                     />
                     允许 delegate 到 cc-connect agent
@@ -1202,7 +1330,16 @@ export function SettingsModal(): JSX.Element | null {
                       Delegate target agent
                       <input
                         value={externalConfig?.delegate.target_agent ?? 'claudecode'}
-                        onChange={(e) => setExternalConfig((config) => config ? { ...config, delegate: { ...config.delegate, target_agent: e.target.value } } : config)}
+                        onChange={(e) =>
+                          setExternalConfig((config) =>
+                            config
+                              ? {
+                                  ...config,
+                                  delegate: { ...config.delegate, target_agent: e.target.value }
+                                }
+                              : config
+                          )
+                        }
                         className={`${INPUT} mt-1`}
                       />
                     </label>
@@ -1212,12 +1349,28 @@ export function SettingsModal(): JSX.Element | null {
                         type="number"
                         min={1}
                         value={externalConfig?.rate_limit.requests_per_minute ?? 10}
-                        onChange={(e) => setExternalConfig((config) => config ? { ...config, rate_limit: { requests_per_minute: Math.max(1, Number(e.target.value) || 1) } } : config)}
+                        onChange={(e) =>
+                          setExternalConfig((config) =>
+                            config
+                              ? {
+                                  ...config,
+                                  rate_limit: {
+                                    requests_per_minute: Math.max(1, Number(e.target.value) || 1)
+                                  }
+                                }
+                              : config
+                          )
+                        }
                         className={`${INPUT} mt-1`}
                       />
                     </label>
                   </div>
-                  <button type="button" className={BTN_PRIMARY} disabled={!externalConfig} onClick={() => void onSaveExternalGateway()}>
+                  <button
+                    type="button"
+                    className={BTN_PRIMARY}
+                    disabled={!externalConfig}
+                    onClick={() => void onSaveExternalGateway()}
+                  >
                     保存 External Gateway 配置
                   </button>
                 </section>
@@ -1227,15 +1380,25 @@ export function SettingsModal(): JSX.Element | null {
                   <div className="max-h-40 space-y-2 overflow-y-auto">
                     {externalSessions.length === 0 ? (
                       <p className="text-xs text-neutral-500">暂无外部 session。</p>
-                    ) : externalSessions.map((session) => (
-                      <div key={session.sessionId} className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-950">
-                        <div className="font-medium">{session.platform}:{session.userName ?? session.userId}</div>
-                        <div className="font-mono text-[11px] text-neutral-500">{session.sessionId} → {session.conversationId}</div>
-                        <div className="text-[11px] text-neutral-500">
-                          {session.archived ? '已归档' : '活跃'} · {new Date(session.lastActivityAt).toLocaleString()}
+                    ) : (
+                      externalSessions.map((session) => (
+                        <div
+                          key={session.sessionId}
+                          className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-950"
+                        >
+                          <div className="font-medium">
+                            {session.platform}:{session.userName ?? session.userId}
+                          </div>
+                          <div className="font-mono text-[11px] text-neutral-500">
+                            {session.sessionId} → {session.conversationId}
+                          </div>
+                          <div className="text-[11px] text-neutral-500">
+                            {session.archived ? '已归档' : '活跃'} ·{' '}
+                            {new Date(session.lastActivityAt).toLocaleString()}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </section>
 
@@ -1244,17 +1407,30 @@ export function SettingsModal(): JSX.Element | null {
                   <div className="max-h-52 space-y-2 overflow-y-auto">
                     {externalRequestLog.length === 0 ? (
                       <p className="text-xs text-neutral-500">暂无请求日志。</p>
-                    ) : externalRequestLog.map((entry) => (
-                      <div key={entry.requestId} className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-950">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{entry.routedTo}</span>
-                          <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] dark:bg-neutral-800">{entry.outcome}</span>
-                          <span className="ml-auto text-[11px] text-neutral-500">{entry.durationMs}ms</span>
+                    ) : (
+                      externalRequestLog.map((entry) => (
+                        <div
+                          key={entry.requestId}
+                          className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-950"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{entry.routedTo}</span>
+                            <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] dark:bg-neutral-800">
+                              {entry.outcome}
+                            </span>
+                            <span className="ml-auto text-[11px] text-neutral-500">
+                              {entry.durationMs}ms
+                            </span>
+                          </div>
+                          <div className="font-mono text-[11px] text-neutral-500">
+                            {entry.platform}:{entry.userId} · {entry.requestId}
+                          </div>
+                          {entry.errorCode && (
+                            <div className="text-[11px] text-red-500">{entry.errorCode}</div>
+                          )}
                         </div>
-                        <div className="font-mono text-[11px] text-neutral-500">{entry.platform}:{entry.userId} · {entry.requestId}</div>
-                        {entry.errorCode && <div className="text-[11px] text-red-500">{entry.errorCode}</div>}
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </section>
               </div>
@@ -1343,11 +1519,7 @@ export function SettingsModal(): JSX.Element | null {
                     重建本机的语义索引；嵌入向量保留在本机，不上传。
                   </p>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => void onReindex()}
-                      disabled={reindexing}
-                      className={BTN}
-                    >
+                    <button onClick={() => void onReindex()} disabled={reindexing} className={BTN}>
                       {reindexing ? '重建中…' : '重建向量索引'}
                     </button>
                     {lastReindex && lastReindex.count >= 0 && (
@@ -1428,10 +1600,12 @@ function TextListEditor(props: {
 }
 
 function splitTextList(value: string): string[] {
-  return Array.from(new Set(
-    value
-      .split(/\r?\n|,/u)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  ));
+  return Array.from(
+    new Set(
+      value
+        .split(/\r?\n|,/u)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
 }

@@ -1,11 +1,4 @@
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState
-} from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
 import type { TerminalAgentLaunchDTO } from '@shared/ipc';
 import { TerminalPane } from './TerminalPane';
@@ -49,7 +42,9 @@ interface ManagerState {
 function isManagerState(value: unknown): value is ManagerState {
   if (!value || typeof value !== 'object') return false;
   const record = value as Record<string, unknown>;
-  return Array.isArray(record.tabs) && record.tabs.length > 0 && typeof record.activeTabId === 'string';
+  return (
+    Array.isArray(record.tabs) && record.tabs.length > 0 && typeof record.activeTabId === 'string'
+  );
 }
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -77,7 +72,7 @@ function defaultState(): ManagerState {
     tabs: [
       {
         id: tabId,
-        title: 'Terminal 1',
+        title: '终端 1',
         root: { kind: 'leaf', id: leafId },
         focusedLeafId: leafId,
         zoomedLeafId: null
@@ -429,7 +424,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
           tabs = [
             {
               id: newId,
-              title: 'Terminal 1',
+              title: '终端 1',
               root: { kind: 'leaf', id: leafId },
               focusedLeafId: leafId,
               zoomedLeafId: null
@@ -649,20 +644,26 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
       setRenamingTabId(null);
     }
 
-    const launchRequestForLeaf = useCallback((leafId: string): TerminalLaunchRequest | undefined => {
-      return pendingLaunchRequests.current.get(leafId);
-    }, []);
+    const launchRequestForLeaf = useCallback(
+      (leafId: string): TerminalLaunchRequest | undefined => {
+        return pendingLaunchRequests.current.get(leafId);
+      },
+      []
+    );
 
     const onLaunchRequestConsumed = useCallback((leafId: string): void => {
       pendingLaunchRequests.current.delete(leafId);
     }, []);
 
-    const onPaneStatusChange = useCallback((leafId: string, status: TerminalPaneAgentStatus): void => {
-      if (!upsertTerminalPaneStatus(paneStatusesRef.current, leafId, status)) {
-        return;
-      }
-      setPaneStatusVersion((value) => value + 1);
-    }, []);
+    const onPaneStatusChange = useCallback(
+      (leafId: string, status: TerminalPaneAgentStatus): void => {
+        if (!upsertTerminalPaneStatus(paneStatusesRef.current, leafId, status)) {
+          return;
+        }
+        setPaneStatusVersion((value) => value + 1);
+      },
+      []
+    );
 
     function tabIndicatorStatus(tab: TabState): TerminalPaneAgentStatus | null {
       const statuses = getAllLeafIds(tab.root).map(
@@ -730,7 +731,9 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
                       }`}
                     />
                   )}
-                  <span>{idx + 1}. {tab.title}</span>
+                  <span>
+                    {idx + 1}. {tab.title}
+                  </span>
                   <span
                     role="button"
                     onClick={(e) => {
@@ -796,7 +799,7 @@ export const TerminalManager = forwardRef<TerminalManagerHandle, TerminalManager
         {/* Status hint */}
         {activeTab && (
           <div className="flex shrink-0 items-center gap-3 border-t border-neutral-200 dark:border-neutral-800 px-3 py-0.5 text-[10px] text-neutral-400">
-            <span>⌘D split right · ⌘⇧D split down · ⌘W close · ⌘T new tab · ⌘⇧↩ zoom</span>
+            <span>⌘D 向右拆分 · ⌘⇧D 向下拆分 · ⌘W 关闭 · ⌘T 新标签 · ⌘⇧↩ 缩放</span>
           </div>
         )}
       </div>

@@ -121,13 +121,13 @@ export function ProjectRoomView(): JSX.Element {
       const v = localStorage.getItem(key);
       setOuterTabRaw(
         v === 'context' ||
-        v === 'terminal' ||
-        v === 'sessions' ||
-        v === 'github' ||
-        v === 'materials' ||
-        v === 'outputs' ||
-        v === 'planner' ||
-        v === 'roles'
+          v === 'terminal' ||
+          v === 'sessions' ||
+          v === 'github' ||
+          v === 'materials' ||
+          v === 'outputs' ||
+          v === 'planner' ||
+          v === 'roles'
           ? (v as ProjectRoomOuterTab)
           : 'kanban'
       );
@@ -638,7 +638,7 @@ export function ProjectRoomView(): JSX.Element {
                 }`}
                 title={project.workdirPath}
               >
-                Workdir · {workdirLabel}
+                工作目录 · {workdirLabel}
               </span>
             )}
           </div>
@@ -890,7 +890,9 @@ export function ProjectPMILContextPanel({
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">个人记忆智能</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+              个人记忆智能
+            </p>
             <h2 className="mt-1 text-xl font-semibold">项目上下文 · {projectName}</h2>
             <p className="mt-1 max-w-3xl text-sm text-neutral-500">
               基于证据片段、图谱邻居、个人问答和开放回路启发式组装当前项目背景。
@@ -928,17 +930,28 @@ export function ProjectPMILContextPanel({
             </div>
 
             <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">活跃线索</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">
+                活跃线索
+              </h3>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {threads.slice(0, 8).map((thread) => (
-                  <article key={`${thread.title}:${thread.confidence}`} className="rounded-xl border border-violet-200 bg-white p-3 dark:border-violet-900 dark:bg-neutral-900">
+                  <article
+                    key={`${thread.title}:${thread.confidence}`}
+                    className="rounded-xl border border-violet-200 bg-white p-3 dark:border-violet-900 dark:bg-neutral-900"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-sm font-semibold">{thread.title}</h4>
-                      <span className="text-xs text-neutral-500">{Math.round(thread.confidence * 100)}%</span>
+                      <span className="text-xs text-neutral-500">
+                        {Math.round(thread.confidence * 100)}%
+                      </span>
                     </div>
-                    <p className="mt-2 text-xs leading-5 text-neutral-600 dark:text-neutral-300">{thread.summary}</p>
+                    <p className="mt-2 text-xs leading-5 text-neutral-600 dark:text-neutral-300">
+                      {thread.summary}
+                    </p>
                     {thread.likely_next_steps.length ? (
-                      <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">下一步：{thread.likely_next_steps[0]}</p>
+                      <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">
+                        下一步：{thread.likely_next_steps[0]}
+                      </p>
                     ) : null}
                     <ProjectEvidenceButtons selectors={thread.evidence} />
                   </article>
@@ -948,34 +961,64 @@ export function ProjectPMILContextPanel({
 
             <section className="grid gap-3 md:grid-cols-2">
               <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-neutral-500">开放回路</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-neutral-500">
+                  开放回路
+                </h3>
                 <div className="mt-3 space-y-2">
-                  {loops.length ? loops.slice(0, 8).map((loop) => (
-                    <div key={loop.id} className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">{loop.kind}</span>
-                        <span className={loop.severity === 'warning' ? 'text-xs text-amber-700 dark:text-amber-300' : 'text-xs text-neutral-500'}>{loop.severity}</span>
+                  {loops.length ? (
+                    loops.slice(0, 8).map((loop) => (
+                      <div
+                        key={loop.id}
+                        className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">
+                            {loop.kind}
+                          </span>
+                          <span
+                            className={
+                              loop.severity === 'warning'
+                                ? 'text-xs text-amber-700 dark:text-amber-300'
+                                : 'text-xs text-neutral-500'
+                            }
+                          >
+                            {loop.severity}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm font-medium">{loop.title}</p>
+                        <p className="mt-1 text-xs leading-5 text-neutral-500">{loop.rationale}</p>
+                        <ProjectEvidenceButtons selectors={loop.evidence} />
                       </div>
-                      <p className="mt-2 text-sm font-medium">{loop.title}</p>
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">{loop.rationale}</p>
-                      <ProjectEvidenceButtons selectors={loop.evidence} />
-                    </div>
-                  )) : <p className="text-sm text-neutral-500">当前证据窗口中没有检测到开放回路。</p>}
+                    ))
+                  ) : (
+                    <p className="text-sm text-neutral-500">当前证据窗口中没有检测到开放回路。</p>
+                  )}
                 </div>
               </div>
 
               <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-neutral-500">决策</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-neutral-500">
+                  决策
+                </h3>
                 <div className="mt-3 space-y-2">
-                  {work.decisions.length ? work.decisions.slice(0, 8).map((decision) => (
-                    <div key={`${decision.status}:${decision.title}`} className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">{decision.status}</span>
+                  {work.decisions.length ? (
+                    work.decisions.slice(0, 8).map((decision) => (
+                      <div
+                        key={`${decision.status}:${decision.title}`}
+                        className="rounded-xl border border-neutral-200 p-3 dark:border-neutral-800"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">
+                            {decision.status}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm font-medium">{decision.title}</p>
+                        <ProjectEvidenceButtons selectors={decision.evidence} />
                       </div>
-                      <p className="mt-2 text-sm font-medium">{decision.title}</p>
-                      <ProjectEvidenceButtons selectors={decision.evidence} />
-                    </div>
-                  )) : <p className="text-sm text-neutral-500">还没有检测到明确的项目决策。</p>}
+                    ))
+                  ) : (
+                    <p className="text-sm text-neutral-500">还没有检测到明确的项目决策。</p>
+                  )}
                 </div>
               </div>
             </section>
@@ -995,7 +1038,11 @@ function ProjectContextMetric({ label, value }: { label: string; value: string }
   );
 }
 
-function ProjectEvidenceButtons({ selectors }: { selectors: EvidenceSelector[] }): JSX.Element | null {
+function ProjectEvidenceButtons({
+  selectors
+}: {
+  selectors: EvidenceSelector[];
+}): JSX.Element | null {
   if (!selectors.length) return null;
   return (
     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1031,7 +1078,9 @@ function ProjectEvidenceButton({ selector }: { selector: EvidenceSelector }): JS
       </button>
       {result ? (
         <span className="rounded-md border border-neutral-200 bg-white p-2 text-[11px] leading-5 text-neutral-600 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-          <span className="block font-medium text-neutral-800 dark:text-neutral-100">{result.source.title}</span>
+          <span className="block font-medium text-neutral-800 dark:text-neutral-100">
+            {result.source.title}
+          </span>
           {result.excerpts[0]?.text.slice(0, 520) ?? '没有可用摘录。'}
         </span>
       ) : null}
@@ -1046,7 +1095,10 @@ function projectEvidenceSelectorKey(selector: EvidenceSelector): string {
 function withPMILTimeout<T>(promise: Promise<T>, ms = 15000): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timer = new Promise<T>((_resolve, reject) => {
-    timeout = setTimeout(() => reject(new Error('项目上下文构建超时，请稍后重试或先刷新证据索引。')), ms);
+    timeout = setTimeout(
+      () => reject(new Error('项目上下文构建超时，请稍后重试或先刷新证据索引。')),
+      ms
+    );
   });
   return Promise.race([promise, timer]).finally(() => {
     if (timeout) clearTimeout(timeout);
@@ -1136,7 +1188,8 @@ function TaskCard({
 }): JSX.Element {
   const activeRunSegment = (task as TaskRecord & { activeRunSegment?: { sessionStatus?: string } })
     .activeRunSegment;
-  const awaitingUser = task.status === 'doing' && activeRunSegment?.sessionStatus === 'awaiting_user';
+  const awaitingUser =
+    task.status === 'doing' && activeRunSegment?.sessionStatus === 'awaiting_user';
   const priority =
     task.source === 'file' ? ((task as TaskRecord & { priority?: string }).priority ?? null) : null;
   const priorityColor =

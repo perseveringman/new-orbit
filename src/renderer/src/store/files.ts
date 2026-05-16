@@ -88,7 +88,14 @@ export const useFiles = create<FilesState>((set, get) => ({
   teardown() {
     initToken += 1;
     get().unsubscribe?.();
-    set({ unsubscribe: null, tree: null, projectTree: null, projectTreeError: null, active: null, backlinks: [] });
+    set({
+      unsubscribe: null,
+      tree: null,
+      projectTree: null,
+      projectTreeError: null,
+      active: null,
+      backlinks: []
+    });
   },
 
   async refreshTree(vaultPath: string) {
@@ -105,8 +112,8 @@ export const useFiles = create<FilesState>((set, get) => ({
       set({ projectTree });
     } catch {
       if (token !== projectTreeToken) return;
-      set({ projectTreeError: 'Failed to load project files' });
-      get().toast('Failed to load project files');
+      set({ projectTreeError: '加载项目文件失败' });
+      get().toast('加载项目文件失败');
     }
   },
 

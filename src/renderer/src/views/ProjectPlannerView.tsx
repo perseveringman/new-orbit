@@ -28,14 +28,14 @@ function PlannerDeprecationBanner(): JSX.Element {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200">
       <span>
-        Planner 即将退役，新版本对话工作流统一进入 <strong>Ask Anywhere</strong>。
-        现有计划仍可继续使用，新规划建议从 Ask Anywhere 起步。
+        Planner 即将退役，新版本对话工作流统一进入 <strong>随处问</strong>。
+        现有计划仍可继续使用，新规划建议从随处问起步。
       </span>
       <button
         onClick={() => setView({ kind: 'askAnywhere' })}
         className="rounded border border-amber-300 px-2 py-0.5 hover:bg-amber-100 dark:border-amber-600 dark:hover:bg-amber-900/40"
       >
-        前往 Ask Anywhere →
+        前往随处问 →
       </button>
     </div>
   );
@@ -93,8 +93,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
       id: 'planner-welcome',
       role: 'assistant',
       agentId: 'plan-agent',
-      content:
-        '告诉我你想达成的结果。我会先帮你梳理需求；拆分清晰后，再在右侧生成任务工件。'
+      content: '告诉我你想达成的结果。我会先帮你梳理需求；拆分清晰后，再在右侧生成任务工件。'
     }
   ]);
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<PlannerFlowNode>([]);
@@ -186,7 +185,11 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
     }
     setPendingMode('proposal');
     try {
-      const reply = await window.orbit.planner.generateProposal(projectUid, activeAgentId, nextMessages);
+      const reply = await window.orbit.planner.generateProposal(
+        projectUid,
+        activeAgentId,
+        nextMessages
+      );
       setChatMessages([
         ...nextMessages,
         {
@@ -239,8 +242,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
 
   async function publish(): Promise<void> {
     if (!selected) return;
-    if (!window.confirm(`发布方案 "${selected.title}"? 这会创建或更新任务。`))
-      return;
+    if (!window.confirm(`发布方案 "${selected.title}"? 这会创建或更新任务。`)) return;
     try {
       const result = await window.orbit.planner.publishProposal(projectUid, selected.proposalId);
       setPublishResult(result);
@@ -340,18 +342,18 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
               )}
               {!selected && (
                 <div className="rounded-2xl border border-dashed border-neutral-300 bg-white/70 p-4 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60">
-                   还没有任务拆分工件。继续对话，范围清晰后再生成带版本的 React Flow 工件。
+                  还没有任务拆分工件。继续对话，范围清晰后再生成带版本的 React Flow 工件。
                 </div>
               )}
             </div>
 
             <form
               className="shrink-0 border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void sendMessage();
-                }}
-              >
+              onSubmit={(event) => {
+                event.preventDefault();
+                void sendMessage();
+              }}
+            >
               <textarea
                 value={composer}
                 onChange={(event) => setComposer(event.target.value)}
@@ -361,7 +363,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
               />
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="text-xs text-neutral-500">
-                   生成操作会基于当前对话创建新的工件版本。
+                  生成操作会基于当前对话创建新的工件版本。
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -370,14 +372,14 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                     disabled={pendingMode !== null}
                     className="rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-white"
                   >
-                     {pendingMode === 'proposal' ? '生成中…' : '生成拆分'}
+                    {pendingMode === 'proposal' ? '生成中…' : '生成拆分'}
                   </button>
                   <button
                     type="submit"
                     disabled={pendingMode !== null}
                     className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   >
-                     {pendingMode === 'chat' ? '思考中…' : '发送'}
+                    {pendingMode === 'chat' ? '思考中…' : '发送'}
                   </button>
                 </div>
               </div>
@@ -476,7 +478,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                   <div className="min-h-[480px] flex-1 overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
                     {flowNodes.length === 0 ? (
                       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-                         这个工件还没有节点。
+                        这个工件还没有节点。
                       </div>
                     ) : (
                       <ReactFlow<PlannerFlowNode, Edge>
@@ -536,9 +538,7 @@ export function ProjectPlannerView({ projectUid }: ProjectPlannerViewProps): JSX
                           />
                         </div>
                       ) : (
-                        <p className="mt-3 text-neutral-500">
-                           在画布上选择一个节点以查看详情。
-                        </p>
+                        <p className="mt-3 text-neutral-500">在画布上选择一个节点以查看详情。</p>
                       )}
                     </div>
                   </section>
@@ -760,9 +760,7 @@ function PublishResultPanel({
     <div className="rounded border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-700 dark:bg-emerald-950/30">
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <h4 className="font-semibold text-emerald-800 dark:text-emerald-200">
-            方案已发布
-          </h4>
+          <h4 className="font-semibold text-emerald-800 dark:text-emerald-200">方案已发布</h4>
           <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
             发布时间：{new Date(result.publishedAt).toLocaleString()}
           </p>

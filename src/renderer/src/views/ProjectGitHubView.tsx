@@ -166,13 +166,13 @@ export function ProjectGitHubView({
   };
 
   return (
-      <ProjectGitHubSurface
-        projectName={project.name}
-        projectUid={project.uid}
-        projectSlug={project.slug}
-        tasks={tasks}
-        details={details}
-        activeTab={activeTab}
+    <ProjectGitHubSurface
+      projectName={project.name}
+      projectUid={project.uid}
+      projectSlug={project.slug}
+      tasks={tasks}
+      details={details}
+      activeTab={activeTab}
       onSelectTab={setActiveTab}
       onRefresh={() => void refresh()}
       onPublish={publish}
@@ -234,17 +234,18 @@ export function ProjectGitHubSurface({
         </div>
         <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-neutral-500">
           <span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">
-            Issues {details?.issues.length ?? 0}
+            Issue {details?.issues.length ?? 0}
           </span>
           <span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">
             PRs {details?.pullRequests.length ?? 0}
           </span>
           <span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">
-            Worktrees {details?.worktrees.length ?? 0}
+            Worktree {details?.worktrees.length ?? 0}
           </span>
           {details?.overview.sync && (
             <span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">
-              {details.overview.sync.branch} · ↑{details.overview.sync.ahead} ↓{details.overview.sync.behind}
+              {details.overview.sync.branch} · ↑{details.overview.sync.ahead} ↓
+              {details.overview.sync.behind}
             </span>
           )}
         </div>
@@ -320,7 +321,12 @@ export function ProjectGitHubSurface({
               description="使用已批准任务、worktree 执行与 PR/check 状态作为交付轨迹。"
               actionLabel="打开终端"
               onAction={onOpenTerminal}
-              steps={['已关联 issue 的任务队列', 'Ghost worktree', '自主执行', 'PR + checks + 跟进']}
+              steps={[
+                '已关联 issue 的任务队列',
+                'Ghost worktree',
+                '自主执行',
+                'PR + checks + 跟进'
+              ]}
             />
           </section>
         </div>
@@ -394,10 +400,15 @@ export function ProjectGitHubSurface({
       {activeTab === 'prs' && (
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <section className="rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/70">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">PR 列表</h3>
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              PR 列表
+            </h3>
             <div className="mt-4 space-y-3">
               {(details?.pullRequests ?? []).map((pullRequest) => (
-                <article key={pullRequest.number} className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+                <article
+                  key={pullRequest.number}
+                  className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800"
+                >
                   <button
                     className="text-left text-sm font-semibold text-neutral-900 hover:text-sky-600 dark:text-neutral-100 dark:hover:text-sky-400"
                     onClick={() => onOpenPullRequest(pullRequest.url)}
@@ -414,11 +425,15 @@ export function ProjectGitHubSurface({
           <section className="space-y-4">
             <StatusPanel
               title="检查"
-              items={(details?.checks ?? []).map((check) => `${check.name} · ${check.conclusion ?? check.status}`)}
+              items={(details?.checks ?? []).map(
+                (check) => `${check.name} · ${check.conclusion ?? check.status}`
+              )}
             />
             <StatusPanel
               title="评审"
-              items={(details?.reviews ?? []).map((review) => `${review.reviewer} · ${review.state}`)}
+              items={(details?.reviews ?? []).map(
+                (review) => `${review.reviewer} · ${review.state}`
+              )}
             />
           </section>
         </div>
@@ -513,7 +528,11 @@ function StatusPanel({ title, items }: { title: string; items: string[] }): JSX.
     <article className="rounded-2xl border border-neutral-200 bg-white/80 p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/70">
       <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{title}</h3>
       <ul className="mt-4 space-y-2 text-xs text-neutral-500">
-        {items.length === 0 ? <li>暂无{title}。</li> : items.map((item) => <li key={item}>{item}</li>)}
+        {items.length === 0 ? (
+          <li>暂无{title}。</li>
+        ) : (
+          items.map((item) => <li key={item}>{item}</li>)
+        )}
       </ul>
     </article>
   );
