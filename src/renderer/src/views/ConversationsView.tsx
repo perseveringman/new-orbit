@@ -29,17 +29,17 @@ import {
 function describeAnchor(a: ConversationAnchor): string {
   switch (a.kind) {
     case 'task':
-      return `Task · ${a.refId.slice(0, 8)}`;
+      return `任务 · ${a.refId.slice(0, 8)}`;
     case 'inbox_item':
       return `Inbox · ${a.refId.slice(0, 8)}`;
     case 'ask_anywhere_session':
-      return `Ask · ${a.refId.slice(0, 8)}`;
+      return `随处问 · ${a.refId.slice(0, 8)}`;
     case 'channel_thread':
-      return `Channel · ${a.refId}`;
+      return `频道 · ${a.refId}`;
     case 'capture_item':
-      return `Capture · ${a.refId.slice(0, 8)}`;
+      return `捕获 · ${a.refId.slice(0, 8)}`;
     case 'planner_session':
-      return `Planner · ${a.refId.slice(0, 8)}`;
+      return `规划 · ${a.refId.slice(0, 8)}`;
     default:
       return `${a.kind}:${a.refId}`;
   }
@@ -161,7 +161,7 @@ export function ConversationsView(): JSX.Element {
     <div className="flex h-full min-h-0">
       <aside className="w-72 shrink-0 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800">
         <div className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Conversations · {list.length}
+          对话 · {list.length}
         </div>
         <ul className="space-y-0.5 px-2 pb-4">
           {list.map((c) => {
@@ -175,14 +175,14 @@ export function ConversationsView(): JSX.Element {
                 >
                   <span className="truncate font-medium">{c.title ?? c.id.slice(0, 8)}</span>
                   <span className="text-[11px] text-neutral-500">
-                    {anchor ? describeAnchor(anchor) : 'no anchor'} · {new Date(c.updatedAt).toLocaleString()}
+                    {anchor ? describeAnchor(anchor) : '无锚点'} · {new Date(c.updatedAt).toLocaleString()}
                   </span>
                 </button>
               </li>
             );
           })}
           {list.length === 0 && (
-            <li className="px-2 py-6 text-center text-xs text-neutral-500">No conversations yet.</li>
+            <li className="px-2 py-6 text-center text-xs text-neutral-500">暂无对话。</li>
           )}
         </ul>
       </aside>
@@ -192,7 +192,7 @@ export function ConversationsView(): JSX.Element {
             <header className="border-b border-neutral-200 px-4 py-2 text-sm dark:border-neutral-800">
               <div className="font-semibold">{activeMeta.title ?? activeMeta.id}</div>
               <div className="text-xs text-neutral-500">
-                {activeMeta.anchors.map(describeAnchor).join(' · ')} · status: {activeMeta.status}
+                {activeMeta.anchors.map(describeAnchor).join(' · ')} · 状态：{conversationStatusLabel(activeMeta.status)}
               </div>
             </header>
             <div className="min-h-0 flex-1">
@@ -202,7 +202,7 @@ export function ConversationsView(): JSX.Element {
                 events={events}
                 isLoading={false}
                 onAction={handleAction}
-                welcomeMessage={canContinue ? '继续这个 Ask Anywhere 会话。' : '只读历史。'}
+                welcomeMessage={canContinue ? '继续这个随处问会话。' : '只读历史。'}
                 composerOptions={runtimeCatalog.options}
                 composerSelection={selectionFromConversation(
                   activeConversation,
@@ -215,10 +215,17 @@ export function ConversationsView(): JSX.Element {
           </div>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-            Select a conversation.
+            选择一个对话。
           </div>
         )}
       </main>
     </div>
   );
+}
+
+function conversationStatusLabel(status: ConversationMeta['status']): string {
+  if (status === 'active') return '活跃';
+  if (status === 'paused') return '已暂停';
+  if (status === 'ended') return '已结束';
+  return status;
 }
