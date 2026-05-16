@@ -39,7 +39,7 @@ export function AgentsLibraryView(): JSX.Element {
         return next.templates[0]?.id ?? null;
       });
     } catch (error) {
-      toast(`Load role templates failed: ${(error as Error).message}`);
+      toast(`加载角色模板失败：${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -130,46 +130,45 @@ export function AgentsLibrarySurface({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-500">
-              Role template system
+              角色模板系统
             </p>
             <h1 className="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-              Role Templates
+              角色模板
             </h1>
             <p className="max-w-3xl text-sm text-neutral-600 dark:text-neutral-300">
-              Manage reusable role templates, inspect version baselines, and understand how each
-              template is performing across projects before dropping into a project binding.
+              管理可复用角色模板，查看版本基线，并在进入项目绑定前了解每个模板在跨项目中的表现。
             </p>
           </div>
           <button
             onClick={onRefresh}
             className="rounded border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Refresh library
+            刷新库
           </button>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <WorkspaceStat
-            label="Templates"
+            label="模板"
             value={String(templates.length)}
-            hint="Builtin and custom role assets"
+            hint="内置与自定义角色资产"
           />
           <WorkspaceStat
-            label="Bindings"
+            label="绑定"
             value={String((snapshot?.bindings ?? []).length)}
-            hint="Project role instances using those templates"
+            hint="使用这些模板的项目角色实例"
           />
           <WorkspaceStat
-            label="Reports"
+            label="报告"
             value={String((snapshot?.reports ?? []).length)}
-            hint="Implementation history flowing through bindings"
+            hint="流经绑定的实现历史"
           />
           <WorkspaceStat
-            label="Healthy bindings"
+            label="健康绑定"
             value={String(
               (snapshot?.bindings ?? []).filter((binding) => binding.health === 'healthy').length
             )}
-            hint="Bindings ready to keep participating"
+            hint="可继续参与的绑定"
           />
         </div>
       </header>
@@ -178,16 +177,16 @@ export function AgentsLibrarySurface({
         <div className="flex h-full min-h-0">
           <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
             <div className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-              <h2 className="text-sm font-semibold">Templates</h2>
+              <h2 className="text-sm font-semibold">模板</h2>
               <p className="mt-1 text-xs text-neutral-500">
-                Reusable roles shared across projects.
+                跨项目共享的可复用角色。
               </p>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               {loading ? (
-                <p className="px-2 py-3 text-sm text-neutral-500">Loading templates…</p>
+                <p className="px-2 py-3 text-sm text-neutral-500">正在加载模板…</p>
               ) : templates.length === 0 ? (
-                <p className="px-2 py-3 text-sm text-neutral-500">No templates registered yet.</p>
+                <p className="px-2 py-3 text-sm text-neutral-500">尚未注册模板。</p>
               ) : (
                 <ul className="space-y-2">
                   {templates.map((template) => {
@@ -216,11 +215,11 @@ export function AgentsLibrarySurface({
                               <div className="mt-1 text-xs text-neutral-500">{template.slug}</div>
                             </div>
                             <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] dark:bg-neutral-800">
-                              {stats?.bindings ?? 0} bindings
+                              {stats?.bindings ?? 0} 个绑定
                             </span>
                           </div>
                           <div className="mt-2 text-[11px] text-neutral-500">
-                            {stats?.projects ?? 0} projects · {stats?.reports ?? 0} reports
+                            {stats?.projects ?? 0} 个项目 · {stats?.reports ?? 0} 个报告
                           </div>
                         </button>
                       </li>
@@ -234,7 +233,7 @@ export function AgentsLibrarySurface({
           <main className="flex min-h-0 flex-1 flex-col">
             {!selectedTemplate ? (
               <div className="flex h-full items-center justify-center text-sm text-neutral-500">
-                Select a template to inspect versions and project usage.
+                选择一个模板以查看版本与项目使用情况。
               </div>
             ) : (
               <>
@@ -248,12 +247,12 @@ export function AgentsLibrarySurface({
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-neutral-500">
-                        {selectedTemplate.slug} · Latest version {latestVersion?.version ?? '—'}
+                        {selectedTemplate.slug} · 最新版本 {latestVersion?.version ?? '—'}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-[11px] text-neutral-500">
-                      <span>Updated: {new Date(selectedTemplate.updatedAt).toLocaleString()}</span>
-                      <span>Bindings: {selectedBindings.length}</span>
+                      <span>更新于：{new Date(selectedTemplate.updatedAt).toLocaleString()}</span>
+                      <span>绑定：{selectedBindings.length}</span>
                     </div>
                   </div>
                 </header>
@@ -262,16 +261,16 @@ export function AgentsLibrarySurface({
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
                     <div className="space-y-4">
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
-                        <h3 className="text-sm font-semibold">Template Baseline</h3>
+                        <h3 className="text-sm font-semibold">模板基线</h3>
                         {!latestVersion ? (
                           <p className="mt-3 text-sm text-neutral-500">
-                            No published versions for this template yet.
+                            这个模板尚无已发布版本。
                           </p>
                         ) : (
                           <div className="mt-3 space-y-4">
                             <div>
                               <div className="text-xs uppercase tracking-wide text-neutral-500">
-                                Instructions
+                                指令
                               </div>
                               <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-700 dark:text-neutral-200">
                                 {latestVersion.instructions}
@@ -279,20 +278,20 @@ export function AgentsLibrarySurface({
                             </div>
                             <div className="grid gap-3 md:grid-cols-2">
                               <InfoCard
-                                label="Default dispatch"
+                                label="默认派发"
                                 value={latestVersion.defaultDispatchMode}
                               />
                               <InfoCard
-                                label="Autonomous"
-                                value={latestVersion.allowAutonomous ? 'allowed' : 'manual first'}
+                                label="自主"
+                                value={latestVersion.allowAutonomous ? '允许' : '先手动'}
                               />
                               <InfoCard
-                                label="Concurrency"
+                                label="并发"
                                 value={String(latestVersion.defaultConcurrency)}
                               />
                               <InfoCard
-                                label="Output style"
-                                value={latestVersion.outputStyle ?? 'unspecified'}
+                                label="输出风格"
+                                value={latestVersion.outputStyle ?? '未指定'}
                               />
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -306,7 +305,7 @@ export function AgentsLibrarySurface({
                               ))}
                               {latestVersion.providerPreferences?.length ? null : (
                                 <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                                  No provider preference
+                                  无 provider 偏好
                                 </span>
                               )}
                             </div>
@@ -326,14 +325,14 @@ export function AgentsLibrarySurface({
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold">Project Bindings</h3>
+                          <h3 className="text-sm font-semibold">项目绑定</h3>
                           <span className="text-xs text-neutral-500">
                             {selectedBindings.length}
                           </span>
                         </div>
                         {selectedBindings.length === 0 ? (
                           <p className="mt-3 text-sm text-neutral-500">
-                            No project is binding this template yet.
+                            还没有项目绑定这个模板。
                           </p>
                         ) : (
                           <ul className="mt-3 space-y-2">
@@ -351,12 +350,12 @@ export function AgentsLibrarySurface({
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold">Recent Reports</h3>
+                          <h3 className="text-sm font-semibold">最近报告</h3>
                           <span className="text-xs text-neutral-500">{selectedReports.length}</span>
                         </div>
                         {selectedReports.length === 0 ? (
                           <p className="mt-3 text-sm text-neutral-500">
-                            No execution reports attached to this template yet.
+                            这个模板尚无执行报告。
                           </p>
                         ) : (
                           <ul className="mt-3 space-y-2">
@@ -375,7 +374,7 @@ export function AgentsLibrarySurface({
 
                     <div className="space-y-4">
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
-                        <h3 className="text-sm font-semibold">Version History</h3>
+                        <h3 className="text-sm font-semibold">版本历史</h3>
                         <ul className="mt-3 space-y-2">
                           {templateVersions.map((version) => (
                             <li
@@ -399,23 +398,23 @@ export function AgentsLibrarySurface({
                       </section>
 
                       <section className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-950">
-                        <h3 className="text-sm font-semibold">Cross-project summary</h3>
+                        <h3 className="text-sm font-semibold">跨项目摘要</h3>
                         <dl className="mt-3 grid gap-3 text-sm">
                           <InfoCard
-                            label="Projects"
+                            label="项目"
                             value={String(
                               new Set(selectedBindings.map((binding) => binding.projectUid)).size
                             )}
                           />
-                          <InfoCard label="Bindings" value={String(selectedBindings.length)} />
+                          <InfoCard label="绑定" value={String(selectedBindings.length)} />
                           <InfoCard
-                            label="Healthy"
+                            label="健康"
                             value={String(
                               selectedBindings.filter((binding) => binding.health === 'healthy')
                                 .length
                             )}
                           />
-                          <InfoCard label="Reports" value={String(selectedReports.length)} />
+                          <InfoCard label="报告" value={String(selectedReports.length)} />
                         </dl>
                       </section>
                     </div>
@@ -449,15 +448,15 @@ function BindingListItem({
             <BindingHealthBadge health={binding.health} />
           </div>
           <div className="mt-1 text-xs text-neutral-500">
-            {binding.dispatchMode}
-            {binding.runtimePreference && <> · prefers {binding.runtimePreference}</>}
+            {dispatchModeLabel(binding.dispatchMode)}
+            {binding.runtimePreference && <> · 偏好 {binding.runtimePreference}</>}
           </div>
         </div>
         <button
           onClick={() => onOpenProjectRoles(binding.projectUid)}
           className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
-          Open roles
+          打开角色
         </button>
       </div>
     </li>
@@ -484,7 +483,7 @@ function TemplateReportItem({
           </div>
           <p className="mt-1 text-xs text-neutral-500">{report.summary}</p>
           <div className="mt-2 text-[11px] text-neutral-500">
-            {project?.name ?? report.projectUid ?? 'No project'} ·{' '}
+            {project?.name ?? report.projectUid ?? '无项目'} ·{' '}
             {new Date(report.createdAt).toLocaleString()}
           </div>
         </div>
@@ -493,7 +492,7 @@ function TemplateReportItem({
             onClick={() => onOpenProjectRoles(report.projectUid!)}
             className="rounded border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Open roles
+            打开角色
           </button>
         )}
       </div>
@@ -528,6 +527,36 @@ function InfoCard({ label, value }: { label: string; value: string }): JSX.Eleme
   );
 }
 
+function dispatchModeLabel(mode: ProjectRoleBinding['dispatchMode']): string {
+  const labels: Record<ProjectRoleBinding['dispatchMode'], string> = {
+    'manual-only': '仅手动',
+    suggested: '建议',
+    autonomous: '自主'
+  };
+  return labels[mode];
+}
+
+function bindingHealthLabel(health: ProjectRoleBinding['health']): string {
+  const labels: Record<ProjectRoleBinding['health'], string> = {
+    healthy: '健康',
+    degraded: '降级',
+    paused: '暂停',
+    blocked: '阻塞'
+  };
+  return labels[health];
+}
+
+function reportStatusLabel(status: ImplementationReport['status']): string {
+  const labels: Partial<Record<ImplementationReport['status'], string>> = {
+    running: '运行中',
+    completed: '已完成',
+    needs_attention: '需要关注',
+    failed: '失败',
+    released: '已释放'
+  };
+  return labels[status] ?? status;
+}
+
 function BindingHealthBadge({ health }: { health: ProjectRoleBinding['health'] }): JSX.Element {
   const color =
     health === 'healthy'
@@ -541,7 +570,7 @@ function BindingHealthBadge({ health }: { health: ProjectRoleBinding['health'] }
     <span
       className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}
     >
-      {health}
+            {bindingHealthLabel(health)}
     </span>
   );
 }
@@ -561,7 +590,7 @@ function ReportStatusBadge({ status }: { status: ImplementationReport['status'] 
     <span
       className={`rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${color}`}
     >
-      {status}
+      {reportStatusLabel(status)}
     </span>
   );
 }
