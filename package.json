@@ -15,6 +15,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
+    "demo:pmil-vault": "esbuild scripts/create-pmil-demo-vault.ts --bundle --platform=node --target=node20 --format=cjs --outfile=/tmp/orbit-create-pmil-demo-vault.cjs --alias:@shared=./src/shared && node /tmp/orbit-create-pmil-demo-vault.cjs",
     "package": "npm run build && electron-builder --mac --config electron-builder.yml",
     "package:dir": "npm run build && electron-builder --mac --dir --config electron-builder.yml",
     "e2e:install": "playwright install chromium",
