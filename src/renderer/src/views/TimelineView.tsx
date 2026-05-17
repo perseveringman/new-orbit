@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DailyTimeline, MonthlyIndex, TimelineExportResult, WeeklyTimeline, YearlyIndex } from '@shared/timeline';
-import type { SynthesisArtifact } from '@shared/synthesis';
+import type { DailySummaryEvidenceLine, DailySummaryPayload, SynthesisArtifact } from '@shared/synthesis';
 import type { Note } from '@shared/note';
+import { AnalysisProgressCard } from '../components/AnalysisProgressCard';
 import { SynthesisStatus } from '../components/synthesis';
 
 type TimelineMode = 'day' | 'week' | 'month' | 'year';
+
+const DAILY_SUMMARY_ANALYSIS_STEPS = [
+  '读取这一天留下的时间线记录',
+  '过滤技术噪声，只保留可复盘的事件',
+  '把相近的写作、阅读和任务推进合并成线索',
+  '提取今天真正完成的事情',
+  '寻找还没有闭环的讨论和想法',
+  '整理成一段能留到以后回看的每日复盘'
+];
 
 interface TimelineState {
   day: DailyTimeline | null;
@@ -14,7 +24,7 @@ interface TimelineState {
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey(new Date());
 }
 
 export function TimelineView(): JSX.Element {
@@ -24,6 +34,7 @@ export function TimelineView(): JSX.Element {
   const [state, setState] = useState<TimelineState>({ day: null, week: null, month: null, year: null });
   const [summaryArtifact, setSummaryArtifact] = useState<SynthesisArtifact | null>(null);
   const [loading, setLoading] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<TimelineExportResult | null>(null);
 
@@ -65,8 +76,18 @@ export function TimelineView(): JSX.Element {
   }, [date, mode]);
 
   async function summarize(): Promise<void> {
-    await window.orbit.timeline.generateDailySummary(date);
-    await reload();
+    setSummarizing(true);
+    setLoading(true);
+    setError(null);
+    try {
+      await window.orbit.timeline.generateDailySummary(date);
+      await reload();
+    } catch (err) {
+      setError(formatSummaryError(err));
+    } finally {
+      setLoading(false);
+      setSummarizing(false);
+    }
   }
 
   async function exportScope(): Promise<void> {
@@ -78,8 +99,8 @@ export function TimelineView(): JSX.Element {
       <header className="border-b border-neutral-200 p-4 dark:border-neutral-800">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold">每日时间线</h1>
-            <p className="text-xs text-neutral-500">由 TraceableEvent 投射出的生活日志。默认展示 Layer 1；仅在开发者模式显示 Layer 2。</p>
+            <h1 className="text-lg font-semibold">今日回顾</h1>
+            <p className="text-xs text-neutral-500">按时间整理今天完成、推进、沉淀的事情。</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => setDate(shiftDate(date, -1))} className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700">←</button>
@@ -87,9 +108,9 @@ export function TimelineView(): JSX.Element {
             <button onClick={() => setDate(shiftDate(date, 1))} className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700">→</button>
             <ModeSwitcher mode={mode} onChange={setMode} />
             <label className="flex items-center gap-1 text-xs text-neutral-500">
-              <input type="checkbox" checked={developerMode} onChange={(event) => setDeveloperMode(event.target.checked)} /> Layer 2
+              <input type="checkbox" checked={developerMode} onChange={(event) => setDeveloperMode(event.target.checked)} /> 技术记录
             </label>
-            <button onClick={() => void summarize()} disabled={mode !== 'day'} className="rounded bg-sky-600 px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:bg-neutral-300">生成摘要</button>
+            <button onClick={() => void summarize()} disabled={mode !== 'day' || summarizing} className="rounded bg-sky-600 px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:bg-neutral-300">{summarizing ? '复盘中…' : '生成真实复盘'}</button>
             <button onClick={() => void exportScope()} className="rounded border border-neutral-300 px-3 py-1.5 text-xs dark:border-neutral-700">导出 PDF</button>
           </div>
         </div>
@@ -97,7 +118,7 @@ export function TimelineView(): JSX.Element {
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto p-6">
         {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200">{error}</div> : null}
-        {loading ? <div className="text-sm text-neutral-500">正在加载时间线…</div> : null}
+        {loading && !summarizing ? <div className="mx-auto max-w-5xl text-sm text-neutral-500">正在加载时间线…</div> : null}
         <TimelineContent
           mode={mode}
           day={state.day}
@@ -105,6 +126,7 @@ export function TimelineView(): JSX.Element {
           month={state.month}
           year={state.year}
           summaryArtifact={summaryArtifact}
+          summarizing={summarizing}
           onSummarize={() => void summarize()}
         />
       </main>
@@ -119,6 +141,7 @@ export function TimelineContent({
   month,
   year,
   summaryArtifact,
+  summarizing = false,
   onSummarize
 }: {
   mode: TimelineMode;
@@ -127,45 +150,75 @@ export function TimelineContent({
   month: MonthlyIndex | null;
   year: YearlyIndex | null;
   summaryArtifact?: SynthesisArtifact | null;
+  summarizing?: boolean;
   onSummarize?: () => void;
 }): JSX.Element {
   if (mode === 'week') return week ? <WeekPanel week={week} /> : <EmptyState title="未加载周时间线" />;
   if (mode === 'month') return month ? <MonthPanel month={month} /> : <EmptyState title="未加载月时间线" />;
   if (mode === 'year') return year ? <YearPanel year={year} /> : <EmptyState title="未加载年时间线" />;
-  return day ? <DayPanel timeline={day} summaryArtifact={summaryArtifact ?? null} onSummarize={onSummarize} /> : <EmptyState title="未加载日时间线" />;
+  return day ? (
+    <div className="space-y-5">
+      {summarizing ? (
+        <div className="mx-auto max-w-5xl">
+          <AnalysisProgressCard
+            title="正在生成每日复盘"
+            description="Orbit 正在把今天的完成、推进、沉淀和未闭环线索整理成可以回看的总结。"
+            steps={DAILY_SUMMARY_ANALYSIS_STEPS}
+          />
+        </div>
+      ) : null}
+      <DayPanel timeline={day} summaryArtifact={summaryArtifact ?? null} summarizing={summarizing} onSummarize={onSummarize} />
+    </div>
+  ) : <EmptyState title="未加载日时间线" />;
 }
 
-function DayPanel({ timeline, summaryArtifact, onSummarize }: { timeline: DailyTimeline; summaryArtifact: SynthesisArtifact | null; onSummarize?: () => void }): JSX.Element {
+function DayPanel({ timeline, summaryArtifact, summarizing, onSummarize }: { timeline: DailyTimeline; summaryArtifact: SynthesisArtifact | null; summarizing: boolean; onSummarize?: () => void }): JSX.Element {
   const segments = timeline.segments ?? groupByPeriod(timeline.entries);
+  const summaryPayload = summaryArtifact?.payload as DailySummaryPayload | undefined;
+  const summarySourceCount = timeline.summary?.source_count ?? summaryPayload?.coverage?.evidence_count ?? summaryArtifact?.sources.length ?? 0;
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">今日一览</h2>
-            <p className="text-xs text-neutral-500">默认展示 Layer 1 事件；技术性的 Layer 2 事件会以视觉方式标记。</p>
+            <h2 className="text-sm font-semibold">今日完成清单</h2>
+            <p className="text-xs text-neutral-500">默认只显示可以复盘的成果和推进；技术记录可在右上角打开。</p>
           </div>
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-6">
-          <Glance label="事件" value={timeline.stats.total_events} />
+          <Glance label="记录" value={timeline.stats.total_events} />
           <Glance label="想法" value={timeline.stats.thoughts_count} />
           <Glance label="字数" value={timeline.stats.longforms_words} />
-          <Glance label="资料库" value={timeline.stats.library_added} />
+          <Glance label="收藏" value={timeline.stats.library_added} />
           <Glance label="任务" value={timeline.stats.tasks_completed} />
-          <Glance label="对话" value={timeline.stats.conversations_count} />
+          <Glance label="讨论" value={timeline.stats.conversations_count} />
         </div>
       </section>
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">AI 每日摘要</h2>
-            <SynthesisStatus artifact={summaryArtifact} generatedAt={timeline.summary?.generated_at} sourceCount={summaryArtifact?.sources.length ?? 0} onRefresh={onSummarize} />
+            <h2 className="text-sm font-semibold">AI 每日复盘</h2>
+            <SynthesisStatus artifact={summaryArtifact} generatedAt={timeline.summary?.generated_at} sourceCount={summarySourceCount} onRefresh={onSummarize} />
           </div>
-          <button onClick={onSummarize} className="rounded bg-amber-600 px-3 py-1.5 text-xs text-white">生成</button>
+          <button onClick={onSummarize} disabled={summarizing} className="rounded bg-amber-600 px-3 py-1.5 text-xs text-white disabled:cursor-wait disabled:opacity-70">{summarizing ? '复盘中…' : '生成真实复盘'}</button>
         </div>
+        {timeline.summary?.headline ? <p className="mt-3 text-base font-semibold">{timeline.summary.headline}</p> : null}
         <p className="mt-2 text-sm">{timeline.summary?.narrative ?? '暂无摘要。当天有足够信号后即可生成。'}</p>
+        {summaryPayload ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <SummaryEvidenceList title="完成清单" items={summaryPayload.done_list} />
+            <SummaryThreadList items={summaryPayload.main_threads} />
+            <SummaryEvidenceList title="未闭环" items={summaryPayload.open_loops} />
+            <SummaryEvidenceList title="明日延续" items={summaryPayload.tomorrow} />
+          </div>
+        ) : null}
+        {timeline.summary?.runtime ? (
+          <p className="mt-4 text-[11px] text-amber-800/70 dark:text-amber-100/70">
+            由 {runtimeLabel(timeline.summary.runtime)} 生成{timeline.summary.model ? ` · ${timeline.summary.model}` : ''} · 基于 {summarySourceCount} 条证据
+          </p>
+        ) : null}
       </section>
-      {timeline.entries.length === 0 ? <EmptyState title="安静的一天" description="这一天没有捕获到用户可见的 Layer 1 事件。" /> : null}
+      {timeline.entries.length === 0 ? <EmptyState title="安静的一天" description="这一天还没有留下可复盘的完成记录。" /> : null}
       {segments.map((group) => (
         <section key={group.id}>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">{group.label} · {group.range}</h2>
@@ -185,9 +238,9 @@ function WeekPanel({ week }: { week: WeeklyTimeline }): JSX.Element {
         <h2 className="text-sm font-semibold">第 {week.iso_week} 周</h2>
         <p className="text-xs text-neutral-500">{week.range.from} → {week.range.to}</p>
         <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <Glance label="事件" value={week.stats.total_events} />
+          <Glance label="记录" value={week.stats.total_events} />
           <Glance label="想法" value={week.stats.thoughts_count} />
-          <Glance label="资料库" value={week.stats.library_added} />
+          <Glance label="收藏" value={week.stats.library_added} />
           <Glance label="任务" value={week.stats.tasks_completed} />
         </div>
       </section>
@@ -196,7 +249,7 @@ function WeekPanel({ week }: { week: WeeklyTimeline }): JSX.Element {
           <article key={day.date} className="rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
             <div className="text-xs font-semibold">{day.date.slice(5)}</div>
             <div className="mt-2 text-2xl font-semibold">{day.stats.total_events}</div>
-            <div className="text-[11px] text-neutral-500">事件</div>
+            <div className="text-[11px] text-neutral-500">记录</div>
             {day.summary?.headline ? <p className="mt-2 text-xs text-amber-700 dark:text-amber-200">{day.summary.headline}</p> : null}
           </article>
         ))}
@@ -293,7 +346,7 @@ function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.
               </button>
             ) : null}
           </div>
-          <div className="text-[11px] text-neutral-500">{new Date(entry.occurred_at).toLocaleTimeString()} · {entry.event_kind}{entry.layer === 2 ? ' · Layer 2' : ''}</div>
+          <div className="text-[11px] text-neutral-500">{formatEntryTime(entry.occurred_at)} · {entryKindLabel(entry.event_kind)}{entry.layer === 2 ? ' · 技术记录' : ''}</div>
           {editing ? (
             <div className="mt-3 space-y-2">
               <input
@@ -320,8 +373,8 @@ function EntryCard({ entry }: { entry: DailyTimeline['entries'][number] }): JSX.
             <p className="mt-1 text-neutral-600 dark:text-neutral-300">{entry.summary}</p>
           ) : null}
           {error ? <p className="mt-1 text-[11px] text-red-600 dark:text-red-300">{error}</p> : null}
-          {entry.refs?.length ? <p className="mt-1 text-[11px] text-neutral-500">引用：{entry.refs.map((ref) => ref.label ?? ref.ref).join(', ')}</p> : null}
-          {entry.derived_from?.length ? <p className="mt-1 text-[11px] text-neutral-500">↳ 相关事件：{entry.derived_from.length}</p> : null}
+          {entry.refs?.length ? <p className="mt-1 text-[11px] text-neutral-500">关联：{entry.refs.map((ref) => ref.label ?? ref.ref).join(', ')}</p> : null}
+          {entry.derived_from?.length ? <p className="mt-1 text-[11px] text-neutral-500">↳ 合并了 {entry.derived_from.length} 条相关记录</p> : null}
         </div>
       </div>
     </article>
@@ -344,6 +397,38 @@ function Glance({ label, value }: { label: string; value: number }): JSX.Element
   return <div><div className="text-2xl font-semibold">{value}</div><div className="text-xs text-neutral-500">{label}</div></div>;
 }
 
+function SummaryEvidenceList({ title, items }: { title: string; items?: DailySummaryEvidenceLine[] }): JSX.Element | null {
+  const lines = (items ?? []).filter((item) => item.text.trim());
+  if (!lines.length) return null;
+  return (
+    <div className="min-w-0">
+      <h3 className="text-xs font-semibold">{title}</h3>
+      <ul className="mt-2 space-y-1 text-xs leading-5">
+        {lines.map((item, index) => (
+          <li key={`${title}-${index}`}>- {item.text}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SummaryThreadList({ items }: { items?: DailySummaryPayload['main_threads'] }): JSX.Element | null {
+  const threads = items ?? [];
+  if (!threads.length) return null;
+  return (
+    <div className="min-w-0">
+      <h3 className="text-xs font-semibold">主线推进</h3>
+      <ul className="mt-2 space-y-2 text-xs leading-5">
+        {threads.map((item, index) => (
+          <li key={`${item.title}-${index}`}>
+            <span className="font-medium">{item.title}</span>：{item.summary}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function EmptyState({ title, description }: { title: string; description?: string }): JSX.Element {
   return (
     <div className="mx-auto max-w-4xl rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500 dark:border-neutral-700">
@@ -351,6 +436,25 @@ function EmptyState({ title, description }: { title: string; description?: strin
       {description ? <p className="mt-1">{description}</p> : null}
     </div>
   );
+}
+
+function formatSummaryError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('daily_summary_ai_unavailable')) {
+    return '未配置可用 AI 端点，无法生成真实每日复盘。请先在设置里配置 AI 端点。';
+  }
+  if (message.includes('daily_summary_ai_failed')) {
+    return 'AI 生成每日复盘失败，请稍后重试或检查当前 AI 端点配置。';
+  }
+  return message;
+}
+
+function runtimeLabel(runtime: string): string {
+  if (runtime === 'sdk:anthropic') return 'Anthropic';
+  if (runtime === 'sdk:minimax') return 'Minimax';
+  if (runtime === 'sdk:deepseek') return 'DeepSeek';
+  if (runtime.startsWith('sdk:')) return runtime.slice(4);
+  return runtime;
 }
 
 function timelineModeLabel(mode: TimelineMode): string {
@@ -363,19 +467,73 @@ function timelineModeLabel(mode: TimelineMode): string {
   return labels[mode];
 }
 
+function entryKindLabel(kind: string): string {
+  const labels: Record<string, string> = {
+    'note.created': '捕获',
+    'note.updated': '写作更新',
+    'note.archived': '归档',
+    'library.item.added': '资料收藏',
+    'library.item.annotated': '阅读标注',
+    'library.item.status_changed': '资料状态',
+    'library.item.read': '阅读完成',
+    'library.item.distilled': '资料提炼',
+    'library.item.linked_to_resource': '资源关联',
+    'feed.source.added': '信息源',
+    'feed.item.saved_to_library': '信息流收藏',
+    'daily_summary.generated': '每日总结',
+    'kb.imported': '知识库',
+    'kb.doc.activated': '知识沉淀',
+    'kb.activated': '知识沉淀',
+    'kb.welcome_analysis_completed': '知识分析',
+    'scheduled_task.created': '定时任务',
+    'scheduled_task.execution.completed': '定时任务完成',
+    'task.completed': '任务完成',
+    'conversation.started': '对话',
+    'conversation.meaningful': '有效讨论',
+    'resource.created': '资源主题',
+    'resource.updated': '资源更新',
+    'resource.ref.linked': '素材关联',
+    'resource.ref.promoted': '素材沉淀',
+    'resource.engagement': '资源推进',
+    'resource.archived': '资源归档',
+    'agent.run.started': '代理开始',
+    'agent.run.completed': '代理完成',
+    'agent.run.interrupted': '代理中断',
+    'runtime.sdk.invocation.started': '模型调用',
+    'runtime.sdk.cost': '调用成本',
+    'runtime.sdk.invocation.completed': '调用完成',
+    'synthesis.artifact.created': '智能生成',
+    'synthesis.artifact.stale': '智能生成过期',
+    'synthesis.artifact.superseded': '智能生成替换',
+    'synthesis.artifact.failed': '智能生成失败',
+    'synthesis.artifact.user_edited': '智能生成编辑',
+    'conversation.turn.added': '对话轮次',
+    'conversation.message.added': '对话消息',
+    'inbox.item.created': '待处理事项',
+    'inbox.item.resolved': '处理完成',
+    'activity.user': '用户操作',
+    'activity.system': '系统操作'
+  };
+  return labels[kind] ?? '记录';
+}
+
+function formatEntryTime(value: string): string {
+  return wallClockTime(value);
+}
+
 function groupByPeriod(entries: DailyTimeline['entries']): NonNullable<DailyTimeline['segments']> {
   const buckets = new Map<string, DailyTimeline['entries']>();
   for (const entry of entries) {
-    const hour = Number(entry.occurred_at.slice(11, 13));
+    const hour = wallClockHour(entry.occurred_at);
     const id = hour < 6 ? 'night' : hour < 12 ? 'morning' : hour < 14 ? 'noon' : hour < 18 ? 'afternoon' : 'evening';
     buckets.set(id, [...(buckets.get(id) ?? []), entry]);
   }
   const labels = {
-    night: ['夜间', '00:00-06:00'],
+    night: ['凌晨', '00:00-06:00'],
     morning: ['上午', '06:00-12:00'],
     noon: ['中午', '12:00-14:00'],
     afternoon: ['下午', '14:00-18:00'],
-    evening: ['晚间', '18:00-24:00']
+    evening: ['晚上', '18:00-24:00']
   } as const;
   return (Object.keys(labels) as Array<keyof typeof labels>)
     .map((id) => ({ id, label: labels[id][0], range: labels[id][1], entries: buckets.get(id) ?? [] }))
@@ -383,9 +541,9 @@ function groupByPeriod(entries: DailyTimeline['entries']): NonNullable<DailyTime
 }
 
 function shiftDate(date: string, deltaDays: number): string {
-  const next = new Date(`${date}T00:00:00.000Z`);
-  next.setUTCDate(next.getUTCDate() + deltaDays);
-  return next.toISOString().slice(0, 10);
+  const [year, month, day] = date.split('-').map(Number);
+  const next = new Date(year, (month || 1) - 1, (day || 1) + deltaDays);
+  return localDateKey(next);
 }
 
 function scopeValueFor(mode: TimelineMode, date: string): string {
@@ -409,4 +567,28 @@ function heatClass(count: number): string {
   if (count < 3) return 'border-sky-100 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-100';
   if (count < 8) return 'border-sky-200 bg-sky-100 text-sky-950 dark:border-sky-800 dark:bg-sky-900/40 dark:text-sky-50';
   return 'border-sky-300 bg-sky-200 text-sky-950 dark:border-sky-700 dark:bg-sky-800 dark:text-white';
+}
+
+function localDateKey(value: Date): string {
+  return [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, '0'),
+    String(value.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function wallClockTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    const match = value.match(/T(\d{2}):(\d{2})/);
+    return match ? `${match[1]}:${match[2]}` : value.slice(11, 16);
+  }
+  return parsed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function wallClockHour(value: string): number {
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed.getHours();
+  const match = value.match(/T(\d{2})/);
+  return match ? Number(match[1]) : 0;
 }

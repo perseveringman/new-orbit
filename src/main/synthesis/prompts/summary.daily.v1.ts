@@ -24,8 +24,7 @@ export const summaryDailyPrompt: SynthesisPromptTemplate<DailySummaryPayload> = 
       headline,
       narrative,
       highlights: stringArray(parsed['highlights']),
-      tomorrow: stringArray(parsed['tomorrow'])
+      tomorrow: stringArray(parsed['tomorrow']).map((text) => ({ text, evidence_ids: [] }))
     };
   }
 };
-

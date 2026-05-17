@@ -12,8 +12,14 @@ export function SynthesisBadge({ artifact }: { artifact?: Pick<SynthesisArtifact
           : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200';
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${tone}`}>
-      AI · {artifact?.user_edited ? 'edited' : status}
+      AI · {artifact?.user_edited ? '已编辑' : synthesisStatusLabel(status)}
     </span>
   );
 }
 
+function synthesisStatusLabel(status: SynthesisArtifact['status'] | 'stale'): string {
+  if (status === 'fresh') return '最新';
+  if (status === 'failed') return '失败';
+  if (status === 'superseded') return '已替换';
+  return '待刷新';
+}

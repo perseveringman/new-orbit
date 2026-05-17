@@ -17,11 +17,22 @@ describe('ReviewContent', () => {
       baseElement({ state: 'success', runs: [sampleDetail().run], detail: sampleDetail() })
     );
 
-    expect(html).toContain('发现停滞、未归属和沉睡的工作');
-    expect(html).toContain('Unassigned notes');
-    expect(html).toContain('个人记忆智能');
-    expect(html).toContain('当前工作上下文');
-    expect(html).toContain('确认');
+    expect(html).toContain('把未闭环的事变成下一步');
+    expect(html).toContain('有笔记还没有归属领域');
+    expect(html).toContain('笔记归属');
+    expect(html).toContain('工作线索');
+    expect(html).toContain('最近值得接住的线索');
+    expect(html).toContain('可行动事项');
+    expect(html).toContain('这次先略过');
+    expect(html).toContain('我知道了');
+  });
+
+  it('shows analysis progress while generating a review', () => {
+    const html = renderToStaticMarkup(baseElement({ state: 'loading', generating: true }));
+
+    expect(html).toContain('正在生成行动复盘');
+    expect(html).toContain('读取最近的项目、任务和笔记');
+    expect(html).toContain('复盘中');
   });
 });
 
@@ -34,6 +45,7 @@ function baseElement(
     detail: null,
     state: 'success',
     error: null,
+    generating: false,
     onTab: vi.fn(),
     onTrigger: vi.fn(),
     onReload: vi.fn(),

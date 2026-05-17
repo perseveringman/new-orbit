@@ -34,6 +34,8 @@ describe('Review System', () => {
     const { findings, health } = await discoverReviewFindings(vaultPath, run);
 
     expect(findings.map((finding) => finding.category)).toEqual(expect.arrayContaining(['unassigned-note', 'library-undistilled']));
+    expect(findings.find((finding) => finding.category === 'unassigned-note')?.title).toContain('笔记还没有归属领域');
+    expect(findings.find((finding) => finding.category === 'library-undistilled')?.suggested_actions[0]?.description).toContain('提炼已读资料');
     expect(health.notes.unassigned).toBe(1);
   });
 

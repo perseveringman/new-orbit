@@ -24,6 +24,7 @@ import type { SynthesisStore } from './store';
 export interface SynthesisRunnerOptions {
   router?: SynthesisRuntimeRouter | null;
   maxBudgetUsd?: number;
+  requireSdk?: boolean;
 }
 
 export interface SynthesisRuntimeRouter {
@@ -86,6 +87,8 @@ export class SynthesisRunner {
           });
         }
       }
+
+      if (this.options.requireSdk) throw new Error('synthesis_sdk_unavailable');
 
       const payload = localSynthesis(job.kind, job.sources);
       return this.store.writeFresh({
@@ -165,18 +168,35 @@ function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknow
 
 function localDailySummary(sources: SynthesisSource[]): DailySummaryPayload {
   const timeline = sources.find((source) => source.kind === 'timeline_range')?.metadata as
-    | { entries?: Array<{ icon?: string; title?: string }>; stats?: { total_events?: number } }
+    | {
+        packet?: {
+          entries?: Array<{ icon?: string; title?: string }>;
+          stats?: { total_events?: number };
+          coverage?: { evidence_count?: number; included_kinds?: string[]; omitted_count?: number };
+        };
+        entries?: Array<{ icon?: string; title?: string }>;
+        stats?: { total_events?: number };
+      }
     | undefined;
-  const entries = timeline?.entries ?? [];
-  const count = timeline?.stats?.total_events ?? entries.length;
-  const highlights = entries.slice(0, 5).map((entry) => `${entry.icon ?? '•'} ${entry.title ?? 'Timeline event'}`);
+  const entries = timeline?.entries ?? timeline?.packet?.entries ?? [];
+  const count = timeline?.stats?.total_events ?? timeline?.packet?.stats?.total_events ?? entries.length;
+  const highlights = entries.slice(0, 5).map((entry) => `${entry.icon ?? '•'} ${entry.title ?? '时间线记录'}`);
   return {
-    headline: count > 0 ? `${count} meaningful events` : 'Quiet day',
+    headline: count > 0 ? `${count} 条可复盘记录` : '安静的一天',
     narrative:
       count > 0
-        ? `Orbit captured ${count} timeline event(s). The main thread was: ${highlights.join(' / ')}.`
-        : 'No user-visible activity was captured today.',
-    highlights: highlights.length > 0 ? highlights : ['Rest / no captured events']
+        ? `Orbit 捕获了 ${count} 条时间线记录：${highlights.join(' / ')}。`
+        : '今天还没有捕获到可复盘的用户活动。',
+    highlights: highlights.length > 0 ? highlights : ['暂无可复盘记录'],
+    done_list: highlights.map((text, index) => ({ text, evidence_ids: [`local-${index + 1}`] })),
+    main_threads: [],
+    open_loops: [],
+    tomorrow: [],
+    coverage: {
+      evidence_count: timeline?.packet?.coverage?.evidence_count ?? entries.length,
+      included_kinds: timeline?.packet?.coverage?.included_kinds ?? [],
+      omitted_count: timeline?.packet?.coverage?.omitted_count ?? 0
+    }
   };
 }
 

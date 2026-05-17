@@ -85,7 +85,7 @@ describe('mobile inbound ingest', () => {
       expect.arrayContaining([
         expect.objectContaining({
           event_kind: 'note.created',
-          title: 'Captured thought',
+          title: '捕获想法《A subway thought》',
           event_id: 'mobile-capture-note:mob_cap_ok'
         })
       ])

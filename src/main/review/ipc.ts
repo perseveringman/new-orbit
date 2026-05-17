@@ -142,20 +142,20 @@ function reviewActionsFromOpenLoop(
       ...(createTask && 'project_ref' in createTask && createTask.project_ref
         ? { target_ref: `project:${createTask.project_ref}` }
         : {}),
-      description: createTask && 'title' in createTask ? createTask.title : `Follow up: ${loop.title}`,
+      description: createTask && 'title' in createTask ? createTask.title : `继续处理：${loop.title}`,
       executed: false
     },
     {
       id: `action-${randomUUID()}`,
       kind: 'schedule_review',
       target_ref: `synthesis:${artifactId}`,
-      description: 'Keep this loop in review',
+      description: '保留到下次复盘继续看',
       executed: false
     },
     {
       id: `action-${randomUUID()}`,
       kind: 'ignore',
-      description: 'Dismiss this loop for now',
+      description: '这次先略过',
       executed: false
     }
   ];

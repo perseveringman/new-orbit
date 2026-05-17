@@ -8,7 +8,25 @@ export interface DailySummaryPayload {
   headline: string;
   narrative: string;
   highlights: string[];
-  tomorrow?: string[];
+  done_list?: DailySummaryEvidenceLine[];
+  main_threads?: Array<{
+    title: string;
+    summary: string;
+    evidence_ids: string[];
+  }>;
+  open_loops?: DailySummaryEvidenceLine[];
+  tomorrow?: DailySummaryEvidenceLine[];
+  coverage?: {
+    evidence_count: number;
+    included_kinds: string[];
+    omitted_count: number;
+  };
+}
+
+export interface DailySummaryEvidenceLine {
+  text: string;
+  evidence_ids: string[];
+  reason?: string;
 }
 
 export interface LibraryDistillPayload {

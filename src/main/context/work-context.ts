@@ -19,7 +19,7 @@ export async function generateWorkContextReport(
   const packet = await buildContextPacket(vaultPath, {
     purpose: 'review',
     scope,
-    query: input.query ?? 'current focus open loops blockers decisions next steps',
+    query: input.query ?? '当前焦点 开放回路 阻塞 待决策 下一步',
     max_tokens: 2200,
     evidence_limit: 10,
     graph_limit: 12,
@@ -69,22 +69,22 @@ function loopCandidatesForChunk(chunk: EvidenceChunk): OpenLoopPayload['loops'] 
     id: `open-loop-${randomUUID()}`,
     status: 'candidate' as const,
     evidence: [chunk.selector],
-    rationale: `Detected from evidence chunk "${chunk.title}" because it looks unfinished or action-oriented.`
+    rationale: `这条内容看起来还没有闭环，可能需要被整理成任务、决策或后续复盘。来源：${chunk.title}`
   };
   if (/\b(todo|next step|follow[- ]?up|remaining|not yet|backlog|later|continue|implement)\b|下一步|待办|继续|补上|实现|后续/iu.test(text)) {
     candidates.push({
       ...base,
-      title: titleFromText(chunk.text, 'Follow up on unfinished work'),
+      title: titleFromText(chunk.text, '继续处理这件未完成的事'),
       kind: 'task_candidate',
       severity: 'suggestion',
-      suggested_actions: [{ kind: 'create_task', title: titleFromText(chunk.text, 'Follow up on unfinished work') }]
+      suggested_actions: [{ kind: 'create_task', title: titleFromText(chunk.text, '继续处理这件未完成的事') }]
     });
   }
   if (/\b(decide|decision pending|open question|trade[- ]?off|whether|should we)\b|待定|拍板|选择|取舍|问题/iu.test(text)) {
     candidates.push({
       ...base,
       id: `open-loop-${randomUUID()}`,
-      title: titleFromText(chunk.text, 'Resolve pending decision'),
+      title: titleFromText(chunk.text, '把这个待决策问题说清楚'),
       kind: text.includes('?') || text.includes('？') ? 'question' : 'decision_pending',
       severity: 'warning',
       suggested_actions: [{ kind: 'schedule_review' }]
@@ -94,7 +94,7 @@ function loopCandidatesForChunk(chunk: EvidenceChunk): OpenLoopPayload['loops'] 
     candidates.push({
       ...base,
       id: `open-loop-${randomUUID()}`,
-      title: titleFromText(chunk.text, 'Review blocker or stale context'),
+      title: titleFromText(chunk.text, '检查这里是否已经停滞或被阻塞'),
       kind: 'stale_context',
       severity: 'warning',
       suggested_actions: [{ kind: 'schedule_review' }]
@@ -113,7 +113,7 @@ function buildActiveThreads(
     evidence: [chunk.selector],
     confidence: Number((0.55 + Math.max(0, 4 - index) * 0.05).toFixed(2)),
     likely_next_steps: likelyNextSteps(chunk, openLoopTitles),
-    ...(hasBlocker(chunk.text) ? { blockers: [titleFromText(chunk.text, 'Review blocker')] } : {})
+    ...(hasBlocker(chunk.text) ? { blockers: [titleFromText(chunk.text, '检查这个阻塞点')] } : {})
   }));
 }
 
@@ -131,9 +131,9 @@ function buildDecisions(chunks: EvidenceChunk[]): WorkContextPayload['decisions'
 function likelyNextSteps(chunk: EvidenceChunk, openLoopTitles: string[]): string[] {
   const explicit = openLoopTitles.find((title) => title && chunk.text.includes(title.slice(0, 20)));
   if (explicit) return [explicit];
-  if (hasBlocker(chunk.text)) return ['Review the blocker and decide the smallest unblock action.'];
-  if (/\b(decision|whether|should)\b|待定|是否|选择/iu.test(chunk.text)) return ['Turn the pending decision into an explicit choice or review item.'];
-  return ['Check whether this thread should become a task, note, or resource update.'];
+  if (hasBlocker(chunk.text)) return ['先确认卡点，再决定一个最小的推进动作。'];
+  if (/\b(decision|whether|should)\b|待定|是否|选择/iu.test(chunk.text)) return ['把待决策问题写成一个明确选择。'];
+  return ['判断这条线索应该变成任务、笔记，还是主题更新。'];
 }
 
 function currentFocus(chunks: EvidenceChunk[], fallbackTitles: string[]): string {
@@ -150,7 +150,7 @@ function currentFocus(chunks: EvidenceChunk[], fallbackTitles: string[]): string
   if (topEntities.length) return topEntities.join(', ');
   const titles = chunks.slice(0, 3).map((chunk) => chunk.title).filter(Boolean);
   if (titles.length) return titles.join(' / ');
-  return fallbackTitles.join(' / ') || 'No clear current focus detected yet.';
+  return fallbackTitles.join(' / ') || '暂时没有发现明确焦点';
 }
 
 function titleFromText(text: string, fallback: string): string {

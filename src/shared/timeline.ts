@@ -40,6 +40,10 @@ export interface DailySummary {
   highlights?: string[];
   synthesis_ref?: string;
   status?: 'fresh' | 'stale' | 'superseded' | 'failed';
+  source_count?: number;
+  runtime?: string;
+  model?: string;
+  prompt_version?: string;
 }
 
 export interface DailyTimeline {

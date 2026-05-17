@@ -23,32 +23,32 @@ export async function discoverReviewFindings(vaultPath: string, run: ReviewRun):
   const unassignedProjects = activeProjects.filter((project) => !project.area_slugs?.length && !project.area_uid);
 
   if (unassignedNotes.length) {
-    findings.push(finding(run, 'suggestion', 'unassigned-note', `${unassignedNotes.length} notes are not assigned to Areas`, 'Unassigned notes are hard to connect to long-running Areas.', [
-      action('assign_area', 'Open Area assignment queue', 'note:unassigned'),
-      action('ignore', 'Ignore for this review')
+    findings.push(finding(run, 'suggestion', 'unassigned-note', `有 ${unassignedNotes.length} 条笔记还没有归属领域`, '这些笔记已经进入你的知识库，但还没有连接到长期负责的领域。补上归属后，之后复盘和提问时更容易把它们唤回来。', [
+      action('assign_area', '整理这些笔记的领域归属', 'note:unassigned'),
+      action('ignore', '这次先略过')
     ]));
   }
   if (dormantResources.length) {
-    findings.push(finding(run, 'warning', 'dormant-resource', `${dormantResources.length} resources need engagement`, 'Dormant resources may be stale or ready for refresh/archive.', [
-      action('refresh_resource', 'Review dormant resources', `resource:${dormantResources[0].frontmatter.slug}`),
-      action('ignore', 'Ignore for this review')
+    findings.push(finding(run, 'warning', 'dormant-resource', `有 ${dormantResources.length} 个主题已经很久没有触碰`, '这些主题可能已经过期，也可能值得重新推进。建议选一个最相关的主题更新、归档或补一次触达记录。', [
+      action('refresh_resource', '检查沉睡主题是否还值得保留', `resource:${dormantResources[0].frontmatter.slug}`),
+      action('ignore', '这次先略过')
     ]));
   }
   if (readUndistilled.length) {
-    findings.push(finding(run, 'info', 'library-undistilled', `${readUndistilled.length} read library items are not distilled`, 'Read source material can decay unless distilled or accepted into notes.', [
-      action('create_task', 'Create task to distill read library items', firstProjectTarget(activeProjects)),
-      action('ignore', 'Ignore for this review')
+    findings.push(finding(run, 'info', 'library-undistilled', `有 ${readUndistilled.length} 条已读资料还没有提炼`, '这些资料已经读完，但还没有沉淀成自己的笔记或主题素材。时间越久，能复用的细节越容易流失。', [
+      action('create_task', '创建一个任务：提炼已读资料', firstProjectTarget(activeProjects)),
+      action('ignore', '这次先略过')
     ]));
   }
   if (unassignedProjects.length) {
-    findings.push(finding(run, 'suggestion', 'unassigned-project', `${unassignedProjects.length} active projects are not aligned to Areas`, 'Projects without Area alignment are harder to review and balance.', [
-      action('assign_area', 'Assign project to an Area', `project:${unassignedProjects[0].uid}`),
-      action('ignore', 'Ignore for this review')
+    findings.push(finding(run, 'suggestion', 'unassigned-project', `有 ${unassignedProjects.length} 个活跃项目还没有对齐领域`, '项目如果没有归属领域，就很难判断它服务于哪个长期方向，也不容易在周/月复盘时看出精力分布。', [
+      action('assign_area', '为项目选择所属领域', `project:${unassignedProjects[0].uid}`),
+      action('ignore', '这次先略过')
     ]));
   }
   if (!findings.length) {
-    findings.push(finding(run, 'info', 'healthy', `${labelForKind(run.kind)} review found no major issues`, 'Current PARA state has no obvious stale, dormant, or unassigned anomalies.', [
-      action('ignore', 'Acknowledge healthy review')
+    findings.push(finding(run, 'info', 'healthy', `${labelForKind(run.kind)}没有发现明显问题`, '当前项目、领域、主题、资料和笔记之间没有发现明显的停滞、沉睡或未归属状态。可以把注意力放回正在推进的事情。', [
+      action('ignore', '确认这次复盘')
     ]));
   }
 
@@ -92,5 +92,14 @@ function firstProjectTarget(projects: Array<{ uid: string }>): string | undefine
 }
 
 function labelForKind(kind: ReviewKind): string {
-  return kind.charAt(0).toUpperCase() + kind.slice(1);
+  const labels: Record<ReviewKind, string> = {
+    daily: '每日复盘',
+    weekly: '每周复盘',
+    monthly: '每月复盘',
+    quarterly: '季度复盘',
+    area: '领域复盘',
+    resource: '主题复盘',
+    project: '项目复盘'
+  };
+  return labels[kind];
 }

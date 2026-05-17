@@ -234,6 +234,7 @@ describe('PMIL recall foundation', () => {
     expect(report.open_loops.loops.map((loop) => loop.kind)).toEqual(
       expect.arrayContaining(['task_candidate', 'decision_pending', 'stale_context'])
     );
+    expect(report.open_loops.loops[0].rationale).toContain('还没有闭环');
     expect(report.open_loops.loops[0].evidence[0].kind).toBe('semantic_chunk');
   });
 });

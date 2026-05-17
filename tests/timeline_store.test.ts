@@ -3,8 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TraceableEvent } from '../src/shared/events';
+import type { RuntimeRouteDecision } from '../src/shared/runtime';
 import { configureEventReplay, currentEventReplayStore } from '../src/main/events/bus';
+import { createNoteStore } from '../src/main/note/store';
 import { createTimelineStore } from '../src/main/timeline/store';
+import type { SynthesisRuntimeRouter } from '../src/main/synthesis/runner';
 
 let vault: string;
 
@@ -47,14 +50,14 @@ describe('TimelineStore Phase 6.4 projection', () => {
 
     expect(timeline.entries.map((entry) => entry.event_kind)).toEqual(['note.updated', 'feed.item.saved_to_library']);
     expect(timeline.entries[0]).toMatchObject({
-      title: 'Updated longform (2 saves)',
-      summary: '+200 words across aggregated saves',
+      title: '持续写作（2 次保存）',
+      summary: '累计新增 200 字',
       derived_from: ['note-2']
     });
     expect(timeline.stats.total_events).toBe(3);
     expect(timeline.stats.longforms_words).toBe(200);
     expect(timeline.stats.resources_touched).toEqual(['second-brain']);
-    expect(timeline.segments?.[0]?.label).toBe('Morning');
+    expect(timeline.segments?.[0]?.label).toBe('晚上');
   });
 
   it('shows Layer 2 only in developer mode and keeps raw feed fetch hidden', async () => {
@@ -88,14 +91,66 @@ describe('TimelineStore Phase 6.4 projection', () => {
     expect(await readFile(exported.path, 'utf8')).toContain('%PDF-1.4');
   });
 
-  it('generates a daily summary artifact and materialized daily-summary note on explicit action', async () => {
+  it('refuses to generate a fake daily summary when no AI endpoint is available', async () => {
     await appendEvents([
       event('note-1', '2026-04-28T09:00:00.000Z', 'note.created', { note_id: 'n1', type: 'thought', title: 'Summary input', path: 'notes/thoughts/input.md' })
     ]);
 
-    const summary = await createTimelineStore(vault).generateDailySummary('2026-04-28');
+    await expect(createTimelineStore(vault).generateDailySummary('2026-04-28')).rejects.toThrow('daily_summary_ai_unavailable');
+  });
 
-    expect(summary).toMatchObject({ headline: '1 meaningful events', status: 'fresh' });
+  it('generates a real daily summary artifact and materialized daily-summary note on explicit action', async () => {
+    const note = await createNoteStore(vault).create({
+      type: 'thought',
+      title: 'Summary input',
+      body: '今天想明白了 Timeline 应该是 done list，而不是系统日志。'
+    });
+    await appendEvents([
+      event('note-1', '2026-04-28T09:00:00.000Z', 'note.created', { note_id: note.frontmatter.id, type: 'thought', title: 'Summary input', path: note.path })
+    ]);
+
+    let promptText = '';
+    const router: SynthesisRuntimeRouter = {
+      decide: async (): Promise<RuntimeRouteDecision> => ({
+        mode: 'synthesis',
+        track: 'sdk',
+        runtime: 'sdk:anthropic',
+        endpointId: 'anthropic',
+        model: 'claude-test',
+        reason: 'test'
+      }),
+      stream: async (input) => {
+        promptText = String(input.messages[0]?.content ?? '');
+        return {
+          text: JSON.stringify({
+            headline: '真实复盘',
+            narrative: '今天沉淀了一条可复盘的想法。',
+            highlights: ['捕获了 Summary input'],
+            done_list: [{ text: '捕获了 Summary input', evidence_ids: ['note-1:1'] }],
+            main_threads: [{ title: '想法沉淀', summary: '当天围绕 Summary input 留下了记录。', evidence_ids: ['note-1:1'] }],
+            open_loops: [],
+            tomorrow: [],
+            coverage: { evidence_count: 1, included_kinds: ['note.created'], omitted_count: 0 }
+          }),
+          eventIds: [],
+          inputTokens: 100,
+          outputTokens: 50
+        };
+      }
+    };
+
+    const summary = await createTimelineStore(vault, { synthesisRouter: router }).generateDailySummary('2026-04-28');
+
+    expect(promptText).toContain('今天想明白了 Timeline 应该是 done list');
+    expect(promptText).toContain('"local_time": "17:00"');
+    expect(summary).toMatchObject({
+      headline: '真实复盘',
+      status: 'fresh',
+      source_count: 1,
+      runtime: 'sdk:anthropic',
+      model: 'claude-test',
+      prompt_version: 'summary.daily.v2'
+    });
     expect(summary.synthesis_ref).toBeTruthy();
     expect(summary.note_path).toMatch(/notes\/daily-summaries\/.+\.md/);
   });

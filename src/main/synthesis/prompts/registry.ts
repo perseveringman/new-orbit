@@ -7,7 +7,7 @@ import { entityProfilePrompt } from './entity.profile.v1';
 import { personalQAPrompt } from './qa.personal.v1';
 import { relateNotesPrompt } from './relate.notes.v1';
 import { searchAnswerPrompt } from './search.answer.v1';
-import { summaryDailyPrompt } from './summary.daily.v1';
+import { summaryDailyPrompt } from './summary.daily.v2';
 import { summaryEntityPrompt } from './summary.entity.v1';
 
 export interface RenderedPrompt {

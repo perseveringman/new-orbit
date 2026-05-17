@@ -26,7 +26,7 @@ describe('Synthesis Layer foundation', () => {
       kind: 'summary.daily',
       scope_key: 'daily:2026-04-28',
       sources: [{ kind: 'timeline_range', ref: '2026-04-28' }],
-      provenance: provenance('summary.daily.v1'),
+      provenance: provenance('summary.daily.v2'),
       payload: { headline: 'Day', narrative: 'A day', highlights: [] }
     });
     expect(await store.latest('daily:2026-04-28')).toMatchObject({ id: artifact.id, status: 'fresh' });
@@ -37,14 +37,14 @@ describe('Synthesis Layer foundation', () => {
       kind: 'summary.daily',
       scope_key: 'daily:2026-04-28',
       sources: [{ kind: 'timeline_range', ref: '2026-04-28' }],
-      provenance: provenance('summary.daily.v1'),
+      provenance: provenance('summary.daily.v2'),
       payload: { headline: 'Old', narrative: 'Old', highlights: [] }
     });
     const second = await store.writeFresh({
       kind: 'summary.daily',
       scope_key: 'daily:2026-04-28',
       sources: [{ kind: 'timeline_range', ref: '2026-04-28' }],
-      provenance: provenance('summary.daily.v1'),
+      provenance: provenance('summary.daily.v2'),
       payload: { headline: 'New', narrative: 'New', highlights: [] }
     });
     expect(await store.get(first.id)).toMatchObject({ status: 'superseded', superseded_by: second.id });
@@ -86,7 +86,7 @@ describe('Synthesis Layer foundation', () => {
     expect(artifact.provenance).toMatchObject({
       runtime: 'local:heuristic',
       model: 'orbit-local-heuristic',
-      prompt_version: 'summary.daily.v1'
+      prompt_version: 'summary.daily.v2'
     });
   });
 
@@ -127,4 +127,3 @@ function provenance(promptVersion: string) {
     generated_at: new Date().toISOString()
   };
 }
-

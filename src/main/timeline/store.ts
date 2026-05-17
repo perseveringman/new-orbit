@@ -16,12 +16,21 @@ import type {
 import { shouldShowOnTimeline, TIMELINE_LAYER_1_KINDS } from '@shared/timeline';
 import { currentEventReplayStore, publishTraceableEvent } from '../events/bus';
 import { createNoteStore } from '../note/store';
-import type { DailySummaryPayload } from '@shared/synthesis';
-import { SynthesisRunner, createSynthesisJob } from '../synthesis/runner';
+import type { DailySummaryEvidenceLine, DailySummaryPayload } from '@shared/synthesis';
+import { SynthesisRunner, createSynthesisJob, type SynthesisRuntimeRouter } from '../synthesis/runner';
 import { createSynthesisStore } from '../synthesis/store';
+import { getSDKRuntime } from '../runtime/sdk/ipc';
+import { buildDailyContextPacket, type DailyContextPacket } from './daily-context';
+
+export interface TimelineStoreOptions {
+  synthesisRouter?: SynthesisRuntimeRouter | null;
+}
 
 export class TimelineStore {
-  constructor(private readonly vaultPath: string) {}
+  constructor(
+    private readonly vaultPath: string,
+    private readonly options: TimelineStoreOptions = {}
+  ) {}
 
   async getDay(date: string, developerMode = false): Promise<DailyTimeline> {
     const events = await this.eventsForDate(date, developerMode);
@@ -79,29 +88,38 @@ export class TimelineStore {
 
   async generateDailySummary(date: string): Promise<DailySummary> {
     const timeline = await this.getDay(date, false);
+    const context = await buildDailyContextPacket(this.vaultPath, timeline);
+    const router = this.options.synthesisRouter ?? requireDefaultSynthesisRouter(this.vaultPath);
+    const decision = await router.decide({ mode: 'synthesis', modelTier: 'heavy' }).catch(() => {
+      throw new Error('daily_summary_ai_unavailable');
+    });
+    if (decision.track !== 'sdk' || !decision.endpointId) {
+      throw new Error('daily_summary_ai_unavailable');
+    }
+    const lockedRouter: SynthesisRuntimeRouter = {
+      decide: async () => decision,
+      stream: (input, windows) => router.stream(input, windows)
+    };
     const store = createSynthesisStore(this.vaultPath);
-    const artifact = await new SynthesisRunner(store).run(
+    const artifact = await new SynthesisRunner(store, { router: lockedRouter, maxBudgetUsd: 1, requireSdk: true }).run(
       createSynthesisJob({
         kind: 'summary.daily',
         scope_key: `daily:${date}`,
         priority: 'user-blocking',
         reason: 'manual',
         force: true,
-        sources: [
-          {
-            kind: 'timeline_range',
-            ref: date,
-            range: { from: `${date}T00:00:00.000Z`, to: `${date}T23:59:59.999Z` },
-            metadata: { entries: timeline.entries, stats: timeline.stats }
-          }
-        ]
+        sources: context.sources,
+        budget_usd: 0.2
       })
     );
+    if (artifact.status === 'failed') {
+      throw new Error(`daily_summary_ai_failed:${artifact.error ?? 'unknown'}`);
+    }
     const payload = artifact.payload as DailySummaryPayload;
     const headline = payload.headline;
     const highlights = payload.highlights;
     const narrative = payload.narrative;
-    const body = `# ${date} Daily Summary\n\n${narrative}\n\n## Highlights\n\n${highlights.map((item) => `- ${item}`).join('\n') || '- Rest / no captured events'}\n`;
+    const body = renderDailySummaryNoteBody(date, payload, context.packet);
     const notes = createNoteStore(this.vaultPath);
     const current = await this.readDailySummary(date);
     const currentNote = current?.note_path ? await notes.getByPath(current.note_path).catch(() => null) : null;
@@ -109,7 +127,7 @@ export class TimelineStore {
       ? await notes.update(currentNote.frontmatter.id, { body })
       : await notes.create({
           type: 'daily_summary',
-          title: `${date} Daily Summary`,
+          title: `${date} 每日总结`,
           body,
           tags: ['daily-summary'],
           source: { kind: 'synthesis', ref: artifact.id },
@@ -122,13 +140,17 @@ export class TimelineStore {
       narrative,
       highlights,
       synthesis_ref: artifact.id,
-      status: artifact.status
+      status: artifact.status,
+      source_count: context.packet.coverage.evidence_count,
+      runtime: artifact.provenance.runtime,
+      model: artifact.provenance.model,
+      prompt_version: artifact.provenance.prompt_version
     };
     await this.writeSummary(date, summary);
     publishTraceableEvent({
       source: 'activity',
       kind: 'daily_summary.generated',
-      summary: `Generated daily summary for ${date}`,
+      summary: `生成 ${date} 每日总结`,
       payload: { date, note_path: note.path, artifact_id: artifact.id, headline }
     });
     return summary;
@@ -161,7 +183,7 @@ export class TimelineStore {
     if (!store) return [];
     const result = await store.query({ limit: 10_000 });
     return result.events
-      .filter((event) => event.at.startsWith(date))
+      .filter((event) => timelineDateKey(event.at) === date)
       .filter((event) => shouldShowOnTimeline(event.kind ?? event.type, developerMode));
   }
 
@@ -184,8 +206,59 @@ export class TimelineStore {
   }
 }
 
-export function createTimelineStore(vaultPath: string): TimelineStore {
-  return new TimelineStore(vaultPath);
+export function createTimelineStore(vaultPath: string, options: TimelineStoreOptions = {}): TimelineStore {
+  return new TimelineStore(vaultPath, options);
+}
+
+function renderDailySummaryNoteBody(date: string, payload: DailySummaryPayload, context: DailyContextPacket): string {
+  return [
+    `# ${date} AI 每日复盘`,
+    '',
+    payload.narrative,
+    '',
+    renderStringSection('今日亮点', payload.highlights),
+    renderEvidenceSection('完成清单', payload.done_list),
+    renderThreadSection('主线推进', payload.main_threads),
+    renderEvidenceSection('未闭环', payload.open_loops),
+    renderEvidenceSection('明日延续', payload.tomorrow),
+    '## 生成依据',
+    '',
+    `- 基于 ${context.coverage.evidence_count} 条证据`,
+    `- 覆盖事件：${context.coverage.included_kinds.join('、') || '无'}`,
+    `- 忽略记录：${context.coverage.omitted_count} 条`,
+    ''
+  ]
+    .join('\n');
+}
+
+function renderStringSection(title: string, items: string[] | undefined): string {
+  const lines = (items ?? []).map((item) => item.trim()).filter(Boolean);
+  return [`## ${title}`, '', ...(lines.length ? lines.map((item) => `- ${item}`) : ['- 暂无']), ''].join('\n');
+}
+
+function renderEvidenceSection(title: string, items: DailySummaryEvidenceLine[] | undefined): string {
+  const lines = (items ?? []).map((item) => item.text.trim()).filter(Boolean);
+  return [`## ${title}`, '', ...(lines.length ? lines.map((item) => `- ${item}`) : ['- 暂无']), ''].join('\n');
+}
+
+function renderThreadSection(title: string, items: DailySummaryPayload['main_threads']): string {
+  const threads = items ?? [];
+  return [
+    `## ${title}`,
+    '',
+    ...(threads.length
+      ? threads.map((item) => `- ${item.title}：${item.summary}`)
+      : ['- 暂无']),
+    ''
+  ].join('\n');
+}
+
+function requireDefaultSynthesisRouter(vaultPath: string): SynthesisRuntimeRouter {
+  try {
+    return getSDKRuntime(vaultPath).router;
+  } catch {
+    throw new Error('daily_summary_ai_unavailable');
+  }
 }
 
 function projectEvent(event: TraceableEvent, developerMode: boolean): TimelineEntry | null {
@@ -212,10 +285,11 @@ function projectEvent(event: TraceableEvent, developerMode: boolean): TimelineEn
 
 function summaryFor(kind: string, payload: Record<string, unknown>, fallback?: string): string | undefined {
   if (kind === 'note.updated' && typeof payload['word_delta'] === 'number') {
-    return `${String(payload['title'] ?? 'note')} (${formatWordDelta(payload['word_delta'])})`;
+    const target = titleSuffix(payload['title']);
+    return `${target ? `${target} ` : ''}${formatWordDelta(payload['word_delta'])}`;
   }
   if (kind === 'conversation.meaningful' && typeof payload['message_count'] === 'number') {
-    return `${payload['message_count']} messages`;
+    return `${payload['message_count']} 条消息`;
   }
   const raw = payload['title'] ?? fallback;
   return raw === undefined ? undefined : String(raw).slice(0, 180);
@@ -247,32 +321,55 @@ function iconFor(kind: string, noteType: string, specialIcon?: string): string {
 }
 
 function titleFor(kind: string, payload: Record<string, unknown>, specialKind?: string): string {
-  if (specialKind) return `${specialKind}: ${String(payload['title'] ?? 'special capture')}`;
-  if (kind === 'note.created') return `Captured ${String(payload['type'] ?? 'note')}`;
-  if (kind === 'note.updated') return `Updated ${String(payload['title'] ?? 'note')}`;
-  if (kind === 'note.archived') return `Archived ${String(payload['title'] ?? 'note')}`;
-  if (kind === 'library.item.added') return `Saved Library item ${String(payload['title'] ?? '')}`.trim();
-  if (kind === 'library.item.read') return `Finished reading ${String(payload['title'] ?? 'Library item')}`;
-  if (kind === 'library.item.annotated') return `Annotated ${String(payload['title'] ?? 'Library item')}`;
-  if (kind === 'library.item.status_changed') return `Updated Library status to ${String(payload['status'] ?? 'unknown')}`;
-  if (kind === 'library.item.distilled') return `Distilled ${String(payload['title'] ?? 'Library item')}`;
-  if (kind === 'library.item.linked_to_resource') return `Linked Library item to Resource`;
-  if (kind === 'feed.source.added') return `Subscribed to Feed ${String(payload['title'] ?? '')}`.trim();
-  if (kind === 'feed.item.saved_to_library') return `Saved Feed item ${String(payload['title'] ?? '')} to Library`.trim();
-  if (kind === 'daily_summary.generated') return `Generated daily summary ${String(payload['headline'] ?? '')}`.trim();
-  if (kind === 'kb.imported') return `Imported KB ${String(payload['name'] ?? '')}`.trim();
-  if (kind === 'kb.doc.activated' || kind === 'kb.activated') return 'Activated knowledge into note';
-  if (kind === 'task.completed') return `Completed task ${String(payload['title'] ?? payload['taskId'] ?? '')}`.trim();
-  if (kind === 'scheduled_task.execution.completed') return 'Scheduled task ran';
-  if (kind === 'conversation.started') return 'Started conversation';
-  if (kind === 'conversation.meaningful') return 'Meaningful conversation';
-  if (kind === 'resource.created') return `Created Resource ${String(payload['title'] ?? '')}`.trim();
-  if (kind === 'resource.updated') return `Updated Resource ${String(payload['title'] ?? '')}`.trim();
-  if (kind === 'resource.ref.linked') return `Linked material to ${String(payload['title'] ?? 'Resource')}`;
-  if (kind === 'resource.ref.promoted') return `Promoted material in ${String(payload['title'] ?? 'Resource')}`;
-  if (kind === 'resource.engagement') return `Engaged Resource ${String(payload['title'] ?? '')}`.trim();
-  if (kind === 'resource.archived') return `Archived Resource ${String(payload['title'] ?? '')}`.trim();
-  return kind.replace(/\./g, ' ');
+  if (specialKind) {
+    const marker = specialMarkerLabel(specialKind);
+    const suffix = titleSuffix(payload['title']);
+    return suffix ? `${marker}${suffix}` : marker;
+  }
+  if (kind === 'note.created') return `捕获${noteTypeLabel(payload['type'])}${titleSuffix(payload['title'])}`;
+  if (kind === 'note.updated') return `更新笔记${titleSuffix(payload['title'])}`;
+  if (kind === 'note.archived') return `归档笔记${titleSuffix(payload['title'])}`;
+  if (kind === 'library.item.added') return `收藏资料${titleSuffix(payload['title'])}`;
+  if (kind === 'library.item.read') return `读完资料${titleSuffix(payload['title'])}`;
+  if (kind === 'library.item.annotated') return `标注资料${titleSuffix(payload['title'])}`;
+  if (kind === 'library.item.status_changed') return `更新资料状态为 ${statusLabel(payload['status'])}`;
+  if (kind === 'library.item.distilled') return `提炼资料${titleSuffix(payload['title'])}`;
+  if (kind === 'library.item.linked_to_resource') return '把资料关联到资源';
+  if (kind === 'feed.source.added') return `订阅信息源${titleSuffix(payload['title'])}`;
+  if (kind === 'feed.item.saved_to_library') return `从信息流收藏${titleSuffix(payload['title'])}`;
+  if (kind === 'daily_summary.generated') return `生成今日总结${titleSuffix(payload['headline'])}`;
+  if (kind === 'kb.imported') return `导入知识库${titleSuffix(payload['name'])}`;
+  if (kind === 'kb.doc.activated' || kind === 'kb.activated') return '把知识片段沉淀为笔记';
+  if (kind === 'kb.welcome_analysis_completed') return `完成知识库初始分析${titleSuffix(payload['name'])}`;
+  if (kind === 'scheduled_task.created') return `创建定时任务${titleSuffix(payload['name'])}`;
+  if (kind === 'scheduled_task.execution.completed') return `完成定时任务${titleSuffix(payload['name'] ?? payload['task_id'])}`;
+  if (kind === 'task.completed') return `完成任务${titleSuffix(payload['title'] ?? payload['taskId'])}`;
+  if (kind === 'conversation.started') return '开始一次对话';
+  if (kind === 'conversation.meaningful') return '推进了一次有效讨论';
+  if (kind === 'resource.created') return `创建资源主题${titleSuffix(payload['title'])}`;
+  if (kind === 'resource.updated') return `更新资源主题${titleSuffix(payload['title'])}`;
+  if (kind === 'resource.ref.linked') return `把素材关联到资源${titleSuffix(payload['title'])}`;
+  if (kind === 'resource.ref.promoted') return `沉淀资源素材${titleSuffix(payload['title'])}`;
+  if (kind === 'resource.engagement') return `推进资源主题${titleSuffix(payload['title'])}`;
+  if (kind === 'resource.archived') return `归档资源主题${titleSuffix(payload['title'])}`;
+  if (kind === 'agent.run.started') return '开始执行代理任务';
+  if (kind === 'agent.run.completed') return '代理任务执行完成';
+  if (kind === 'agent.run.interrupted') return '代理任务已中断';
+  if (kind === 'runtime.sdk.invocation.started') return '开始模型调用';
+  if (kind === 'runtime.sdk.cost') return '记录模型调用成本';
+  if (kind === 'runtime.sdk.invocation.completed') return '模型调用完成';
+  if (kind === 'synthesis.artifact.created') return '生成智能摘要素材';
+  if (kind === 'synthesis.artifact.stale') return '智能摘要需要刷新';
+  if (kind === 'synthesis.artifact.superseded') return '智能摘要已被新版本替换';
+  if (kind === 'synthesis.artifact.failed') return '智能摘要生成失败';
+  if (kind === 'synthesis.artifact.user_edited') return '用户编辑了智能摘要';
+  if (kind === 'conversation.turn.added') return '记录一轮对话';
+  if (kind === 'conversation.message.added') return '记录一条对话消息';
+  if (kind === 'inbox.item.created') return '新增待处理事项';
+  if (kind === 'inbox.item.resolved') return '处理完成待办事项';
+  if (kind === 'activity.user') return '记录用户操作';
+  if (kind === 'activity.system') return '记录系统操作';
+  return semanticFallback(kind);
 }
 
 function refsFor(kind: string, payload: Record<string, unknown>): TimelineEntry['refs'] {
@@ -280,7 +377,7 @@ function refsFor(kind: string, payload: Record<string, unknown>): TimelineEntry[
     return [{ kind: 'note', ref: payload['path'], label: String(payload['title'] ?? payload['note_id'] ?? 'note') }];
   }
   if (kind === 'daily_summary.generated' && typeof payload['note_path'] === 'string') {
-    return [{ kind: 'note', ref: payload['note_path'], label: String(payload['headline'] ?? 'daily summary') }];
+    return [{ kind: 'note', ref: payload['note_path'], label: String(payload['headline'] ?? '每日总结') }];
   }
   if (kind.startsWith('library.') && typeof payload['item_id'] === 'string') {
     return [{ kind: 'library', ref: payload['item_id'], label: String(payload['title'] ?? payload['item_id']) }];
@@ -398,33 +495,33 @@ function aggregateEntries(entries: TimelineEntry[]): TimelineEntry[] {
 }
 
 function aggregateTitle(entry: TimelineEntry, count: number): string {
-  if (entry.event_kind === 'note.updated') return `Updated longform (${count} saves)`;
-  if (entry.event_kind === 'library.item.annotated') return `Annotated Library item (${count} notes)`;
-  if (entry.event_kind === 'task.completed') return `Completed ${count} tasks`;
-  return `${entry.title} (${count} events)`;
+  if (entry.event_kind === 'note.updated') return `持续写作（${count} 次保存）`;
+  if (entry.event_kind === 'library.item.annotated') return `连续标注资料（${count} 条）`;
+  if (entry.event_kind === 'task.completed') return `完成 ${count} 个任务`;
+  return `${entry.title}（${count} 条记录）`;
 }
 
 function aggregateSummary(a: TimelineEntry, b: TimelineEntry): string | undefined {
   if (a.event_kind === 'note.updated') {
     const words = wordDeltaFromSummary(a.summary) + wordDeltaFromSummary(b.summary);
-    if (words !== 0) return `${formatWordDelta(words)} across aggregated saves`;
+    if (words !== 0) return `累计${formatWordDelta(words)}`;
   }
   return a.summary ?? b.summary;
 }
 
 function groupByTimeSegment(entries: TimelineEntry[]): TimeSegmentGroup[] {
   const definitions: Array<Omit<TimeSegmentGroup, 'entries'> & { from: number; to: number }> = [
-    { id: 'night', label: 'Night', range: '00:00-06:00', from: 0, to: 6 },
-    { id: 'morning', label: 'Morning', range: '06:00-12:00', from: 6, to: 12 },
-    { id: 'noon', label: 'Noon', range: '12:00-14:00', from: 12, to: 14 },
-    { id: 'afternoon', label: 'Afternoon', range: '14:00-18:00', from: 14, to: 18 },
-    { id: 'evening', label: 'Evening', range: '18:00-24:00', from: 18, to: 24 }
+    { id: 'night', label: '凌晨', range: '00:00-06:00', from: 0, to: 6 },
+    { id: 'morning', label: '上午', range: '06:00-12:00', from: 6, to: 12 },
+    { id: 'noon', label: '中午', range: '12:00-14:00', from: 12, to: 14 },
+    { id: 'afternoon', label: '下午', range: '14:00-18:00', from: 14, to: 18 },
+    { id: 'evening', label: '晚上', range: '18:00-24:00', from: 18, to: 24 }
   ];
   return definitions
     .map(({ from, to, ...segment }) => ({
       ...segment,
       entries: entries.filter((entry) => {
-        const hour = Number(entry.occurred_at.slice(11, 13));
+        const hour = wallClockHour(entry.occurred_at);
         return hour >= from && hour < to;
       })
     }))
@@ -461,12 +558,18 @@ function sumWordDeltas(entries: TimelineEntry[]): number {
 
 function wordDeltaFromSummary(summary: string | undefined): number {
   if (!summary) return 0;
-  const match = summary.match(/([+-]?\d+)\s+words?/);
-  return match ? Number(match[1]) : 0;
+  const added = summary.match(/新增\s+(\d+)\s*字/);
+  if (added) return Number(added[1]);
+  const removed = summary.match(/删减\s+(\d+)\s*字/);
+  if (removed) return -Number(removed[1]);
+  const legacy = summary.match(/([+-]?\d+)\s+words?/);
+  return legacy ? Number(legacy[1]) : 0;
 }
 
 function formatWordDelta(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value} words`;
+  if (value > 0) return `新增 ${value} 字`;
+  if (value < 0) return `删减 ${Math.abs(value)} 字`;
+  return '字数无变化';
 }
 
 function datesForIsoWeek(isoWeek: string): string[] {
@@ -492,33 +595,101 @@ function daysInMonth(month: string): string[] {
 }
 
 function renderTimelineText(timeline: DailyTimeline): string {
-  const summary = timeline.summary ? `Summary: ${timeline.summary.headline}\n${timeline.summary.narrative}\n\n` : '';
-  const stats = `Events: ${timeline.stats.total_events}  Thoughts: ${timeline.stats.thoughts_count}  Library: ${timeline.stats.library_added}  Conversations: ${timeline.stats.conversations_count}\n\n`;
+  const summary = timeline.summary ? `今日总结：${timeline.summary.headline}\n${timeline.summary.narrative}\n\n` : '';
+  const stats = `记录：${timeline.stats.total_events}  想法：${timeline.stats.thoughts_count}  收藏：${timeline.stats.library_added}  讨论：${timeline.stats.conversations_count}\n\n`;
   const entries = (timeline.segments ?? groupByTimeSegment(timeline.entries))
     .map(
       (segment) =>
         `${segment.label} (${segment.range})\n${segment.entries
-          .map((entry) => `  ${entry.occurred_at.slice(11, 16)} ${entry.icon} ${entry.title}${entry.summary ? ` - ${entry.summary}` : ''}`)
+          .map((entry) => `  ${wallClockTime(entry.occurred_at)} ${entry.icon} ${entry.title}${entry.summary ? ` - ${entry.summary}` : ''}`)
           .join('\n')}`
     )
     .join('\n\n');
-  return `Timeline ${timeline.date}\n\n${summary}${stats}${entries || 'No user-visible events.'}`;
+  return `今日回顾 ${timeline.date}\n\n${summary}${stats}${entries || '暂无可复盘记录。'}`;
 }
 
 function renderWeekText(week: WeeklyTimeline): string {
-  return `Timeline Week ${week.iso_week}\n${week.range.from} to ${week.range.to}\n\n${week.days
-    .map((day) => `${day.date}: ${day.stats.total_events} events${day.summary?.headline ? ` - ${day.summary.headline}` : ''}`)
+  return `周回顾 ${week.iso_week}\n${week.range.from} 至 ${week.range.to}\n\n${week.days
+    .map((day) => `${day.date}: ${day.stats.total_events} 条记录${day.summary?.headline ? ` - ${day.summary.headline}` : ''}`)
     .join('\n')}`;
 }
 
 function renderMonthText(index: MonthlyIndex): string {
-  return `Timeline Month ${index.month}\n\n${index.days.map((day) => `${day.date}: ${day.entry_count} events`).join('\n')}`;
+  return `月回顾 ${index.month}\n\n${index.days.map((day) => `${day.date}: ${day.entry_count} 条记录`).join('\n')}`;
 }
 
 function renderYearText(index: YearlyIndex): string {
-  return `Timeline Year ${index.year}\n\n${index.months
-    .map((month) => `${month.month}: ${month.total_events} events across ${month.days_active} active days`)
+  return `年回顾 ${index.year}\n\n${index.months
+    .map((month) => `${month.month}: ${month.total_events} 条记录，${month.days_active} 个活跃日`)
     .join('\n')}`;
+}
+
+function noteTypeLabel(value: unknown): string {
+  const type = String(value ?? 'note');
+  if (type === 'thought') return '想法';
+  if (type === 'longform') return '长文';
+  if (type === 'voice_log') return '语音日志';
+  if (type === 'daily_summary') return '每日总结';
+  if (type === 'capture') return '捕获';
+  return '笔记';
+}
+
+function statusLabel(value: unknown): string {
+  const status = String(value ?? 'unknown');
+  if (status === 'unread') return '待读';
+  if (status === 'reading') return '阅读中';
+  if (status === 'read') return '已读';
+  if (status === 'distilled') return '已提炼';
+  if (status === 'archived') return '已归档';
+  return '已更新';
+}
+
+function specialMarkerLabel(value: string): string {
+  if (value === 'insight') return '灵感时刻';
+  if (value === 'breakthrough') return '突破';
+  if (value === 'setback') return '挫折';
+  if (value === 'milestone') return '里程碑';
+  if (value === 'gratitude') return '感恩';
+  if (value === 'reflection') return '反思';
+  return '特殊记录';
+}
+
+function titleSuffix(value: unknown): string {
+  const title = String(value ?? '').trim();
+  return title ? `《${title}》` : '';
+}
+
+function semanticFallback(kind: string): string {
+  return kind ? '未分类记录' : '记录';
+}
+
+function timelineDateKey(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})T/);
+    return match?.[1] ?? value.slice(0, 10);
+  }
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, '0'),
+    String(parsed.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function wallClockTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    const match = value.match(/T(\d{2}):(\d{2})/);
+    return match ? `${match[1]}:${match[2]}` : value.slice(11, 16);
+  }
+  return parsed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function wallClockHour(value: string): number {
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed.getHours();
+  const match = value.match(/T(\d{2})/);
+  return match ? Number(match[1]) : 0;
 }
 
 function renderSimplePdf(text: string): Buffer {
