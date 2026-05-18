@@ -1,5 +1,11 @@
+import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 const DEFAULT_HN_LIMIT = 20;
 const HN_API_ROOT = 'https://hacker-news.firebaseio.com/v0';
+const HN_ALGOLIA_ROOT = 'https://hn.algolia.com/api/v1';
 
 export type HackerNewsFeedType = 'top' | 'new' | 'best' | 'show' | 'ask' | 'jobs';
 
@@ -90,11 +96,47 @@ async function listHackerNewsCandidates(
   options: HackerNewsListOptions = {}
 ): Promise<HackerNewsStoryCandidate[]> {
   const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_HN_LIMIT, 100));
+  let primaryError: unknown;
+  try {
+    const candidates = await listHackerNewsWithFirebase(source, limit);
+    if (candidates.length > 0) return candidates;
+  } catch (error) {
+    primaryError = error;
+  }
+  const algoliaCandidates = await listHackerNewsWithAlgolia(source, limit).catch(() => []);
+  if (algoliaCandidates.length > 0) return algoliaCandidates;
+  const openCliCandidates = await listHackerNewsWithOpenCli(source, limit).catch(() => []);
+  if (openCliCandidates.length > 0) return openCliCandidates;
+  if (primaryError instanceof Error) throw primaryError;
+  return [];
+}
+
+async function listHackerNewsWithFirebase(source: HackerNewsSourceDescriptor, limit: number): Promise<HackerNewsStoryCandidate[]> {
   const ids = (await fetchJson(`${HN_API_ROOT}/${endpointForFeedType(source.source_type)}.json`)) as unknown;
   if (!Array.isArray(ids)) return [];
   const selected = ids.filter((id): id is number => typeof id === 'number').slice(0, limit);
   const items = await Promise.all(selected.map((id) => fetchHackerNewsItem(id).catch(() => null)));
   return items.flatMap((item) => (item ? storyFromHackerNewsItem(item) : [])).slice(0, limit);
+}
+
+async function listHackerNewsWithAlgolia(source: HackerNewsSourceDescriptor, limit: number): Promise<HackerNewsStoryCandidate[]> {
+  const url = new URL(`${HN_ALGOLIA_ROOT}/${algoliaEndpointForFeedType(source.source_type)}`);
+  url.searchParams.set('tags', algoliaTagsForFeedType(source.source_type));
+  url.searchParams.set('hitsPerPage', String(limit));
+  const parsed = await fetchJson(url.toString());
+  if (!isRecord(parsed) || !Array.isArray(parsed.hits)) return [];
+  return parsed.hits.flatMap((hit) => (isRecord(hit) ? storyFromAlgoliaHit(hit) : [])).slice(0, limit);
+}
+
+async function listHackerNewsWithOpenCli(source: HackerNewsSourceDescriptor, limit: number): Promise<HackerNewsStoryCandidate[]> {
+  const { stdout } = await execFileAsync(
+    'opencli',
+    ['hackernews', openCliCommandForFeedType(source.source_type), '--limit', String(limit), '-f', 'json'],
+    { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }
+  );
+  const parsed = parseJsonValue(stdout);
+  const records = Array.isArray(parsed) ? parsed : isRecord(parsed) ? [parsed] : [];
+  return records.flatMap((record) => (isRecord(record) ? storyFromOpenCliRecord(record, source) : [])).slice(0, limit);
 }
 
 async function fetchHackerNewsDiscussion(storyId: string): Promise<HackerNewsDiscussionArchive> {
@@ -176,6 +218,49 @@ function storyFromHackerNewsItem(item: Record<string, unknown>): HackerNewsStory
   ];
 }
 
+function storyFromAlgoliaHit(hit: Record<string, unknown>): HackerNewsStoryCandidate[] {
+  const id = stringValue(hit.objectID) ?? stringValue(hit.story_id) ?? (numberValue(hit.objectID) ? String(numberValue(hit.objectID)) : undefined);
+  const title = stringValue(hit.title) ?? stringValue(hit.story_title);
+  if (!id || !title) return [];
+  const canonicalUrl = `https://news.ycombinator.com/item?id=${id}`;
+  const outboundUrl = stringValue(hit.url) ?? stringValue(hit.story_url);
+  return [
+    {
+      id,
+      title,
+      author: stringValue(hit.author),
+      url: outboundUrl ?? canonicalUrl,
+      canonical_url: canonicalUrl,
+      ...(outboundUrl ? { outbound_url: outboundUrl } : {}),
+      published_at: stringValue(hit.created_at),
+      score: numberValue(hit.points),
+      comments: numberValue(hit.num_comments),
+      story_type: 'story'
+    }
+  ];
+}
+
+function storyFromOpenCliRecord(record: Record<string, unknown>, source: HackerNewsSourceDescriptor): HackerNewsStoryCandidate[] {
+  const title = stringValue(record.title);
+  const url = stringValue(record.url);
+  if (!title || !url) return [];
+  const id = extractHackerNewsId(url) ?? `opencli:${shortHash(`${title}\n${url}`)}`;
+  const canonicalUrl = id.startsWith('opencli:') ? url : `https://news.ycombinator.com/item?id=${id}`;
+  return [
+    {
+      id,
+      title,
+      author: stringValue(record.author),
+      url,
+      canonical_url: canonicalUrl,
+      ...(canonicalUrl !== url ? { outbound_url: url } : {}),
+      score: numberValue(record.score),
+      comments: numberValue(record.comments),
+      story_type: source.source_type === 'jobs' ? 'job' : 'story'
+    }
+  ];
+}
+
 function descriptorForFeedType(value: string): HackerNewsSourceDescriptor {
   const sourceType = normalizeFeedType(value);
   return {
@@ -204,6 +289,23 @@ function endpointForFeedType(value: HackerNewsFeedType): string {
   return 'jobstories';
 }
 
+function algoliaEndpointForFeedType(value: HackerNewsFeedType): string {
+  return value === 'top' || value === 'best' ? 'search' : 'search_by_date';
+}
+
+function algoliaTagsForFeedType(value: HackerNewsFeedType): string {
+  if (value === 'top' || value === 'best') return 'front_page';
+  if (value === 'show') return 'show_hn';
+  if (value === 'ask') return 'ask_hn';
+  if (value === 'jobs') return 'job';
+  return 'story';
+}
+
+function openCliCommandForFeedType(value: HackerNewsFeedType): string {
+  if (value === 'new') return 'new';
+  return value;
+}
+
 function pathForFeedType(value: HackerNewsFeedType): string {
   if (value === 'top') return 'news';
   if (value === 'new') return 'newest';
@@ -219,6 +321,52 @@ async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url, { headers: { accept: 'application/json' } });
   if (!response.ok) throw new Error(`hackernews_fetch_failed:${response.status}`);
   return response.json() as Promise<unknown>;
+}
+
+function parseJsonValue(value: string): unknown | null {
+  const start = value.search(/[[{]/);
+  if (start < 0) return null;
+  const opener = value[start];
+  const closer = opener === '[' ? ']' : '}';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === opener) depth += 1;
+    else if (char === closer) {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(value.slice(start, index + 1)) as unknown;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function extractHackerNewsId(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.hostname.replace(/^www\./, '') === 'news.ycombinator.com') return url.searchParams.get('id');
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+function shortHash(value: string): string {
+  return createHash('sha1').update(value).digest('hex').slice(0, 12);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

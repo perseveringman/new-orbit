@@ -60,6 +60,53 @@ describe('Hacker News feed provider', () => {
       })
     ]);
   });
+
+  it('falls back to Algolia when Hacker News topstories is unavailable', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.endsWith('/topstories.json')) {
+        return jsonResponse({ error: 'temporarily unavailable' }, 503);
+      }
+      if (href.startsWith('https://hn.algolia.com/api/v1/search?')) {
+        return jsonResponse({
+          hits: [
+            {
+              objectID: '48168668',
+              title: 'I turned an Android tablet into a Debian workstation',
+              url: 'https://github.com/tech4bot/rk3562deb',
+              points: 407,
+              author: 'tech4bot',
+              num_comments: 207,
+              created_at: '2026-05-17T13:16:27Z'
+            }
+          ]
+        });
+      }
+      return jsonResponse(null, 404);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const stories = await defaultHackerNewsFeedProvider.listCandidates(normalizeHackerNewsSource('hn:top'), { limit: 20 });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://hacker-news.firebaseio.com/v0/topstories.json', {
+      headers: { accept: 'application/json' }
+    });
+    expect(fetchMock).toHaveBeenCalledWith('https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=20', {
+      headers: { accept: 'application/json' }
+    });
+    expect(stories).toEqual([
+      expect.objectContaining({
+        id: '48168668',
+        title: 'I turned an Android tablet into a Debian workstation',
+        url: 'https://github.com/tech4bot/rk3562deb',
+        canonical_url: 'https://news.ycombinator.com/item?id=48168668',
+        outbound_url: 'https://github.com/tech4bot/rk3562deb',
+        score: 407,
+        comments: 207,
+        published_at: '2026-05-17T13:16:27Z'
+      })
+    ]);
+  });
 });
 
 function jsonResponse(value: unknown, status = 200): Response {
