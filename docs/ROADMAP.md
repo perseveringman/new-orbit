@@ -419,6 +419,8 @@ Implemented notes:
 - Feed Reader UI provides source management, fetch controls, filters, item stream, save/seen/ignore actions, and digest/cluster previews.
 - Feed readable extraction now calls the same Content Connector registry used by Library/mobile shares before writing `extracted_ref`.
 - X account sources now normalize `@handle` / profile URLs, fetch the latest 20 posts through OpenCLI, dedupe by `x:<tweet_id>`, and remain Layer 0 until explicit Save to Library.
+- Reddit subreddit sources now normalize `r/<name>` / subreddit URLs, fetch latest 20 posts with OpenCLI + public JSON fallbacks, dedupe by `reddit:<post_id>`, and save discussion Markdown only when promoted to Library.
+- Hacker News sources now support top/new/best/show/ask/jobs channels through the public API, dedupe by `hackernews:<story_id>`, and preserve HN discussion links plus optional comments during Library promotion.
 
 Data structures:
 

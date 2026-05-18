@@ -48,12 +48,28 @@ import {
   xSourceTitle,
   type XFeedProvider
 } from './x';
+import {
+  defaultRedditFeedProvider,
+  normalizeRedditSource,
+  redditPostTitle,
+  redditSourceTitle,
+  type RedditFeedProvider
+} from './reddit';
+import {
+  defaultHackerNewsFeedProvider,
+  hackerNewsSourceTitle,
+  hackerNewsStoryTitle,
+  normalizeHackerNewsSource,
+  type HackerNewsFeedProvider
+} from './hackernews';
 
 const FEEDS_ROOT = 'feeds';
 const SOURCES_FILE = '_sources.json';
 const FEED_ASSET_ROOT = path.join('.orbit', 'feed');
 const DEFAULT_YOUTUBE_RECENT_COUNT = 20;
 const DEFAULT_X_RECENT_COUNT = 20;
+const DEFAULT_REDDIT_RECENT_COUNT = 20;
+const DEFAULT_HACKERNEWS_RECENT_COUNT = 20;
 const YOUTUBE_DOWNLOAD_INTERVAL_MS = 5_000;
 const YOUTUBE_RATE_LIMIT_BASE_DELAY_MS = 30_000;
 const YOUTUBE_RATE_LIMIT_MAX_RETRIES = 5;
@@ -65,6 +81,8 @@ export interface FeedStoreOptions {
   fetchReadableText?: (url: string) => Promise<string>;
   youtubeProvider?: YouTubeFeedProvider;
   xProvider?: XFeedProvider;
+  redditProvider?: RedditFeedProvider;
+  hackerNewsProvider?: HackerNewsFeedProvider;
 }
 
 export class FeedStore {
@@ -73,6 +91,8 @@ export class FeedStore {
   private readonly fetchReadableText: (url: string) => Promise<string>;
   private readonly youtubeProvider: YouTubeFeedProvider;
   private readonly xProvider: XFeedProvider;
+  private readonly redditProvider: RedditFeedProvider;
+  private readonly hackerNewsProvider: HackerNewsFeedProvider;
 
   constructor(private readonly vaultPath: string, options: FeedStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
@@ -80,6 +100,8 @@ export class FeedStore {
     this.fetchReadableText = options.fetchReadableText ?? defaultFetchReadableText;
     this.youtubeProvider = options.youtubeProvider ?? defaultYouTubeFeedProvider;
     this.xProvider = options.xProvider ?? defaultXFeedProvider;
+    this.redditProvider = options.redditProvider ?? defaultRedditFeedProvider;
+    this.hackerNewsProvider = options.hackerNewsProvider ?? defaultHackerNewsFeedProvider;
   }
 
   async listSources(): Promise<FeedSource[]> {
@@ -99,7 +121,9 @@ export class FeedStore {
     const requestedKind = input.kind ?? inferFeedSourceKind(input.url);
     const youtube = requestedKind === 'youtube' ? this.youtubeProvider.normalizeSource(input.url) : null;
     const x = requestedKind === 'twitter' ? this.xProvider.normalizeSource(input.url) : null;
-    const url = youtube?.url ?? x?.url ?? normalizeUrl(input.url);
+    const reddit = requestedKind === 'reddit' ? this.redditProvider.normalizeSource(input.url) : null;
+    const hackerNews = requestedKind === 'hackernews' ? this.hackerNewsProvider.normalizeSource(input.url) : null;
+    const url = youtube?.url ?? x?.url ?? reddit?.url ?? hackerNews?.url ?? normalizeUrl(input.url);
     const duplicate = sources.find((source) => source.url === url);
     if (duplicate) return duplicate;
     const now = this.now().toISOString();
@@ -107,7 +131,9 @@ export class FeedStore {
       ? { extract_readable: true, auto_analyze: false, generate_item_summary: true, preferred_languages: DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES }
       : x
         ? { extract_readable: false, auto_analyze: false, generate_item_summary: true, capture_comments: false, include_replies: true }
-      : { extract_readable: false, auto_analyze: false, generate_item_summary: true };
+        : reddit || hackerNews
+          ? { extract_readable: false, auto_analyze: false, generate_item_summary: true, capture_comments: false }
+          : { extract_readable: false, auto_analyze: false, generate_item_summary: true };
     const defaultFetchPolicy = youtube
       ? {
           interval_minutes: 1440,
@@ -124,14 +150,44 @@ export class FeedStore {
             initial_backfill_count: DEFAULT_X_RECENT_COUNT,
             respect_cache: true
           }
-      : { interval_minutes: 1440, max_items_per_fetch: 50, respect_cache: true };
+        : reddit
+          ? {
+              interval_minutes: 1440,
+              max_items_per_fetch: DEFAULT_REDDIT_RECENT_COUNT,
+              initial_backfill: 'recent' as const,
+              initial_backfill_count: DEFAULT_REDDIT_RECENT_COUNT,
+              respect_cache: true
+            }
+          : hackerNews
+            ? {
+                interval_minutes: 1440,
+                max_items_per_fetch: DEFAULT_HACKERNEWS_RECENT_COUNT,
+                initial_backfill: 'recent' as const,
+                initial_backfill_count: DEFAULT_HACKERNEWS_RECENT_COUNT,
+                respect_cache: true
+              }
+            : { interval_minutes: 1440, max_items_per_fetch: 50, respect_cache: true };
     const source: FeedSource = normalizeFeedSource({
       id: stableId('feed-source', url),
-      title: input.title?.trim() || (youtube ? youtubeSourceTitle(youtube) : x ? xSourceTitle(x) : hostnameTitle(url)),
+      title:
+        input.title?.trim() ||
+        (youtube
+          ? youtubeSourceTitle(youtube)
+          : x
+            ? xSourceTitle(x)
+            : reddit
+              ? redditSourceTitle(reddit)
+              : hackerNews
+                ? hackerNewsSourceTitle(hackerNews)
+                : hostnameTitle(url)),
       url,
       kind: requestedKind,
       ...(youtube ? { metadata: { provider: 'youtube', youtube_source_type: youtube.source_type } } : {}),
       ...(x ? { metadata: { provider: 'x', x_handle: x.handle } } : {}),
+      ...(reddit
+        ? { metadata: { provider: 'reddit', reddit_subreddit: reddit.subreddit, reddit_sort: reddit.sort, reddit_time: reddit.time } }
+        : {}),
+      ...(hackerNews ? { metadata: { provider: 'hackernews', hn_feed_type: hackerNews.source_type } } : {}),
       areas: input.areas ?? [],
       resource_refs: normalizeStrings(input.resource_refs ?? []),
       tags: normalizeTags(input.tags ?? []),
@@ -258,6 +314,8 @@ export class FeedStore {
     }
     if (isYouTubeItem(item)) return this.ensureYouTubeReadableContent(item);
     if (isXItem(item)) return this.ensureXReadableContent(item);
+    if (isRedditItem(item)) return this.ensureRedditReadableContent(item);
+    if (isHackerNewsItem(item)) return this.ensureHackerNewsReadableContent(item);
 
     const fetchedAt = this.now().toISOString();
     let rawRef = item.raw_ref;
@@ -806,6 +864,117 @@ export class FeedStore {
     return { feed_item: next, content: markdown, ref };
   }
 
+  private async ensureRedditReadableContent(item: FeedItem): Promise<{ feed_item: FeedItem; content: string; ref: FeedReadableRef }> {
+    const source = await this.getSource(item.source_id);
+    const postId = item.metadata?.external_id ?? redditPostIdFromItem(item);
+    if (!postId) throw new Error(`reddit_post_id_missing:${item.id}`);
+    const fetchedAt = this.now().toISOString();
+    const post = {
+      id: postId,
+      title: item.title,
+      author: item.author?.replace(/^u\//, ''),
+      subreddit: item.metadata?.subreddit ?? source?.metadata?.reddit_subreddit ?? 'unknown',
+      text: item.summary ?? item.excerpt,
+      url: item.url,
+      canonical_url: item.canonical_url ?? item.url,
+      outbound_url: item.metadata?.outbound_url,
+      published_at: item.published_at,
+      score: item.metadata?.score_count,
+      comments: item.metadata?.comment_count,
+      image_url: item.image_url
+    };
+    let discussionRef: FeedReadableRef | undefined;
+    let discussion;
+    let processingError: string | undefined;
+    if (source?.processing_policy?.capture_comments) {
+      try {
+        discussion = await this.redditProvider.fetchDiscussion(item.canonical_url ?? postId);
+        discussionRef = await this.writeAsset(
+          'raw',
+          `${item.id}.reddit.discussion.json`,
+          `${JSON.stringify(discussion, null, 2)}\n`,
+          'reddit_discussion_json',
+          fetchedAt
+        );
+      } catch (error) {
+        processingError = errorMessage(error);
+      }
+    }
+    const markdown = this.redditProvider.buildMarkdown(post, discussion);
+    const ref = await this.writeAsset('extracted', `${item.id}.reddit.md`, markdown, 'reddit_post_markdown', fetchedAt);
+    const existingMetadata = { ...(item.metadata ?? {}) };
+    delete existingMetadata.last_processing_error;
+    const next = await this.writeItem({
+      ...item,
+      raw_refs: mergeReadableRefs([...(item.raw_refs ?? []), item.raw_ref, discussionRef]),
+      extracted_ref: ref,
+      content_hash: ref.content_hash,
+      language: item.language ?? detectLanguage(markdown),
+      excerpt: item.excerpt ?? firstMeaningfulParagraph(markdown)?.slice(0, 500),
+      summary: item.summary ?? firstMeaningfulParagraph(markdown)?.slice(0, 500),
+      metadata: {
+        ...existingMetadata,
+        ...(processingError ? { last_processing_error: processingError } : {})
+      }
+    });
+    return { feed_item: next, content: markdown, ref };
+  }
+
+  private async ensureHackerNewsReadableContent(item: FeedItem): Promise<{ feed_item: FeedItem; content: string; ref: FeedReadableRef }> {
+    const source = await this.getSource(item.source_id);
+    const storyId = item.metadata?.external_id ?? hackerNewsStoryIdFromItem(item);
+    if (!storyId) throw new Error(`hackernews_story_id_missing:${item.id}`);
+    const fetchedAt = this.now().toISOString();
+    const story = {
+      id: storyId,
+      title: item.title,
+      author: item.author,
+      text: item.summary ?? item.excerpt,
+      url: item.url,
+      canonical_url: item.canonical_url ?? item.url,
+      outbound_url: item.metadata?.outbound_url,
+      published_at: item.published_at,
+      score: item.metadata?.score_count,
+      comments: item.metadata?.comment_count,
+      story_type: 'story'
+    };
+    let discussionRef: FeedReadableRef | undefined;
+    let discussion;
+    let processingError: string | undefined;
+    if (source?.processing_policy?.capture_comments) {
+      try {
+        discussion = await this.hackerNewsProvider.fetchDiscussion(storyId);
+        discussionRef = await this.writeAsset(
+          'raw',
+          `${item.id}.hackernews.discussion.json`,
+          `${JSON.stringify(discussion, null, 2)}\n`,
+          'hackernews_discussion_json',
+          fetchedAt
+        );
+      } catch (error) {
+        processingError = errorMessage(error);
+      }
+    }
+    const markdown = this.hackerNewsProvider.buildMarkdown(story, discussion);
+    const ref = await this.writeAsset('extracted', `${item.id}.hackernews.md`, markdown, 'hackernews_story_markdown', fetchedAt);
+    const existingMetadata = { ...(item.metadata ?? {}) };
+    delete existingMetadata.last_processing_error;
+    const next = await this.writeItem({
+      ...item,
+      raw_refs: mergeReadableRefs([...(item.raw_refs ?? []), item.raw_ref, discussionRef]),
+      extracted_ref: ref,
+      content_hash: ref.content_hash,
+      language: item.language ?? detectLanguage(markdown),
+      excerpt: item.excerpt ?? firstMeaningfulParagraph(markdown)?.slice(0, 500),
+      summary: item.summary ?? firstMeaningfulParagraph(markdown)?.slice(0, 500),
+      metadata: {
+        ...existingMetadata,
+        ...(processingError ? { last_processing_error: processingError } : {})
+      }
+    });
+    return { feed_item: next, content: markdown, ref };
+  }
+
   private async fetchOne(source: FeedSource): Promise<FeedFetchResult> {
     const run: FeedFetchRun = {
       id: `feed-run-${randomUUID()}`,
@@ -822,6 +991,8 @@ export class FeedStore {
     try {
       if (source.kind === 'youtube') return await this.fetchYouTubeSource(source, run);
       if (source.kind === 'twitter') return await this.fetchXSource(source, run);
+      if (source.kind === 'reddit') return await this.fetchRedditSource(source, run);
+      if (source.kind === 'hackernews') return await this.fetchHackerNewsSource(source, run);
       const xml = await this.fetchText(source.url);
       const rawFeedRef = await this.writeAsset('raw', `${run.id}.xml`, xml, 'feed_xml', run.started_at);
       const parsed = parseRss(xml, source.url, this.now);
@@ -1258,6 +1429,215 @@ export class FeedStore {
     };
   }
 
+  private async fetchRedditSource(source: FeedSource, run: FeedFetchRun): Promise<FeedFetchResult> {
+    const descriptor = this.redditProvider.normalizeSource(source.url);
+    const limit = source.fetch_policy?.max_items_per_fetch ?? DEFAULT_REDDIT_RECENT_COUNT;
+    const startedAt = this.now().toISOString();
+    await this.writeFetchRun({
+      ...run,
+      stages: markRunStage(run.stages, 'resolve-source', 'running', `Resolving latest ${limit} Reddit post(s).`, startedAt)
+    });
+
+    const candidates = await this.redditProvider.listCandidates(descriptor, { limit });
+    const rawFeedRef = await this.writeAsset(
+      'raw',
+      `${run.id}.reddit.candidates.json`,
+      `${JSON.stringify({ source: descriptor, candidates }, null, 2)}\n`,
+      'reddit_candidate_json',
+      run.started_at
+    );
+    const allExistingItems = await this.listItems({ include_ignored: true, include_saved: true });
+    const existingIds = new Set(allExistingItems.map((item) => item.id));
+    const existingDedupeKeys = new Set(allExistingItems.map((item) => item.dedupe_key).filter(Boolean));
+    const createdItems: FeedItem[] = [];
+    for (const candidate of candidates) {
+      const id = stableId('feed-item', `${source.id}:reddit:${candidate.id}`);
+      const dedupeKey = `reddit:${candidate.id}`;
+      if (existingIds.has(id) || existingDedupeKeys.has(dedupeKey)) continue;
+      const fetchedAt = this.now().toISOString();
+      const item = await this.writeItem(
+        normalizeFeedItem({
+          id,
+          source_id: source.id,
+          fetch_run_id: run.id,
+          guid: candidate.id,
+          title: redditPostTitle(candidate),
+          url: candidate.canonical_url,
+          canonical_url: candidate.canonical_url,
+          dedupe_key: dedupeKey,
+          author: candidate.author ? `u/${candidate.author}` : undefined,
+          published_at: candidate.published_at,
+          fetched_at: fetchedAt,
+          site_name: `r/${descriptor.subreddit}`,
+          summary: candidate.text || candidate.title,
+          excerpt: (candidate.text || candidate.title).slice(0, 500),
+          image_url: candidate.image_url,
+          content_hash: hashContent(`${candidate.title}\n${candidate.text ?? ''}\n${candidate.canonical_url}`),
+          raw_ref: rawFeedRef,
+          raw_refs: [rawFeedRef],
+          enrichment_artifact_ids: [],
+          collection_artifact_ids: [],
+          pinned_by: [],
+          metadata: {
+            provider: 'reddit',
+            external_id: candidate.id,
+            source_url: descriptor.url,
+            subreddit: descriptor.subreddit,
+            reddit_sort: descriptor.sort,
+            author_handle: candidate.author,
+            outbound_url: candidate.outbound_url,
+            score_count: candidate.score,
+            comment_count: candidate.comments
+          },
+          status: 'new'
+        })
+      );
+      existingIds.add(id);
+      existingDedupeKeys.add(dedupeKey);
+      createdItems.push(item);
+      if (source.processing_policy?.extract_readable) await this.ensureReadableContent(id);
+      if (source.processing_policy?.auto_analyze) await this.analyzeItem(id);
+      if (source.processing_policy?.auto_translate_to) await this.translateItem(id, source.processing_policy.auto_translate_to);
+    }
+
+    const completedAt = this.now().toISOString();
+    await this.updateSourceAfterFetch(source, {
+      title: source.title || redditSourceTitle(descriptor),
+      metadata: {
+        ...(source.metadata ?? {}),
+        provider: 'reddit',
+        reddit_subreddit: descriptor.subreddit,
+        reddit_sort: descriptor.sort,
+        reddit_time: descriptor.time
+      },
+      last_fetched_at: completedAt,
+      last_fetch_error: undefined,
+      updated_at: completedAt
+    });
+    const completedRun: FeedFetchRun = {
+      ...run,
+      completed_at: completedAt,
+      status: 'success',
+      fetched: candidates.length,
+      created: createdItems.length,
+      skipped: candidates.length - createdItems.length,
+      raw_feed_ref: rawFeedRef.path,
+      stages: markRunStage(run.stages, 'resolve-source', 'success', `Resolved ${candidates.length} Reddit post(s).`, completedAt),
+      stats: {
+        subreddit: descriptor.subreddit,
+        sort: descriptor.sort
+      }
+    };
+    await this.writeFetchRun(completedRun);
+    return {
+      run_id: run.id,
+      source_id: source.id,
+      fetched: candidates.length,
+      created: createdItems.length,
+      skipped: candidates.length - createdItems.length
+    };
+  }
+
+  private async fetchHackerNewsSource(source: FeedSource, run: FeedFetchRun): Promise<FeedFetchResult> {
+    const descriptor = this.hackerNewsProvider.normalizeSource(source.url);
+    const limit = source.fetch_policy?.max_items_per_fetch ?? DEFAULT_HACKERNEWS_RECENT_COUNT;
+    const startedAt = this.now().toISOString();
+    await this.writeFetchRun({
+      ...run,
+      stages: markRunStage(run.stages, 'resolve-source', 'running', `Resolving latest ${limit} Hacker News item(s).`, startedAt)
+    });
+
+    const candidates = await this.hackerNewsProvider.listCandidates(descriptor, { limit });
+    const rawFeedRef = await this.writeAsset(
+      'raw',
+      `${run.id}.hackernews.candidates.json`,
+      `${JSON.stringify({ source: descriptor, candidates }, null, 2)}\n`,
+      'hackernews_candidate_json',
+      run.started_at
+    );
+    const allExistingItems = await this.listItems({ include_ignored: true, include_saved: true });
+    const existingIds = new Set(allExistingItems.map((item) => item.id));
+    const existingDedupeKeys = new Set(allExistingItems.map((item) => item.dedupe_key).filter(Boolean));
+    const createdItems: FeedItem[] = [];
+    for (const candidate of candidates) {
+      const id = stableId('feed-item', `${source.id}:hackernews:${candidate.id}`);
+      const dedupeKey = `hackernews:${candidate.id}`;
+      if (existingIds.has(id) || existingDedupeKeys.has(dedupeKey)) continue;
+      const fetchedAt = this.now().toISOString();
+      const item = await this.writeItem(
+        normalizeFeedItem({
+          id,
+          source_id: source.id,
+          fetch_run_id: run.id,
+          guid: candidate.id,
+          title: hackerNewsStoryTitle(candidate),
+          url: candidate.url,
+          canonical_url: candidate.canonical_url,
+          dedupe_key: dedupeKey,
+          author: candidate.author,
+          published_at: candidate.published_at,
+          fetched_at: fetchedAt,
+          site_name: hackerNewsSourceTitle(descriptor),
+          summary: candidate.text || candidate.title,
+          excerpt: (candidate.text || candidate.title).slice(0, 500),
+          content_hash: hashContent(`${candidate.title}\n${candidate.text ?? ''}\n${candidate.canonical_url}`),
+          raw_ref: rawFeedRef,
+          raw_refs: [rawFeedRef],
+          enrichment_artifact_ids: [],
+          collection_artifact_ids: [],
+          pinned_by: [],
+          metadata: {
+            provider: 'hackernews',
+            external_id: candidate.id,
+            source_url: descriptor.url,
+            hn_feed_type: descriptor.source_type,
+            hn_discussion_url: candidate.canonical_url,
+            outbound_url: candidate.outbound_url,
+            score_count: candidate.score,
+            comment_count: candidate.comments
+          },
+          status: 'new'
+        })
+      );
+      existingIds.add(id);
+      existingDedupeKeys.add(dedupeKey);
+      createdItems.push(item);
+      if (source.processing_policy?.extract_readable) await this.ensureReadableContent(id);
+      if (source.processing_policy?.auto_analyze) await this.analyzeItem(id);
+      if (source.processing_policy?.auto_translate_to) await this.translateItem(id, source.processing_policy.auto_translate_to);
+    }
+
+    const completedAt = this.now().toISOString();
+    await this.updateSourceAfterFetch(source, {
+      title: source.title || hackerNewsSourceTitle(descriptor),
+      metadata: { ...(source.metadata ?? {}), provider: 'hackernews', hn_feed_type: descriptor.source_type },
+      last_fetched_at: completedAt,
+      last_fetch_error: undefined,
+      updated_at: completedAt
+    });
+    const completedRun: FeedFetchRun = {
+      ...run,
+      completed_at: completedAt,
+      status: 'success',
+      fetched: candidates.length,
+      created: createdItems.length,
+      skipped: candidates.length - createdItems.length,
+      raw_feed_ref: rawFeedRef.path,
+      stages: markRunStage(run.stages, 'resolve-source', 'success', `Resolved ${candidates.length} Hacker News item(s).`, completedAt),
+      stats: {
+        feed_type: descriptor.source_type
+      }
+    };
+    await this.writeFetchRun(completedRun);
+    return {
+      run_id: run.id,
+      source_id: source.id,
+      fetched: candidates.length,
+      created: createdItems.length,
+      skipped: candidates.length - createdItems.length
+    };
+  }
+
   private async processYouTubeExtractionTarget(
     item: FeedItem,
     source: FeedSource,
@@ -1447,10 +1827,45 @@ function normalizeFeedSource(value: FeedSource): FeedSource {
           }
         })()
       : null;
+  const reddit =
+    value.kind === 'reddit'
+      ? (() => {
+          try {
+            return normalizeRedditSource(value.url);
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  const hackerNews =
+    value.kind === 'hackernews'
+      ? (() => {
+          try {
+            return normalizeHackerNewsSource(value.url);
+          } catch {
+            return null;
+          }
+        })()
+      : null;
   return {
     ...value,
     ...(youtube ? { url: youtube.url, metadata: { ...(value.metadata ?? {}), provider: 'youtube', youtube_source_type: youtube.source_type } } : {}),
     ...(x ? { url: x.url, metadata: { ...(value.metadata ?? {}), provider: 'x', x_handle: x.handle } } : {}),
+    ...(reddit
+      ? {
+          url: reddit.url,
+          metadata: {
+            ...(value.metadata ?? {}),
+            provider: 'reddit',
+            reddit_subreddit: reddit.subreddit,
+            reddit_sort: reddit.sort,
+            reddit_time: reddit.time
+          }
+        }
+      : {}),
+    ...(hackerNews
+      ? { url: hackerNews.url, metadata: { ...(value.metadata ?? {}), provider: 'hackernews', hn_feed_type: hackerNews.source_type } }
+      : {}),
     areas: value.areas ?? [],
     resource_refs: normalizeStrings(value.resource_refs ?? []),
     tags: normalizeTags(value.tags ?? []),
@@ -1575,6 +1990,26 @@ function normalizeFetchPolicy(value: FeedSource['fetch_policy'], kind: FeedSourc
       ...(value ?? {})
     };
   }
+  if (kind === 'reddit') {
+    return {
+      interval_minutes: 1440,
+      max_items_per_fetch: DEFAULT_REDDIT_RECENT_COUNT,
+      initial_backfill: 'recent',
+      initial_backfill_count: DEFAULT_REDDIT_RECENT_COUNT,
+      respect_cache: true,
+      ...(value ?? {})
+    };
+  }
+  if (kind === 'hackernews') {
+    return {
+      interval_minutes: 1440,
+      max_items_per_fetch: DEFAULT_HACKERNEWS_RECENT_COUNT,
+      initial_backfill: 'recent',
+      initial_backfill_count: DEFAULT_HACKERNEWS_RECENT_COUNT,
+      respect_cache: true,
+      ...(value ?? {})
+    };
+  }
   return {
     interval_minutes: 1440,
     max_items_per_fetch: 50,
@@ -1592,10 +2027,14 @@ function normalizeUrl(value: string): string {
 function inferFeedSourceKind(value: string): FeedSource['kind'] {
   const trimmed = value.trim();
   if (trimmed.startsWith('@')) return 'youtube';
+  if (/^(?:\/?r\/|reddit:)/i.test(trimmed)) return 'reddit';
+  if (/^(?:hn:|hackernews:)/i.test(trimmed)) return 'hackernews';
   try {
     const host = new URL(trimmed).hostname.replace(/^www\./, '').replace(/^m\./, '');
     if (host === 'youtube.com' || host === 'youtu.be') return 'youtube';
     if (host === 'x.com' || host === 'twitter.com') return 'twitter';
+    if (host === 'reddit.com' || host === 'old.reddit.com' || host === 'new.reddit.com') return 'reddit';
+    if (host === 'news.ycombinator.com') return 'hackernews';
   } catch {
     return 'rss';
   }
@@ -1669,6 +2108,12 @@ function initialRunStages(kind: FeedSource['kind']): FeedFetchRunStage[] {
   if (kind === 'twitter') {
     return [{ id: 'resolve-source', label: 'Resolve X account', status: 'pending' }];
   }
+  if (kind === 'reddit') {
+    return [{ id: 'resolve-source', label: 'Resolve Reddit source', status: 'pending' }];
+  }
+  if (kind === 'hackernews') {
+    return [{ id: 'resolve-source', label: 'Resolve Hacker News source', status: 'pending' }];
+  }
   return [{ id: 'fetch', label: 'Fetch feed document', status: 'pending' }];
 }
 
@@ -1740,14 +2185,45 @@ function isXItem(item: FeedItem): boolean {
   return item.metadata?.provider === 'x' || item.dedupe_key?.startsWith('x:') === true || /(?:^|\.)x\.com|(?:^|\.)twitter\.com/i.test(item.url);
 }
 
+function isRedditItem(item: FeedItem): boolean {
+  return item.metadata?.provider === 'reddit' || item.dedupe_key?.startsWith('reddit:') === true || /(?:^|\.)reddit\.com/i.test(item.url);
+}
+
+function isHackerNewsItem(item: FeedItem): boolean {
+  return (
+    item.metadata?.provider === 'hackernews' ||
+    item.dedupe_key?.startsWith('hackernews:') === true ||
+    /news\.ycombinator\.com/i.test(item.canonical_url ?? item.url)
+  );
+}
+
 function xTweetIdFromItem(item: FeedItem): string | null {
   if (item.metadata?.external_id) return item.metadata.external_id;
   if (item.dedupe_key?.startsWith('x:')) return item.dedupe_key.slice('x:'.length);
   return item.url.match(/(?:status|statuses)\/(\d+)/i)?.[1] ?? null;
 }
 
+function redditPostIdFromItem(item: FeedItem): string | null {
+  if (item.metadata?.external_id) return item.metadata.external_id;
+  if (item.dedupe_key?.startsWith('reddit:')) return item.dedupe_key.slice('reddit:'.length);
+  return item.url.match(/\/comments\/([A-Za-z0-9]+)/i)?.[1] ?? null;
+}
+
+function hackerNewsStoryIdFromItem(item: FeedItem): string | null {
+  if (item.metadata?.external_id) return item.metadata.external_id;
+  if (item.dedupe_key?.startsWith('hackernews:')) return item.dedupe_key.slice('hackernews:'.length);
+  try {
+    const url = new URL(item.canonical_url ?? item.url);
+    return url.hostname.includes('ycombinator.com') ? url.searchParams.get('id') : null;
+  } catch {
+    return null;
+  }
+}
+
 function libraryKindForFeedItem(item: FeedItem): 'article' | 'video' | 'bookmark' {
   if (item.metadata?.provider === 'x') return 'bookmark';
+  if (item.metadata?.provider === 'reddit') return 'bookmark';
+  if (item.metadata?.provider === 'hackernews' && !item.metadata.outbound_url) return 'bookmark';
   if (item.url.match(/youtube\.com|youtu\.be|vimeo\.com|\.mp4(\?|$)/i)) return 'video';
   return 'article';
 }

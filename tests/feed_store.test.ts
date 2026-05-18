@@ -12,6 +12,18 @@ import {
   type YouTubeVideoCandidate
 } from '../src/main/feed/youtube';
 import { defaultXFeedProvider, normalizeXSource, type XFeedProvider, type XPostCandidate } from '../src/main/feed/x';
+import {
+  defaultRedditFeedProvider,
+  normalizeRedditSource,
+  type RedditFeedProvider,
+  type RedditPostCandidate
+} from '../src/main/feed/reddit';
+import {
+  defaultHackerNewsFeedProvider,
+  normalizeHackerNewsSource,
+  type HackerNewsFeedProvider,
+  type HackerNewsStoryCandidate
+} from '../src/main/feed/hackernews';
 import { createLibraryStore } from '../src/main/library/store';
 import { createSynthesisStore } from '../src/main/synthesis/store';
 
@@ -386,6 +398,163 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(promoted.library_item.body).toContain('OpenCLI 支持了官方的 weread');
     expect(promoted.library_item.body).toContain('Reply by @jakevin7');
     expect(await createLibraryStore(tmp).list()).toHaveLength(1);
+  });
+
+  it('fetches Reddit subreddit subscriptions as Layer 0 posts and promotes discussion snapshots to Library', async () => {
+    const listLimits: Array<number | undefined> = [];
+    const discussionRequests: string[] = [];
+    const candidates: RedditPostCandidate[] = [
+      {
+        id: '1abc123',
+        title: 'Open local-first readers',
+        author: 'orbit_user',
+        subreddit: 'LocalLLaMA',
+        text: 'A useful discussion about local-first AI readers.',
+        url: 'https://www.reddit.com/r/LocalLLaMA/comments/1abc123/open_local_first_readers/',
+        canonical_url: 'https://www.reddit.com/r/LocalLLaMA/comments/1abc123/open_local_first_readers/',
+        outbound_url: 'https://example.com/local-first-readers',
+        published_at: '2026-05-18T08:00:00.000Z',
+        score: 128,
+        comments: 42
+      }
+    ];
+    const redditProvider: RedditFeedProvider = {
+      normalizeSource: normalizeRedditSource,
+      listCandidates: async (_source, options) => {
+        listLimits.push(options?.limit);
+        return candidates;
+      },
+      fetchDiscussion: async (postIdOrUrl) => {
+        discussionRequests.push(postIdOrUrl);
+        return {
+          comments: [{ id: 'c1', author: 'reader', text: 'This belongs in the Library.', score: 12, depth: 0 }]
+        };
+      },
+      buildMarkdown: defaultRedditFeedProvider.buildMarkdown
+    };
+    const feed = createFeedStore(tmp, {
+      now: () => new Date('2026-05-18T12:00:00.000Z'),
+      redditProvider
+    });
+    const source = await feed.createSource({
+      kind: 'reddit',
+      url: 'r/LocalLLaMA/new',
+      processing_policy: { capture_comments: true }
+    });
+
+    const first = await feed.fetch(source.id);
+    const second = await feed.fetch(source.id);
+    const [item] = await feed.listItems({ include_saved: true });
+    const promoted = await feed.saveToLibrary(item.id);
+
+    expect(source.url).toBe('https://www.reddit.com/r/LocalLLaMA/new/');
+    expect(source.metadata).toMatchObject({ provider: 'reddit', reddit_subreddit: 'LocalLLaMA', reddit_sort: 'new' });
+    expect(listLimits).toEqual([20, 20]);
+    expect(first[0]).toMatchObject({ fetched: 1, created: 1, skipped: 0 });
+    expect(second[0]).toMatchObject({ fetched: 1, created: 0, skipped: 1 });
+    expect(item).toMatchObject({
+      dedupe_key: 'reddit:1abc123',
+      url: 'https://www.reddit.com/r/LocalLLaMA/comments/1abc123/open_local_first_readers/',
+      metadata: {
+        provider: 'reddit',
+        external_id: '1abc123',
+        subreddit: 'LocalLLaMA',
+        reddit_sort: 'new',
+        outbound_url: 'https://example.com/local-first-readers',
+        score_count: 128,
+        comment_count: 42
+      }
+    });
+    expect(item.raw_ref?.kind).toBe('reddit_candidate_json');
+    expect(discussionRequests).toEqual(['https://www.reddit.com/r/LocalLLaMA/comments/1abc123/open_local_first_readers/']);
+    expect(promoted.feed_item.extracted_ref?.kind).toBe('reddit_post_markdown');
+    expect(promoted.library_item.frontmatter.kind).toBe('bookmark');
+    expect(promoted.library_item.frontmatter.source).toMatchObject({
+      kind: 'feed',
+      provider: 'reddit',
+      external_id: '1abc123',
+      feed_source_id: source.id
+    });
+    expect(promoted.library_item.body).toContain('r/LocalLLaMA');
+    expect(promoted.library_item.body).toContain('This belongs in the Library.');
+  });
+
+  it('fetches Hacker News channels as Layer 0 stories and promotes article snapshots to Library', async () => {
+    const listLimits: Array<number | undefined> = [];
+    const discussionRequests: string[] = [];
+    const candidates: HackerNewsStoryCandidate[] = [
+      {
+        id: '44556677',
+        title: 'Show HN: Local-first capture inbox',
+        author: 'hn_user',
+        text: 'A compact story text.',
+        url: 'https://example.com/hn-local-first',
+        canonical_url: 'https://news.ycombinator.com/item?id=44556677',
+        outbound_url: 'https://example.com/hn-local-first',
+        published_at: '2026-05-18T09:00:00.000Z',
+        score: 320,
+        comments: 88
+      }
+    ];
+    const hackerNewsProvider: HackerNewsFeedProvider = {
+      normalizeSource: normalizeHackerNewsSource,
+      listCandidates: async (_source, options) => {
+        listLimits.push(options?.limit);
+        return candidates;
+      },
+      fetchDiscussion: async (storyId) => {
+        discussionRequests.push(storyId);
+        return {
+          comments: [{ id: 'c1', author: 'pg', text: 'HN comments are useful context.', depth: 0 }]
+        };
+      },
+      buildMarkdown: defaultHackerNewsFeedProvider.buildMarkdown
+    };
+    const feed = createFeedStore(tmp, {
+      now: () => new Date('2026-05-18T12:00:00.000Z'),
+      hackerNewsProvider
+    });
+    const source = await feed.createSource({
+      kind: 'hackernews',
+      url: 'hn:show',
+      processing_policy: { capture_comments: true }
+    });
+
+    const first = await feed.fetch(source.id);
+    const second = await feed.fetch(source.id);
+    const [item] = await feed.listItems({ include_saved: true });
+    const promoted = await feed.saveToLibrary(item.id);
+
+    expect(source.url).toBe('https://news.ycombinator.com/show');
+    expect(source.metadata).toMatchObject({ provider: 'hackernews', hn_feed_type: 'show' });
+    expect(listLimits).toEqual([20, 20]);
+    expect(first[0]).toMatchObject({ fetched: 1, created: 1, skipped: 0 });
+    expect(second[0]).toMatchObject({ fetched: 1, created: 0, skipped: 1 });
+    expect(item).toMatchObject({
+      dedupe_key: 'hackernews:44556677',
+      url: 'https://example.com/hn-local-first',
+      canonical_url: 'https://news.ycombinator.com/item?id=44556677',
+      metadata: {
+        provider: 'hackernews',
+        external_id: '44556677',
+        hn_feed_type: 'show',
+        hn_discussion_url: 'https://news.ycombinator.com/item?id=44556677',
+        outbound_url: 'https://example.com/hn-local-first',
+        score_count: 320,
+        comment_count: 88
+      }
+    });
+    expect(item.raw_ref?.kind).toBe('hackernews_candidate_json');
+    expect(discussionRequests).toEqual(['44556677']);
+    expect(promoted.feed_item.extracted_ref?.kind).toBe('hackernews_story_markdown');
+    expect(promoted.library_item.frontmatter.kind).toBe('article');
+    expect(promoted.library_item.frontmatter.source).toMatchObject({
+      kind: 'feed',
+      provider: 'hackernews',
+      external_id: '44556677',
+      feed_source_id: source.id
+    });
+    expect(promoted.library_item.body).toContain('HN comments are useful context.');
   });
 
   it('refreshes older YouTube transcript caches that predate bilingual subtitle requests', async () => {

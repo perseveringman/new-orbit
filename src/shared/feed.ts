@@ -2,7 +2,17 @@ import type { NoteAreaRef } from './note';
 import type { LibraryItem } from './library';
 import type { SynthesisArtifact } from './synthesis';
 
-export const FEED_SOURCE_KINDS = ['rss', 'youtube', 'twitter', 'newsletter', 'podcast', 'github', 'custom'] as const;
+export const FEED_SOURCE_KINDS = [
+  'rss',
+  'youtube',
+  'twitter',
+  'reddit',
+  'hackernews',
+  'newsletter',
+  'podcast',
+  'github',
+  'custom'
+] as const;
 export type FeedSourceKind = (typeof FEED_SOURCE_KINDS)[number];
 
 export const FEED_ITEM_STATUSES = ['new', 'seen', 'ignored', 'saved', 'expired'] as const;
@@ -128,6 +138,12 @@ export interface FeedReadableRef {
     | 'x_candidate_json'
     | 'x_thread_json'
     | 'x_post_markdown'
+    | 'reddit_candidate_json'
+    | 'reddit_discussion_json'
+    | 'reddit_post_markdown'
+    | 'hackernews_candidate_json'
+    | 'hackernews_discussion_json'
+    | 'hackernews_story_markdown'
     | 'artifact';
   path?: string;
   artifact_id?: string;
@@ -270,6 +286,10 @@ export interface FeedSourceMetadata {
   youtube_initial_backfill_completed_at?: string;
   x_handle?: string;
   x_profile_name?: string;
+  reddit_subreddit?: string;
+  reddit_sort?: string;
+  reddit_time?: string;
+  hn_feed_type?: string;
 }
 
 export interface FeedItemMetadata {
@@ -310,6 +330,13 @@ export interface FeedItemMetadata {
   retweet_count?: number;
   reply_count?: number;
   quoted_url?: string;
+  subreddit?: string;
+  reddit_sort?: string;
+  outbound_url?: string;
+  score_count?: number;
+  comment_count?: number;
+  hn_feed_type?: string;
+  hn_discussion_url?: string;
 }
 
 export interface SaveFeedToLibraryInput {

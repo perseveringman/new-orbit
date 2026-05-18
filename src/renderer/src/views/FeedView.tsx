@@ -12,6 +12,8 @@ import {
   Inbox,
   Languages,
   Library,
+  MessageSquare,
+  Newspaper,
   PlayCircle,
   Plus,
   Radio,
@@ -69,6 +71,10 @@ export function FeedView(): JSX.Element {
   const [youtubeBackfill, setYoutubeBackfill] = useState<'recent' | 'full'>('recent');
   const [xIncludeReplies, setXIncludeReplies] = useState(true);
   const [xCaptureThreadOnSave, setXCaptureThreadOnSave] = useState(false);
+  const [redditSort, setRedditSort] = useState<'hot' | 'new' | 'top' | 'rising'>('hot');
+  const [redditCaptureComments, setRedditCaptureComments] = useState(false);
+  const [hnFeedType, setHnFeedType] = useState<'top' | 'new' | 'best' | 'show' | 'ask' | 'jobs'>('top');
+  const [hnCaptureComments, setHnCaptureComments] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -213,22 +219,29 @@ export function FeedView(): JSX.Element {
   }, [activeItem?.id, activeItem?.enrichment_artifact_ids?.join('|')]);
 
   async function addSource(): Promise<void> {
-    if (!url.trim()) return;
-    if (sourceKind === 'rss' && url.trim().startsWith('@')) {
+    const sourceUrl = sourceKind === 'hackernews' && !url.trim() ? `hn:${hnFeedType}` : url.trim();
+    if (!sourceUrl) return;
+    if (sourceKind === 'rss' && sourceUrl.startsWith('@')) {
       setError('请先选择 YouTube 或 X 账号，再添加 @handle。');
       return;
     }
     const nextKind =
-      sourceKind === 'rss' && looksLikeXSource(url)
+      sourceKind === 'rss' && looksLikeXSource(sourceUrl)
         ? 'twitter'
-        : sourceKind === 'rss' && looksLikeYouTubeSource(url)
+        : sourceKind === 'rss' && looksLikeYouTubeSource(sourceUrl)
           ? 'youtube'
-          : sourceKind;
+          : sourceKind === 'rss' && looksLikeRedditSource(sourceUrl)
+            ? 'reddit'
+            : sourceKind === 'rss' && looksLikeHackerNewsSource(sourceUrl)
+              ? 'hackernews'
+              : sourceKind;
+    const normalizedSourceUrl =
+      nextKind === 'reddit' ? redditSourceInputWithSort(sourceUrl, redditSort) : nextKind === 'hackernews' && !url.trim() ? `hn:${hnFeedType}` : sourceUrl;
     setBusy(true);
     setMessage(null);
     try {
       const source = await window.orbit.feeds.createSource({
-        url: url.trim(),
+        url: normalizedSourceUrl,
         title: title.trim() || undefined,
         kind: nextKind,
         ...(nextKind === 'youtube'
@@ -258,7 +271,39 @@ export function FeedView(): JSX.Element {
                   capture_comments: xCaptureThreadOnSave
                 }
               }
-          : {})
+            : nextKind === 'reddit'
+              ? {
+                  fetch_policy: {
+                    interval_minutes: 1440,
+                    max_items_per_fetch: 20,
+                    initial_backfill: 'recent',
+                    initial_backfill_count: 20,
+                    respect_cache: true
+                  },
+                  processing_policy: {
+                    extract_readable: false,
+                    auto_analyze: false,
+                    generate_item_summary: true,
+                    capture_comments: redditCaptureComments
+                  }
+                }
+              : nextKind === 'hackernews'
+                ? {
+                    fetch_policy: {
+                      interval_minutes: 1440,
+                      max_items_per_fetch: 20,
+                      initial_backfill: 'recent',
+                      initial_backfill_count: 20,
+                      respect_cache: true
+                    },
+                    processing_policy: {
+                      extract_readable: false,
+                      auto_analyze: false,
+                      generate_item_summary: true,
+                      capture_comments: hnCaptureComments
+                    }
+                  }
+                : {})
       });
       setUrl('');
       setTitle('');
@@ -269,7 +314,11 @@ export function FeedView(): JSX.Element {
           ? `已添加 ${source.title}，正在抓取${source.fetch_policy?.initial_backfill === 'full' ? '完整频道' : '最新 20 条'}。`
           : source.kind === 'twitter'
             ? `已添加 ${source.title}，正在抓取最新 20 条 X 内容。`
-          : `已添加 ${source.title}，正在抓取。`
+            : source.kind === 'reddit'
+              ? `已添加 ${source.title}，正在抓取最新 20 条 Reddit 内容。`
+              : source.kind === 'hackernews'
+                ? `已添加 ${source.title}，正在抓取最新 20 条 Hacker News 内容。`
+                : `已添加 ${source.title}，正在抓取。`
       );
       window.setTimeout(() => void reload(null), 400);
       const result = await window.orbit.feeds.fetch(source.id);
@@ -425,6 +474,8 @@ export function FeedView(): JSX.Element {
             <option value="rss">RSS / Atom</option>
             <option value="youtube">YouTube</option>
             <option value="twitter">X 账号</option>
+            <option value="reddit">Reddit</option>
+            <option value="hackernews">Hacker News</option>
           </select>
           <input
             value={title}
@@ -438,6 +489,8 @@ export function FeedView(): JSX.Element {
               const nextUrl = event.target.value;
               setUrl(nextUrl);
               if (looksLikeXSource(nextUrl)) setSourceKind('twitter');
+              else if (looksLikeRedditSource(nextUrl)) setSourceKind('reddit');
+              else if (looksLikeHackerNewsSource(nextUrl)) setSourceKind('hackernews');
               else if (sourceKind !== 'twitter' && looksLikeYouTubeSource(nextUrl)) setSourceKind('youtube');
             }}
             placeholder={
@@ -445,12 +498,16 @@ export function FeedView(): JSX.Element {
                 ? 'YouTube 频道 / 播放列表 / @handle / 视频 URL'
                 : sourceKind === 'twitter'
                   ? '@handle 或 https://x.com/handle'
-                : 'RSS / Atom URL'
+                  : sourceKind === 'reddit'
+                    ? 'r/LocalLLaMA 或 Reddit subreddit URL'
+                    : sourceKind === 'hackernews'
+                      ? '留空使用频道，或输入 top / new / best / show / ask / jobs'
+                      : 'RSS / Atom URL'
             }
             className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
           />
           <button
-            disabled={operationBusy || !url.trim()}
+            disabled={operationBusy || (!url.trim() && sourceKind !== 'hackernews')}
             onClick={() => void addSource()}
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-neutral-900 px-3 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
           >
@@ -512,6 +569,68 @@ export function FeedView(): JSX.Element {
               {xCaptureThreadOnSave ? '抓线程详情' : '只缓存原帖'}
             </button>
             <span>默认每次用 OpenCLI 抓取最近 20 条。</span>
+          </div>
+        ) : null}
+        {sourceKind === 'reddit' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+            <span>Reddit 排序</span>
+            {(['hot', 'new', 'top', 'rising'] as const).map((sort) => (
+              <button
+                key={sort}
+                type="button"
+                onClick={() => setRedditSort(sort)}
+                className={`h-7 rounded-md border px-2 ${
+                  redditSort === sort
+                    ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-100'
+                    : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+                }`}
+              >
+                {sort}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setRedditCaptureComments((value) => !value)}
+              className={`h-7 rounded-md border px-2 ${
+                redditCaptureComments
+                  ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-100'
+                  : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+              }`}
+            >
+              {redditCaptureComments ? '保存时抓评论' : '只缓存帖子'}
+            </button>
+            <span>默认抓取 subreddit 最新 20 条候选。</span>
+          </div>
+        ) : null}
+        {sourceKind === 'hackernews' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+            <span>HN 频道</span>
+            {(['top', 'new', 'best', 'show', 'ask', 'jobs'] as const).map((feedType) => (
+              <button
+                key={feedType}
+                type="button"
+                onClick={() => setHnFeedType(feedType)}
+                className={`h-7 rounded-md border px-2 ${
+                  hnFeedType === feedType
+                    ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
+                    : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+                }`}
+              >
+                {feedType}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setHnCaptureComments((value) => !value)}
+              className={`h-7 rounded-md border px-2 ${
+                hnCaptureComments
+                  ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100'
+                  : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+              }`}
+            >
+              {hnCaptureComments ? '保存时抓评论' : '只缓存故事'}
+            </button>
+            <span>使用 Hacker News public API 抓取最近 20 条。</span>
           </div>
         ) : null}
 
@@ -706,7 +825,11 @@ function SourceRail({
                           ? (source.metadata?.youtube_source_type ?? 'youtube')
                           : source.kind === 'twitter'
                             ? `@${source.metadata?.x_handle ?? 'x'}`
-                          : source.kind}
+                            : source.kind === 'reddit'
+                              ? `r/${source.metadata?.reddit_subreddit ?? 'reddit'}`
+                              : source.kind === 'hackernews'
+                                ? `HN ${source.metadata?.hn_feed_type ?? 'top'}`
+                                : source.kind}
                       </span>
                     </div>
                     <div className="mt-0.5 truncate text-[11px] text-neutral-500">{source.url}</div>
@@ -796,6 +919,8 @@ function FeedItemRow({
   const saved = item.status === 'saved';
   const isYouTube = item.metadata?.provider === 'youtube';
   const isX = item.metadata?.provider === 'x';
+  const isReddit = item.metadata?.provider === 'reddit';
+  const isHackerNews = item.metadata?.provider === 'hackernews';
   return (
     <article
       className={`group cursor-pointer px-4 py-3 transition ${
@@ -829,6 +954,24 @@ function FeedItemRow({
                 X
               </span>
             ) : null}
+            {isReddit ? (
+              <span
+                title="Reddit 内容"
+                className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] text-orange-700 dark:bg-orange-950/40 dark:text-orange-100"
+              >
+                <MessageSquare size={11} />
+                Reddit
+              </span>
+            ) : null}
+            {isHackerNews ? (
+              <span
+                title="Hacker News 内容"
+                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+              >
+                <Newspaper size={11} />
+                HN
+              </span>
+            ) : null}
             {hasAnalysis ? (
               <span
                 title="已有分析"
@@ -858,6 +1001,12 @@ function FeedItemRow({
             ) : null}
             {typeof item.metadata?.like_count === 'number' ? (
               <span>{formatCompactNumber(item.metadata.like_count)} 喜欢</span>
+            ) : null}
+            {typeof item.metadata?.score_count === 'number' ? (
+              <span>{formatCompactNumber(item.metadata.score_count)} 分</span>
+            ) : null}
+            {typeof item.metadata?.comment_count === 'number' ? (
+              <span>{formatCompactNumber(item.metadata.comment_count)} 评论</span>
             ) : null}
           </div>
           <p className="mt-2 line-clamp-2 text-sm leading-5 text-neutral-600 dark:text-neutral-300">
@@ -1018,6 +1167,26 @@ function Inspector({
                 {item.metadata.is_reply ? <span>回复</span> : <span>主贴</span>}
               </div>
             ) : null}
+            {item.metadata?.provider === 'reddit' ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
+                <span className="inline-flex items-center gap-1">
+                  <MessageSquare size={12} />
+                  Reddit
+                </span>
+                {item.metadata.subreddit ? <span>r/{item.metadata.subreddit}</span> : null}
+                {item.author ? <span>{item.author}</span> : null}
+              </div>
+            ) : null}
+            {item.metadata?.provider === 'hackernews' ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
+                <span className="inline-flex items-center gap-1">
+                  <Newspaper size={12} />
+                  Hacker News
+                </span>
+                {item.metadata.hn_feed_type ? <span>{item.metadata.hn_feed_type}</span> : null}
+                {item.author ? <span>{item.author}</span> : null}
+              </div>
+            ) : null}
           </div>
           <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
             {labelForStatus(item.status)}
@@ -1103,6 +1272,20 @@ function Inspector({
                   <MiniMeta label="查看" value={formatCompactNumber(item.metadata.view_count ?? 0)} />
                 </div>
               ) : null}
+              {item.metadata?.provider === 'reddit' ? (
+                <div className="mt-3 grid grid-cols-3 gap-1 text-[11px] text-neutral-500">
+                  <MiniMeta label="社区" value={item.metadata.subreddit ? `r/${item.metadata.subreddit}` : '未知'} />
+                  <MiniMeta label="分数" value={formatCompactNumber(item.metadata.score_count ?? 0)} />
+                  <MiniMeta label="评论" value={formatCompactNumber(item.metadata.comment_count ?? 0)} />
+                </div>
+              ) : null}
+              {item.metadata?.provider === 'hackernews' ? (
+                <div className="mt-3 grid grid-cols-3 gap-1 text-[11px] text-neutral-500">
+                  <MiniMeta label="频道" value={item.metadata.hn_feed_type ?? 'top'} />
+                  <MiniMeta label="分数" value={formatCompactNumber(item.metadata.score_count ?? 0)} />
+                  <MiniMeta label="评论" value={formatCompactNumber(item.metadata.comment_count ?? 0)} />
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-1">
                 <Pill
                   icon={<FileText size={12} />}
@@ -1117,9 +1300,17 @@ function Inspector({
                         ? item.extracted_ref
                           ? '已缓存 X 正文'
                           : '可按需缓存'
-                      : item.extracted_ref
-                        ? '已缓存提取文本'
-                        : '提取待处理'
+                        : item.metadata?.provider === 'reddit'
+                          ? item.extracted_ref
+                            ? '已缓存 Reddit 快照'
+                            : '可按需缓存'
+                          : item.metadata?.provider === 'hackernews'
+                            ? item.extracted_ref
+                              ? '已缓存 HN 快照'
+                              : '可按需缓存'
+                            : item.extracted_ref
+                              ? '已缓存提取文本'
+                              : '提取待处理'
                   }
                 />
                 <Pill
@@ -1159,7 +1350,11 @@ function Inspector({
                     : 'YouTube 描述'
                   : item.metadata?.provider === 'x'
                     ? 'X 正文'
-                  : '可读内容'
+                    : item.metadata?.provider === 'reddit'
+                      ? 'Reddit 快照'
+                      : item.metadata?.provider === 'hackernews'
+                        ? 'Hacker News 快照'
+                        : '可读内容'
               }
             >
               <ReadableContentPanel
@@ -1226,6 +1421,15 @@ function Inspector({
               {item.metadata?.x_handle ? (
                 <Meta label="X 来源账号" value={`@${item.metadata.x_handle}`} />
               ) : null}
+              {item.metadata?.subreddit ? (
+                <Meta label="Reddit 社区" value={`r/${item.metadata.subreddit}`} />
+              ) : null}
+              {item.metadata?.hn_feed_type ? (
+                <Meta label="HN 频道" value={item.metadata.hn_feed_type} />
+              ) : null}
+              {item.metadata?.outbound_url ? (
+                <Meta label="外链" value={item.metadata.outbound_url} />
+              ) : null}
               {item.metadata?.duration_human ? (
                 <Meta label="时长" value={item.metadata.duration_human} />
               ) : null}
@@ -1237,6 +1441,12 @@ function Inspector({
               ) : null}
               {typeof item.metadata?.retweet_count === 'number' ? (
                 <Meta label="转发" value={formatCompactNumber(item.metadata.retweet_count)} />
+              ) : null}
+              {typeof item.metadata?.score_count === 'number' ? (
+                <Meta label="分数" value={formatCompactNumber(item.metadata.score_count)} />
+              ) : null}
+              {typeof item.metadata?.comment_count === 'number' ? (
+                <Meta label="评论" value={formatCompactNumber(item.metadata.comment_count)} />
               ) : null}
               <Meta
                 label="发布时间"
@@ -1306,6 +1516,8 @@ function ReadableContentPanel({
 
   const isYouTube = item.metadata?.provider === 'youtube';
   const isX = item.metadata?.provider === 'x';
+  const isReddit = item.metadata?.provider === 'reddit';
+  const isHackerNews = item.metadata?.provider === 'hackernews';
   const transcriptSection = isYouTube ? extractMarkdownSection(content.content, '转录') : null;
   const transcript =
     transcriptSection && !isMissingTranscriptText(transcriptSection) ? transcriptSection : null;
@@ -1345,6 +1557,20 @@ function ReadableContentPanel({
           <MiniMeta label="喜欢" value={formatCompactNumber(item.metadata?.like_count ?? 0)} />
           <MiniMeta label="转发" value={formatCompactNumber(item.metadata?.retweet_count ?? 0)} />
           <MiniMeta label="查看" value={formatCompactNumber(item.metadata?.view_count ?? 0)} />
+        </div>
+      ) : null}
+      {isReddit ? (
+        <div className="grid grid-cols-3 gap-2 text-[11px] text-neutral-500">
+          <MiniMeta label="社区" value={item.metadata?.subreddit ? `r/${item.metadata.subreddit}` : '未知'} />
+          <MiniMeta label="分数" value={formatCompactNumber(item.metadata?.score_count ?? 0)} />
+          <MiniMeta label="评论" value={formatCompactNumber(item.metadata?.comment_count ?? 0)} />
+        </div>
+      ) : null}
+      {isHackerNews ? (
+        <div className="grid grid-cols-3 gap-2 text-[11px] text-neutral-500">
+          <MiniMeta label="频道" value={item.metadata?.hn_feed_type ?? 'top'} />
+          <MiniMeta label="分数" value={formatCompactNumber(item.metadata?.score_count ?? 0)} />
+          <MiniMeta label="评论" value={formatCompactNumber(item.metadata?.comment_count ?? 0)} />
         </div>
       ) : null}
       {description ? (
@@ -1463,7 +1689,16 @@ function FeedThumbnail({ item, compact }: { item: FeedItem; compact?: boolean })
     );
   }
 
-  const Icon = item.metadata?.provider === 'youtube' ? PlayCircle : item.metadata?.provider === 'x' ? AtSign : FileText;
+  const Icon =
+    item.metadata?.provider === 'youtube'
+      ? PlayCircle
+      : item.metadata?.provider === 'x'
+        ? AtSign
+        : item.metadata?.provider === 'reddit'
+          ? MessageSquare
+          : item.metadata?.provider === 'hackernews'
+            ? Newspaper
+            : FileText;
   return (
     <div
       className={`${className} flex items-center justify-center bg-neutral-100 text-neutral-400 dark:bg-neutral-900`}
@@ -1718,6 +1953,38 @@ function looksLikeXSource(value: string): boolean {
   }
 }
 
+function looksLikeRedditSource(value: string): boolean {
+  const trimmed = value.trim();
+  if (/^(?:\/?r\/|reddit:)/i.test(trimmed)) return true;
+  try {
+    const host = new URL(trimmed).hostname.replace(/^www\./, '').replace(/^old\./, '').replace(/^new\./, '').replace(/^m\./, '');
+    return host === 'reddit.com';
+  } catch {
+    return false;
+  }
+}
+
+function looksLikeHackerNewsSource(value: string): boolean {
+  const trimmed = value.trim();
+  if (/^(?:hn:|hackernews:)/i.test(trimmed)) return true;
+  try {
+    return new URL(trimmed).hostname.replace(/^www\./, '') === 'news.ycombinator.com';
+  } catch {
+    return false;
+  }
+}
+
+function redditSourceInputWithSort(value: string, sort: string): string {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const cleaned = trimmed.replace(/^reddit:/i, '').replace(/^\/+/, '');
+  const segments = cleaned.split('/').filter(Boolean);
+  const subreddit = segments[0]?.toLowerCase() === 'r' ? segments[1] : segments[0];
+  const explicitSort = segments[0]?.toLowerCase() === 'r' ? segments[2] : segments[1];
+  if (!subreddit || explicitSort) return trimmed;
+  return `r/${subreddit}/${sort}`;
+}
+
 function hasYouTubeTranscript(item: FeedItem): boolean {
   return (
     item.metadata?.provider === 'youtube' &&
@@ -1727,7 +1994,10 @@ function hasYouTubeTranscript(item: FeedItem): boolean {
 }
 
 function inspectorTabLabel(item: FeedItem, tab: InspectorTab): string {
-  if (tab !== 'content' || item.metadata?.provider !== 'youtube') return tab;
+  if (tab !== 'content') return tab;
+  if (item.metadata?.provider === 'reddit') return '帖子';
+  if (item.metadata?.provider === 'hackernews') return '讨论';
+  if (item.metadata?.provider !== 'youtube') return tab;
   return hasYouTubeTranscript(item) ? '转录' : '描述';
 }
 
