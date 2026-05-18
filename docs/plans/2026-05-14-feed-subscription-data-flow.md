@@ -824,7 +824,7 @@ Landed foundation:
 - YouTube sources normalize handles/channels/playlists/videos, fetch latest 20 by default, support full initial backfill, and use `yt-dlp` with Chrome cookies.
 - YouTube extraction captures available preferred subtitle tracks (`zh-Hans`, `zh-Hant`, `zh`, `en`) as raw subtitle files plus segmented transcript JSON.
 - YouTube FeedItems now carry `media.transcript_tracks`, preferred transcript track metadata, subtitle language/status metadata, and Library promotion preserves those refs.
-- X account sources normalize `@handle` / profile URLs, fetch latest 20 by default with OpenCLI (`twitter search from:<handle>`), optionally include replies, and save tweet/thread Markdown only when promoted to Library.
+- X sources normalize `@handle` / profile URLs plus `x:following` / `x:for-you` timeline feeds, fetch latest 20 by default with OpenCLI (`twitter search from:<handle>` or `twitter timeline --type following|for-you`), optionally include replies for profile feeds, and save tweet/thread Markdown only when promoted to Library.
 - Reddit sources normalize subreddit names/URLs, fetch latest 20 by default with OpenCLI + public JSON fallbacks, and optionally fetch comments when a post is promoted to Library.
 - Hacker News sources cover top/new/best/show/ask/jobs via the public API, keep stable story IDs for dedupe, and optionally fetch HN comments when promoted to Library.
 - AI subtitle translation has a storage/API path via `attachAiSubtitleTranslation`: translated segment output is saved as an AI transcript track, plus an interleaved bilingual markdown ref for “translation under each original subtitle line”.

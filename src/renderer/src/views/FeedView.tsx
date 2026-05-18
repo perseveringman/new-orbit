@@ -69,6 +69,7 @@ export function FeedView(): JSX.Element {
   const [title, setTitle] = useState('');
   const [sourceKind, setSourceKind] = useState<FeedSource['kind']>('rss');
   const [youtubeBackfill, setYoutubeBackfill] = useState<'recent' | 'full'>('recent');
+  const [xMode, setXMode] = useState<'profile' | 'following' | 'for-you'>('profile');
   const [xIncludeReplies, setXIncludeReplies] = useState(true);
   const [xCaptureThreadOnSave, setXCaptureThreadOnSave] = useState(false);
   const [redditSort, setRedditSort] = useState<'hot' | 'new' | 'top' | 'rising'>('hot');
@@ -219,7 +220,12 @@ export function FeedView(): JSX.Element {
   }, [activeItem?.id, activeItem?.enrichment_artifact_ids?.join('|')]);
 
   async function addSource(): Promise<void> {
-    const sourceUrl = sourceKind === 'hackernews' && !url.trim() ? `hn:${hnFeedType}` : url.trim();
+    const sourceUrl =
+      sourceKind === 'hackernews' && !url.trim()
+        ? `hn:${hnFeedType}`
+        : sourceKind === 'twitter' && xMode !== 'profile' && !url.trim()
+          ? `x:${xMode}`
+          : url.trim();
     if (!sourceUrl) return;
     if (sourceKind === 'rss' && sourceUrl.startsWith('@')) {
       setError('请先选择 YouTube 或 X 账号，再添加 @handle。');
@@ -473,7 +479,7 @@ export function FeedView(): JSX.Element {
           >
             <option value="rss">RSS / Atom</option>
             <option value="youtube">YouTube</option>
-            <option value="twitter">X 账号</option>
+            <option value="twitter">X</option>
             <option value="reddit">Reddit</option>
             <option value="hackernews">Hacker News</option>
           </select>
@@ -488,16 +494,27 @@ export function FeedView(): JSX.Element {
             onChange={(event) => {
               const nextUrl = event.target.value;
               setUrl(nextUrl);
-              if (looksLikeXSource(nextUrl)) setSourceKind('twitter');
-              else if (looksLikeRedditSource(nextUrl)) setSourceKind('reddit');
-              else if (looksLikeHackerNewsSource(nextUrl)) setSourceKind('hackernews');
-              else if (sourceKind !== 'twitter' && looksLikeYouTubeSource(nextUrl)) setSourceKind('youtube');
+              if (looksLikeXTimelineSource(nextUrl)) {
+                setSourceKind('twitter');
+                setXMode(xTimelineModeFromInput(nextUrl) ?? 'following');
+              } else if (looksLikeXSource(nextUrl)) {
+                setSourceKind('twitter');
+                setXMode('profile');
+              } else if (looksLikeRedditSource(nextUrl)) {
+                setSourceKind('reddit');
+              } else if (looksLikeHackerNewsSource(nextUrl)) {
+                setSourceKind('hackernews');
+              } else if (sourceKind !== 'twitter' && looksLikeYouTubeSource(nextUrl)) {
+                setSourceKind('youtube');
+              }
             }}
             placeholder={
               sourceKind === 'youtube'
                 ? 'YouTube 频道 / 播放列表 / @handle / 视频 URL'
                 : sourceKind === 'twitter'
-                  ? '@handle 或 https://x.com/handle'
+                  ? xMode === 'profile'
+                    ? '@handle 或 https://x.com/handle'
+                    : '留空直接添加，或输入 x:following / x:for-you'
                   : sourceKind === 'reddit'
                     ? 'r/LocalLLaMA 或 Reddit subreddit URL'
                     : sourceKind === 'hackernews'
@@ -507,7 +524,7 @@ export function FeedView(): JSX.Element {
             className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
           />
           <button
-            disabled={operationBusy || (!url.trim() && sourceKind !== 'hackernews')}
+            disabled={operationBusy || (!url.trim() && sourceKind !== 'hackernews' && !(sourceKind === 'twitter' && xMode !== 'profile'))}
             onClick={() => void addSource()}
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-neutral-900 px-3 text-xs font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
           >
@@ -545,7 +562,24 @@ export function FeedView(): JSX.Element {
         ) : null}
         {sourceKind === 'twitter' ? (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
-            <span>X 抓取</span>
+            <span>X 来源</span>
+            {(['profile', 'following', 'for-you'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setXMode(mode);
+                  if (mode !== 'profile') setUrl('');
+                }}
+                className={`h-7 rounded-md border px-2 ${
+                  xMode === mode
+                    ? 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100'
+                    : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+                }`}
+              >
+                {mode === 'profile' ? '账号' : mode === 'following' ? 'Following' : 'For You'}
+              </button>
+            ))}
             <button
               type="button"
               onClick={() => setXIncludeReplies((value) => !value)}
@@ -568,7 +602,11 @@ export function FeedView(): JSX.Element {
             >
               {xCaptureThreadOnSave ? '抓线程详情' : '只缓存原帖'}
             </button>
-            <span>默认每次用 OpenCLI 抓取最近 20 条。</span>
+            <span>
+              {xMode === 'profile'
+                ? '默认每次用 OpenCLI 抓取该账号最近 20 条。'
+                : '需要本机浏览器已登录 X；默认抓取 timeline 最近 20 条。'}
+            </span>
           </div>
         ) : null}
         {sourceKind === 'reddit' ? (
@@ -824,7 +862,7 @@ function SourceRail({
                         {source.kind === 'youtube'
                           ? (source.metadata?.youtube_source_type ?? 'youtube')
                           : source.kind === 'twitter'
-                            ? `@${source.metadata?.x_handle ?? 'x'}`
+                            ? xSourceBadge(source)
                             : source.kind === 'reddit'
                               ? `r/${source.metadata?.reddit_subreddit ?? 'reddit'}`
                               : source.kind === 'hackernews'
@@ -1951,6 +1989,46 @@ function looksLikeXSource(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function looksLikeXTimelineSource(value: string): boolean {
+  return xTimelineModeFromInput(value) !== null;
+}
+
+function xTimelineModeFromInput(value: string): 'following' | 'for-you' | null {
+  const trimmed = value.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.replace(/^www\./, '').replace(/^mobile\./, '');
+    if (host === 'x.com' || host === 'twitter.com') {
+      const segment = parsed.pathname.split('/').filter(Boolean)[0];
+      if (segment) return xTimelineModeFromToken(segment);
+    }
+  } catch {
+    // Fall through to shorthand parsing below.
+  }
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/^x:/, '')
+    .replace(/^twitter:/, '')
+    .replace(/^\/+/, '')
+    .replace(/^timeline\//, '')
+    .replace(/^x:\/\/timeline\//, '');
+  return xTimelineModeFromToken(normalized);
+}
+
+function xTimelineModeFromToken(value: string): 'following' | 'for-you' | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'following') return 'following';
+  if (normalized === 'foryou' || normalized === 'for-you' || normalized === 'for_you' || normalized === 'home') return 'for-you';
+  return null;
+}
+
+function xSourceBadge(source: FeedSource): string {
+  if (source.metadata?.x_timeline_type === 'following') return 'X Following';
+  if (source.metadata?.x_timeline_type === 'for-you') return 'X For You';
+  return `@${source.metadata?.x_handle ?? 'x'}`;
 }
 
 function looksLikeRedditSource(value: string): boolean {

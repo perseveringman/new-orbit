@@ -139,7 +139,7 @@ must be added there (or the test will fail typecheck).
 - Shared contracts live in `src/shared/feed.ts`.
 - Main-process store/IPC live in `src/main/feed/store.ts` and `src/main/feed/ipc.ts`; renderer API is `window.orbit.feeds`.
 - Feed sources are stored in `<vault>/feeds/_sources.json`; raw feed items are Layer 0 JSON files under `<vault>/feeds/<source-id>/`.
-- YouTube sources are provider-backed by `src/main/feed/youtube.ts`; X account sources are provider-backed by `src/main/feed/x.ts` and use OpenCLI (`twitter search from:<handle>`) to fetch the latest 20 posts by default.
+- YouTube sources are provider-backed by `src/main/feed/youtube.ts`; X sources are provider-backed by `src/main/feed/x.ts` and use OpenCLI (`twitter search from:<handle>` for profiles, `twitter timeline --type following|for-you` for timelines) to fetch the latest 20 posts by default.
 - Reddit sources are provider-backed by `src/main/feed/reddit.ts` with OpenCLI + public JSON fallbacks. Hacker News sources are provider-backed by `src/main/feed/hackernews.ts` and use the official public API for stable story IDs.
 - Feed readable extraction calls the shared content connector registry before writing `<vault>/.orbit/feed/extracted/` refs.
 - Fetching feeds must stay Layer 0: do not create Notes, LibraryItems, Resources, Resource refs, or main search truth during raw fetch.

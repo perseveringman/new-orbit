@@ -400,6 +400,67 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(await createLibraryStore(tmp).list()).toHaveLength(1);
   });
 
+  it('fetches X following and for-you timelines while sharing tweet dedupe keys', async () => {
+    const requests: string[] = [];
+    const timelineCandidate: XPostCandidate = {
+      id: '2057000000000000001',
+      author: 'alice',
+      text: 'A useful timeline post from X.',
+      url: 'https://x.com/i/status/2057000000000000001',
+      canonical_url: 'https://x.com/alice/status/2057000000000000001',
+      published_at: '2026-05-18T12:00:00.000Z',
+      likes: 12,
+      retweets: 1,
+      replies: 2,
+      views: 900,
+      is_reply: false
+    };
+    const xProvider: XFeedProvider = {
+      normalizeSource: normalizeXSource,
+      listCandidates: async (source, options) => {
+        requests.push(`${source.timeline_type ?? source.handle}:${options?.limit ?? 'none'}`);
+        return [timelineCandidate];
+      },
+      fetchThread: async () => ({ tweets: [timelineCandidate] }),
+      buildMarkdown: defaultXFeedProvider.buildMarkdown
+    };
+    const feed = createFeedStore(tmp, {
+      now: () => new Date('2026-05-18T12:00:00.000Z'),
+      xProvider
+    });
+    const following = await feed.createSource({ kind: 'twitter', url: 'x:following' });
+    const forYou = await feed.createSource({ kind: 'twitter', url: 'x:for-you' });
+
+    const first = await feed.fetch(following.id);
+    const second = await feed.fetch(forYou.id);
+    const items = await feed.listItems({ include_saved: true });
+
+    expect(following).toMatchObject({
+      url: 'x://timeline/following',
+      title: 'X Following',
+      metadata: { provider: 'x', x_source_type: 'timeline', x_timeline_type: 'following' }
+    });
+    expect(forYou).toMatchObject({
+      url: 'x://timeline/for-you',
+      title: 'X For You',
+      metadata: { provider: 'x', x_source_type: 'timeline', x_timeline_type: 'for-you' }
+    });
+    expect(requests).toEqual(['following:20', 'for-you:20']);
+    expect(first[0]).toMatchObject({ fetched: 1, created: 1, skipped: 0 });
+    expect(second[0]).toMatchObject({ fetched: 1, created: 0, skipped: 1 });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      dedupe_key: 'x:2057000000000000001',
+      metadata: {
+        provider: 'x',
+        external_id: '2057000000000000001',
+        x_source_type: 'timeline',
+        x_timeline_type: 'following',
+        author_handle: 'alice'
+      }
+    });
+  });
+
   it('fetches Reddit subreddit subscriptions as Layer 0 posts and promotes discussion snapshots to Library', async () => {
     const listLimits: Array<number | undefined> = [];
     const discussionRequests: string[] = [];

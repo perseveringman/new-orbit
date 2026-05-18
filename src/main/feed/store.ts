@@ -183,7 +183,16 @@ export class FeedStore {
       url,
       kind: requestedKind,
       ...(youtube ? { metadata: { provider: 'youtube', youtube_source_type: youtube.source_type } } : {}),
-      ...(x ? { metadata: { provider: 'x', x_handle: x.handle } } : {}),
+      ...(x
+        ? {
+            metadata: {
+              provider: 'x',
+              x_source_type: x.source_type,
+              ...(x.handle ? { x_handle: x.handle } : {}),
+              ...(x.timeline_type ? { x_timeline_type: x.timeline_type } : {})
+            }
+          }
+        : {}),
       ...(reddit
         ? { metadata: { provider: 'reddit', reddit_subreddit: reddit.subreddit, reddit_sort: reddit.sort, reddit_time: reddit.time } }
         : {}),
@@ -1363,7 +1372,7 @@ export class FeedStore {
           author: `@${candidate.author}`,
           published_at: candidate.published_at,
           fetched_at: fetchedAt,
-          site_name: source.title || `@${descriptor.handle}`,
+          site_name: source.title || xSourceTitle(descriptor),
           summary: candidate.text,
           excerpt: candidate.text.slice(0, 500),
           content_hash: hashContent(`${candidate.text}\n${candidate.canonical_url}`),
@@ -1376,7 +1385,9 @@ export class FeedStore {
             provider: 'x',
             external_id: candidate.id,
             source_url: descriptor.url,
-            x_handle: descriptor.handle,
+            x_source_type: descriptor.source_type,
+            ...(descriptor.handle ? { x_handle: descriptor.handle } : {}),
+            ...(descriptor.timeline_type ? { x_timeline_type: descriptor.timeline_type } : {}),
             author_handle: candidate.author,
             is_reply: candidate.is_reply,
             reply_to: candidate.reply_to,
@@ -1399,7 +1410,13 @@ export class FeedStore {
     const completedAt = this.now().toISOString();
     await this.updateSourceAfterFetch(source, {
       title: source.title || xSourceTitle(descriptor),
-      metadata: { ...(source.metadata ?? {}), provider: 'x', x_handle: descriptor.handle },
+      metadata: {
+        ...(source.metadata ?? {}),
+        provider: 'x',
+        x_source_type: descriptor.source_type,
+        ...(descriptor.handle ? { x_handle: descriptor.handle } : {}),
+        ...(descriptor.timeline_type ? { x_timeline_type: descriptor.timeline_type } : {})
+      },
       last_fetched_at: completedAt,
       last_fetch_error: undefined,
       updated_at: completedAt
@@ -1414,7 +1431,9 @@ export class FeedStore {
       raw_feed_ref: rawFeedRef.path,
       stages: markRunStage(run.stages, 'resolve-source', 'success', `Resolved ${selected.length} X post(s).`, completedAt),
       stats: {
-        handle: descriptor.handle,
+        ...(descriptor.handle ? { handle: descriptor.handle } : {}),
+        ...(descriptor.timeline_type ? { timeline_type: descriptor.timeline_type } : {}),
+        source_type: descriptor.source_type,
         raw_candidates: candidates.length,
         include_replies: includeReplies
       }
@@ -1850,7 +1869,18 @@ function normalizeFeedSource(value: FeedSource): FeedSource {
   return {
     ...value,
     ...(youtube ? { url: youtube.url, metadata: { ...(value.metadata ?? {}), provider: 'youtube', youtube_source_type: youtube.source_type } } : {}),
-    ...(x ? { url: x.url, metadata: { ...(value.metadata ?? {}), provider: 'x', x_handle: x.handle } } : {}),
+    ...(x
+      ? {
+          url: x.url,
+          metadata: {
+            ...(value.metadata ?? {}),
+            provider: 'x',
+            x_source_type: x.source_type,
+            ...(x.handle ? { x_handle: x.handle } : {}),
+            ...(x.timeline_type ? { x_timeline_type: x.timeline_type } : {})
+          }
+        }
+      : {}),
     ...(reddit
       ? {
           url: reddit.url,
@@ -2027,6 +2057,7 @@ function normalizeUrl(value: string): string {
 function inferFeedSourceKind(value: string): FeedSource['kind'] {
   const trimmed = value.trim();
   if (trimmed.startsWith('@')) return 'youtube';
+  if (/^(?:x:|twitter:|x:\/\/timeline\/)/i.test(trimmed)) return 'twitter';
   if (/^(?:\/?r\/|reddit:)/i.test(trimmed)) return 'reddit';
   if (/^(?:hn:|hackernews:)/i.test(trimmed)) return 'hackernews';
   try {

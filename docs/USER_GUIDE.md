@@ -159,7 +159,7 @@ Feed item 仍然必须先 Save to Library，不能直接进入 Resource 或 Note
 
 Feed Reader 页面支持：
 
-- **Sources**：添加、选择、移除 RSS / YouTube / X 账号 / Reddit / Hacker News 等 feed source。
+- **Sources**：添加、选择、移除 RSS / YouTube / X 账号或 timeline / Reddit / Hacker News 等 feed source。
 - **Fetch**：从选中的 source 或全部 source 拉取最新条目，并做去重。
 - **Filters**：查看 new / seen / ignored / saved / all 状态。
 - **Save to Library**：显式 promotion gate。只有点击保存后，feed item 才会成为 Layer 1 `LibraryItem`。

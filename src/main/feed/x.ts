@@ -4,10 +4,14 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const DEFAULT_X_LIMIT = 20;
 
+export type XSourceType = 'profile' | 'timeline';
+export type XTimelineType = 'following' | 'for-you';
+
 export interface XSourceDescriptor {
   url: string;
-  handle: string;
-  source_type: 'profile';
+  source_type: XSourceType;
+  handle?: string;
+  timeline_type?: XTimelineType;
 }
 
 export interface XListOptions {
@@ -50,7 +54,10 @@ export const defaultXFeedProvider: XFeedProvider = {
 
 export function normalizeXSource(input: string): XSourceDescriptor {
   const trimmed = input.trim();
-  if (!trimmed) throw new Error('An X handle or profile URL is required.');
+  if (!trimmed) throw new Error('An X handle, timeline type, or profile URL is required.');
+
+  const timeline = timelineTypeFromInput(trimmed);
+  if (timeline) return descriptorForTimeline(timeline);
 
   if (!/^https?:\/\//i.test(trimmed)) {
     return descriptorForHandle(trimmed);
@@ -70,13 +77,18 @@ export function normalizeXSource(input: string): XSourceDescriptor {
 
   const segments = parsed.pathname.split('/').filter(Boolean);
   const handle = segments[0];
-  if (!handle || ['i', 'home', 'explore', 'search', 'notifications', 'messages'].includes(handle.toLowerCase())) {
+  const timelineFromPath = handle ? timelineTypeFromInput(handle) : null;
+  if (timelineFromPath || ['home'].includes(handle?.toLowerCase() ?? '')) {
+    return descriptorForTimeline(timelineFromPath ?? 'for-you');
+  }
+  if (!handle || ['i', 'explore', 'search', 'notifications', 'messages'].includes(handle.toLowerCase())) {
     throw new Error('Use an X profile URL or handle, not a single post or app page.');
   }
   return descriptorForHandle(handle);
 }
 
 export function xSourceTitle(source: XSourceDescriptor): string {
+  if (source.source_type === 'timeline') return source.timeline_type === 'following' ? 'X Following' : 'X For You';
   return `@${source.handle}`;
 }
 
@@ -87,22 +99,46 @@ export function xPostTitle(post: XPostCandidate): string {
 
 async function listXPostCandidates(source: XSourceDescriptor, options: XListOptions = {}): Promise<XPostCandidate[]> {
   const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_X_LIMIT, 100));
-  const { stdout } = await execFileAsync(
-    'opencli',
-    ['twitter', 'search', `from:${source.handle}`, '--filter', 'live', '--limit', String(limit), '-f', 'json'],
-    { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }
-  );
-  return parseXPostRecords(stdout).filter((post) => post.author.toLowerCase() === source.handle.toLowerCase()).slice(0, limit);
+  if (source.source_type === 'timeline') {
+    const timelineType = source.timeline_type ?? 'for-you';
+    const { stdout } = await runOpenCliTwitter(['timeline', '--type', timelineType, '--limit', String(limit), '-f', 'json']);
+    return parseXPostRecords(stdout).slice(0, limit);
+  }
+  if (!source.handle) throw new Error('x_profile_handle_missing');
+  const handle = source.handle;
+  const { stdout } = await runOpenCliTwitter(['search', `from:${handle}`, '--filter', 'live', '--limit', String(limit), '-f', 'json']);
+  return parseXPostRecords(stdout).filter((post) => post.author.toLowerCase() === handle.toLowerCase()).slice(0, limit);
 }
 
 async function fetchXThread(tweetId: string): Promise<XThreadArchive> {
   const id = extractTweetId(tweetId);
   if (!id) throw new Error(`invalid_x_tweet_id:${tweetId}`);
-  const { stdout } = await execFileAsync('opencli', ['twitter', 'thread', id, '-f', 'json'], {
-    timeout: 30_000,
-    maxBuffer: 16 * 1024 * 1024
-  });
+  const { stdout } = await runOpenCliTwitter(['thread', id, '-f', 'json']);
   return { tweets: parseXPostRecords(stdout) };
+}
+
+async function runOpenCliTwitter(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  try {
+    return await execFileAsync('opencli', ['twitter', ...args], { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+  } catch (error) {
+    if (!isTransientOpenCliBrowserError(error)) throw error;
+    await delay(750);
+    return execFileAsync('opencli', ['twitter', ...args], { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+  }
+}
+
+function isTransientOpenCliBrowserError(error: unknown): boolean {
+  const text = errorText(error).toLowerCase();
+  return text.includes('no tab with id') || text.includes('pre-navigation') || text.includes('browser extension');
+}
+
+function errorText(error: unknown): string {
+  if (!isRecord(error)) return String(error);
+  return [error.message, error.stdout, error.stderr].filter((value): value is string => typeof value === 'string').join('\n');
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildXPostMarkdown(post: XPostCandidate, thread?: XThreadArchive): string {
@@ -170,6 +206,28 @@ function descriptorForHandle(value: string): XSourceDescriptor {
     handle,
     source_type: 'profile'
   };
+}
+
+function descriptorForTimeline(timelineType: XTimelineType): XSourceDescriptor {
+  return {
+    url: `x://timeline/${timelineType}`,
+    source_type: 'timeline',
+    timeline_type: timelineType
+  };
+}
+
+function timelineTypeFromInput(value: string): XTimelineType | null {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/^x:/, '')
+    .replace(/^twitter:/, '')
+    .replace(/^\/+/, '')
+    .replace(/^timeline\//, '')
+    .replace(/^x:\/\/timeline\//, '');
+  if (normalized === 'following') return 'following';
+  if (normalized === 'foryou' || normalized === 'for-you' || normalized === 'for_you' || normalized === 'home') return 'for-you';
+  return null;
 }
 
 function normalizeHandle(value: string): string {

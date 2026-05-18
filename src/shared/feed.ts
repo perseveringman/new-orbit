@@ -284,6 +284,8 @@ export interface FeedSourceMetadata {
   provider?: string;
   youtube_source_type?: YouTubeSourceType;
   youtube_initial_backfill_completed_at?: string;
+  x_source_type?: 'profile' | 'timeline';
+  x_timeline_type?: 'following' | 'for-you';
   x_handle?: string;
   x_profile_name?: string;
   reddit_subreddit?: string;
@@ -323,6 +325,8 @@ export interface FeedItemMetadata {
   preferred_transcript_track_id?: string;
   subtitle_download_errors?: string[];
   last_processing_error?: string;
+  x_source_type?: 'profile' | 'timeline';
+  x_timeline_type?: 'following' | 'for-you';
   x_handle?: string;
   author_handle?: string;
   is_reply?: boolean;
