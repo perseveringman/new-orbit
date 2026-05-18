@@ -11,6 +11,7 @@ import {
   type YouTubeFeedProvider,
   type YouTubeVideoCandidate
 } from '../src/main/feed/youtube';
+import { defaultXFeedProvider, normalizeXSource, type XFeedProvider, type XPostCandidate } from '../src/main/feed/x';
 import { createLibraryStore } from '../src/main/library/store';
 import { createSynthesisStore } from '../src/main/synthesis/store';
 
@@ -291,6 +292,100 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
       expect.arrayContaining(['youtube:auto:en', 'ai:ai_translation:zh-CN'])
     );
     expect(promoted.library_item.frontmatter.source_snapshot_ref).toBe(item.extracted_ref?.path);
+  });
+
+  it('fetches X account subscriptions as Layer 0 posts and promotes bookmarks to Library', async () => {
+    const listLimits: Array<number | undefined> = [];
+    const threadRequests: string[] = [];
+    const candidates: XPostCandidate[] = [
+      {
+        id: '2056340861773136121',
+        author: 'jakevin7',
+        text: 'OpenCLI 支持了官方的 weread 微信读书 CLI。',
+        url: 'https://x.com/i/status/2056340861773136121',
+        canonical_url: 'https://x.com/jakevin7/status/2056340861773136121',
+        created_at: 'Mon May 18 11:47:21 +0000 2026',
+        published_at: '2026-05-18T11:47:21.000Z',
+        likes: 24,
+        retweets: 3,
+        views: 3011,
+        is_reply: false
+      },
+      {
+        id: '2056334923070582834',
+        author: 'jakevin7',
+        text: '@yangyi 真难啊😂',
+        url: 'https://x.com/i/status/2056334923070582834',
+        canonical_url: 'https://x.com/jakevin7/status/2056334923070582834',
+        created_at: 'Mon May 18 11:23:45 +0000 2026',
+        published_at: '2026-05-18T11:23:45.000Z',
+        likes: 0,
+        views: 337,
+        is_reply: true
+      }
+    ];
+    const xProvider: XFeedProvider = {
+      normalizeSource: normalizeXSource,
+      listCandidates: async (_source, options) => {
+        listLimits.push(options?.limit);
+        return candidates;
+      },
+      fetchThread: async (tweetId) => {
+        threadRequests.push(tweetId);
+        return { tweets: candidates };
+      },
+      buildMarkdown: defaultXFeedProvider.buildMarkdown
+    };
+    const feed = createFeedStore(tmp, {
+      now: () => new Date('2026-05-18T12:00:00.000Z'),
+      xProvider
+    });
+    const source = await feed.createSource({
+      kind: 'twitter',
+      url: '@jakevin7',
+      processing_policy: { include_replies: false, capture_comments: true }
+    });
+
+    const first = await feed.fetch(source.id);
+    const second = await feed.fetch(source.id);
+    const items = await feed.listItems({ include_saved: true });
+
+    expect(source.url).toBe('https://x.com/jakevin7');
+    expect(source.metadata).toMatchObject({ provider: 'x', x_handle: 'jakevin7' });
+    expect(listLimits).toEqual([20, 20]);
+    expect(first[0]).toMatchObject({ fetched: 1, created: 1, skipped: 0 });
+    expect(second[0]).toMatchObject({ fetched: 1, created: 0, skipped: 1 });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      dedupe_key: 'x:2056340861773136121',
+      url: 'https://x.com/jakevin7/status/2056340861773136121',
+      metadata: {
+        provider: 'x',
+        external_id: '2056340861773136121',
+        x_handle: 'jakevin7',
+        author_handle: 'jakevin7',
+        is_reply: false,
+        like_count: 24,
+        view_count: 3011
+      }
+    });
+    expect(items[0].raw_ref?.kind).toBe('x_candidate_json');
+    const raw = await readFile(path.join(tmp, items[0].raw_ref?.path ?? ''), 'utf8');
+    expect(raw).toContain('2056334923070582834');
+
+    const promoted = await feed.saveToLibrary(items[0].id);
+    expect(threadRequests).toEqual(['2056340861773136121']);
+    expect(promoted.feed_item.extracted_ref?.kind).toBe('x_post_markdown');
+    expect(promoted.library_item.frontmatter.kind).toBe('bookmark');
+    expect(promoted.library_item.frontmatter.source).toMatchObject({
+      kind: 'feed',
+      provider: 'x',
+      external_id: '2056340861773136121',
+      feed_source_id: source.id
+    });
+    expect(promoted.library_item.body).toContain('OpenCLI 支持了官方的 weread');
+    expect(promoted.library_item.body).toContain('Reply by @jakevin7');
+    expect(await createLibraryStore(tmp).list()).toHaveLength(1);
   });
 
   it('refreshes older YouTube transcript caches that predate bilingual subtitle requests', async () => {

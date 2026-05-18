@@ -139,6 +139,7 @@ must be added there (or the test will fail typecheck).
 - Shared contracts live in `src/shared/feed.ts`.
 - Main-process store/IPC live in `src/main/feed/store.ts` and `src/main/feed/ipc.ts`; renderer API is `window.orbit.feeds`.
 - Feed sources are stored in `<vault>/feeds/_sources.json`; raw feed items are Layer 0 JSON files under `<vault>/feeds/<source-id>/`.
+- YouTube sources are provider-backed by `src/main/feed/youtube.ts`; X account sources are provider-backed by `src/main/feed/x.ts` and use OpenCLI (`twitter search from:<handle>`) to fetch the latest 20 posts by default.
 - Feed readable extraction calls the shared content connector registry before writing `<vault>/.orbit/feed/extracted/` refs.
 - Fetching feeds must stay Layer 0: do not create Notes, LibraryItems, Resources, Resource refs, or main search truth during raw fetch.
 - `feeds.items.saveToLibrary(id)` is the explicit promotion gate. It creates a first-class Library item and emits `promote.feed_to_library`.

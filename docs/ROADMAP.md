@@ -418,6 +418,7 @@ Implemented notes:
 - Feed digest and cluster produce feed-scoped SynthesisArtifacts (`feed.digest`, `feed.cluster`) and remain outside Layer 1 truth.
 - Feed Reader UI provides source management, fetch controls, filters, item stream, save/seen/ignore actions, and digest/cluster previews.
 - Feed readable extraction now calls the same Content Connector registry used by Library/mobile shares before writing `extracted_ref`.
+- X account sources now normalize `@handle` / profile URLs, fetch the latest 20 posts through OpenCLI, dedupe by `x:<tweet_id>`, and remain Layer 0 until explicit Save to Library.
 
 Data structures:
 

@@ -41,11 +41,19 @@ import {
   type YouTubeFeedProvider,
   type YouTubeSourceType
 } from './youtube';
+import {
+  defaultXFeedProvider,
+  normalizeXSource,
+  xPostTitle,
+  xSourceTitle,
+  type XFeedProvider
+} from './x';
 
 const FEEDS_ROOT = 'feeds';
 const SOURCES_FILE = '_sources.json';
 const FEED_ASSET_ROOT = path.join('.orbit', 'feed');
 const DEFAULT_YOUTUBE_RECENT_COUNT = 20;
+const DEFAULT_X_RECENT_COUNT = 20;
 const YOUTUBE_DOWNLOAD_INTERVAL_MS = 5_000;
 const YOUTUBE_RATE_LIMIT_BASE_DELAY_MS = 30_000;
 const YOUTUBE_RATE_LIMIT_MAX_RETRIES = 5;
@@ -56,6 +64,7 @@ export interface FeedStoreOptions {
   fetchText?: (url: string) => Promise<string>;
   fetchReadableText?: (url: string) => Promise<string>;
   youtubeProvider?: YouTubeFeedProvider;
+  xProvider?: XFeedProvider;
 }
 
 export class FeedStore {
@@ -63,12 +72,14 @@ export class FeedStore {
   private readonly fetchText: (url: string) => Promise<string>;
   private readonly fetchReadableText: (url: string) => Promise<string>;
   private readonly youtubeProvider: YouTubeFeedProvider;
+  private readonly xProvider: XFeedProvider;
 
   constructor(private readonly vaultPath: string, options: FeedStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.fetchText = options.fetchText ?? defaultFetchText;
     this.fetchReadableText = options.fetchReadableText ?? defaultFetchReadableText;
     this.youtubeProvider = options.youtubeProvider ?? defaultYouTubeFeedProvider;
+    this.xProvider = options.xProvider ?? defaultXFeedProvider;
   }
 
   async listSources(): Promise<FeedSource[]> {
@@ -87,12 +98,15 @@ export class FeedStore {
     const sources = await this.listSources();
     const requestedKind = input.kind ?? inferFeedSourceKind(input.url);
     const youtube = requestedKind === 'youtube' ? this.youtubeProvider.normalizeSource(input.url) : null;
-    const url = youtube?.url ?? normalizeUrl(input.url);
+    const x = requestedKind === 'twitter' ? this.xProvider.normalizeSource(input.url) : null;
+    const url = youtube?.url ?? x?.url ?? normalizeUrl(input.url);
     const duplicate = sources.find((source) => source.url === url);
     if (duplicate) return duplicate;
     const now = this.now().toISOString();
     const defaultProcessing = youtube
       ? { extract_readable: true, auto_analyze: false, generate_item_summary: true, preferred_languages: DEFAULT_YOUTUBE_SUBTITLE_LANGUAGES }
+      : x
+        ? { extract_readable: false, auto_analyze: false, generate_item_summary: true, capture_comments: false, include_replies: true }
       : { extract_readable: false, auto_analyze: false, generate_item_summary: true };
     const defaultFetchPolicy = youtube
       ? {
@@ -102,13 +116,22 @@ export class FeedStore {
           initial_backfill_count: DEFAULT_YOUTUBE_RECENT_COUNT,
           respect_cache: true
         }
+      : x
+        ? {
+            interval_minutes: 1440,
+            max_items_per_fetch: DEFAULT_X_RECENT_COUNT,
+            initial_backfill: 'recent' as const,
+            initial_backfill_count: DEFAULT_X_RECENT_COUNT,
+            respect_cache: true
+          }
       : { interval_minutes: 1440, max_items_per_fetch: 50, respect_cache: true };
     const source: FeedSource = normalizeFeedSource({
       id: stableId('feed-source', url),
-      title: input.title?.trim() || (youtube ? youtubeSourceTitle(youtube) : hostnameTitle(url)),
+      title: input.title?.trim() || (youtube ? youtubeSourceTitle(youtube) : x ? xSourceTitle(x) : hostnameTitle(url)),
       url,
       kind: requestedKind,
       ...(youtube ? { metadata: { provider: 'youtube', youtube_source_type: youtube.source_type } } : {}),
+      ...(x ? { metadata: { provider: 'x', x_handle: x.handle } } : {}),
       areas: input.areas ?? [],
       resource_refs: normalizeStrings(input.resource_refs ?? []),
       tags: normalizeTags(input.tags ?? []),
@@ -171,11 +194,21 @@ export class FeedStore {
       if (isNotFound(error)) return [];
       throw error;
     });
-    const runs = await Promise.all(
-      files
-        .filter((file) => file.endsWith('.json'))
-        .map((file) => fs.readFile(path.join(dir, file), 'utf8').then((raw) => JSON.parse(raw) as FeedFetchRun))
-    );
+    const runs = (
+      await Promise.all(
+        files
+          .filter((file) => file.endsWith('.json'))
+          .map((file) =>
+            fs
+              .readFile(path.join(dir, file), 'utf8')
+              .then((raw) => JSON.parse(raw) as FeedFetchRun)
+              .catch((error: unknown) => {
+                if (error instanceof SyntaxError) return null;
+                throw error;
+              })
+          )
+      )
+    ).filter((run): run is FeedFetchRun => Boolean(run));
     return runs
       .filter((run) => !sourceId || run.source_id === sourceId)
       .sort((a, b) => b.started_at.localeCompare(a.started_at));
@@ -224,6 +257,7 @@ export class FeedStore {
       if (existing) return { feed_item: item, content: existing, ref: item.extracted_ref };
     }
     if (isYouTubeItem(item)) return this.ensureYouTubeReadableContent(item);
+    if (isXItem(item)) return this.ensureXReadableContent(item);
 
     const fetchedAt = this.now().toISOString();
     let rawRef = item.raw_ref;
@@ -452,7 +486,7 @@ export class FeedStore {
     const item = await this.requireItem(id);
     const preferredArtifactId = input.preferred_display === 'translated' ? input.translation_artifact_id : undefined;
     const libraryItem = await createLibraryStore(this.vaultPath).save({
-      kind: item.url.match(/youtube\.com|youtu\.be|vimeo\.com/i) ? 'video' : 'article',
+      kind: libraryKindForFeedItem(item),
       title: item.title,
       url: item.url,
       body: readable.content,
@@ -716,6 +750,62 @@ export class FeedStore {
     return { feed_item: next, content: record.markdown, ref };
   }
 
+  private async ensureXReadableContent(item: FeedItem): Promise<{ feed_item: FeedItem; content: string; ref: FeedReadableRef }> {
+    const source = await this.getSource(item.source_id);
+    const tweetId = item.metadata?.external_id ?? xTweetIdFromItem(item);
+    if (!tweetId) throw new Error(`x_tweet_id_missing:${item.id}`);
+    const fetchedAt = this.now().toISOString();
+    const post = {
+      id: tweetId,
+      author: item.metadata?.author_handle ?? item.author?.replace(/^@/, '') ?? item.metadata?.x_handle ?? 'unknown',
+      text: item.summary ?? item.excerpt ?? item.title,
+      url: item.url,
+      canonical_url: item.canonical_url ?? item.url,
+      published_at: item.published_at,
+      likes: item.metadata?.like_count,
+      retweets: item.metadata?.retweet_count,
+      replies: item.metadata?.reply_count,
+      views: item.metadata?.view_count,
+      is_reply: item.metadata?.is_reply,
+      reply_to: item.metadata?.reply_to
+    };
+    let threadRef: FeedReadableRef | undefined;
+    let thread;
+    let processingError: string | undefined;
+    if (source?.processing_policy?.capture_comments) {
+      try {
+        thread = await this.xProvider.fetchThread(tweetId);
+        threadRef = await this.writeAsset(
+          'raw',
+          `${item.id}.x.thread.json`,
+          `${JSON.stringify(thread, null, 2)}\n`,
+          'x_thread_json',
+          fetchedAt
+        );
+      } catch (error) {
+        processingError = errorMessage(error);
+      }
+    }
+    const markdown = this.xProvider.buildMarkdown(post, thread);
+    const ref = await this.writeAsset('extracted', `${item.id}.x.md`, markdown, 'x_post_markdown', fetchedAt);
+    const existingMetadata = { ...(item.metadata ?? {}) };
+    delete existingMetadata.last_processing_error;
+    const next = await this.writeItem({
+      ...item,
+      raw_refs: mergeReadableRefs([...(item.raw_refs ?? []), item.raw_ref, threadRef]),
+      extracted_ref: ref,
+      content_hash: ref.content_hash,
+      language: item.language ?? detectLanguage(markdown),
+      excerpt: item.excerpt ?? firstMeaningfulParagraph(markdown)?.slice(0, 500),
+      summary: item.summary ?? firstMeaningfulParagraph(markdown)?.slice(0, 500),
+      metadata: {
+        ...existingMetadata,
+        ...(processingError ? { last_processing_error: processingError } : {})
+      }
+    });
+    return { feed_item: next, content: markdown, ref };
+  }
+
   private async fetchOne(source: FeedSource): Promise<FeedFetchResult> {
     const run: FeedFetchRun = {
       id: `feed-run-${randomUUID()}`,
@@ -731,6 +821,7 @@ export class FeedStore {
     await this.writeFetchRun(run);
     try {
       if (source.kind === 'youtube') return await this.fetchYouTubeSource(source, run);
+      if (source.kind === 'twitter') return await this.fetchXSource(source, run);
       const xml = await this.fetchText(source.url);
       const rawFeedRef = await this.writeAsset('raw', `${run.id}.xml`, xml, 'feed_xml', run.started_at);
       const parsed = parseRss(xml, source.url, this.now);
@@ -1060,6 +1151,113 @@ export class FeedStore {
     };
   }
 
+  private async fetchXSource(source: FeedSource, run: FeedFetchRun): Promise<FeedFetchResult> {
+    const descriptor = this.xProvider.normalizeSource(source.url);
+    const limit = source.fetch_policy?.max_items_per_fetch ?? DEFAULT_X_RECENT_COUNT;
+    const startedAt = this.now().toISOString();
+    await this.writeFetchRun({
+      ...run,
+      stages: markRunStage(run.stages, 'resolve-source', 'running', `Resolving latest ${limit} X post(s) with OpenCLI.`, startedAt)
+    });
+
+    const candidates = await this.xProvider.listCandidates(descriptor, { limit });
+    const includeReplies = source.processing_policy?.include_replies !== false;
+    const selected = includeReplies ? candidates : candidates.filter((candidate) => !candidate.is_reply);
+    const rawFeedRef = await this.writeAsset(
+      'raw',
+      `${run.id}.x.candidates.json`,
+      `${JSON.stringify({ source: descriptor, candidates, selected }, null, 2)}\n`,
+      'x_candidate_json',
+      run.started_at
+    );
+    const allExistingItems = await this.listItems({ include_ignored: true, include_saved: true });
+    const existingIds = new Set(allExistingItems.map((item) => item.id));
+    const existingDedupeKeys = new Set(allExistingItems.map((item) => item.dedupe_key).filter(Boolean));
+    const createdItems: FeedItem[] = [];
+    for (const candidate of selected) {
+      const id = stableId('feed-item', `${source.id}:x:${candidate.id}`);
+      const dedupeKey = `x:${candidate.id}`;
+      if (existingIds.has(id) || existingDedupeKeys.has(dedupeKey)) continue;
+      const fetchedAt = this.now().toISOString();
+      const item = await this.writeItem(
+        normalizeFeedItem({
+          id,
+          source_id: source.id,
+          fetch_run_id: run.id,
+          guid: candidate.id,
+          title: xPostTitle(candidate),
+          url: candidate.canonical_url,
+          canonical_url: candidate.canonical_url,
+          dedupe_key: dedupeKey,
+          author: `@${candidate.author}`,
+          published_at: candidate.published_at,
+          fetched_at: fetchedAt,
+          site_name: source.title || `@${descriptor.handle}`,
+          summary: candidate.text,
+          excerpt: candidate.text.slice(0, 500),
+          content_hash: hashContent(`${candidate.text}\n${candidate.canonical_url}`),
+          raw_ref: rawFeedRef,
+          raw_refs: [rawFeedRef],
+          enrichment_artifact_ids: [],
+          collection_artifact_ids: [],
+          pinned_by: [],
+          metadata: {
+            provider: 'x',
+            external_id: candidate.id,
+            source_url: descriptor.url,
+            x_handle: descriptor.handle,
+            author_handle: candidate.author,
+            is_reply: candidate.is_reply,
+            reply_to: candidate.reply_to,
+            like_count: candidate.likes,
+            view_count: candidate.views,
+            retweet_count: candidate.retweets,
+            reply_count: candidate.replies
+          },
+          status: 'new'
+        })
+      );
+      existingIds.add(id);
+      existingDedupeKeys.add(dedupeKey);
+      createdItems.push(item);
+      if (source.processing_policy?.extract_readable) await this.ensureReadableContent(id);
+      if (source.processing_policy?.auto_analyze) await this.analyzeItem(id);
+      if (source.processing_policy?.auto_translate_to) await this.translateItem(id, source.processing_policy.auto_translate_to);
+    }
+
+    const completedAt = this.now().toISOString();
+    await this.updateSourceAfterFetch(source, {
+      title: source.title || xSourceTitle(descriptor),
+      metadata: { ...(source.metadata ?? {}), provider: 'x', x_handle: descriptor.handle },
+      last_fetched_at: completedAt,
+      last_fetch_error: undefined,
+      updated_at: completedAt
+    });
+    const completedRun: FeedFetchRun = {
+      ...run,
+      completed_at: completedAt,
+      status: 'success',
+      fetched: selected.length,
+      created: createdItems.length,
+      skipped: selected.length - createdItems.length,
+      raw_feed_ref: rawFeedRef.path,
+      stages: markRunStage(run.stages, 'resolve-source', 'success', `Resolved ${selected.length} X post(s).`, completedAt),
+      stats: {
+        handle: descriptor.handle,
+        raw_candidates: candidates.length,
+        include_replies: includeReplies
+      }
+    };
+    await this.writeFetchRun(completedRun);
+    return {
+      run_id: run.id,
+      source_id: source.id,
+      fetched: selected.length,
+      created: createdItems.length,
+      skipped: selected.length - createdItems.length
+    };
+  }
+
   private async processYouTubeExtractionTarget(
     item: FeedItem,
     source: FeedSource,
@@ -1239,9 +1437,20 @@ function normalizeFeedSource(value: FeedSource): FeedSource {
           }
         })()
       : null;
+  const x =
+    value.kind === 'twitter'
+      ? (() => {
+          try {
+            return normalizeXSource(value.url);
+          } catch {
+            return null;
+          }
+        })()
+      : null;
   return {
     ...value,
     ...(youtube ? { url: youtube.url, metadata: { ...(value.metadata ?? {}), provider: 'youtube', youtube_source_type: youtube.source_type } } : {}),
+    ...(x ? { url: x.url, metadata: { ...(value.metadata ?? {}), provider: 'x', x_handle: x.handle } } : {}),
     areas: value.areas ?? [],
     resource_refs: normalizeStrings(value.resource_refs ?? []),
     tags: normalizeTags(value.tags ?? []),
@@ -1356,6 +1565,16 @@ function normalizeFetchPolicy(value: FeedSource['fetch_policy'], kind: FeedSourc
       ...(value ?? {})
     };
   }
+  if (kind === 'twitter') {
+    return {
+      interval_minutes: 1440,
+      max_items_per_fetch: DEFAULT_X_RECENT_COUNT,
+      initial_backfill: 'recent',
+      initial_backfill_count: DEFAULT_X_RECENT_COUNT,
+      respect_cache: true,
+      ...(value ?? {})
+    };
+  }
   return {
     interval_minutes: 1440,
     max_items_per_fetch: 50,
@@ -1376,6 +1595,7 @@ function inferFeedSourceKind(value: string): FeedSource['kind'] {
   try {
     const host = new URL(trimmed).hostname.replace(/^www\./, '').replace(/^m\./, '');
     if (host === 'youtube.com' || host === 'youtu.be') return 'youtube';
+    if (host === 'x.com' || host === 'twitter.com') return 'twitter';
   } catch {
     return 'rss';
   }
@@ -1446,6 +1666,9 @@ function initialRunStages(kind: FeedSource['kind']): FeedFetchRunStage[] {
       { id: 'extract-readable', label: 'Extract transcripts', status: 'pending' }
     ];
   }
+  if (kind === 'twitter') {
+    return [{ id: 'resolve-source', label: 'Resolve X account', status: 'pending' }];
+  }
   return [{ id: 'fetch', label: 'Fetch feed document', status: 'pending' }];
 }
 
@@ -1511,6 +1734,22 @@ function formatWait(ms: number): string {
 
 function isYouTubeItem(item: FeedItem): boolean {
   return item.metadata?.provider === 'youtube' || item.dedupe_key?.startsWith('youtube:') === true || /youtu\.be|youtube\.com/i.test(item.url);
+}
+
+function isXItem(item: FeedItem): boolean {
+  return item.metadata?.provider === 'x' || item.dedupe_key?.startsWith('x:') === true || /(?:^|\.)x\.com|(?:^|\.)twitter\.com/i.test(item.url);
+}
+
+function xTweetIdFromItem(item: FeedItem): string | null {
+  if (item.metadata?.external_id) return item.metadata.external_id;
+  if (item.dedupe_key?.startsWith('x:')) return item.dedupe_key.slice('x:'.length);
+  return item.url.match(/(?:status|statuses)\/(\d+)/i)?.[1] ?? null;
+}
+
+function libraryKindForFeedItem(item: FeedItem): 'article' | 'video' | 'bookmark' {
+  if (item.metadata?.provider === 'x') return 'bookmark';
+  if (item.url.match(/youtube\.com|youtu\.be|vimeo\.com|\.mp4(\?|$)/i)) return 'video';
+  return 'article';
 }
 
 function shouldRefreshYouTubeReadableContent(item: FeedItem): boolean {

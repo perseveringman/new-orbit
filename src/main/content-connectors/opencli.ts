@@ -191,7 +191,7 @@ function parseOpenCliTwitterThread(
 }
 
 function parseJsonValue(value: string): unknown | null {
-  const start = value.search(/[\[{]/);
+  const start = value.search(/[[{]/);
   if (start < 0) return null;
   const opener = value[start];
   const closer = opener === '[' ? ']' : '}';

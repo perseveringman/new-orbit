@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
+  AtSign,
   Ban,
   BookmarkPlus,
   Check,
@@ -66,6 +67,8 @@ export function FeedView(): JSX.Element {
   const [title, setTitle] = useState('');
   const [sourceKind, setSourceKind] = useState<FeedSource['kind']>('rss');
   const [youtubeBackfill, setYoutubeBackfill] = useState<'recent' | 'full'>('recent');
+  const [xIncludeReplies, setXIncludeReplies] = useState(true);
+  const [xCaptureThreadOnSave, setXCaptureThreadOnSave] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -211,7 +214,16 @@ export function FeedView(): JSX.Element {
 
   async function addSource(): Promise<void> {
     if (!url.trim()) return;
-    const nextKind = looksLikeYouTubeSource(url) ? 'youtube' : sourceKind;
+    if (sourceKind === 'rss' && url.trim().startsWith('@')) {
+      setError('请先选择 YouTube 或 X 账号，再添加 @handle。');
+      return;
+    }
+    const nextKind =
+      sourceKind === 'rss' && looksLikeXSource(url)
+        ? 'twitter'
+        : sourceKind === 'rss' && looksLikeYouTubeSource(url)
+          ? 'youtube'
+          : sourceKind;
     setBusy(true);
     setMessage(null);
     try {
@@ -229,6 +241,23 @@ export function FeedView(): JSX.Element {
                 respect_cache: true
               }
             }
+          : nextKind === 'twitter'
+            ? {
+                fetch_policy: {
+                  interval_minutes: 1440,
+                  max_items_per_fetch: 20,
+                  initial_backfill: 'recent',
+                  initial_backfill_count: 20,
+                  respect_cache: true
+                },
+                processing_policy: {
+                  extract_readable: false,
+                  auto_analyze: false,
+                  generate_item_summary: true,
+                  include_replies: xIncludeReplies,
+                  capture_comments: xCaptureThreadOnSave
+                }
+              }
           : {})
       });
       setUrl('');
@@ -238,6 +267,8 @@ export function FeedView(): JSX.Element {
       setMessage(
         source.kind === 'youtube'
           ? `已添加 ${source.title}，正在抓取${source.fetch_policy?.initial_backfill === 'full' ? '完整频道' : '最新 20 条'}。`
+          : source.kind === 'twitter'
+            ? `已添加 ${source.title}，正在抓取最新 20 条 X 内容。`
           : `已添加 ${source.title}，正在抓取。`
       );
       window.setTimeout(() => void reload(null), 400);
@@ -393,6 +424,7 @@ export function FeedView(): JSX.Element {
           >
             <option value="rss">RSS / Atom</option>
             <option value="youtube">YouTube</option>
+            <option value="twitter">X 账号</option>
           </select>
           <input
             value={title}
@@ -405,11 +437,14 @@ export function FeedView(): JSX.Element {
             onChange={(event) => {
               const nextUrl = event.target.value;
               setUrl(nextUrl);
-              if (looksLikeYouTubeSource(nextUrl)) setSourceKind('youtube');
+              if (looksLikeXSource(nextUrl)) setSourceKind('twitter');
+              else if (sourceKind !== 'twitter' && looksLikeYouTubeSource(nextUrl)) setSourceKind('youtube');
             }}
             placeholder={
               sourceKind === 'youtube'
                 ? 'YouTube 频道 / 播放列表 / @handle / 视频 URL'
+                : sourceKind === 'twitter'
+                  ? '@handle 或 https://x.com/handle'
                 : 'RSS / Atom URL'
             }
             className="h-8 rounded-md border border-neutral-200 bg-white px-3 text-xs outline-none focus:border-sky-400 dark:border-neutral-800 dark:bg-neutral-900"
@@ -449,6 +484,34 @@ export function FeedView(): JSX.Element {
               完整频道
             </button>
             <span>每日刷新仍会检查最新 20 条新发布视频。</span>
+          </div>
+        ) : null}
+        {sourceKind === 'twitter' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+            <span>X 抓取</span>
+            <button
+              type="button"
+              onClick={() => setXIncludeReplies((value) => !value)}
+              className={`h-7 rounded-md border px-2 ${
+                xIncludeReplies
+                  ? 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100'
+                  : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+              }`}
+            >
+              {xIncludeReplies ? '包含回复' : '只看主贴'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setXCaptureThreadOnSave((value) => !value)}
+              className={`h-7 rounded-md border px-2 ${
+                xCaptureThreadOnSave
+                  ? 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100'
+                  : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+              }`}
+            >
+              {xCaptureThreadOnSave ? '抓线程详情' : '只缓存原帖'}
+            </button>
+            <span>默认每次用 OpenCLI 抓取最近 20 条。</span>
           </div>
         ) : null}
 
@@ -641,6 +704,8 @@ function SourceRail({
                       <span className="shrink-0 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] uppercase text-neutral-500 dark:bg-neutral-900">
                         {source.kind === 'youtube'
                           ? (source.metadata?.youtube_source_type ?? 'youtube')
+                          : source.kind === 'twitter'
+                            ? `@${source.metadata?.x_handle ?? 'x'}`
                           : source.kind}
                       </span>
                     </div>
@@ -730,6 +795,7 @@ function FeedItemRow({
   const hasAnalysis = (item.enrichment_artifact_ids ?? []).length > 0;
   const saved = item.status === 'saved';
   const isYouTube = item.metadata?.provider === 'youtube';
+  const isX = item.metadata?.provider === 'x';
   return (
     <article
       className={`group cursor-pointer px-4 py-3 transition ${
@@ -752,6 +818,15 @@ function FeedItemRow({
               >
                 <PlayCircle size={11} />
                 视频
+              </span>
+            ) : null}
+            {isX ? (
+              <span
+                title="X 内容"
+                className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950/40 dark:text-sky-100"
+              >
+                <AtSign size={11} />
+                X
               </span>
             ) : null}
             {hasAnalysis ? (
@@ -779,7 +854,10 @@ function FeedItemRow({
             {item.language ? <span>{item.language}</span> : null}
             {item.metadata?.duration_human ? <span>{item.metadata.duration_human}</span> : null}
             {typeof item.metadata?.view_count === 'number' ? (
-              <span>{formatCompactNumber(item.metadata.view_count)} 次观看</span>
+              <span>{formatCompactNumber(item.metadata.view_count)} 次查看</span>
+            ) : null}
+            {typeof item.metadata?.like_count === 'number' ? (
+              <span>{formatCompactNumber(item.metadata.like_count)} 喜欢</span>
             ) : null}
           </div>
           <p className="mt-2 line-clamp-2 text-sm leading-5 text-neutral-600 dark:text-neutral-300">
@@ -930,6 +1008,16 @@ function Inspector({
                 {item.metadata.duration_human ? <span>{item.metadata.duration_human}</span> : null}
               </div>
             ) : null}
+            {item.metadata?.provider === 'x' ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
+                <span className="inline-flex items-center gap-1">
+                  <AtSign size={12} />
+                  X
+                </span>
+                {item.metadata.author_handle ? <span>@{item.metadata.author_handle}</span> : null}
+                {item.metadata.is_reply ? <span>回复</span> : <span>主贴</span>}
+              </div>
+            ) : null}
           </div>
           <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
             {labelForStatus(item.status)}
@@ -1007,6 +1095,14 @@ function Inspector({
                   </button>
                 </div>
               ) : null}
+              {item.metadata?.provider === 'x' ? (
+                <div className="mt-3 grid grid-cols-4 gap-1 text-[11px] text-neutral-500">
+                  <MiniMeta label="作者" value={item.metadata.author_handle ? `@${item.metadata.author_handle}` : '未知'} />
+                  <MiniMeta label="喜欢" value={formatCompactNumber(item.metadata.like_count ?? 0)} />
+                  <MiniMeta label="转发" value={formatCompactNumber(item.metadata.retweet_count ?? 0)} />
+                  <MiniMeta label="查看" value={formatCompactNumber(item.metadata.view_count ?? 0)} />
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-1">
                 <Pill
                   icon={<FileText size={12} />}
@@ -1017,6 +1113,10 @@ function Inspector({
                           ? '已缓存转录'
                           : `已缓存描述；${youtubeSubtitleStatusLabel(item)}`
                         : '转录待处理'
+                      : item.metadata?.provider === 'x'
+                        ? item.extracted_ref
+                          ? '已缓存 X 正文'
+                          : '可按需缓存'
                       : item.extracted_ref
                         ? '已缓存提取文本'
                         : '提取待处理'
@@ -1057,6 +1157,8 @@ function Inspector({
                   ? hasYouTubeTranscript(item)
                     ? 'YouTube 字幕 / 转录'
                     : 'YouTube 描述'
+                  : item.metadata?.provider === 'x'
+                    ? 'X 正文'
                   : '可读内容'
               }
             >
@@ -1118,11 +1220,23 @@ function Inspector({
               {item.metadata?.channel_name ? (
                 <Meta label="频道" value={item.metadata.channel_name} />
               ) : null}
+              {item.metadata?.author_handle ? (
+                <Meta label="X 作者" value={`@${item.metadata.author_handle}`} />
+              ) : null}
+              {item.metadata?.x_handle ? (
+                <Meta label="X 来源账号" value={`@${item.metadata.x_handle}`} />
+              ) : null}
               {item.metadata?.duration_human ? (
                 <Meta label="时长" value={item.metadata.duration_human} />
               ) : null}
               {typeof item.metadata?.view_count === 'number' ? (
-                <Meta label="观看次数" value={formatCompactNumber(item.metadata.view_count)} />
+                <Meta label="查看次数" value={formatCompactNumber(item.metadata.view_count)} />
+              ) : null}
+              {typeof item.metadata?.like_count === 'number' ? (
+                <Meta label="喜欢" value={formatCompactNumber(item.metadata.like_count)} />
+              ) : null}
+              {typeof item.metadata?.retweet_count === 'number' ? (
+                <Meta label="转发" value={formatCompactNumber(item.metadata.retweet_count)} />
               ) : null}
               <Meta
                 label="发布时间"
@@ -1191,6 +1305,7 @@ function ReadableContentPanel({
   if (!content) return <p className="text-sm text-neutral-500">打开此标签页以加载提取内容。</p>;
 
   const isYouTube = item.metadata?.provider === 'youtube';
+  const isX = item.metadata?.provider === 'x';
   const transcriptSection = isYouTube ? extractMarkdownSection(content.content, '转录') : null;
   const transcript =
     transcriptSection && !isMissingTranscriptText(transcriptSection) ? transcriptSection : null;
@@ -1224,6 +1339,14 @@ function ReadableContentPanel({
           ))}
         </div>
       ) : null}
+      {isX ? (
+        <div className="grid grid-cols-4 gap-2 text-[11px] text-neutral-500">
+          <MiniMeta label="作者" value={item.metadata?.author_handle ? `@${item.metadata.author_handle}` : '未知'} />
+          <MiniMeta label="喜欢" value={formatCompactNumber(item.metadata?.like_count ?? 0)} />
+          <MiniMeta label="转发" value={formatCompactNumber(item.metadata?.retweet_count ?? 0)} />
+          <MiniMeta label="查看" value={formatCompactNumber(item.metadata?.view_count ?? 0)} />
+        </div>
+      ) : null}
       {description ? (
         <details className="rounded-md bg-neutral-50 p-3 text-xs dark:bg-neutral-900">
           <summary className="cursor-pointer text-neutral-600 dark:text-neutral-300">描述</summary>
@@ -1238,7 +1361,7 @@ function ReadableContentPanel({
         </div>
       ) : (
         <div className="rounded-md bg-amber-50 p-3 text-xs leading-5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-          YouTube 未提供此视频字幕。Orbit 仍已缓存视频元数据和描述。
+          {isYouTube ? 'YouTube 未提供此视频字幕。Orbit 仍已缓存视频元数据和描述。' : '此条目没有可读缓存。'}
         </div>
       )}
       <div className="text-[11px] text-neutral-500">
@@ -1340,7 +1463,7 @@ function FeedThumbnail({ item, compact }: { item: FeedItem; compact?: boolean })
     );
   }
 
-  const Icon = item.metadata?.provider === 'youtube' ? PlayCircle : FileText;
+  const Icon = item.metadata?.provider === 'youtube' ? PlayCircle : item.metadata?.provider === 'x' ? AtSign : FileText;
   return (
     <div
       className={`${className} flex items-center justify-center bg-neutral-100 text-neutral-400 dark:bg-neutral-900`}
@@ -1578,10 +1701,18 @@ function labelForStatus(status: FeedItemStatus | 'all'): string {
 
 function looksLikeYouTubeSource(value: string): boolean {
   const trimmed = value.trim();
-  if (trimmed.startsWith('@')) return true;
   try {
     const host = new URL(trimmed).hostname.replace(/^www\./, '').replace(/^m\./, '');
     return host === 'youtube.com' || host === 'youtu.be';
+  } catch {
+    return false;
+  }
+}
+
+function looksLikeXSource(value: string): boolean {
+  try {
+    const host = new URL(value.trim()).hostname.replace(/^www\./, '').replace(/^mobile\./, '');
+    return host === 'x.com' || host === 'twitter.com';
   } catch {
     return false;
   }
