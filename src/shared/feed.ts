@@ -278,6 +278,62 @@ export interface FeedFetchResult {
   error?: string;
 }
 
+export type FeedTaskPlatform = 'rss' | 'youtube' | 'x' | 'reddit' | 'hackernews' | 'custom';
+export type FeedTaskKind = 'source.initial_fetch' | 'source.refresh';
+export type FeedTaskPriority = 'manual' | 'scheduled' | 'background';
+export type FeedTaskStatus = 'queued' | 'running' | 'retry_wait' | 'success' | 'failed' | 'cancelled';
+
+export interface FeedTask {
+  id: string;
+  kind: FeedTaskKind;
+  source_id: string;
+  source_title?: string;
+  source_url?: string;
+  platform: FeedTaskPlatform;
+  priority: FeedTaskPriority;
+  status: FeedTaskStatus;
+  dedupe_key: string;
+  attempts: number;
+  max_attempts: number;
+  due_at: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+  lease_expires_at?: string;
+  error?: string;
+  run_ids?: string[];
+  result?: FeedFetchResult;
+}
+
+export interface FeedTaskLaneSnapshot {
+  platform: FeedTaskPlatform;
+  running: number;
+  queued: number;
+  retry_wait: number;
+}
+
+export interface FeedTaskSnapshot {
+  jobs: FeedTask[];
+  running: number;
+  queued: number;
+  retry_wait: number;
+  failed: number;
+  lanes: FeedTaskLaneSnapshot[];
+}
+
+export interface EnqueueFeedTaskInput {
+  source_id?: string;
+  kind?: FeedTaskKind;
+  priority?: FeedTaskPriority;
+  force?: boolean;
+}
+
+export interface EnqueueFeedTaskResult {
+  jobs: FeedTask[];
+  snapshot: FeedTaskSnapshot;
+}
+
 export type YouTubeSourceType = 'channel' | 'playlist' | 'video';
 
 export interface FeedSourceMetadata {

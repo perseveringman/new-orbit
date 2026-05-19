@@ -161,6 +161,8 @@ import type {
 } from './library';
 import type {
   CreateFeedSourceInput,
+  EnqueueFeedTaskInput,
+  EnqueueFeedTaskResult,
   FeedAiSubtitleTranslationInput,
   FeedAiSubtitleTranslationResult,
   FeedClusterPayload,
@@ -173,6 +175,8 @@ import type {
   FeedReportPayload,
   FeedSource,
   FeedSynthesisResult,
+  FeedTask,
+  FeedTaskSnapshot,
   SaveFeedToLibraryInput,
   SaveFeedToLibraryResult,
   UpdateFeedSourceInput
@@ -647,6 +651,10 @@ export const IPC = {
     sourcesUpdate: 'feeds:sources:update',
     sourcesDelete: 'feeds:sources:delete',
     fetch: 'feeds:fetch',
+    tasksList: 'feeds:tasks:list',
+    tasksEnqueue: 'feeds:tasks:enqueue',
+    tasksCancel: 'feeds:tasks:cancel',
+    tasksRetry: 'feeds:tasks:retry',
     runsList: 'feeds:runs:list',
     itemsList: 'feeds:items:list',
     itemsContent: 'feeds:items:content',
@@ -1784,6 +1792,10 @@ export interface OrbitApi {
     updateSource(id: string, patch: UpdateFeedSourceInput): Promise<FeedSource>;
     deleteSource(id: string): Promise<FeedSource | null>;
     fetch(sourceId?: string): Promise<FeedFetchResult[]>;
+    listTasks(): Promise<FeedTaskSnapshot>;
+    enqueueTask(input?: EnqueueFeedTaskInput): Promise<EnqueueFeedTaskResult>;
+    cancelTask(jobId: string): Promise<FeedTask>;
+    retryTask(jobId: string): Promise<FeedTask>;
     listRuns(sourceId?: string): Promise<FeedFetchRun[]>;
     listItems(filter?: FeedItemFilter): Promise<FeedItem[]>;
     getItemContent(id: string): Promise<FeedItemContent>;

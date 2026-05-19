@@ -9,6 +9,7 @@ import type {
 } from '@shared/feed';
 import { publishTraceableEvent } from '../events/bus';
 import { createFeedStore } from './store';
+import { getFeedTaskCenter } from './task-center';
 
 export function registerFeedIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
@@ -20,6 +21,13 @@ export function registerFeedIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.feeds.sourcesList, () => createFeedStore(vaultPath()).listSources());
   ipcMain.handle(IPC.feeds.sourcesCreate, async (_event, input: CreateFeedSourceInput) => {
     const source = await createFeedStore(vaultPath()).createSource(input);
+    if (source.enabled) {
+      await getFeedTaskCenter(vaultPath()).enqueueRefresh({
+        source_id: source.id,
+        kind: 'source.initial_fetch',
+        priority: 'background'
+      });
+    }
     publishTraceableEvent({
       source: 'activity',
       kind: 'feed.source.added',
@@ -28,12 +36,21 @@ export function registerFeedIpc(getVaultPath: () => string | null): void {
     });
     return source;
   });
-  ipcMain.handle(IPC.feeds.sourcesUpdate, (_event, id: string, patch: UpdateFeedSourceInput) =>
-    createFeedStore(vaultPath()).updateSource(id, patch)
-  );
+  ipcMain.handle(IPC.feeds.sourcesUpdate, async (_event, id: string, patch: UpdateFeedSourceInput) => {
+    const source = await createFeedStore(vaultPath()).updateSource(id, patch);
+    if (patch.enabled === true) {
+      await getFeedTaskCenter(vaultPath()).enqueueRefresh({
+        source_id: source.id,
+        kind: 'source.refresh',
+        priority: 'background'
+      });
+    }
+    return source;
+  });
   ipcMain.handle(IPC.feeds.sourcesDelete, async (_event, id: string) => {
     const source = await createFeedStore(vaultPath()).deleteSource(id);
     if (source) {
+      await getFeedTaskCenter(vaultPath()).cancelSource(source.id);
       publishTraceableEvent({
         source: 'activity',
         kind: 'feed.source.removed',
@@ -55,6 +72,10 @@ export function registerFeedIpc(getVaultPath: () => string | null): void {
     }
     return results;
   });
+  ipcMain.handle(IPC.feeds.tasksList, () => getFeedTaskCenter(vaultPath()).list());
+  ipcMain.handle(IPC.feeds.tasksEnqueue, (_event, input = {}) => getFeedTaskCenter(vaultPath()).enqueueRefresh(input));
+  ipcMain.handle(IPC.feeds.tasksCancel, (_event, jobId: string) => getFeedTaskCenter(vaultPath()).cancel(jobId));
+  ipcMain.handle(IPC.feeds.tasksRetry, (_event, jobId: string) => getFeedTaskCenter(vaultPath()).retry(jobId));
   ipcMain.handle(IPC.feeds.runsList, (_event, sourceId?: string) => createFeedStore(vaultPath()).listFetchRuns(sourceId));
   ipcMain.handle(IPC.feeds.itemsList, (_event, filter?: FeedItemFilter) => createFeedStore(vaultPath()).listItems(filter));
   ipcMain.handle(IPC.feeds.itemsContent, (_event, id: string) => createFeedStore(vaultPath()).getItemContent(id));

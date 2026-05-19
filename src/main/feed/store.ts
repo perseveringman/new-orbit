@@ -1073,7 +1073,7 @@ export class FeedStore {
       };
     } catch (error) {
       const completedAt = this.now().toISOString();
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       await this.updateSourceAfterFetch(source, {
         last_fetched_at: completedAt,
         last_fetch_error: message,

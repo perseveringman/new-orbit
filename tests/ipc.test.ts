@@ -44,6 +44,7 @@ describe('IPC contract', () => {
         'review',
         'role',
         'runtime',
+        'runtimeSessions',
         'scheduledTasks',
         'settings',
         'space',
@@ -282,7 +283,11 @@ describe('IPC contract', () => {
         'sourcesCreate',
         'sourcesDelete',
         'sourcesList',
-        'sourcesUpdate'
+        'sourcesUpdate',
+        'tasksCancel',
+        'tasksEnqueue',
+        'tasksList',
+        'tasksRetry'
       ].sort()
     );
     for (const v of Object.values(IPC.feeds)) expect(v.startsWith('feeds:')).toBe(true);

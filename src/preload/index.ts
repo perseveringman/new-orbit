@@ -138,6 +138,8 @@ import type {
 } from '@shared/library';
 import type {
   CreateFeedSourceInput,
+  EnqueueFeedTaskInput,
+  EnqueueFeedTaskResult,
   FeedAiSubtitleTranslationInput,
   FeedAiSubtitleTranslationResult,
   FeedClusterPayload,
@@ -150,6 +152,8 @@ import type {
   FeedReportPayload,
   FeedSource,
   FeedSynthesisResult,
+  FeedTask,
+  FeedTaskSnapshot,
   SaveFeedToLibraryInput,
   SaveFeedToLibraryResult,
   UpdateFeedSourceInput
@@ -777,6 +781,11 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.feeds.sourcesUpdate, id, patch),
     deleteSource: (id: string): Promise<FeedSource | null> => ipcRenderer.invoke(IPC.feeds.sourcesDelete, id),
     fetch: (sourceId?: string): Promise<FeedFetchResult[]> => ipcRenderer.invoke(IPC.feeds.fetch, sourceId),
+    listTasks: (): Promise<FeedTaskSnapshot> => ipcRenderer.invoke(IPC.feeds.tasksList),
+    enqueueTask: (input?: EnqueueFeedTaskInput): Promise<EnqueueFeedTaskResult> =>
+      ipcRenderer.invoke(IPC.feeds.tasksEnqueue, input),
+    cancelTask: (jobId: string): Promise<FeedTask> => ipcRenderer.invoke(IPC.feeds.tasksCancel, jobId),
+    retryTask: (jobId: string): Promise<FeedTask> => ipcRenderer.invoke(IPC.feeds.tasksRetry, jobId),
     listRuns: (sourceId?: string): Promise<FeedFetchRun[]> => ipcRenderer.invoke(IPC.feeds.runsList, sourceId),
     listItems: (filter?: FeedItemFilter): Promise<FeedItem[]> => ipcRenderer.invoke(IPC.feeds.itemsList, filter),
     getItemContent: (id: string): Promise<FeedItemContent> => ipcRenderer.invoke(IPC.feeds.itemsContent, id),

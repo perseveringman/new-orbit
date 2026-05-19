@@ -9,6 +9,7 @@ import type {
   ScheduledTaskFilter
 } from '@shared/scheduled-task';
 import { createFeedStore } from '../feed/store';
+import { getFeedTaskCenter } from '../feed/task-center';
 
 interface ScheduledTaskFile {
   version: 1;
@@ -330,7 +331,14 @@ interface ActionExecutionResult {
 async function executeAction(vaultPath: string, action: ScheduledTask['action']): Promise<ActionExecutionResult> {
   if (action.kind === 'feed_refresh') {
     const feed = createFeedStore(vaultPath);
-    const results = await feed.fetch(action.source_id);
+    const taskCenter = getFeedTaskCenter(vaultPath);
+    const enqueued = await taskCenter.enqueueRefresh({
+      source_id: action.source_id,
+      kind: 'source.refresh',
+      priority: 'scheduled'
+    });
+    const jobs = await taskCenter.waitForJobs(enqueued.jobs.map((job) => job.id), 10 * 60_000);
+    const results = jobs.flatMap((job) => (job.result ? [job.result] : []));
     const date = localDateKey(new Date());
     const artifacts: NonNullable<ScheduledTaskExecution['artifacts']> = results
       .flatMap((result) => (result.run_id ? [{ kind: 'log' as const, ref: result.run_id }] : []));
@@ -350,7 +358,9 @@ async function executeAction(vaultPath: string, action: ScheduledTask['action'])
       output: {
         message: 'Feed refresh completed.',
         source_id: action.source_id ?? 'all',
+        jobs,
         results,
+        failed_jobs: jobs.filter((job) => job.status === 'failed').length,
         digest_artifact_id: digestArtifactId,
         report_artifact_id: reportArtifactId
       },

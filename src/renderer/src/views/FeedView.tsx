@@ -32,9 +32,17 @@ import type {
   FeedItemStatus,
   FeedItemTranslationPayload,
   FeedReportPayload,
-  FeedSource
+  FeedSource,
+  FeedTask,
+  FeedTaskSnapshot,
+  FeedTaskStatus
 } from '@shared/feed';
 import type { SynthesisArtifact } from '@shared/synthesis';
+import {
+  useAskAnywhereSession,
+  type UseAskAnywhereSessionResult
+} from '../components/ask-anywhere/AskAnywhereHost';
+import { ConversationShell } from '../components/conversation/ConversationShell';
 
 const STATUSES: Array<FeedItemStatus | 'all'> = [
   'all',
@@ -46,6 +54,7 @@ const STATUSES: Array<FeedItemStatus | 'all'> = [
 ];
 const INSPECTOR_TABS = ['overview', 'content', 'analysis', 'provenance'] as const;
 type InspectorTab = (typeof INSPECTOR_TABS)[number];
+type FeedRightSidebarTab = 'tasks' | 'chat';
 
 type FeedSynthesisArtifact =
   | SynthesisArtifact<FeedDigestPayload>
@@ -61,8 +70,10 @@ export function FeedView(): JSX.Element {
   const [sources, setSources] = useState<FeedSource[]>([]);
   const [allItems, setAllItems] = useState<FeedItem[]>([]);
   const [runs, setRuns] = useState<FeedFetchRun[]>([]);
+  const [taskSnapshot, setTaskSnapshot] = useState<FeedTaskSnapshot | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [rightSidebarTab, setRightSidebarTab] = useState<FeedRightSidebarTab>('tasks');
   const [status, setStatus] = useState<FeedItemStatus | 'all'>('new');
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
@@ -84,6 +95,11 @@ export function FeedView(): JSX.Element {
   const [report, setReport] = useState<SynthesisArtifact<FeedReportPayload> | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
   const [enrichments, setEnrichments] = useState<EnrichmentArtifact[]>([]);
+  const feedChatScope = useMemo(
+    () => ({ kind: 'external' as const, platform: 'orbit.feed', user_id: 'local' }),
+    []
+  );
+  const feedChat = useAskAnywhereSession({ scope: feedChatScope, title: 'Feed Chat' });
 
   const sourceById = useMemo(
     () => new Map(sources.map((source) => [source.id, source])),
@@ -102,7 +118,10 @@ export function FeedView(): JSX.Element {
     ? (latestRunBySource.get(activeSourceId) ?? null)
     : (runningRuns[0] ?? null);
   const activeRunningRun = activeRun?.status === 'running' ? activeRun : null;
-  const operationBusy = busy || runningRuns.length > 0;
+  const activeTaskCount =
+    (taskSnapshot?.running ?? 0) + (taskSnapshot?.queued ?? 0) + (taskSnapshot?.retry_wait ?? 0);
+  const activeTaskBySource = useMemo(() => taskBySource(taskSnapshot), [taskSnapshot]);
+  const operationBusy = busy;
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -169,14 +188,16 @@ export function FeedView(): JSX.Element {
   async function reload(nextActiveItemId = activeItemId): Promise<void> {
     try {
       setError(null);
-      const [nextSources, nextItems, nextRuns] = await Promise.all([
+      const [nextSources, nextItems, nextRuns, nextTasks] = await Promise.all([
         window.orbit.feeds.listSources(),
         window.orbit.feeds.listItems({ include_ignored: true, include_saved: true }),
-        window.orbit.feeds.listRuns()
+        window.orbit.feeds.listRuns(),
+        window.orbit.feeds.listTasks()
       ]);
       setSources(nextSources);
       setAllItems(nextItems);
       setRuns(nextRuns);
+      setTaskSnapshot(nextTasks);
       if (nextActiveItemId && nextItems.some((item) => item.id === nextActiveItemId)) {
         setActiveItemId(nextActiveItemId);
       } else {
@@ -192,12 +213,12 @@ export function FeedView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (runningRuns.length === 0) return;
+    if (runningRuns.length === 0 && activeTaskCount === 0) return;
     const timer = window.setInterval(() => {
       void reload(activeItemId);
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [activeItemId, runningRuns.length]);
+  }, [activeItemId, activeTaskCount, runningRuns.length]);
 
   useEffect(() => {
     if (!activeItemId || allItems.some((item) => item.id === activeItemId)) return;
@@ -314,23 +335,20 @@ export function FeedView(): JSX.Element {
       setUrl('');
       setTitle('');
       setActiveSourceId(source.id);
+      setRightSidebarTab('tasks');
       await reload(null);
       setMessage(
         source.kind === 'youtube'
-          ? `已添加 ${source.title}，正在抓取${source.fetch_policy?.initial_backfill === 'full' ? '完整频道' : '最新 20 条'}。`
+          ? `已添加 ${source.title}，首次抓取已加入任务中心：${source.fetch_policy?.initial_backfill === 'full' ? '完整频道' : '最新 20 条'}。`
           : source.kind === 'twitter'
-            ? `已添加 ${source.title}，正在抓取最新 20 条 X 内容。`
+            ? `已添加 ${source.title}，最新 20 条 X 内容已加入任务中心。`
             : source.kind === 'reddit'
-              ? `已添加 ${source.title}，正在抓取最新 20 条 Reddit 内容。`
+              ? `已添加 ${source.title}，最新 20 条 Reddit 内容已加入任务中心。`
               : source.kind === 'hackernews'
-                ? `已添加 ${source.title}，正在抓取最新 20 条 Hacker News 内容。`
-                : `已添加 ${source.title}，正在抓取。`
+                ? `已添加 ${source.title}，最新 20 条 Hacker News 内容已加入任务中心。`
+                : `已添加 ${source.title}，抓取已加入任务中心。`
       );
       window.setTimeout(() => void reload(null), 400);
-      const result = await window.orbit.feeds.fetch(source.id);
-      const created = result.reduce((sum, item) => sum + item.created, 0);
-      await reload(null);
-      setMessage(`已添加 ${source.title}，并抓取 ${created} 条新内容。`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '添加来源失败。');
     } finally {
@@ -343,10 +361,18 @@ export function FeedView(): JSX.Element {
     setMessage(null);
     try {
       window.setTimeout(() => void reload(activeItemId), 400);
-      const result = await window.orbit.feeds.fetch(sourceId);
-      const created = result.reduce((sum, item) => sum + item.created, 0);
-      await reload();
-      setMessage(`已抓取 ${created} 条新内容。`);
+      const result = await window.orbit.feeds.enqueueTask({
+        source_id: sourceId,
+        kind: 'source.refresh',
+        priority: 'manual'
+      });
+      setRightSidebarTab('tasks');
+      await reload(activeItemId);
+      setMessage(
+        result.jobs.length > 0
+          ? `已加入任务中心：${result.jobs.length} 个抓取任务。`
+          : '当前没有启用的 Feed 来源。'
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : '刷新 Feed 失败。');
     } finally {
@@ -388,6 +414,35 @@ export function FeedView(): JSX.Element {
     await window.orbit.feeds.deleteSource(source.id);
     if (activeSourceId === source.id) setActiveSourceId(null);
     await reload();
+  }
+
+  async function cancelTask(job: FeedTask): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.orbit.feeds.cancelTask(job.id);
+      await reload(activeItemId);
+      setMessage(`已取消任务：${job.source_title ?? job.source_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '取消任务失败。');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retryTask(job: FeedTask): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.orbit.feeds.retryTask(job.id);
+      setRightSidebarTab('tasks');
+      await reload(activeItemId);
+      setMessage(`已重新加入队列：${job.source_title ?? job.source_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重试任务失败。');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function runDigest(): Promise<void> {
@@ -465,7 +520,7 @@ export function FeedView(): JSX.Element {
               onClick={() => void refresh(activeSourceId ?? undefined)}
               className="inline-flex h-8 items-center gap-1.5 rounded-md bg-sky-600 px-3 text-xs font-medium text-white disabled:opacity-50"
             >
-              <RefreshCw size={14} className={operationBusy ? 'animate-spin' : ''} />
+              <RefreshCw size={14} className={taskSnapshot?.running ? 'animate-spin' : ''} />
               刷新
             </button>
           </div>
@@ -694,6 +749,7 @@ export function FeedView(): JSX.Element {
           sources={sources}
           sourceCounts={sourceCounts}
           latestRunBySource={latestRunBySource}
+          activeTaskBySource={activeTaskBySource}
           activeSourceId={activeSourceId}
           onSelect={(id) => {
             setActiveSourceId(id);
@@ -769,22 +825,16 @@ export function FeedView(): JSX.Element {
           </div>
         </main>
 
-        <Inspector
-          item={activeItem}
-          source={activeItem ? sourceById.get(activeItem.source_id) : undefined}
-          tab={inspectorTab}
-          setTab={setInspectorTab}
-          enrichments={enrichments}
-          digest={digest}
-          cluster={cluster}
-          report={report}
+        <FeedRightSidebar
+          tab={rightSidebarTab}
+          setTab={setRightSidebarTab}
+          tasks={taskSnapshot}
+          sources={sources}
+          chat={feedChat}
           busy={busy}
-          onSave={(item) => void save(item)}
-          onSeen={(item) => void markSeen(item)}
-          onIgnore={(item) => void ignore(item)}
-          onDigest={() => void runDigest()}
-          onCluster={() => void runCluster()}
-          onReport={() => void runReport()}
+          onRefreshAll={() => void refresh()}
+          onCancelTask={(job) => void cancelTask(job)}
+          onRetryTask={(job) => void retryTask(job)}
         />
       </div>
     </div>
@@ -795,6 +845,7 @@ function SourceRail({
   sources,
   sourceCounts,
   latestRunBySource,
+  activeTaskBySource,
   activeSourceId,
   onSelect,
   onRefresh,
@@ -805,6 +856,7 @@ function SourceRail({
   sources: FeedSource[];
   sourceCounts: Map<string, { total: number; today: number; newItems: number; saved: number }>;
   latestRunBySource: Map<string, FeedFetchRun>;
+  activeTaskBySource: Map<string, FeedTask>;
   activeSourceId: string | null;
   onSelect: (id: string | null) => void;
   onRefresh: (source: FeedSource) => void;
@@ -839,7 +891,8 @@ function SourceRail({
             saved: 0
           };
           const latestRun = latestRunBySource.get(source.id) ?? null;
-          const running = latestRun?.status === 'running';
+          const activeTask = activeTaskBySource.get(source.id) ?? null;
+          const running = latestRun?.status === 'running' || activeTask?.status === 'running';
           const stage = currentRunStage(latestRun);
           return (
             <section
@@ -879,7 +932,9 @@ function SourceRail({
                 <SmallStat label="新增" value={counts.newItems} />
                 <SmallStat label="已保存" value={counts.saved} />
               </div>
-              {running && latestRun ? (
+              {activeTask ? (
+                <TaskInline task={activeTask} />
+              ) : running && latestRun ? (
                 <RunInline run={latestRun} stage={stage} />
               ) : source.last_fetch_error &&
                 !isTranscriptExtractionWarning(source.last_fetch_error) ? (
@@ -905,12 +960,12 @@ function SourceRail({
               <div className="mt-3 flex items-center gap-1">
                 <button
                   title="刷新来源"
-                  disabled={busy || running}
+                  disabled={busy}
                   onClick={() => onRefresh(source)}
                   className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-neutral-200 text-[11px] hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
                 >
                   <RefreshCw size={12} className={running ? 'animate-spin' : ''} />
-                  {running ? '抓取中' : '抓取'}
+                  {activeTask ? feedTaskStatusLabel(activeTask.status) : running ? '抓取中' : '抓取'}
                 </button>
                 <button
                   title={source.enabled ? '停用来源' : '启用来源'}
@@ -1086,6 +1141,241 @@ function FeedItemRow({
         </div>
       </div>
     </article>
+  );
+}
+
+function FeedRightSidebar({
+  tab,
+  setTab,
+  tasks,
+  sources,
+  chat,
+  busy,
+  onRefreshAll,
+  onCancelTask,
+  onRetryTask
+}: {
+  tab: FeedRightSidebarTab;
+  setTab: (tab: FeedRightSidebarTab) => void;
+  tasks: FeedTaskSnapshot | null;
+  sources: FeedSource[];
+  chat: UseAskAnywhereSessionResult;
+  busy: boolean;
+  onRefreshAll: () => void;
+  onCancelTask: (job: FeedTask) => void;
+  onRetryTask: (job: FeedTask) => void;
+}): JSX.Element {
+  return (
+    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="shrink-0 border-b border-neutral-200 p-3 dark:border-neutral-800">
+        <div className="flex rounded-md border border-neutral-200 bg-neutral-50 p-1 dark:border-neutral-800 dark:bg-neutral-900">
+          {(['tasks', 'chat'] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setTab(item)}
+              className={`inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded text-xs font-medium ${
+                tab === item
+                  ? 'bg-white text-neutral-950 shadow-sm dark:bg-neutral-950 dark:text-neutral-100'
+                  : 'text-neutral-500'
+              }`}
+            >
+              {item === 'tasks' ? <RefreshCw size={13} /> : <MessageSquare size={13} />}
+              {item === 'tasks' ? '任务中心' : 'Chat'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'tasks' ? (
+        <FeedTaskCenterPanel
+          tasks={tasks}
+          sources={sources}
+          busy={busy}
+          onRefreshAll={onRefreshAll}
+          onCancelTask={onCancelTask}
+          onRetryTask={onRetryTask}
+        />
+      ) : (
+        <FeedChatPanel chat={chat} />
+      )}
+    </aside>
+  );
+}
+
+function FeedTaskCenterPanel({
+  tasks,
+  sources,
+  busy,
+  onRefreshAll,
+  onCancelTask,
+  onRetryTask
+}: {
+  tasks: FeedTaskSnapshot | null;
+  sources: FeedSource[];
+  busy: boolean;
+  onRefreshAll: () => void;
+  onCancelTask: (job: FeedTask) => void;
+  onRetryTask: (job: FeedTask) => void;
+}): JSX.Element {
+  const jobs = tasks?.jobs ?? [];
+  const sourceById = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
+  const visibleJobs = jobs.slice(0, 80);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-neutral-200 p-3 dark:border-neutral-800">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Feed 任务中心</h2>
+            <p className="mt-0.5 text-[11px] text-neutral-500">最近任务和平台状态</p>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onRefreshAll}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-neutral-900 px-2.5 text-[11px] font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          >
+            <RefreshCw size={13} className={tasks?.running ? 'animate-spin' : ''} />
+            刷新全部
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-1">
+          <TaskStat label="运行" value={tasks?.running ?? 0} tone="sky" />
+          <TaskStat label="排队" value={tasks?.queued ?? 0} tone="neutral" />
+          <TaskStat label="重试" value={tasks?.retry_wait ?? 0} tone="amber" />
+          <TaskStat label="失败" value={tasks?.failed ?? 0} tone="rose" />
+        </div>
+        {tasks?.lanes.length ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {tasks.lanes.map((lane) => (
+              <span
+                key={lane.platform}
+                className="rounded-full border border-neutral-200 px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-800 dark:text-neutral-300"
+              >
+                {feedTaskPlatformLabel(lane.platform)}: {lane.running} 运行 / {lane.queued + lane.retry_wait} 等待
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+        {visibleJobs.length === 0 ? (
+          <div className="rounded-md border border-dashed border-neutral-300 p-4 text-sm text-neutral-500 dark:border-neutral-800">
+            暂无 Feed 抓取任务。
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {visibleJobs.map((job) => (
+              <FeedTaskRow
+                key={job.id}
+                job={job}
+                source={sourceById.get(job.source_id)}
+                busy={busy}
+                onCancelTask={onCancelTask}
+                onRetryTask={onRetryTask}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FeedTaskRow({
+  job,
+  source,
+  busy,
+  onCancelTask,
+  onRetryTask
+}: {
+  job: FeedTask;
+  source?: FeedSource;
+  busy: boolean;
+  onCancelTask: (job: FeedTask) => void;
+  onRetryTask: (job: FeedTask) => void;
+}): JSX.Element {
+  const canCancel = job.status === 'queued' || job.status === 'retry_wait';
+  const canRetry = job.status === 'failed' || job.status === 'cancelled';
+  return (
+    <section className="rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 rounded-full ${feedTaskStatusDotClass(job.status)}`} />
+            <h3 className="truncate font-medium">{job.source_title ?? source?.title ?? job.source_id}</h3>
+          </div>
+          <div className="mt-1 truncate text-[11px] text-neutral-500">
+            {feedTaskKindLabel(job.kind)} / {feedTaskPlatformLabel(job.platform)}
+          </div>
+        </div>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${feedTaskStatusClass(job.status)}`}>
+          {feedTaskStatusLabel(job.status)}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
+        <SmallStat label="尝试" value={job.attempts} />
+        <SmallStat label="新增" value={job.result?.created ?? 0} />
+        <SmallStat label="抓取" value={job.result?.fetched ?? 0} />
+      </div>
+      {job.error ? (
+        <div className="mt-2 flex gap-1.5 rounded-md bg-rose-50 p-2 text-[11px] text-rose-700 dark:bg-rose-950/30 dark:text-rose-200">
+          <AlertTriangle size={13} className="shrink-0" />
+          <span className="line-clamp-3 whitespace-pre-wrap">{job.error}</span>
+        </div>
+      ) : (
+        <div className="mt-2 text-[11px] text-neutral-500">
+          {job.status === 'retry_wait'
+            ? `下次重试：${formatRelative(job.due_at)}`
+            : job.completed_at
+              ? `完成于 ${formatRelative(job.completed_at)}`
+              : `创建于 ${formatRelative(job.created_at)}`}
+        </div>
+      )}
+      <div className="mt-3 flex items-center gap-1">
+        <button
+          type="button"
+          disabled={busy || !canCancel}
+          onClick={() => onCancelTask(job)}
+          className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-neutral-200 text-[11px] hover:bg-neutral-50 disabled:opacity-45 dark:border-neutral-800 dark:hover:bg-neutral-900"
+        >
+          <Ban size={12} />
+          取消
+        </button>
+        <button
+          type="button"
+          disabled={busy || !canRetry}
+          onClick={() => onRetryTask(job)}
+          className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-neutral-200 text-[11px] hover:bg-neutral-50 disabled:opacity-45 dark:border-neutral-800 dark:hover:bg-neutral-900"
+        >
+          <RefreshCw size={12} />
+          重试
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function FeedChatPanel({ chat }: { chat: UseAskAnywhereSessionResult }): JSX.Element {
+  return (
+    <div className="min-h-0 flex-1 overflow-hidden">
+      <ConversationShell
+        conversations={chat.sessions}
+        activeId={chat.activeId}
+        activeConversation={chat.activeConversation}
+        events={chat.events}
+        stage={chat.stage}
+        isLoading={chat.isLoading}
+        variant="compact"
+        onSelect={chat.selectActiveId}
+        onNew={() => void chat.handleNew()}
+        onArchive={(id) => void chat.handleArchive(id)}
+        onAction={(action) => void chat.handleAction(action)}
+        onArtifactAction={(artifactId, actionId) => void chat.handleArtifactAction(artifactId, actionId)}
+        composerSourceSurface="ask_full"
+        welcomeMessage="围绕当前 Feed 继续对话。"
+      />
+    </div>
   );
 }
 
@@ -1689,6 +1979,28 @@ function RunInline({
   );
 }
 
+function TaskInline({ task }: { task: FeedTask }): JSX.Element {
+  return (
+    <div className="mt-2 rounded-md bg-sky-50 p-2 text-[11px] text-sky-800 dark:bg-sky-950/30 dark:text-sky-100">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex min-w-0 items-center gap-1">
+          <RefreshCw
+            size={12}
+            className={`shrink-0 ${task.status === 'running' ? 'animate-spin' : ''}`}
+          />
+          <span className="truncate">{feedTaskKindLabel(task.kind)}</span>
+        </span>
+        <span className="shrink-0">{feedTaskStatusLabel(task.status)}</span>
+      </div>
+      <div className="mt-1 line-clamp-2 text-sky-700 dark:text-sky-200">
+        {task.status === 'retry_wait'
+          ? `等待重试：${formatRelative(task.due_at)}`
+          : task.error ?? `${feedTaskPlatformLabel(task.platform)} 任务处理中。`}
+      </div>
+    </div>
+  );
+}
+
 type FeedFetchRunStageLike = NonNullable<FeedFetchRun['stages']>[number];
 
 function currentRunStage(run?: FeedFetchRun | null): FeedFetchRunStageLike | undefined {
@@ -1825,6 +2137,29 @@ function SmallStat({ label, value }: { label: string; value: number }): JSX.Elem
     <div className="rounded-md bg-neutral-50 px-2 py-1 dark:bg-neutral-900">
       <div className="font-medium">{value}</div>
       <div className="text-neutral-500">{label}</div>
+    </div>
+  );
+}
+
+function TaskStat({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: number;
+  tone: 'sky' | 'neutral' | 'amber' | 'rose';
+}): JSX.Element {
+  const className = {
+    sky: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-200',
+    neutral: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300',
+    amber: 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-100',
+    rose: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200'
+  }[tone];
+  return (
+    <div className={`rounded-md px-2 py-2 text-center ${className}`}>
+      <div className="text-sm font-semibold">{value}</div>
+      <div className="text-[11px]">{label}</div>
     </div>
   );
 }
@@ -1970,6 +2305,66 @@ function labelForStatus(status: FeedItemStatus | 'all'): string {
   if (status === 'ignored') return '已忽略';
   if (status === 'expired') return '已过期';
   return status;
+}
+
+function taskBySource(snapshot: FeedTaskSnapshot | null): Map<string, FeedTask> {
+  const map = new Map<string, FeedTask>();
+  const active = (snapshot?.jobs ?? [])
+    .filter((job) => job.status === 'running' || job.status === 'queued' || job.status === 'retry_wait')
+    .sort((a, b) => feedTaskStatusWeight(a.status) - feedTaskStatusWeight(b.status));
+  for (const job of active) {
+    if (!map.has(job.source_id)) map.set(job.source_id, job);
+  }
+  return map;
+}
+
+function feedTaskStatusWeight(status: FeedTaskStatus): number {
+  if (status === 'running') return 0;
+  if (status === 'queued') return 1;
+  if (status === 'retry_wait') return 2;
+  if (status === 'failed') return 3;
+  if (status === 'success') return 4;
+  return 5;
+}
+
+function feedTaskKindLabel(kind: FeedTask['kind']): string {
+  return kind === 'source.initial_fetch' ? '首次抓取' : '订阅更新';
+}
+
+function feedTaskPlatformLabel(platform: FeedTask['platform']): string {
+  if (platform === 'youtube') return 'YouTube';
+  if (platform === 'x') return 'X';
+  if (platform === 'reddit') return 'Reddit';
+  if (platform === 'hackernews') return 'Hacker News';
+  if (platform === 'rss') return 'RSS';
+  return 'Custom';
+}
+
+function feedTaskStatusLabel(status: FeedTaskStatus): string {
+  if (status === 'queued') return '排队';
+  if (status === 'running') return '运行中';
+  if (status === 'retry_wait') return '等待重试';
+  if (status === 'success') return '成功';
+  if (status === 'failed') return '失败';
+  return '已取消';
+}
+
+function feedTaskStatusDotClass(status: FeedTaskStatus): string {
+  if (status === 'running') return 'bg-sky-500';
+  if (status === 'queued') return 'bg-neutral-400';
+  if (status === 'retry_wait') return 'bg-amber-500';
+  if (status === 'success') return 'bg-emerald-500';
+  if (status === 'failed') return 'bg-rose-500';
+  return 'bg-neutral-300';
+}
+
+function feedTaskStatusClass(status: FeedTaskStatus): string {
+  if (status === 'running') return 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-100';
+  if (status === 'queued') return 'bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300';
+  if (status === 'retry_wait') return 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-100';
+  if (status === 'success') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200';
+  if (status === 'failed') return 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200';
+  return 'bg-neutral-100 text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400';
 }
 
 function looksLikeYouTubeSource(value: string): boolean {
@@ -2150,6 +2545,12 @@ function formatRelative(value: string): string {
   const minute = 60_000;
   const hour = minute * 60;
   const day = hour * 24;
+  if (diffMs < 0) {
+    const futureMs = Math.abs(diffMs);
+    if (futureMs < hour) return `${Math.max(1, Math.round(futureMs / minute))} 分钟后`;
+    if (futureMs < day) return `${Math.round(futureMs / hour)} 小时后`;
+    return date.toLocaleString();
+  }
   if (Math.abs(diffMs) < hour) return `${Math.max(1, Math.round(diffMs / minute))} 分钟前`;
   if (Math.abs(diffMs) < day) return `${Math.round(diffMs / hour)} 小时前`;
   if (Math.abs(diffMs) < day * 7) return `${Math.round(diffMs / day)} 天前`;
