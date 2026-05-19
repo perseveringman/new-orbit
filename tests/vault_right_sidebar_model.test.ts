@@ -68,6 +68,10 @@ describe('vault right sidebar model', () => {
       'dashboard-rhythm',
       'ask'
     ]);
+    expect(getSidebarPanelTabs('feeds', 'overview').map((tab) => tab.id)).toEqual([
+      'feed-tasks',
+      'ask'
+    ]);
   });
 
   it('describes companion pane candidates with icons and width presets', () => {
@@ -90,6 +94,7 @@ describe('vault right sidebar model', () => {
 
     expect(getSidebarDefaultWidth('files')).toBeLessThan(getSidebarDefaultWidth('diff'));
     expect(getSidebarDefaultWidth('diff')).toBe(560);
+    expect(getSidebarDefaultWidth('feed-tasks')).toBe(560);
   });
 
   it('exposes Ask as a right sidebar panel on every intent', () => {

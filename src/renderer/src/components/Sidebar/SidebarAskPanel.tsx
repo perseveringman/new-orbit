@@ -75,6 +75,15 @@ export function deriveSidebarAskContext(input: {
     };
   }
 
+  if (view.kind === 'feeds') {
+    return {
+      scope: { kind: 'external', platform: 'orbit.feed', user_id: 'local' },
+      label: '信息流',
+      detail: 'Feed 订阅、抓取任务、信号与资料库提升上下文。',
+      title: '提问 · 信息流'
+    };
+  }
+
   if (view.kind === 'editor' && activeFile) {
     return {
       scope: { kind: 'note', note_id: activeFile.relPath },
@@ -163,6 +172,8 @@ function workspaceLabel(kind: WorkspaceView['kind']): string {
       return '复盘';
     case 'library':
       return '资料库';
+    case 'feeds':
+      return '信息流';
     case 'notes':
       return '笔记';
     case 'search':

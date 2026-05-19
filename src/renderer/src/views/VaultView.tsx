@@ -16,6 +16,7 @@ import {
   Network,
   PanelRight,
   Pin,
+  RefreshCw,
   ScrollText,
   Search,
   Settings,
@@ -37,6 +38,7 @@ import { WorktreesPanel } from '../components/Sidebar/WorktreesPanel';
 import { TaskDetailPanel } from '../components/Sidebar/TaskDetailPanel';
 import { ProjectTaskTreePanel } from '../components/Sidebar/ProjectTaskTreePanel';
 import { SidebarAskPanel } from '../components/Sidebar/SidebarAskPanel';
+import { FeedTaskCenterPanel } from '../components/Sidebar/FeedTaskCenterPanel';
 import {
   DashboardFocusPanel,
   DashboardRhythmPanel
@@ -109,6 +111,7 @@ function isSidebarPanelId(value: string): value is SidebarPanelId {
     value === 'runlog' ||
     value === 'diff' ||
     value === 'sessions' ||
+    value === 'feed-tasks' ||
     value === 'ask'
   );
 }
@@ -128,6 +131,7 @@ const COMPANION_PANEL_ICONS: Record<SidebarPanelIconId, LucideIcon> = {
   runlog: ScrollText,
   diff: FileDiff,
   sessions: MessageSquare,
+  'feed-tasks': RefreshCw,
   ask: Sparkles
 };
 
@@ -418,6 +422,7 @@ export function VaultView(): JSX.Element {
     if (sidebarPanel === 'review') return <ReviewInboxView />;
     if (sidebarPanel === 'runlog') return <RunLogPane />;
     if (sidebarPanel === 'diff') return <DiffWorkspacePane />;
+    if (sidebarPanel === 'feed-tasks') return <FeedTaskCenterPanel />;
     if (sidebarPanel === 'ask') return <SidebarAskPanel />;
     if (sidebarPanel === 'sessions') return <TerminalSessionsPanel />;
     return <WorktreesPanel />;
@@ -425,7 +430,7 @@ export function VaultView(): JSX.Element {
 
   function canPromoteSidebarPanel(panel: SidebarPanelId): boolean {
     if (panel === 'dashboard-focus' || panel === 'dashboard-rhythm') return true;
-    if (panel === 'ask' || panel === 'review' || panel === 'worktrees') return true;
+    if (panel === 'ask' || panel === 'feed-tasks' || panel === 'review' || panel === 'worktrees') return true;
     if (panel === 'files' || panel === 'backlinks' || panel === 'inspector') return true;
     if (panel === 'sessions') return Boolean(sidebarFocus.projectUid);
     if (panel === 'task-detail' || panel === 'task-tree') return Boolean(sidebarFocus.projectUid);
@@ -440,6 +445,10 @@ export function VaultView(): JSX.Element {
 
     if (panel === 'ask') {
       setView({ kind: 'askAnywhere' });
+      return;
+    }
+    if (panel === 'feed-tasks') {
+      setView({ kind: 'feeds' });
       return;
     }
     if (panel === 'review') {

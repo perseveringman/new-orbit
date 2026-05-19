@@ -38,11 +38,7 @@ import type {
   FeedTaskStatus
 } from '@shared/feed';
 import type { SynthesisArtifact } from '@shared/synthesis';
-import {
-  useAskAnywhereSession,
-  type UseAskAnywhereSessionResult
-} from '../components/ask-anywhere/AskAnywhereHost';
-import { ConversationShell } from '../components/conversation/ConversationShell';
+import { useSidebar } from '../store/sidebar';
 
 const STATUSES: Array<FeedItemStatus | 'all'> = [
   'all',
@@ -54,7 +50,6 @@ const STATUSES: Array<FeedItemStatus | 'all'> = [
 ];
 const INSPECTOR_TABS = ['overview', 'content', 'analysis', 'provenance'] as const;
 type InspectorTab = (typeof INSPECTOR_TABS)[number];
-type FeedRightSidebarTab = 'tasks' | 'chat';
 
 type FeedSynthesisArtifact =
   | SynthesisArtifact<FeedDigestPayload>
@@ -73,7 +68,6 @@ export function FeedView(): JSX.Element {
   const [taskSnapshot, setTaskSnapshot] = useState<FeedTaskSnapshot | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
-  const [rightSidebarTab, setRightSidebarTab] = useState<FeedRightSidebarTab>('tasks');
   const [status, setStatus] = useState<FeedItemStatus | 'all'>('new');
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
@@ -95,11 +89,7 @@ export function FeedView(): JSX.Element {
   const [report, setReport] = useState<SynthesisArtifact<FeedReportPayload> | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
   const [enrichments, setEnrichments] = useState<EnrichmentArtifact[]>([]);
-  const feedChatScope = useMemo(
-    () => ({ kind: 'external' as const, platform: 'orbit.feed', user_id: 'local' }),
-    []
-  );
-  const feedChat = useAskAnywhereSession({ scope: feedChatScope, title: 'Feed Chat' });
+  const openSidebarPanel = useSidebar((state) => state.openPanel);
 
   const sourceById = useMemo(
     () => new Map(sources.map((source) => [source.id, source])),
@@ -335,7 +325,7 @@ export function FeedView(): JSX.Element {
       setUrl('');
       setTitle('');
       setActiveSourceId(source.id);
-      setRightSidebarTab('tasks');
+      openSidebarPanel({ surface: 'feeds', panel: 'feed-tasks' });
       await reload(null);
       setMessage(
         source.kind === 'youtube'
@@ -366,7 +356,7 @@ export function FeedView(): JSX.Element {
         kind: 'source.refresh',
         priority: 'manual'
       });
-      setRightSidebarTab('tasks');
+      openSidebarPanel({ surface: 'feeds', panel: 'feed-tasks' });
       await reload(activeItemId);
       setMessage(
         result.jobs.length > 0
@@ -414,35 +404,6 @@ export function FeedView(): JSX.Element {
     await window.orbit.feeds.deleteSource(source.id);
     if (activeSourceId === source.id) setActiveSourceId(null);
     await reload();
-  }
-
-  async function cancelTask(job: FeedTask): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await window.orbit.feeds.cancelTask(job.id);
-      await reload(activeItemId);
-      setMessage(`已取消任务：${job.source_title ?? job.source_id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '取消任务失败。');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function retryTask(job: FeedTask): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await window.orbit.feeds.retryTask(job.id);
-      setRightSidebarTab('tasks');
-      await reload(activeItemId);
-      setMessage(`已重新加入队列：${job.source_title ?? job.source_id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '重试任务失败。');
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function runDigest(): Promise<void> {
@@ -744,7 +705,7 @@ export function FeedView(): JSX.Element {
         {error ? <Notice tone="rose" message={error} /> : null}
       </header>
 
-      <div className="grid h-full min-h-0 min-w-0 flex-1 grid-cols-[288px_minmax(0,1fr)_minmax(360px,420px)] overflow-hidden">
+      <div className="grid h-full min-h-0 min-w-0 flex-1 grid-cols-[288px_minmax(0,1fr)] overflow-hidden">
         <SourceRail
           sources={sources}
           sourceCounts={sourceCounts}
@@ -761,7 +722,7 @@ export function FeedView(): JSX.Element {
           busy={busy}
         />
 
-        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-neutral-950">
           <div className="shrink-0 border-b border-neutral-200 p-3 dark:border-neutral-800">
             <div className="flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
@@ -825,17 +786,6 @@ export function FeedView(): JSX.Element {
           </div>
         </main>
 
-        <FeedRightSidebar
-          tab={rightSidebarTab}
-          setTab={setRightSidebarTab}
-          tasks={taskSnapshot}
-          sources={sources}
-          chat={feedChat}
-          busy={busy}
-          onRefreshAll={() => void refresh()}
-          onCancelTask={(job) => void cancelTask(job)}
-          onRetryTask={(job) => void retryTask(job)}
-        />
       </div>
     </div>
   );
@@ -1141,241 +1091,6 @@ function FeedItemRow({
         </div>
       </div>
     </article>
-  );
-}
-
-function FeedRightSidebar({
-  tab,
-  setTab,
-  tasks,
-  sources,
-  chat,
-  busy,
-  onRefreshAll,
-  onCancelTask,
-  onRetryTask
-}: {
-  tab: FeedRightSidebarTab;
-  setTab: (tab: FeedRightSidebarTab) => void;
-  tasks: FeedTaskSnapshot | null;
-  sources: FeedSource[];
-  chat: UseAskAnywhereSessionResult;
-  busy: boolean;
-  onRefreshAll: () => void;
-  onCancelTask: (job: FeedTask) => void;
-  onRetryTask: (job: FeedTask) => void;
-}): JSX.Element {
-  return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="shrink-0 border-b border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="flex rounded-md border border-neutral-200 bg-neutral-50 p-1 dark:border-neutral-800 dark:bg-neutral-900">
-          {(['tasks', 'chat'] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setTab(item)}
-              className={`inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded text-xs font-medium ${
-                tab === item
-                  ? 'bg-white text-neutral-950 shadow-sm dark:bg-neutral-950 dark:text-neutral-100'
-                  : 'text-neutral-500'
-              }`}
-            >
-              {item === 'tasks' ? <RefreshCw size={13} /> : <MessageSquare size={13} />}
-              {item === 'tasks' ? '任务中心' : 'Chat'}
-            </button>
-          ))}
-        </div>
-      </div>
-      {tab === 'tasks' ? (
-        <FeedTaskCenterPanel
-          tasks={tasks}
-          sources={sources}
-          busy={busy}
-          onRefreshAll={onRefreshAll}
-          onCancelTask={onCancelTask}
-          onRetryTask={onRetryTask}
-        />
-      ) : (
-        <FeedChatPanel chat={chat} />
-      )}
-    </aside>
-  );
-}
-
-function FeedTaskCenterPanel({
-  tasks,
-  sources,
-  busy,
-  onRefreshAll,
-  onCancelTask,
-  onRetryTask
-}: {
-  tasks: FeedTaskSnapshot | null;
-  sources: FeedSource[];
-  busy: boolean;
-  onRefreshAll: () => void;
-  onCancelTask: (job: FeedTask) => void;
-  onRetryTask: (job: FeedTask) => void;
-}): JSX.Element {
-  const jobs = tasks?.jobs ?? [];
-  const sourceById = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
-  const visibleJobs = jobs.slice(0, 80);
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold">Feed 任务中心</h2>
-            <p className="mt-0.5 text-[11px] text-neutral-500">最近任务和平台状态</p>
-          </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onRefreshAll}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-neutral-900 px-2.5 text-[11px] font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-          >
-            <RefreshCw size={13} className={tasks?.running ? 'animate-spin' : ''} />
-            刷新全部
-          </button>
-        </div>
-        <div className="mt-3 grid grid-cols-4 gap-1">
-          <TaskStat label="运行" value={tasks?.running ?? 0} tone="sky" />
-          <TaskStat label="排队" value={tasks?.queued ?? 0} tone="neutral" />
-          <TaskStat label="重试" value={tasks?.retry_wait ?? 0} tone="amber" />
-          <TaskStat label="失败" value={tasks?.failed ?? 0} tone="rose" />
-        </div>
-        {tasks?.lanes.length ? (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {tasks.lanes.map((lane) => (
-              <span
-                key={lane.platform}
-                className="rounded-full border border-neutral-200 px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-800 dark:text-neutral-300"
-              >
-                {feedTaskPlatformLabel(lane.platform)}: {lane.running} 运行 / {lane.queued + lane.retry_wait} 等待
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
-        {visibleJobs.length === 0 ? (
-          <div className="rounded-md border border-dashed border-neutral-300 p-4 text-sm text-neutral-500 dark:border-neutral-800">
-            暂无 Feed 抓取任务。
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {visibleJobs.map((job) => (
-              <FeedTaskRow
-                key={job.id}
-                job={job}
-                source={sourceById.get(job.source_id)}
-                busy={busy}
-                onCancelTask={onCancelTask}
-                onRetryTask={onRetryTask}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FeedTaskRow({
-  job,
-  source,
-  busy,
-  onCancelTask,
-  onRetryTask
-}: {
-  job: FeedTask;
-  source?: FeedSource;
-  busy: boolean;
-  onCancelTask: (job: FeedTask) => void;
-  onRetryTask: (job: FeedTask) => void;
-}): JSX.Element {
-  const canCancel = job.status === 'queued' || job.status === 'retry_wait';
-  const canRetry = job.status === 'failed' || job.status === 'cancelled';
-  return (
-    <section className="rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${feedTaskStatusDotClass(job.status)}`} />
-            <h3 className="truncate font-medium">{job.source_title ?? source?.title ?? job.source_id}</h3>
-          </div>
-          <div className="mt-1 truncate text-[11px] text-neutral-500">
-            {feedTaskKindLabel(job.kind)} / {feedTaskPlatformLabel(job.platform)}
-          </div>
-        </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${feedTaskStatusClass(job.status)}`}>
-          {feedTaskStatusLabel(job.status)}
-        </span>
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
-        <SmallStat label="尝试" value={job.attempts} />
-        <SmallStat label="新增" value={job.result?.created ?? 0} />
-        <SmallStat label="抓取" value={job.result?.fetched ?? 0} />
-      </div>
-      {job.error ? (
-        <div className="mt-2 flex gap-1.5 rounded-md bg-rose-50 p-2 text-[11px] text-rose-700 dark:bg-rose-950/30 dark:text-rose-200">
-          <AlertTriangle size={13} className="shrink-0" />
-          <span className="line-clamp-3 whitespace-pre-wrap">{job.error}</span>
-        </div>
-      ) : (
-        <div className="mt-2 text-[11px] text-neutral-500">
-          {job.status === 'retry_wait'
-            ? `下次重试：${formatRelative(job.due_at)}`
-            : job.completed_at
-              ? `完成于 ${formatRelative(job.completed_at)}`
-              : `创建于 ${formatRelative(job.created_at)}`}
-        </div>
-      )}
-      <div className="mt-3 flex items-center gap-1">
-        <button
-          type="button"
-          disabled={busy || !canCancel}
-          onClick={() => onCancelTask(job)}
-          className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-neutral-200 text-[11px] hover:bg-neutral-50 disabled:opacity-45 dark:border-neutral-800 dark:hover:bg-neutral-900"
-        >
-          <Ban size={12} />
-          取消
-        </button>
-        <button
-          type="button"
-          disabled={busy || !canRetry}
-          onClick={() => onRetryTask(job)}
-          className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border border-neutral-200 text-[11px] hover:bg-neutral-50 disabled:opacity-45 dark:border-neutral-800 dark:hover:bg-neutral-900"
-        >
-          <RefreshCw size={12} />
-          重试
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function FeedChatPanel({ chat }: { chat: UseAskAnywhereSessionResult }): JSX.Element {
-  return (
-    <div className="min-h-0 flex-1 overflow-hidden">
-      <ConversationShell
-        conversations={chat.sessions}
-        activeId={chat.activeId}
-        activeConversation={chat.activeConversation}
-        events={chat.events}
-        stage={chat.stage}
-        isLoading={chat.isLoading}
-        variant="compact"
-        onSelect={chat.selectActiveId}
-        onNew={() => void chat.handleNew()}
-        onArchive={(id) => void chat.handleArchive(id)}
-        onAction={(action) => void chat.handleAction(action)}
-        onArtifactAction={(artifactId, actionId) => void chat.handleArtifactAction(artifactId, actionId)}
-        composerSourceSurface="ask_full"
-        welcomeMessage="围绕当前 Feed 继续对话。"
-      />
-    </div>
   );
 }
 

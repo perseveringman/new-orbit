@@ -184,6 +184,16 @@ describe('随处问 UX revamp components', () => {
       areas: []
     });
     expect(noteContext.scope).toEqual({ kind: 'note', note_id: '02_Areas/vision/README.md' });
+
+    const feedContext = deriveSidebarAskContext({
+      view: { kind: 'feeds' },
+      activeFile: null,
+      activeProjectUid: null,
+      projects: [],
+      areas: []
+    });
+    expect(feedContext.scope).toEqual({ kind: 'external', platform: 'orbit.feed', user_id: 'local' });
+    expect(feedContext.title).toBe('提问 · 信息流');
   });
 });
 

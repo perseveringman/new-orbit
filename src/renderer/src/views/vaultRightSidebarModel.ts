@@ -82,6 +82,7 @@ export type SidebarPanelIconId =
   | 'runlog'
   | 'diff'
   | 'sessions'
+  | 'feed-tasks'
   | 'ask';
 
 export type SidebarPanelId =
@@ -99,6 +100,7 @@ export type SidebarPanelId =
   | 'runlog'
   | 'diff'
   | 'sessions'
+  | 'feed-tasks'
   | 'ask';
 
 export interface SidebarIntentTab {
@@ -216,6 +218,12 @@ const PANEL_META: Record<
     widthPreset: 'normal',
     description: '不离开当前流程即可检查项目或领域会话。'
   },
+  'feed-tasks': {
+    title: '任务中心',
+    icon: 'feed-tasks',
+    widthPreset: 'wide',
+    description: '查看 Feed 抓取队列、平台并发和失败重试。'
+  },
   ask: {
     title: '提问',
     icon: 'ask',
@@ -253,7 +261,7 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
     intents: [{ id: 'overview', title: '概览', panels: ['review', 'inspector'] }]
   },
   feeds: {
-    intents: [{ id: 'overview', title: '概览', panels: ['inspector'] }]
+    intents: [{ id: 'overview', title: '概览', panels: ['feed-tasks', 'ask'] }]
   },
   resources: {
     intents: [{ id: 'overview', title: '概览', panels: ['files', 'backlinks', 'inspector'] }]
