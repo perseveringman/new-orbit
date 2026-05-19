@@ -2184,7 +2184,24 @@ function markRunStage(
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (!isErrorRecord(error)) return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  const lines = [
+    message,
+    typeof error.stderr === 'string' && error.stderr.trim() ? `stderr: ${clipErrorPart(error.stderr.trim())}` : null,
+    typeof error.stdout === 'string' && error.stdout.trim() ? `stdout: ${clipErrorPart(error.stdout.trim())}` : null,
+    typeof error.signal === 'string' ? `signal: ${error.signal}` : null,
+    typeof error.code === 'number' || typeof error.code === 'string' ? `exit code: ${String(error.code)}` : null
+  ].filter((line): line is string => Boolean(line));
+  return [...new Set(lines)].join('\n');
+}
+
+function isErrorRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function clipErrorPart(value: string, max = 1200): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
 function isYouTubeRateLimitError(value: string): boolean {

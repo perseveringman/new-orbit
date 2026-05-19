@@ -3,6 +3,9 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_X_LIMIT = 20;
+const OPENCLI_X_DEFAULT_TIMEOUT_MS = 45_000;
+const OPENCLI_X_TIMELINE_TIMEOUT_MS = 90_000;
+const OPENCLI_X_THREAD_TIMEOUT_MS = 60_000;
 
 export type XSourceType = 'profile' | 'timeline';
 export type XTimelineType = 'following' | 'for-you';
@@ -16,6 +19,7 @@ export interface XSourceDescriptor {
 
 export interface XListOptions {
   limit?: number;
+  timeout_ms?: number;
 }
 
 export interface XPostCandidate {
@@ -101,29 +105,38 @@ async function listXPostCandidates(source: XSourceDescriptor, options: XListOpti
   const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_X_LIMIT, 100));
   if (source.source_type === 'timeline') {
     const timelineType = source.timeline_type ?? 'for-you';
-    const { stdout } = await runOpenCliTwitter(['timeline', '--type', timelineType, '--limit', String(limit), '-f', 'json']);
+    const { stdout } = await runOpenCliTwitter(['timeline', '--type', timelineType, '--limit', String(limit), '-f', 'json'], {
+      timeoutMs: options.timeout_ms ?? OPENCLI_X_TIMELINE_TIMEOUT_MS
+    });
     return parseXPostRecords(stdout).slice(0, limit);
   }
   if (!source.handle) throw new Error('x_profile_handle_missing');
   const handle = source.handle;
-  const { stdout } = await runOpenCliTwitter(['search', `from:${handle}`, '--filter', 'live', '--limit', String(limit), '-f', 'json']);
+  const { stdout } = await runOpenCliTwitter(['search', `from:${handle}`, '--filter', 'live', '--limit', String(limit), '-f', 'json'], {
+    timeoutMs: options.timeout_ms ?? OPENCLI_X_DEFAULT_TIMEOUT_MS
+  });
   return parseXPostRecords(stdout).filter((post) => post.author.toLowerCase() === handle.toLowerCase()).slice(0, limit);
 }
 
 async function fetchXThread(tweetId: string): Promise<XThreadArchive> {
   const id = extractTweetId(tweetId);
   if (!id) throw new Error(`invalid_x_tweet_id:${tweetId}`);
-  const { stdout } = await runOpenCliTwitter(['thread', id, '-f', 'json']);
+  const { stdout } = await runOpenCliTwitter(['thread', id, '-f', 'json'], { timeoutMs: OPENCLI_X_THREAD_TIMEOUT_MS });
   return { tweets: parseXPostRecords(stdout) };
 }
 
-async function runOpenCliTwitter(args: string[]): Promise<{ stdout: string; stderr: string }> {
+async function runOpenCliTwitter(args: string[], options: { timeoutMs: number }): Promise<{ stdout: string; stderr: string }> {
+  const command = ['twitter', ...args];
   try {
-    return await execFileAsync('opencli', ['twitter', ...args], { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+    return await execFileAsync('opencli', command, { timeout: options.timeoutMs, maxBuffer: 16 * 1024 * 1024 });
   } catch (error) {
-    if (!isTransientOpenCliBrowserError(error)) throw error;
+    if (!isTransientOpenCliBrowserError(error)) throw toOpenCliError(error, command, options.timeoutMs);
     await delay(750);
-    return execFileAsync('opencli', ['twitter', ...args], { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+    try {
+      return await execFileAsync('opencli', command, { timeout: options.timeoutMs, maxBuffer: 16 * 1024 * 1024 });
+    } catch (retryError) {
+      throw toOpenCliError(retryError, command, options.timeoutMs);
+    }
   }
 }
 
@@ -137,8 +150,29 @@ function errorText(error: unknown): string {
   return [error.message, error.stdout, error.stderr].filter((value): value is string => typeof value === 'string').join('\n');
 }
 
+function toOpenCliError(error: unknown, args: string[], timeoutMs: number): Error {
+  if (!isRecord(error)) return new Error(String(error));
+  const lines = [
+    stringValue(error.message) ?? `Command failed: opencli ${args.join(' ')}`,
+    isOpenCliTimeoutError(error) ? `OpenCLI timed out after ${formatDuration(timeoutMs)}.` : null,
+    stringValue(error.stderr) ? `stderr: ${clip(stringValue(error.stderr) ?? '', 1200)}` : null,
+    stringValue(error.stdout) ? `stdout: ${clip(stringValue(error.stdout) ?? '', 1200)}` : null,
+    stringValue(error.signal) ? `signal: ${stringValue(error.signal)}` : null,
+    typeof error.code === 'number' || typeof error.code === 'string' ? `exit code: ${String(error.code)}` : null
+  ].filter((line): line is string => Boolean(line));
+  return new Error([...new Set(lines)].join('\n'));
+}
+
+function isOpenCliTimeoutError(error: Record<string, unknown>): boolean {
+  return error.killed === true || error.signal === 'SIGTERM' || error.code === 'ETIMEDOUT';
+}
+
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatDuration(ms: number): string {
+  return ms % 1000 === 0 ? `${ms / 1000}s` : `${ms}ms`;
 }
 
 function buildXPostMarkdown(post: XPostCandidate, thread?: XThreadArchive): string {

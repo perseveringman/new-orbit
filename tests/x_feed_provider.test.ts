@@ -175,4 +175,54 @@ console.log(JSON.stringify([
       process.env.PATH = originalPath;
     }
   });
+
+  it('surfaces OpenCLI stderr details when timeline fetch fails', async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-x-error-provider-'));
+    const originalPath = process.env.PATH;
+    const fakeOpenCli = path.join(tmp, 'opencli');
+    await writeFile(
+      fakeOpenCli,
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.join(' ') !== 'twitter timeline --type for-you --limit 20 -f json') {
+  console.error('unexpected args: ' + args.join(' '));
+  process.exit(64);
+}
+console.error('x timeline browser bridge is not ready');
+process.exit(1);`,
+      'utf8'
+    );
+    await chmod(fakeOpenCli, 0o755);
+    process.env.PATH = `${tmp}${path.delimiter}${originalPath ?? ''}`;
+
+    try {
+      await expect(defaultXFeedProvider.listCandidates(normalizeXSource('x:for-you'), { limit: 20 })).rejects.toThrow(
+        /stderr: x timeline browser bridge is not ready/
+      );
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('uses a configurable timeout for slow timeline fetches', async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-x-timeout-provider-'));
+    const originalPath = process.env.PATH;
+    const fakeOpenCli = path.join(tmp, 'opencli');
+    await writeFile(
+      fakeOpenCli,
+      `#!/usr/bin/env node
+setTimeout(() => {}, 1000);`,
+      'utf8'
+    );
+    await chmod(fakeOpenCli, 0o755);
+    process.env.PATH = `${tmp}${path.delimiter}${originalPath ?? ''}`;
+
+    try {
+      await expect(defaultXFeedProvider.listCandidates(normalizeXSource('x:following'), { limit: 20, timeout_ms: 50 })).rejects.toThrow(
+        /OpenCLI timed out after 50ms/
+      );
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
 });
