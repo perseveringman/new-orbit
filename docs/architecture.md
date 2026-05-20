@@ -378,13 +378,13 @@ Task Detail's Chat tab is now presented as Activity. It renders conversation tur
 events through Timeline cards for user/system/assistant messages, thinking, tool use/result, cost,
 error and done states.
 
-The global Dashboard is now a five-quadrant command center backed by `src/main/dashboard/`:
+The global Dashboard is now a built-in widget cockpit backed by `src/main/dashboard/`:
 
-- pending user attention (Inbox, blocked and ready/waiting tasks).
-- active agent work (doing tasks, active runs, runtime online count, today cost).
-- knowledge growth (Feed, Library, Thoughts, promotion and project counts).
-- thinking trail (Daily Review, recent Activity, Vision review age, recent thinking-trail dirs).
-- system health (vault/worktree/orbit disk usage, dirty project count, runtime status, budget).
+- widget definitions declare category, supported sizes, data layers, and permissions.
+- layout state is stored under `.orbit/dashboard/layout.json`, not as Markdown truth.
+- the default strategic layout preserves the original attention / agent / knowledge / thinking / health coverage.
+- additional widgets expose Feed radar, Library digestion, Resource momentum, and Area balance without bypassing Layer 0 to Layer 1 promotion gates.
+- user actions remain controlled jumps, synthesis triggers, or approval-gated writes through existing IPC / store boundaries.
 
 ## 15. Git and GitHub integration
 

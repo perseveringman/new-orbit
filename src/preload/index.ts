@@ -63,10 +63,12 @@ import type { ActivityEvent, ActivityQueryFilter } from '@shared/activity';
 import type {
   DashboardAgentStats,
   DashboardKnowledgeStats,
+  DashboardLayout,
   DashboardPendingStats,
   DashboardSummary,
   DashboardSystemHealth,
-  DashboardThinkingStats
+  DashboardThinkingStats,
+  DashboardWidgetRegistry
 } from '@shared/dashboard';
 import type { TraceableEvent, TraceableEventFilter } from '@shared/events';
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
@@ -406,7 +408,12 @@ const api: OrbitApi = {
     thinkingStats: (): Promise<DashboardThinkingStats> =>
       ipcRenderer.invoke(IPC.dashboard.thinkingStats),
     systemHealth: (): Promise<DashboardSystemHealth> =>
-      ipcRenderer.invoke(IPC.dashboard.systemHealth)
+      ipcRenderer.invoke(IPC.dashboard.systemHealth),
+    registry: (): Promise<DashboardWidgetRegistry> => ipcRenderer.invoke(IPC.dashboard.registry),
+    layout: (): Promise<DashboardLayout> => ipcRenderer.invoke(IPC.dashboard.layout),
+    saveLayout: (layout: DashboardLayout): Promise<DashboardLayout> =>
+      ipcRenderer.invoke(IPC.dashboard.saveLayout, layout),
+    resetLayout: (): Promise<DashboardLayout> => ipcRenderer.invoke(IPC.dashboard.resetLayout)
   },
   planner: {
     listProposals: (projectUid: string): Promise<PlanProposal[]> =>

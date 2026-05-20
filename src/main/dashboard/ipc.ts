@@ -3,11 +3,19 @@ import { IPC } from '@shared/ipc';
 import type {
   DashboardAgentStats,
   DashboardKnowledgeStats,
+  DashboardLayout,
   DashboardPendingStats,
   DashboardSummary,
   DashboardSystemHealth,
-  DashboardThinkingStats
+  DashboardThinkingStats,
+  DashboardWidgetRegistry
 } from '@shared/dashboard';
+import {
+  getDashboardLayout,
+  getDashboardWidgetRegistry,
+  resetDashboardLayout,
+  saveDashboardLayout
+} from './layout';
 import {
   getAgentStats,
   getDashboardSummary,
@@ -40,5 +48,17 @@ export function registerDashboardIpc(getVaultPath: () => string | null): void {
   );
   ipcMain.handle(IPC.dashboard.systemHealth, async (): Promise<DashboardSystemHealth> =>
     getSystemHealth(vaultPath())
+  );
+  ipcMain.handle(IPC.dashboard.registry, async (): Promise<DashboardWidgetRegistry> =>
+    getDashboardWidgetRegistry()
+  );
+  ipcMain.handle(IPC.dashboard.layout, async (): Promise<DashboardLayout> =>
+    getDashboardLayout(vaultPath())
+  );
+  ipcMain.handle(IPC.dashboard.saveLayout, async (_event, layout: DashboardLayout): Promise<DashboardLayout> =>
+    saveDashboardLayout(vaultPath(), layout)
+  );
+  ipcMain.handle(IPC.dashboard.resetLayout, async (): Promise<DashboardLayout> =>
+    resetDashboardLayout(vaultPath())
   );
 }

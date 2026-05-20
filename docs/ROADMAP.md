@@ -20,6 +20,18 @@ Layer 3  Surfaces         Timeline / Chat / Search / Dashboard / Resource / Area
 
 最重要的修正：**Feeds 不是用户数据。只有进入 Library 才算用户数据。**
 
+### 2026-05-20 — Dashboard Widget Registry foundation
+
+Status: **implemented (foundation)**.
+
+Delivered:
+
+- Global Dashboard now uses a built-in widget registry instead of a fixed-only five-quadrant layout.
+- Widget definitions declare category, supported sizes, data layers, and permissions.
+- Dashboard layout is persisted as app state under `.orbit/dashboard/layout.json`, not as Markdown truth.
+- Users can open the component workbench, enable/hide widgets, move widgets, cycle sizes, and reset to the strategic default.
+- New strategic widgets cover Feed radar, Library digestion, Resource momentum, and Area balance while preserving Layer 0 → Layer 1 promotion gates.
+
 ### 2026-05-13 — Ask Anywhere OpenClaw parity foundation
 
 Status: **implemented (foundation)**.
