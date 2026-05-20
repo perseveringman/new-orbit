@@ -271,6 +271,7 @@ describe('IPC contract', () => {
       [
         'cluster',
         'digest',
+        'event',
         'fetch',
         'itemsAttachAiSubtitleTranslation',
         'itemsContent',

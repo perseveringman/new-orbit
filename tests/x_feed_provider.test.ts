@@ -38,6 +38,58 @@ describe('X feed provider', () => {
     });
   });
 
+  it('fetches and parses X user profiles through OpenCLI', async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-x-profile-provider-'));
+    const originalPath = process.env.PATH;
+    const fakeOpenCli = path.join(tmp, 'opencli');
+    await writeFile(
+      fakeOpenCli,
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.join(' ') !== 'twitter profile claudeai -f json') {
+  console.error('unexpected args: ' + args.join(' '));
+  process.exit(64);
+}
+console.log(JSON.stringify([
+  {
+    screen_name: 'claudeai',
+    name: 'Claude',
+    bio: 'Claude is an AI assistant.',
+    followers: '1373937',
+    following: 2,
+    tweets: 466,
+    verified: true,
+    url: 'http://claude.ai',
+    profile_image_url_https: 'https://pbs.twimg.com/profile_images/claude_normal.jpg',
+    created_at: 'Thu Jul 10 13:50:48 +0000 2025'
+  }
+]));`,
+      'utf8'
+    );
+    await chmod(fakeOpenCli, 0o755);
+    process.env.PATH = `${tmp}${path.delimiter}${originalPath ?? ''}`;
+
+    try {
+      await expect(defaultXFeedProvider.fetchProfile?.('claudeai')).resolves.toEqual(
+        expect.objectContaining({
+          handle: 'claudeai',
+          name: 'Claude',
+          bio: 'Claude is an AI assistant.',
+          followers: 1373937,
+          following: 2,
+          tweets: 466,
+          verified: true,
+          url: 'http://claude.ai/',
+          profile_url: 'https://x.com/claudeai',
+          avatar_url: 'https://pbs.twimg.com/profile_images/claude_normal.jpg',
+          created_at: '2025-07-10T13:50:48.000Z'
+        })
+      );
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
   it('calls OpenCLI search with from:handle and parses recent posts', async () => {
     tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-x-provider-'));
     const originalPath = process.env.PATH;
@@ -80,6 +132,176 @@ console.log(JSON.stringify([
       ]);
     } finally {
       process.env.PATH = originalPath;
+    }
+  });
+
+  it('replaces t.co links from X URL entities before storing post text', async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-x-entities-provider-'));
+    const originalPath = process.env.PATH;
+    const fakeOpenCli = path.join(tmp, 'opencli');
+    await writeFile(
+      fakeOpenCli,
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.join(' ') !== 'twitter search from:jakevin7 --filter live --limit 20 -f json') {
+  console.error('unexpected args: ' + args.join(' '));
+  process.exit(64);
+}
+console.log(JSON.stringify([
+  {
+    id: '2056340861773136121',
+    author: 'jakevin7',
+    text: 'Read this https://t.co/abc123 and this https://t.co/def456',
+    url: 'https://x.com/i/status/2056340861773136121',
+    entities: {
+      urls: [
+        {
+          url: 'https://t.co/abc123',
+          expanded_url: 'https://example.com/article?x=1&y=2',
+          display_url: 'example.com/article',
+          title: 'Example article'
+        },
+        {
+          url: 'https://t.co/def456',
+          expanded_url: 'https://docs.example.com/orbit'
+        }
+      ]
+    }
+  }
+]));`,
+      'utf8'
+    );
+    await chmod(fakeOpenCli, 0o755);
+    process.env.PATH = `${tmp}${path.delimiter}${originalPath ?? ''}`;
+
+    try {
+      const posts = await defaultXFeedProvider.listCandidates(normalizeXSource('@jakevin7'), { limit: 20 });
+      expect(posts[0].text).toBe('Read this https://example.com/article?x=1&y=2 and this https://docs.example.com/orbit');
+      expect(posts[0].text).not.toContain('https://t.co/');
+      expect(posts[0].url_entities).toEqual([
+        expect.objectContaining({
+          url: 'https://t.co/abc123',
+          expanded_url: 'https://example.com/article?x=1&y=2',
+          display_url: 'example.com/article',
+          title: 'Example article',
+          resolved_via: 'x_entity'
+        }),
+        expect.objectContaining({
+          url: 'https://t.co/def456',
+          expanded_url: 'https://docs.example.com/orbit',
+          resolved_via: 'x_entity'
+        })
+      ]);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('falls back to bounded t.co redirect resolution when entities are missing', async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-x-tco-provider-'));
+    const originalPath = process.env.PATH;
+    const fakeOpenCli = path.join(tmp, 'opencli');
+    await writeFile(
+      fakeOpenCli,
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.join(' ') !== 'twitter search from:jakevin7 --filter live --limit 20 -f json') {
+  console.error('unexpected args: ' + args.join(' '));
+  process.exit(64);
+}
+console.log(JSON.stringify([
+  {
+    id: '2056340861773136121',
+    author: 'jakevin7',
+    text: 'No entities here https://t.co/raw123',
+    url: 'https://x.com/i/status/2056340861773136121'
+  }
+]));`,
+      'utf8'
+    );
+    await chmod(fakeOpenCli, 0o755);
+    process.env.PATH = `${tmp}${path.delimiter}${originalPath ?? ''}`;
+    const resolved: string[] = [];
+
+    try {
+      const posts = await defaultXFeedProvider.listCandidates(normalizeXSource('@jakevin7'), {
+        limit: 20,
+        tco_url_resolver: async (url, options) => {
+          resolved.push(`${url}:${options?.timeout_ms ?? 'none'}`);
+          return 'https://example.com/from-redirect';
+        },
+        tco_timeout_ms: 123
+      });
+      expect(resolved).toEqual(['https://t.co/raw123:123']);
+      expect(posts[0].text).toBe('No entities here https://example.com/from-redirect');
+      expect(posts[0].url_entities).toEqual([
+        expect.objectContaining({
+          url: 'https://t.co/raw123',
+          expanded_url: 'https://example.com/from-redirect',
+          resolved_via: 'tco_redirect'
+        })
+      ]);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('uses curl for t.co resolution when the local environment requires an HTTP proxy', async () => {
+    tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-x-tco-curl-provider-'));
+    const originalPath = process.env.PATH;
+    const originalHttpsProxy = process.env.https_proxy;
+    const fakeOpenCli = path.join(tmp, 'opencli');
+    const fakeCurl = path.join(tmp, 'curl');
+    await writeFile(
+      fakeOpenCli,
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.join(' ') !== 'twitter search from:jakevin7 --filter live --limit 20 -f json') {
+  console.error('unexpected args: ' + args.join(' '));
+  process.exit(64);
+}
+console.log(JSON.stringify([
+  {
+    id: '2056340861773136121',
+    author: 'jakevin7',
+    text: 'Proxy-only link https://t.co/proxy1',
+    url: 'https://x.com/i/status/2056340861773136121'
+  }
+]));`,
+      'utf8'
+    );
+    await writeFile(
+      fakeCurl,
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (!args.includes('https://t.co/proxy1')) {
+  console.error('unexpected curl args: ' + args.join(' '));
+  process.exit(64);
+}
+console.log('HTTP/2 301');
+console.log('location: https://example.com/proxy-resolved');
+`,
+      'utf8'
+    );
+    await chmod(fakeOpenCli, 0o755);
+    await chmod(fakeCurl, 0o755);
+    process.env.PATH = `${tmp}${path.delimiter}${originalPath ?? ''}`;
+    process.env.https_proxy = 'http://localhost:7897';
+
+    try {
+      const posts = await defaultXFeedProvider.listCandidates(normalizeXSource('@jakevin7'), { limit: 20 });
+      expect(posts[0].text).toBe('Proxy-only link https://example.com/proxy-resolved');
+      expect(posts[0].url_entities).toEqual([
+        expect.objectContaining({
+          url: 'https://t.co/proxy1',
+          expanded_url: 'https://example.com/proxy-resolved',
+          resolved_via: 'tco_redirect'
+        })
+      ]);
+    } finally {
+      process.env.PATH = originalPath;
+      if (originalHttpsProxy === undefined) delete process.env.https_proxy;
+      else process.env.https_proxy = originalHttpsProxy;
     }
   });
 

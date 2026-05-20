@@ -4,6 +4,7 @@ import { distillExternalSessionPrompt } from './distill.external_session.v1';
 import { distillLibraryPrompt } from './distill.library.v1';
 import { emergeResourcePrompt } from './emerge.resource.v1';
 import { entityProfilePrompt } from './entity.profile.v1';
+import { feedClusterPrompt, feedDailyReportPrompt, feedDigestPrompt, feedItemAnalysisPrompt } from './feed.v1';
 import { personalQAPrompt } from './qa.personal.v1';
 import { relateNotesPrompt } from './relate.notes.v1';
 import { searchAnswerPrompt } from './search.answer.v1';
@@ -33,7 +34,11 @@ const PROMPTS = [
   relateNotesPrompt,
   classifyAreaPrompt,
   searchAnswerPrompt,
-  personalQAPrompt
+  personalQAPrompt,
+  feedItemAnalysisPrompt,
+  feedDigestPrompt,
+  feedClusterPrompt,
+  feedDailyReportPrompt
 ] satisfies SynthesisPromptTemplate[];
 
 export function getPromptTemplate(kind: SynthesisKind): SynthesisPromptTemplate {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Ban, RefreshCw } from 'lucide-react';
 import type { FeedSource, FeedTask, FeedTaskSnapshot, FeedTaskStatus } from '@shared/feed';
 
@@ -7,6 +7,7 @@ export function FeedTaskCenterPanel(): JSX.Element {
   const [tasks, setTasks] = useState<FeedTaskSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reloadTimerRef = useRef<number | null>(null);
 
   async function reload(): Promise<void> {
     try {
@@ -24,6 +25,21 @@ export function FeedTaskCenterPanel(): JSX.Element {
 
   useEffect(() => {
     void reload();
+  }, []);
+
+  useEffect(() => {
+    const off = window.orbit.feeds.onEvent((event) => {
+      if (event.type === 'tasks_changed' && event.snapshot) setTasks(event.snapshot);
+      if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current);
+      reloadTimerRef.current = window.setTimeout(() => {
+        reloadTimerRef.current = null;
+        void reload();
+      }, 120);
+    });
+    return () => {
+      off();
+      if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current);
+    };
   }, []);
 
   const activeTaskCount = (tasks?.running ?? 0) + (tasks?.queued ?? 0) + (tasks?.retry_wait ?? 0);
@@ -95,12 +111,19 @@ export function FeedTaskCenterPanel(): JSX.Element {
             刷新全部
           </button>
         </div>
-        <div className="mt-3 grid grid-cols-4 gap-1">
+        <div className="mt-3 grid grid-cols-5 gap-1">
           <TaskStat label="运行" value={tasks?.running ?? 0} tone="sky" />
           <TaskStat label="排队" value={tasks?.queued ?? 0} tone="neutral" />
           <TaskStat label="重试" value={tasks?.retry_wait ?? 0} tone="amber" />
+          <TaskStat label="成功" value={tasks?.success ?? 0} tone="emerald" />
           <TaskStat label="失败" value={tasks?.failed ?? 0} tone="rose" />
         </div>
+        {tasks?.total ? (
+          <div className="mt-2 rounded-md bg-neutral-50 px-2.5 py-2 text-[11px] text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
+            最近 {tasks.total} 个任务，共抓取 {tasks.fetched} 条，新增 {tasks.created} 条
+            {tasks.cancelled ? `，取消 ${tasks.cancelled} 个` : ''}
+          </div>
+        ) : null}
         {tasks?.lanes.length ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {tasks.lanes.map((lane) => (
@@ -227,12 +250,13 @@ function TaskStat({
 }: {
   label: string;
   value: number;
-  tone: 'sky' | 'neutral' | 'amber' | 'rose';
+  tone: 'sky' | 'neutral' | 'amber' | 'emerald' | 'rose';
 }): JSX.Element {
   const className = {
     sky: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-200',
     neutral: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300',
     amber: 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-100',
+    emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200',
     rose: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200'
   }[tone];
   return (

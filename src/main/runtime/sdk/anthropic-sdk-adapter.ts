@@ -55,9 +55,10 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
   async stream(
     invocation: SDKResolvedInvocation,
     input: SDKInvocationInput,
-    emit: SDKRuntimeEventSink
+    emit: SDKRuntimeEventSink,
+    signal?: AbortSignal
   ): Promise<SDKInvocationResult> {
-    const turn = await this.streamAgentTurn(invocation, { ...input, tools: undefined }, emit);
+    const turn = await this.streamAgentTurn(invocation, { ...input, tools: undefined }, emit, signal);
     return {
       text: turn.text,
       eventIds: turn.eventIds,

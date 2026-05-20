@@ -14,6 +14,7 @@ import type {
   SynthesisSource
 } from '@shared/synthesis';
 import type { EvidenceSelector } from '@shared/evidence';
+import type { FeedClusterPayload, FeedDigestPayload, FeedItemAnalysisPayload, FeedReportPayload } from '@shared/feed';
 import type { NoteWorkbenchPayload } from '@shared/note';
 import type { RuntimeRouteDecision, SDKInvocationInput } from '@shared/runtime';
 import type { SDKInvocationResult } from '../runtime/sdk/anthropic-sdk-adapter';
@@ -25,11 +26,15 @@ export interface SynthesisRunnerOptions {
   router?: SynthesisRuntimeRouter | null;
   maxBudgetUsd?: number;
   requireSdk?: boolean;
+  timeoutMs?: number;
 }
 
 export interface SynthesisRuntimeRouter {
   decide(input: { mode: 'synthesis'; modelTier?: 'heavy' }): Promise<RuntimeRouteDecision>;
-  stream(input: SDKInvocationInput, windows: () => BrowserWindow[]): Promise<SDKInvocationResult>;
+  stream(
+    input: SDKInvocationInput & { signal?: AbortSignal },
+    windows: () => BrowserWindow[]
+  ): Promise<SDKInvocationResult>;
 }
 
 export class SynthesisRunner {
@@ -54,20 +59,29 @@ export class SynthesisRunner {
 
     try {
       if (this.options.router) {
-        const decision = await this.options.router.decide({ mode: 'synthesis', modelTier: 'heavy' });
+        const decision = await withTimeout(
+          this.options.router.decide({ mode: 'synthesis', modelTier: 'heavy' }),
+          this.options.timeoutMs,
+          'synthesis_route_timeout'
+        );
         if (decision.track === 'sdk') {
-          const result = await this.options.router.stream(
-            {
-              endpointId: decision.endpointId,
-              model: decision.model,
-              modelTier: 'heavy',
-              system: rendered.system,
-              messages: [{ role: 'user', content: rendered.user }],
-              traceId,
-              conversationId: traceId,
-              mode: 'synthesis'
-            },
-            () => []
+          const controller = this.options.timeoutMs ? new AbortController() : null;
+          const streamInput: SDKInvocationInput & { signal?: AbortSignal } = {
+            endpointId: decision.endpointId,
+            model: decision.model,
+            modelTier: 'heavy',
+            system: rendered.system,
+            messages: [{ role: 'user', content: rendered.user }],
+            traceId,
+            conversationId: traceId,
+            mode: 'synthesis',
+            ...(controller ? { signal: controller.signal } : {})
+          };
+          const result = await withTimeout(
+            this.options.router.stream(streamInput, () => []),
+            this.options.timeoutMs,
+            'synthesis_stream_timeout',
+            () => controller?.abort()
           );
           const payload = template.parse(result.text);
           return this.store.writeFresh({
@@ -142,6 +156,23 @@ export function createSynthesisJob(input: EnsureSynthesisInput): SynthesisJob {
   };
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number | undefined,
+  errorCode: string,
+  onTimeout?: () => void
+): Promise<T> {
+  if (timeoutMs === undefined || timeoutMs <= 0) return promise;
+  let timeoutId: ReturnType<typeof setTimeout>;
+  return new Promise<T>((resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(`${errorCode}:${timeoutMs}`));
+    }, timeoutMs);
+    promise.then(resolve, reject).finally(() => clearTimeout(timeoutId));
+  });
+}
+
 function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknown {
   if (kind === 'summary.daily') return localDailySummary(sources);
   if (kind === 'summary.entity') return localEntitySummary(sources);
@@ -163,6 +194,10 @@ function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknow
   if (kind === 'qa.personal') return localPersonalQA(sources);
   if (kind === 'distill.external_session') return localExternalSessionDistill(sources);
   if (kind === 'entity.profile') return localEntityProfile(sources);
+  if (kind === 'feed.item.analysis') return localFeedItemAnalysis(sources);
+  if (kind === 'feed.digest') return localFeedDigest(sources);
+  if (kind === 'feed.cluster') return localFeedCluster(sources);
+  if (kind === 'feed.report.daily') return localFeedReport(sources);
   return {};
 }
 
@@ -328,6 +363,228 @@ function localEntityProfile(sources: SynthesisSource[]): EntityProfilePayload {
     evidence,
     source_hash: String(raw?.['source_hash'] ?? hashSources(sources))
   };
+}
+
+function localFeedItemAnalysis(sources: SynthesisSource[]): FeedItemAnalysisPayload {
+  const source = sources[0];
+  const text = `${source?.title ?? ''}\n${source?.excerpt ?? ''}`;
+  const entities = extractCapitalizedEntities(text).slice(0, 10);
+  const related = localFeedRelatedRefs(source);
+  const relevance = localFeedRelevance(source);
+  const novelty = localFeedNovelty(source, sources);
+  const triage = relevance >= 0.72 ? 'save' : relevance >= 0.48 ? 'skim' : 'ignore';
+  const itemId = String(source?.ref ?? 'feed-item');
+  const summary = trimSentence(String(source?.excerpt ?? source?.title ?? 'Feed signal'), 420);
+  return {
+    item_id: itemId,
+    summary,
+    key_points: localFeedLines(source).slice(0, 5),
+    key_claims: localFeedLines(source).slice(0, 4),
+    entities,
+    why_it_matters: related.length
+      ? `与 ${related.map((item) => item.title ?? item.ref).join('、')} 有显式关联，值得进一步分拣。`
+      : relevance >= 0.5
+        ? '该信号与来源标题、标签或摘要中的高频主题相关，适合快速扫读后决定是否保存。'
+        : '目前缺少与用户 Area/Resource 的明确关联，适合略读或忽略。',
+    triage_label: triage,
+    relevance_score: relevance,
+    novelty_score: novelty,
+    confidence: source?.excerpt ? 0.62 : 0.38,
+    related,
+    suggested_actions: [
+      triage === 'ignore' ? '忽略此信号，避免污染资料库。' : '判断是否保存到资料库。',
+      related.length ? '保存时带上相关 Area/Resource 引用。' : '如果反复出现，再考虑建立 Resource 或 Watch。'
+    ],
+    action_candidates: [
+      triage === 'ignore'
+        ? { kind: 'ignore', label: '忽略', reason: '相关性较低，当前不值得进入 Library。', item_ids: [itemId], confidence: 0.62 }
+        : {
+            kind: related.some((item) => item.kind === 'resource') ? 'save_to_library_with_resource' : 'save_to_library',
+            label: '保存到资料库',
+            reason: related.length ? '此信号与已有关注方向有明确连接。' : '内容可能值得读完后再提炼。',
+            item_ids: [itemId],
+            resource_ref: related.find((item) => item.kind === 'resource')?.ref,
+            confidence: relevance
+          }
+    ],
+    risks: source?.excerpt ? [] : ['缺少可读正文，判断主要依赖标题和来源元数据。']
+  };
+}
+
+function localFeedDigest(sources: SynthesisSource[]): FeedDigestPayload {
+  const date = dateFromFeedScope(sources);
+  const ranked = [...sources].sort((a, b) => localFeedRelevance(b) - localFeedRelevance(a));
+  return {
+    date,
+    item_count: sources.length,
+    headline: sources.length ? `${sources.length} 条 Feed 信号，优先处理 ${Math.min(5, sources.length)} 条` : '今天没有新的 Feed 信号',
+    highlights: ranked.slice(0, 8).map((source) => ({
+      item_id: String(source.ref ?? ''),
+      source_id: String(source.metadata?.['source_id'] ?? ''),
+      title: source.title ?? String(source.ref ?? 'Untitled'),
+      url: String(source.metadata?.['url'] ?? ''),
+      published_at: typeof source.metadata?.['published_at'] === 'string' ? source.metadata['published_at'] : undefined,
+      summary: trimSentence(String(source.excerpt ?? ''), 240),
+      why_it_matters: localFeedRelatedRefs(source).length
+        ? '命中已有 Area/Resource 关注方向。'
+        : '来自订阅源的新信号，适合快速扫读。',
+      relevance_score: localFeedRelevance(source),
+      novelty_score: localFeedNovelty(source, sources),
+      suggested_action: localFeedRelevance(source) >= 0.55 ? 'save_to_library' : 'watch'
+    })),
+    recommendations: ranked.slice(0, 3).map((source) => ({
+      kind: localFeedRelevance(source) >= 0.55 ? 'save_to_library' : 'watch',
+      label: localFeedRelevance(source) >= 0.55 ? '优先判断是否保存' : '观察是否重复出现',
+      reason: source.title ?? source.ref ?? 'Feed signal',
+      item_ids: source.ref ? [source.ref] : [],
+      confidence: localFeedRelevance(source)
+    }))
+  };
+}
+
+function localFeedCluster(sources: SynthesisSource[]): FeedClusterPayload {
+  const buckets = new Map<string, SynthesisSource[]>();
+  for (const source of sources) {
+    const label = localFeedClusterLabel(source);
+    buckets.set(label, [...(buckets.get(label) ?? []), source]);
+  }
+  return {
+    scope: String(sources[0]?.metadata?.['scope'] ?? 'all'),
+    clusters: [...buckets.entries()].slice(0, 8).map(([label, bucket]) => ({
+      label,
+      item_ids: bucket.map((source) => String(source.ref ?? '')).filter(Boolean),
+      source_ids: uniqueStrings(bucket.map((source) => String(source.metadata?.['source_id'] ?? '')).filter(Boolean)),
+      rationale: `按标题、摘要和显式关注方向聚合了 ${bucket.length} 条信号。`,
+      key_claims: bucket.flatMap((source) => localFeedLines(source).slice(0, 1)).slice(0, 5),
+      relevance_score: Math.max(...bucket.map(localFeedRelevance), 0),
+      novelty_score: Math.max(...bucket.map((source) => localFeedNovelty(source, sources)), 0),
+      related: bucket.flatMap(localFeedRelatedRefs).slice(0, 5),
+      suggested_actions: [
+        {
+          kind: bucket.some((source) => localFeedRelevance(source) >= 0.55) ? 'save_to_library' : 'watch',
+          label: bucket.some((source) => localFeedRelevance(source) >= 0.55) ? '保存代表性条目' : '继续观察',
+          reason: `${label} 主题出现 ${bucket.length} 次。`,
+          item_ids: bucket.map((source) => String(source.ref ?? '')).filter(Boolean),
+          confidence: Math.min(0.85, 0.45 + bucket.length * 0.1)
+        }
+      ]
+    }))
+  };
+}
+
+function localFeedReport(sources: SynthesisSource[]): FeedReportPayload {
+  const digestArtifactId = stringFromMetadata(sources[0], 'digest_artifact_id');
+  const clusterArtifactId = stringFromMetadata(sources[0], 'cluster_artifact_id');
+  const bySource = new Map<string, SynthesisSource[]>();
+  for (const source of sources) {
+    const key = String(source.metadata?.['source_id'] ?? 'unknown');
+    bySource.set(key, [...(bySource.get(key) ?? []), source]);
+  }
+  const ranked = [...sources].sort((a, b) => localFeedRelevance(b) - localFeedRelevance(a));
+  return {
+    date: dateFromFeedScope(sources),
+    item_count: sources.length,
+    ...(digestArtifactId ? { digest_artifact_id: digestArtifactId } : {}),
+    ...(clusterArtifactId ? { cluster_artifact_id: clusterArtifactId } : {}),
+    headline: sources.length ? `今日 Feed 有 ${sources.length} 条信号，${ranked[0]?.title ?? '暂无明显主线'}` : '今日 Feed 没有新信号',
+    executive_summary: ranked.length
+      ? `优先关注：${ranked.slice(0, 3).map((source) => source.title ?? source.ref).join(' / ')}。`
+      : '没有足够信号生成报告。',
+    sections: [...bySource.entries()].map(([sourceId, bucket]) => ({
+      title: sourceId,
+      item_ids: bucket.map((source) => String(source.ref ?? '')).filter(Boolean),
+      summary: bucket.slice(0, 3).map((source) => source.title ?? source.ref ?? 'Untitled').join(' / '),
+      key_changes: bucket.flatMap((source) => localFeedLines(source).slice(0, 1)).slice(0, 4),
+      repeated_claims: repeatedFeedClaims(bucket),
+      why_it_matters: bucket.some((source) => localFeedRelatedRefs(source).length > 0)
+        ? '该组信号命中已有关注方向。'
+        : '该组信号目前主要作为来源动态观察。',
+      recommended_item_ids: bucket
+        .filter((source) => localFeedRelevance(source) >= 0.55)
+        .map((source) => String(source.ref ?? ''))
+        .filter(Boolean)
+    })),
+    recommendations: ranked.slice(0, 5).map((source) => ({
+      kind: localFeedRelevance(source) >= 0.55 ? 'save_to_library' : 'watch',
+      label: localFeedRelevance(source) >= 0.55 ? '保存代表性信号' : '保持观察',
+      reason: source.title ?? source.ref ?? 'Feed signal',
+      item_ids: source.ref ? [source.ref] : [],
+      confidence: localFeedRelevance(source)
+    }))
+  };
+}
+
+function localFeedRelatedRefs(source: SynthesisSource | undefined): NonNullable<FeedItemAnalysisPayload['related']> {
+  const areaRefs = stringArrayFromMetadata(source, 'area_refs');
+  const resourceRefs = stringArrayFromMetadata(source, 'resource_refs');
+  return [
+    ...areaRefs.map((ref) => ({
+      kind: 'area' as const,
+      ref,
+      confidence: 0.72,
+      reason: '来源显式关联到这个 Area。'
+    })),
+    ...resourceRefs.map((ref) => ({
+      kind: 'resource' as const,
+      ref,
+      confidence: 0.78,
+      reason: '来源显式关联到这个 Resource。'
+    }))
+  ];
+}
+
+function localFeedRelevance(source: SynthesisSource | undefined): number {
+  if (!source) return 0;
+  let score = 0.35;
+  if (localFeedRelatedRefs(source).length > 0) score += 0.35;
+  if (stringArrayFromMetadata(source, 'tags').length > 0) score += 0.1;
+  if (String(source.excerpt ?? '').length > 280) score += 0.08;
+  if (source.metadata?.['source_priority'] === 'high') score += 0.12;
+  if (source.metadata?.['status'] === 'saved') score += 0.12;
+  return Math.max(0, Math.min(1, score));
+}
+
+function localFeedNovelty(source: SynthesisSource | undefined, allSources: SynthesisSource[]): number {
+  if (!source) return 0;
+  const label = localFeedClusterLabel(source);
+  const peers = allSources.filter((item) => localFeedClusterLabel(item) === label).length;
+  const base = peers <= 1 ? 0.76 : peers === 2 ? 0.58 : 0.42;
+  return Math.max(0, Math.min(1, base));
+}
+
+function localFeedLines(source: SynthesisSource | undefined): string[] {
+  const excerpt = String(source?.excerpt ?? '');
+  const lines = meaningfulLines(excerpt).slice(0, 8);
+  return lines.length ? lines : [trimSentence(String(source?.title ?? source?.ref ?? 'Feed signal'), 160)];
+}
+
+function localFeedClusterLabel(source: SynthesisSource): string {
+  const text = `${source.title ?? ''} ${source.excerpt ?? ''}`;
+  const explicit = stringArrayFromMetadata(source, 'resource_refs')[0] ?? stringArrayFromMetadata(source, 'area_refs')[0];
+  if (explicit) return explicit;
+  return extractCapitalizedEntities(text)[0]?.toLowerCase() ?? text.split(/\s+/u).find((part) => part.length > 4)?.toLowerCase() ?? 'signals';
+}
+
+function repeatedFeedClaims(sources: SynthesisSource[]): string[] {
+  const counts = new Map<string, number>();
+  for (const source of sources) {
+    for (const line of localFeedLines(source).slice(0, 3)) {
+      const key = trimSentence(line.toLowerCase(), 80);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([line]) => line)
+    .slice(0, 5);
+}
+
+function dateFromFeedScope(sources: SynthesisSource[]): string {
+  const scope = String(sources[0]?.metadata?.['scope_key'] ?? sources[0]?.metadata?.['scope'] ?? '');
+  const match = scope.match(/\d{4}-\d{2}-\d{2}/u);
+  if (match) return match[0];
+  const fetchedAt = sources.map((source) => String(source.metadata?.['fetched_at'] ?? '')).find(Boolean);
+  return fetchedAt?.match(/\d{4}-\d{2}-\d{2}/u)?.[0] ?? new Date().toISOString().slice(0, 10);
 }
 
 function selectorFromSource(source: SynthesisSource | undefined): EvidenceSelector | null {

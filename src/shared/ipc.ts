@@ -165,6 +165,7 @@ import type {
   EnqueueFeedTaskResult,
   FeedAiSubtitleTranslationInput,
   FeedAiSubtitleTranslationResult,
+  FeedChangeEvent,
   FeedClusterPayload,
   FeedDigestPayload,
   FeedFetchResult,
@@ -664,7 +665,8 @@ export const IPC = {
     itemsAttachAiSubtitleTranslation: 'feeds:items:attachAiSubtitleTranslation',
     digest: 'feeds:digest',
     cluster: 'feeds:cluster',
-    report: 'feeds:report'
+    report: 'feeds:report',
+    event: 'feeds:event'
   },
   notes: {
     list: 'notes:list',
@@ -1806,6 +1808,7 @@ export interface OrbitApi {
     digest(date: string): Promise<FeedSynthesisResult<FeedDigestPayload>>;
     cluster(scope?: string): Promise<FeedSynthesisResult<FeedClusterPayload>>;
     report(date: string): Promise<FeedSynthesisResult<FeedReportPayload>>;
+    onEvent(cb: (event: FeedChangeEvent) => void): () => void;
   };
   knowledgeBase: {
     list(): Promise<KnowledgeBase[]>;

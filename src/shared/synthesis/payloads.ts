@@ -1,5 +1,12 @@
 import type { ResourceSuggestion } from '../resource';
-import type { FeedClusterPayload, FeedDigestPayload } from '../feed';
+import type {
+  FeedAiSubtitlePayload,
+  FeedClusterPayload,
+  FeedDigestPayload,
+  FeedItemAnalysisPayload,
+  FeedItemTranslationPayload,
+  FeedReportPayload
+} from '../feed';
 import type { NoteRelationSuggestion, NoteWorkbenchPayload } from '../note';
 import type { EvidenceSelector } from '../evidence';
 import type { SynthesisSource } from './types';
@@ -168,4 +175,8 @@ export interface SynthesisPayloadMap {
   'report.open_loops': OpenLoopPayload;
   'feed.digest': FeedDigestPayload;
   'feed.cluster': FeedClusterPayload;
+  'feed.report.daily': FeedReportPayload;
+  'feed.item.translation': FeedItemTranslationPayload;
+  'feed.youtube.subtitle.ai': FeedAiSubtitlePayload;
+  'feed.item.analysis': FeedItemAnalysisPayload;
 }

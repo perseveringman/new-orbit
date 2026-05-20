@@ -89,7 +89,10 @@ export class RuntimeRouter {
     };
   }
 
-  async stream(input: SDKInvocationInput, windows: () => BrowserWindow[]): Promise<SDKInvocationResult> {
+  async stream(
+    input: SDKInvocationInput & { signal?: AbortSignal },
+    windows: () => BrowserWindow[]
+  ): Promise<SDKInvocationResult> {
     const resolved = await this.resolveInvocation(input);
     await publishTraceableEvent({
       type: 'runtime.sdk.invocation.started',
@@ -130,7 +133,7 @@ export class RuntimeRouter {
           }
         });
       }
-    });
+    }, input.signal);
     await publishTraceableEvent({
       type: 'runtime.sdk.invocation.completed',
       kind: 'runtime.sdk.invocation.completed',

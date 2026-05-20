@@ -25,7 +25,9 @@ import {
   type HackerNewsStoryCandidate
 } from '../src/main/feed/hackernews';
 import { createLibraryStore } from '../src/main/library/store';
+import type { SynthesisRuntimeRouter } from '../src/main/synthesis/runner';
 import { createSynthesisStore } from '../src/main/synthesis/store';
+import type { RuntimeRouteDecision } from '../src/shared/runtime';
 
 let tmp: string;
 
@@ -120,6 +122,13 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(promoted.library_item.frontmatter.promoted_enrichment_artifact_ids).toEqual(promoted.feed_item.enrichment_artifact_ids);
     const analysis = await createSynthesisStore(tmp).get(promoted.feed_item.enrichment_artifact_ids?.[0] ?? '');
     expect(analysis?.kind).toBe('feed.item.analysis');
+    expect(analysis?.payload).toMatchObject({
+      item_id: first.id,
+      triage_label: expect.any(String),
+      relevance_score: expect.any(Number),
+      novelty_score: expect.any(Number),
+      action_candidates: expect.any(Array)
+    });
     expect((await createLibraryStore(tmp).list()).map((item) => item.frontmatter.id)).toEqual([
       promoted.library_item.frontmatter.id
     ]);
@@ -146,7 +155,43 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(cluster.artifact.scope_key).toBe(`feed.cluster:${source.id}`);
     expect(report.artifact.kind).toBe('feed.report.daily');
     expect(report.artifact.payload.digest_artifact_id).toBe(digest.artifact.id);
+    expect(digest.artifact.payload.highlights[0]).toMatchObject({
+      relevance_score: expect.any(Number),
+      suggested_action: expect.any(String)
+    });
+    expect(cluster.artifact.payload.clusters[0]).toMatchObject({
+      suggested_actions: expect.any(Array)
+    });
+    expect(report.artifact.payload.headline).toBeTruthy();
     expect(await createLibraryStore(tmp).list()).toEqual([]);
+  });
+
+  it('falls back to local feed synthesis when SDK synthesis times out', async () => {
+    const router: SynthesisRuntimeRouter = {
+      decide: async (): Promise<RuntimeRouteDecision> => ({
+        mode: 'synthesis',
+        track: 'sdk',
+        runtime: 'sdk:test',
+        endpointId: 'test',
+        model: 'test-model',
+        reason: 'test'
+      }),
+      stream: () => new Promise<never>(() => {})
+    };
+    const feed = createFeedStore(tmp, {
+      now: () => new Date('2026-04-28T12:00:00.000Z'),
+      fetchText: async () => rss,
+      synthesisRouter: router,
+      synthesisTimeoutMs: 5
+    });
+    const source = await feed.createSource({ url: 'https://example.com/rss.xml' });
+    await feed.fetch(source.id);
+
+    const digest = await feed.digest('2026-04-28');
+
+    expect(digest.artifact.status).toBe('fresh');
+    expect(digest.artifact.provenance.runtime).toBe('local:heuristic');
+    expect(digest.artifact.payload.headline).toContain('今日 2 条信号');
   });
 
   it('fetches YouTube subscriptions as Layer 0 videos and promotes transcript snapshots to Library', async () => {
@@ -309,11 +354,12 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
   it('fetches X account subscriptions as Layer 0 posts and promotes bookmarks to Library', async () => {
     const listLimits: Array<number | undefined> = [];
     const threadRequests: string[] = [];
+    const profileRequests: string[] = [];
     const candidates: XPostCandidate[] = [
       {
         id: '2056340861773136121',
         author: 'jakevin7',
-        text: 'OpenCLI 支持了官方的 weread 微信读书 CLI。',
+        text: 'OpenCLI 支持了官方的 weread 微信读书 CLI：https://weread.qq.com/web/bookDetail/abc123',
         url: 'https://x.com/i/status/2056340861773136121',
         canonical_url: 'https://x.com/jakevin7/status/2056340861773136121',
         created_at: 'Mon May 18 11:47:21 +0000 2026',
@@ -321,7 +367,15 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
         likes: 24,
         retweets: 3,
         views: 3011,
-        is_reply: false
+        is_reply: false,
+        url_entities: [
+          {
+            url: 'https://t.co/weread',
+            expanded_url: 'https://weread.qq.com/web/bookDetail/abc123',
+            display_url: 'weread.qq.com/web/bookDetail/abc123',
+            resolved_via: 'x_entity'
+          }
+        ]
       },
       {
         id: '2056334923070582834',
@@ -341,6 +395,23 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
       listCandidates: async (_source, options) => {
         listLimits.push(options?.limit);
         return candidates;
+      },
+      fetchProfile: async (handle) => {
+        profileRequests.push(handle);
+        return {
+          handle,
+          name: 'Jake Vin',
+          bio: 'Builds local-first tools.',
+          location: 'Internet',
+          url: 'https://example.com/jake',
+          profile_url: `https://x.com/${handle}`,
+          avatar_url: `https://cdn.example.com/${handle}.jpg`,
+          verified: true,
+          followers: 1200,
+          following: 80,
+          tweets: 240,
+          created_at: '2020-01-01T00:00:00.000Z'
+        };
       },
       fetchThread: async (tweetId) => {
         threadRequests.push(tweetId);
@@ -365,6 +436,7 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(source.url).toBe('https://x.com/jakevin7');
     expect(source.metadata).toMatchObject({ provider: 'x', x_handle: 'jakevin7' });
     expect(listLimits).toEqual([20, 20]);
+    expect(profileRequests).toEqual(['jakevin7']);
     expect(first[0]).toMatchObject({ fetched: 1, created: 1, skipped: 0 });
     expect(second[0]).toMatchObject({ fetched: 1, created: 0, skipped: 1 });
     expect(items).toHaveLength(1);
@@ -378,12 +450,42 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
         author_handle: 'jakevin7',
         is_reply: false,
         like_count: 24,
-        view_count: 3011
+        view_count: 3011,
+        author_name: 'Jake Vin',
+        author_bio: 'Builds local-first tools.',
+        author_location: 'Internet',
+        author_url: 'https://example.com/jake',
+        author_profile_url: 'https://x.com/jakevin7',
+        author_avatar_url: 'https://cdn.example.com/jakevin7.jpg',
+        author_verified: true,
+        author_followers_count: 1200,
+        author_following_count: 80,
+        author_tweet_count: 240,
+        author_profile_created_at: '2020-01-01T00:00:00.000Z',
+        author_profile_cached_at: '2026-05-18T12:00:00.000Z',
+        outbound_url: 'https://weread.qq.com/web/bookDetail/abc123',
+        x_urls: [
+          expect.objectContaining({
+            url: 'https://t.co/weread',
+            expanded_url: 'https://weread.qq.com/web/bookDetail/abc123',
+            resolved_via: 'x_entity'
+          })
+        ]
       }
     });
     expect(items[0].raw_ref?.kind).toBe('x_candidate_json');
     const raw = await readFile(path.join(tmp, items[0].raw_ref?.path ?? ''), 'utf8');
     expect(raw).toContain('2056334923070582834');
+    expect(raw).toContain('"author_profiles"');
+    const profileCache = JSON.parse(await readFile(path.join(tmp, '.orbit/feed/x-profiles.json'), 'utf8')) as {
+      profiles: Record<string, unknown>;
+    };
+    expect(profileCache.profiles.jakevin7).toMatchObject({
+      handle: 'jakevin7',
+      name: 'Jake Vin',
+      avatar_url: 'https://cdn.example.com/jakevin7.jpg',
+      cached_at: '2026-05-18T12:00:00.000Z'
+    });
 
     const promoted = await feed.saveToLibrary(items[0].id);
     expect(threadRequests).toEqual(['2056340861773136121']);

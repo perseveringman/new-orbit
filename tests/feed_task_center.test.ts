@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FeedFetchResult, FeedSource } from '../src/shared/feed';
+import { onFeedChange } from '../src/main/feed/events';
 import { FeedTaskCenter } from '../src/main/feed/task-center';
 
 let vaultPath: string;
@@ -78,6 +79,42 @@ describe('FeedTaskCenter', () => {
     releaseFetch();
     const completed = await center.waitForJobs([first.jobs[0]!.id], 3_000);
     expect(completed[0]?.status).toBe('success');
+  });
+
+  it('publishes live task snapshots as jobs move through the queue', async () => {
+    const sources = [feedSource('rss-1', 'RSS One', 'https://example.com/rss.xml', 'rss')];
+    const events: Array<{ running: number; queued: number; success: number; created: number; fetched: number }> = [];
+    const off = onFeedChange((event) => {
+      if (event.type !== 'tasks_changed' || event.vault_path !== vaultPath || !event.snapshot) return;
+      events.push({
+        running: event.snapshot.running,
+        queued: event.snapshot.queued,
+        success: event.snapshot.success,
+        created: event.snapshot.created,
+        fetched: event.snapshot.fetched
+      });
+    });
+    const center = new FeedTaskCenter(vaultPath, {
+      maxAttempts: 1,
+      feedStoreFactory: () => ({
+        listSources: async () => sources,
+        fetch: async (sourceId: string) => {
+          await sleep(25);
+          return [fetchResult(sourceId)];
+        }
+      })
+    });
+
+    try {
+      const enqueued = await center.enqueueRefresh({ source_id: 'rss-1', priority: 'manual' });
+      await center.waitForJobs([enqueued.jobs[0]!.id], 3_000);
+    } finally {
+      off();
+    }
+
+    expect(events.some((event) => event.queued === 1)).toBe(true);
+    expect(events.some((event) => event.running === 1)).toBe(true);
+    expect(events.some((event) => event.success === 1 && event.created === 1 && event.fetched === 1)).toBe(true);
   });
 });
 

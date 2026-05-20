@@ -9,6 +9,7 @@ import type {
   FeedBilingualPairRef,
   FeedClusterPayload,
   FeedDigestPayload,
+  FeedExternalUrlEntity,
   FeedFetchResult,
   FeedFetchRun,
   FeedFetchRunStage,
@@ -18,6 +19,7 @@ import type {
   FeedItemFilter,
   FeedItemTranslationPayload,
   FeedReadableRef,
+  FeedRecommendationKind,
   FeedReportPayload,
   FeedSource,
   FeedSynthesisResult,
@@ -28,7 +30,9 @@ import type {
   SaveFeedToLibraryResult,
   UpdateFeedSourceInput
 } from '@shared/feed';
+import type { SynthesisArtifact, SynthesisKind, SynthesisSource } from '@shared/synthesis';
 import { createLibraryStore } from '../library/store';
+import { createSynthesisJob, SynthesisRunner, type SynthesisRuntimeRouter } from '../synthesis/runner';
 import { createSynthesisStore } from '../synthesis/store';
 import { parseContentSource } from '../content-connectors';
 import { parseRss } from '../capture/feed/rss';
@@ -46,7 +50,9 @@ import {
   normalizeXSource,
   xPostTitle,
   xSourceTitle,
-  type XFeedProvider
+  type XFeedProvider,
+  type XPostCandidate,
+  type XUserProfile
 } from './x';
 import {
   defaultRedditFeedProvider,
@@ -62,6 +68,7 @@ import {
   normalizeHackerNewsSource,
   type HackerNewsFeedProvider
 } from './hackernews';
+import { publishFeedChange } from './events';
 
 const FEEDS_ROOT = 'feeds';
 const SOURCES_FILE = '_sources.json';
@@ -74,6 +81,19 @@ const YOUTUBE_DOWNLOAD_INTERVAL_MS = 5_000;
 const YOUTUBE_RATE_LIMIT_BASE_DELAY_MS = 30_000;
 const YOUTUBE_RATE_LIMIT_MAX_RETRIES = 5;
 const YOUTUBE_TRANSIENT_RETRY_DELAY_MS = 5_000;
+const X_PROFILE_CACHE_FILE = path.join(FEED_ASSET_ROOT, 'x-profiles.json');
+const X_PROFILE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const X_PROFILE_FETCH_CONCURRENCY = 3;
+const DEFAULT_FEED_SYNTHESIS_TIMEOUT_MS = 45_000;
+
+interface CachedXUserProfile extends XUserProfile {
+  cached_at: string;
+}
+
+interface XProfileCacheFile {
+  version: 1;
+  profiles: Record<string, CachedXUserProfile>;
+}
 
 export interface FeedStoreOptions {
   now?: () => Date;
@@ -83,6 +103,8 @@ export interface FeedStoreOptions {
   xProvider?: XFeedProvider;
   redditProvider?: RedditFeedProvider;
   hackerNewsProvider?: HackerNewsFeedProvider;
+  synthesisRouter?: SynthesisRuntimeRouter | null;
+  synthesisTimeoutMs?: number;
 }
 
 export class FeedStore {
@@ -93,6 +115,8 @@ export class FeedStore {
   private readonly xProvider: XFeedProvider;
   private readonly redditProvider: RedditFeedProvider;
   private readonly hackerNewsProvider: HackerNewsFeedProvider;
+  private readonly synthesisRouter: SynthesisRuntimeRouter | null;
+  private readonly synthesisTimeoutMs: number;
 
   constructor(private readonly vaultPath: string, options: FeedStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
@@ -102,6 +126,8 @@ export class FeedStore {
     this.xProvider = options.xProvider ?? defaultXFeedProvider;
     this.redditProvider = options.redditProvider ?? defaultRedditFeedProvider;
     this.hackerNewsProvider = options.hackerNewsProvider ?? defaultHackerNewsFeedProvider;
+    this.synthesisRouter = options.synthesisRouter ?? null;
+    this.synthesisTimeoutMs = options.synthesisTimeoutMs ?? DEFAULT_FEED_SYNTHESIS_TIMEOUT_MS;
   }
 
   async listSources(): Promise<FeedSource[]> {
@@ -509,25 +535,16 @@ export class FeedStore {
   async analyzeItem(id: string): Promise<FeedSynthesisResult<FeedItemAnalysisPayload>> {
     const readable = await this.ensureReadableContent(id);
     const item = readable.feed_item;
-    const paragraphs = meaningfulParagraphs(readable.content);
-    const keyPoints = paragraphs.slice(0, 5).map((part) => part.slice(0, 220));
-    const payload: FeedItemAnalysisPayload = {
-      item_id: item.id,
-      summary: paragraphs[0]?.slice(0, 500) || item.summary || `Saved signal from ${item.title}.`,
-      key_points: keyPoints.length ? keyPoints : [item.summary ?? item.title],
-      entities: extractEntities(`${item.title}\n${readable.content}`).slice(0, 16),
-      suggested_actions: [
-        'Decide whether this item should be promoted to Library.',
-        'Link it to an Area or Resource if it supports an active thread.'
-      ]
-    };
-    const artifact = (await createSynthesisStore(this.vaultPath).writeFresh({
+    const source = await this.getSource(item.source_id);
+    const sources = [feedSourceForArtifact(item, readable.content.slice(0, 4000), source, `feed.item.analysis:${item.id}`)];
+    const artifact = await this.writeFeedSynthesis<FeedItemAnalysisPayload>({
       kind: 'feed.item.analysis',
-      scope_key: `feed.item.analysis:${item.id}`,
-      sources: [feedSourceForArtifact(item, readable.content.slice(0, 500))],
-      provenance: localFeedProvenance('feed.item.analysis.v1'),
-      payload
-    })) as FeedSynthesisResult<FeedItemAnalysisPayload>['artifact'];
+      scopeKey: `feed.item.analysis:${item.id}`,
+      sources,
+      fallbackPayload: buildItemAnalysisPayload(item, source, readable.content, [item]),
+      promptVersion: 'feed.item.analysis.v1',
+      budgetUsd: 0.12
+    });
     await this.appendItemArtifacts(item.id, [artifact.id], 'enrichment');
     return { artifact };
   }
@@ -617,64 +634,57 @@ export class FeedStore {
 
   async digest(date: string): Promise<FeedSynthesisResult<FeedDigestPayload>> {
     const items = (await this.listItems({ include_saved: true })).filter((item) => item.fetched_at.startsWith(date));
-    const payload: FeedDigestPayload = {
-      date,
-      item_count: items.length,
-      headline: items.length ? `${items.length} feed item(s) fetched` : 'No feed items fetched',
-      highlights: items.slice(0, 8).map((item) => ({
-        item_id: item.id,
-        source_id: item.source_id,
-        title: item.title,
-        url: item.url,
-        published_at: item.published_at,
-        summary: item.summary ?? item.excerpt
-      }))
-    };
-    const artifact = (await createSynthesisStore(this.vaultPath).writeFresh({
+    const sourceById = await this.sourceMap();
+    const sources = items.map((item) =>
+      feedSourceForArtifact(item, item.summary ?? item.excerpt, sourceById.get(item.source_id), `feed.digest:${date}`)
+    );
+    const artifact = await this.writeFeedSynthesis<FeedDigestPayload>({
       kind: 'feed.digest',
-      scope_key: `feed.digest:${date}`,
-      sources: items.map((item) => feedSourceForArtifact(item, item.summary ?? item.excerpt)),
-      provenance: localFeedProvenance('feed.digest.v1'),
-      payload
-    })) as FeedSynthesisResult<FeedDigestPayload>['artifact'];
+      scopeKey: `feed.digest:${date}`,
+      sources,
+      fallbackPayload: buildDigestPayload(date, items, sourceById),
+      promptVersion: 'feed.digest.v1',
+      budgetUsd: 0.16
+    });
     await this.appendItemArtifacts(
       items.map((item) => item.id),
       [artifact.id],
       'collection',
       'digest'
     );
+    publishFeedChange({
+      type: 'synthesis_changed',
+      vault_path: this.vaultPath,
+      synthesis_kind: 'feed.digest'
+    });
     return { artifact };
   }
 
   async cluster(scope = 'all'): Promise<FeedSynthesisResult<FeedClusterPayload>> {
     const items = await this.itemsForScope(scope);
-    const buckets = new Map<string, FeedItem[]>();
-    for (const item of items) {
-      const label = clusterLabel(item);
-      buckets.set(label, [...(buckets.get(label) ?? []), item]);
-    }
-    const payload: FeedClusterPayload = {
-      scope,
-      clusters: [...buckets.entries()].slice(0, 8).map(([label, bucket]) => ({
-        label,
-        item_ids: bucket.map((item) => item.id),
-        source_ids: [...new Set(bucket.map((item) => item.source_id))],
-        rationale: `Grouped ${bucket.length} item(s) by title, source, and excerpt terms.`
-      }))
-    };
-    const artifact = (await createSynthesisStore(this.vaultPath).writeFresh({
+    const sourceById = await this.sourceMap();
+    const sources = items.map((item) =>
+      feedSourceForArtifact(item, item.summary ?? item.excerpt, sourceById.get(item.source_id), `feed.cluster:${scope}`)
+    );
+    const artifact = await this.writeFeedSynthesis<FeedClusterPayload>({
       kind: 'feed.cluster',
-      scope_key: `feed.cluster:${scope}`,
-      sources: items.map((item) => feedSourceForArtifact(item, item.summary ?? item.excerpt)),
-      provenance: localFeedProvenance('feed.cluster.v1'),
-      payload
-    })) as FeedSynthesisResult<FeedClusterPayload>['artifact'];
+      scopeKey: `feed.cluster:${scope}`,
+      sources,
+      fallbackPayload: buildClusterPayload(scope, items, sourceById),
+      promptVersion: 'feed.cluster.v1',
+      budgetUsd: 0.18
+    });
     await this.appendItemArtifacts(
       items.map((item) => item.id),
       [artifact.id],
       'collection',
       'cluster'
     );
+    publishFeedChange({
+      type: 'synthesis_changed',
+      vault_path: this.vaultPath,
+      synthesis_kind: 'feed.cluster'
+    });
     return { artifact };
   }
 
@@ -683,35 +693,29 @@ export class FeedStore {
     refs: { digest_artifact_id?: string; cluster_artifact_id?: string } = {}
   ): Promise<FeedSynthesisResult<FeedReportPayload>> {
     const items = (await this.listItems({ include_saved: true })).filter((item) => item.fetched_at.startsWith(date));
-    const bySource = new Map<string, FeedItem[]>();
-    for (const item of items) bySource.set(item.source_id, [...(bySource.get(item.source_id) ?? []), item]);
-    const payload: FeedReportPayload = {
-      date,
-      item_count: items.length,
-      digest_artifact_id: refs.digest_artifact_id,
-      cluster_artifact_id: refs.cluster_artifact_id,
-      sections: [...bySource.entries()].map(([sourceId, bucket]) => ({
-        title: sourceId,
-        item_ids: bucket.map((item) => item.id),
-        summary: bucket
-          .slice(0, 3)
-          .map((item) => item.title)
-          .join(' / ')
-      }))
-    };
-    const artifact = (await createSynthesisStore(this.vaultPath).writeFresh({
+    const sourceById = await this.sourceMap();
+    const sources = items.map((item) =>
+      feedSourceForArtifact(item, item.summary ?? item.excerpt, sourceById.get(item.source_id), `feed.report.daily:${date}`, refs)
+    );
+    const artifact = await this.writeFeedSynthesis<FeedReportPayload>({
       kind: 'feed.report.daily',
-      scope_key: `feed.report.daily:${date}`,
-      sources: items.map((item) => feedSourceForArtifact(item, item.summary ?? item.excerpt)),
-      provenance: localFeedProvenance('feed.report.daily.v1'),
-      payload
-    })) as FeedSynthesisResult<FeedReportPayload>['artifact'];
+      scopeKey: `feed.report.daily:${date}`,
+      sources,
+      fallbackPayload: buildReportPayload(date, items, sourceById, refs),
+      promptVersion: 'feed.report.daily.v1',
+      budgetUsd: 0.2
+    });
     await this.appendItemArtifacts(
       items.map((item) => item.id),
       [artifact.id],
       'collection',
       'report'
     );
+    publishFeedChange({
+      type: 'synthesis_changed',
+      vault_path: this.vaultPath,
+      synthesis_kind: 'feed.report.daily'
+    });
     return { artifact };
   }
 
@@ -1343,10 +1347,11 @@ export class FeedStore {
     const candidates = await this.xProvider.listCandidates(descriptor, { limit });
     const includeReplies = source.processing_policy?.include_replies !== false;
     const selected = includeReplies ? candidates : candidates.filter((candidate) => !candidate.is_reply);
+    const authorProfiles = await this.resolveXAuthorProfiles(selected);
     const rawFeedRef = await this.writeAsset(
       'raw',
       `${run.id}.x.candidates.json`,
-      `${JSON.stringify({ source: descriptor, candidates, selected }, null, 2)}\n`,
+      `${JSON.stringify({ source: descriptor, candidates, selected, author_profiles: Object.fromEntries(authorProfiles) }, null, 2)}\n`,
       'x_candidate_json',
       run.started_at
     );
@@ -1359,6 +1364,8 @@ export class FeedStore {
       const dedupeKey = `x:${candidate.id}`;
       if (existingIds.has(id) || existingDedupeKeys.has(dedupeKey)) continue;
       const fetchedAt = this.now().toISOString();
+      const outboundUrl = primaryXOutboundUrl(candidate.url_entities);
+      const authorProfile = authorProfiles.get(candidate.author.toLowerCase());
       const item = await this.writeItem(
         normalizeFeedItem({
           id,
@@ -1394,7 +1401,10 @@ export class FeedStore {
             like_count: candidate.likes,
             view_count: candidate.views,
             retweet_count: candidate.retweets,
-            reply_count: candidate.replies
+            reply_count: candidate.replies,
+            ...(candidate.url_entities?.length ? { x_urls: candidate.url_entities } : {}),
+            ...(outboundUrl ? { outbound_url: outboundUrl } : {}),
+            ...feedMetadataForXProfile(authorProfile)
           },
           status: 'new'
         })
@@ -1435,6 +1445,7 @@ export class FeedStore {
         ...(descriptor.timeline_type ? { timeline_type: descriptor.timeline_type } : {}),
         source_type: descriptor.source_type,
         raw_candidates: candidates.length,
+        author_profiles: authorProfiles.size,
         include_replies: includeReplies
       }
     };
@@ -1703,6 +1714,122 @@ export class FeedStore {
     return (await this.listSources()).find((source) => source.id === id) ?? null;
   }
 
+  private async sourceMap(): Promise<Map<string, FeedSource>> {
+    return new Map((await this.listSources()).map((source) => [source.id, source]));
+  }
+
+  private async resolveXAuthorProfiles(candidates: XPostCandidate[]): Promise<Map<string, CachedXUserProfile>> {
+    const handles = [
+      ...new Set(
+        candidates
+          .map((candidate) => candidate.author.trim())
+          .filter((handle) => /^[A-Za-z0-9_]{1,15}$/.test(handle))
+          .map((handle) => handle.toLowerCase())
+      )
+    ];
+    const cache = await this.readXProfileCache();
+    const resolved = new Map<string, CachedXUserProfile>();
+    const missingOrStale: string[] = [];
+    const nowMs = this.now().getTime();
+
+    for (const handle of handles) {
+      const cached = cache.get(handle);
+      if (cached) resolved.set(handle, cached);
+      if (!cached || xProfileCacheExpired(cached, nowMs)) missingOrStale.push(handle);
+    }
+
+    if (!this.xProvider.fetchProfile || missingOrStale.length === 0) return resolved;
+
+    let changed = false;
+    for (let index = 0; index < missingOrStale.length; index += X_PROFILE_FETCH_CONCURRENCY) {
+      const batch = missingOrStale.slice(index, index + X_PROFILE_FETCH_CONCURRENCY);
+      await Promise.all(
+        batch.map(async (handle) => {
+          try {
+            const profile = await this.xProvider.fetchProfile?.(handle);
+            if (!profile) return;
+            const normalized = normalizeCachedXProfile(profile, this.now().toISOString(), handle);
+            cache.set(normalized.handle.toLowerCase(), normalized);
+            resolved.set(normalized.handle.toLowerCase(), normalized);
+            changed = true;
+          } catch {
+            // Keep stale cached data if profile enrichment fails; Feed fetching should not block on avatars/profile metadata.
+          }
+        })
+      );
+    }
+
+    if (changed) await this.writeXProfileCache(cache);
+    return resolved;
+  }
+
+  private async readXProfileCache(): Promise<Map<string, CachedXUserProfile>> {
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.xProfileCachePath(), 'utf8')) as unknown;
+      if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.profiles)) return new Map();
+      return new Map(
+        Object.entries(parsed.profiles)
+          .flatMap(([handle, value]) => {
+            const profile = normalizeCachedXProfileValue(value, handle);
+            return profile ? [[profile.handle.toLowerCase(), profile] as const] : [];
+          })
+      );
+    } catch (error) {
+      if (isNotFound(error)) return new Map();
+      throw error;
+    }
+  }
+
+  private async writeXProfileCache(cache: Map<string, CachedXUserProfile>): Promise<void> {
+    await fs.mkdir(path.dirname(this.xProfileCachePath()), { recursive: true });
+    const file: XProfileCacheFile = {
+      version: 1,
+      profiles: Object.fromEntries([...cache.entries()].sort(([a], [b]) => a.localeCompare(b)))
+    };
+    await fs.writeFile(this.xProfileCachePath(), `${JSON.stringify(file, null, 2)}\n`, 'utf8');
+  }
+
+  private async writeFeedSynthesis<TPayload>(input: {
+    kind: SynthesisKind;
+    scopeKey: string;
+    sources: SynthesisSource[];
+    fallbackPayload: TPayload;
+    promptVersion: string;
+    budgetUsd: number;
+  }): Promise<SynthesisArtifact<TPayload>> {
+    const store = createSynthesisStore(this.vaultPath);
+    if (this.synthesisRouter) {
+      try {
+        const artifact = await new SynthesisRunner(store, {
+          router: this.synthesisRouter,
+          maxBudgetUsd: 1,
+          requireSdk: true,
+          timeoutMs: this.synthesisTimeoutMs
+        }).run(
+          createSynthesisJob({
+            kind: input.kind,
+            scope_key: input.scopeKey,
+            sources: input.sources,
+            priority: 'interactive',
+            reason: 'manual',
+            force: true,
+            budget_usd: input.budgetUsd
+          })
+        );
+        if (artifact.status === 'fresh') return artifact as SynthesisArtifact<TPayload>;
+      } catch {
+        // Fall back to deterministic local triage below so Feed never blocks on endpoint setup.
+      }
+    }
+    return (await store.writeFresh({
+      kind: input.kind,
+      scope_key: input.scopeKey,
+      sources: input.sources,
+      provenance: localFeedProvenance(input.promptVersion),
+      payload: input.fallbackPayload
+    })) as SynthesisArtifact<TPayload>;
+  }
+
   private async requireItem(id: string): Promise<FeedItem> {
     const item = await this.getItem(id);
     if (!item) throw new Error(`feed_item_not_found:${id}`);
@@ -1736,6 +1863,12 @@ export class FeedStore {
     await fs.mkdir(this.sourceDir(item.source_id), { recursive: true });
     const normalized = normalizeFeedItem(item);
     await fs.writeFile(path.join(this.sourceDir(item.source_id), `${item.id}.json`), `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
+    publishFeedChange({
+      type: 'items_changed',
+      vault_path: this.vaultPath,
+      source_id: normalized.source_id,
+      item_id: normalized.id
+    });
     return normalized;
   }
 
@@ -1796,6 +1929,12 @@ export class FeedStore {
     const filePath = path.join(this.assetDir('runs'), `${run.id}.json`);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, `${JSON.stringify(run, null, 2)}\n`, 'utf8');
+    publishFeedChange({
+      type: 'runs_changed',
+      vault_path: this.vaultPath,
+      source_id: run.source_id,
+      run_id: run.id
+    });
   }
 
   private assetDir(kind: 'raw' | 'extracted' | 'runs'): string {
@@ -1806,13 +1945,22 @@ export class FeedStore {
     return path.join(this.vaultPath, FEEDS_ROOT, SOURCES_FILE);
   }
 
+  private xProfileCachePath(): string {
+    return path.join(this.vaultPath, X_PROFILE_CACHE_FILE);
+  }
+
   private sourceDir(sourceId: string): string {
     return path.join(this.vaultPath, FEEDS_ROOT, sourceId);
   }
 
   private async writeSources(sources: FeedSource[]): Promise<void> {
     await fs.mkdir(path.dirname(this.sourcesPath()), { recursive: true });
-    await fs.writeFile(this.sourcesPath(), `${JSON.stringify(sources.map(normalizeFeedSource), null, 2)}\n`, 'utf8');
+    const normalized = sources.map(normalizeFeedSource);
+    await fs.writeFile(this.sourcesPath(), `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
+    publishFeedChange({
+      type: 'sources_changed',
+      vault_path: this.vaultPath
+    });
   }
 }
 
@@ -2112,7 +2260,284 @@ function localFeedProvenance(promptVersion: string) {
   };
 }
 
-function feedSourceForArtifact(item: FeedItem, excerpt?: string) {
+function buildItemAnalysisPayload(
+  item: FeedItem,
+  source: FeedSource | null | undefined,
+  content: string,
+  scopeItems: FeedItem[]
+): FeedItemAnalysisPayload {
+  const paragraphs = meaningfulParagraphs(content);
+  const keyPoints = paragraphs.slice(0, 5).map((part) => part.slice(0, 220));
+  const related = relatedRefsForSource(source);
+  const relevance = feedRelevanceScore(item, source);
+  const novelty = feedNoveltyScore(item, scopeItems);
+  const triage = triageLabelForScores(relevance, novelty);
+  const actionKind = actionKindForTriage(triage, related.some((ref) => ref.kind === 'resource'));
+  return {
+    item_id: item.id,
+    summary: paragraphs[0]?.slice(0, 500) || item.summary || `来自 ${source?.title ?? item.source_id} 的信号。`,
+    key_points: keyPoints.length ? keyPoints : [item.summary ?? item.excerpt ?? item.title],
+    key_claims: keyPoints.slice(0, 3),
+    entities: extractEntities(`${item.title}\n${content}`).slice(0, 16),
+    why_it_matters: whyItemMatters(item, source, relevance, related),
+    triage_label: triage,
+    relevance_score: relevance,
+    novelty_score: novelty,
+    confidence: content.trim().length > 160 ? 0.68 : 0.42,
+    related,
+    suggested_actions: [
+      actionLabel(actionKind),
+      related.length ? '保存时带上相关 Area/Resource 引用，避免之后再手动归类。' : '先观察是否反复出现，再决定是否建立 Resource。'
+    ],
+    action_candidates: [
+      {
+        kind: actionKind,
+        label: actionLabel(actionKind),
+        reason: actionReason(actionKind, relevance, novelty),
+        item_ids: [item.id],
+        resource_ref: related.find((ref) => ref.kind === 'resource')?.ref,
+        area_ref: related.find((ref) => ref.kind === 'area')?.ref,
+        confidence: relevance
+      }
+    ],
+    risks: content.trim().length > 160 ? [] : ['缺少足够正文，判断主要依赖标题、摘要和来源配置。']
+  };
+}
+
+function buildDigestPayload(date: string, items: FeedItem[], sourceById: Map<string, FeedSource>): FeedDigestPayload {
+  const ranked = rankFeedItems(items, sourceById);
+  return {
+    date,
+    item_count: items.length,
+    headline: items.length ? `今日 ${items.length} 条信号，优先处理 ${Math.min(ranked.length, 5)} 条` : '今天没有新的 Feed 信号',
+    highlights: ranked.slice(0, 8).map((item) => {
+      const source = sourceById.get(item.source_id);
+      const relevance = feedRelevanceScore(item, source);
+      const novelty = feedNoveltyScore(item, items);
+      return {
+        item_id: item.id,
+        source_id: item.source_id,
+        title: item.title,
+        url: item.url,
+        published_at: item.published_at,
+        summary: item.summary ?? item.excerpt,
+        why_it_matters: whyItemMatters(item, source, relevance, relatedRefsForSource(source)),
+        relevance_score: relevance,
+        novelty_score: novelty,
+        suggested_action: actionKindForTriage(triageLabelForScores(relevance, novelty), Boolean(source?.resource_refs?.length))
+      };
+    }),
+    recommendations: ranked.slice(0, 5).map((item) => recommendationForItem(item, sourceById.get(item.source_id), items))
+  };
+}
+
+function buildClusterPayload(scope: string, items: FeedItem[], sourceById: Map<string, FeedSource>): FeedClusterPayload {
+  const buckets = new Map<string, FeedItem[]>();
+  for (const item of items) {
+    const label = clusterLabelForTriage(item, sourceById.get(item.source_id));
+    buckets.set(label, [...(buckets.get(label) ?? []), item]);
+  }
+  return {
+    scope,
+    clusters: [...buckets.entries()].slice(0, 8).map(([label, bucket]) => {
+      const ranked = rankFeedItems(bucket, sourceById);
+      const related = ranked.flatMap((item) => relatedRefsForSource(sourceById.get(item.source_id))).slice(0, 5);
+      return {
+        label,
+        item_ids: bucket.map((item) => item.id),
+        source_ids: [...new Set(bucket.map((item) => item.source_id))],
+        rationale: `按主题、来源配置和摘要相似度聚合了 ${bucket.length} 条信号。`,
+        key_claims: ranked.flatMap((item) => [item.summary ?? item.excerpt ?? item.title]).slice(0, 5),
+        relevance_score: Math.max(...bucket.map((item) => feedRelevanceScore(item, sourceById.get(item.source_id))), 0),
+        novelty_score: Math.max(...bucket.map((item) => feedNoveltyScore(item, items)), 0),
+        related,
+        suggested_actions: [recommendationForItem(ranked[0] ?? bucket[0]!, sourceById.get((ranked[0] ?? bucket[0]!).source_id), items)]
+      };
+    })
+  };
+}
+
+function buildReportPayload(
+  date: string,
+  items: FeedItem[],
+  sourceById: Map<string, FeedSource>,
+  refs: { digest_artifact_id?: string; cluster_artifact_id?: string } = {}
+): FeedReportPayload {
+  const ranked = rankFeedItems(items, sourceById);
+  const bySource = new Map<string, FeedItem[]>();
+  for (const item of items) bySource.set(item.source_id, [...(bySource.get(item.source_id) ?? []), item]);
+  return {
+    date,
+    item_count: items.length,
+    digest_artifact_id: refs.digest_artifact_id,
+    cluster_artifact_id: refs.cluster_artifact_id,
+    headline: items.length ? `今日 Feed：${ranked[0]?.title ?? `${items.length} 条新信号`}` : '今日 Feed 没有新信号',
+    executive_summary: ranked.length
+      ? `最值得分拣的是：${ranked.slice(0, 3).map((item) => item.title).join(' / ')}。`
+      : '没有足够信号生成报告。',
+    sections: [...bySource.entries()].map(([sourceId, bucket]) => {
+      const rankedBucket = rankFeedItems(bucket, sourceById);
+      return {
+        title: sourceById.get(sourceId)?.title ?? sourceId,
+        item_ids: bucket.map((item) => item.id),
+        summary: rankedBucket
+          .slice(0, 3)
+          .map((item) => item.title)
+          .join(' / '),
+        key_changes: rankedBucket.flatMap((item) => [item.summary ?? item.excerpt ?? item.title]).slice(0, 4),
+        repeated_claims: repeatedClaims(bucket),
+        why_it_matters: sourceById.get(sourceId)?.resource_refs?.length || sourceById.get(sourceId)?.areas?.length
+          ? '该来源已连接到你的关注方向，值得优先分拣。'
+          : '该来源目前作为外部信号雷达，适合观察是否出现重复主题。',
+        recommended_item_ids: rankedBucket
+          .filter((item) => feedRelevanceScore(item, sourceById.get(item.source_id)) >= 0.5)
+          .map((item) => item.id)
+      };
+    }),
+    recommendations: ranked.slice(0, 5).map((item) => recommendationForItem(item, sourceById.get(item.source_id), items))
+  };
+}
+
+function rankFeedItems(items: FeedItem[], sourceById: Map<string, FeedSource>): FeedItem[] {
+  return [...items].sort((a, b) => {
+    const aScore = feedRelevanceScore(a, sourceById.get(a.source_id)) + feedNoveltyScore(a, items) * 0.35;
+    const bScore = feedRelevanceScore(b, sourceById.get(b.source_id)) + feedNoveltyScore(b, items) * 0.35;
+    return bScore - aScore || (b.published_at ?? b.fetched_at).localeCompare(a.published_at ?? a.fetched_at);
+  });
+}
+
+function relatedRefsForSource(source: FeedSource | null | undefined): NonNullable<FeedItemAnalysisPayload['related']> {
+  return [
+    ...(source?.areas ?? []).map((area) => ({
+      kind: 'area' as const,
+      ref: area.area_slug,
+      title: area.area_slug,
+      confidence: area.primary ? 0.82 : 0.68,
+      reason: '来源已被用户分配到此 Area。'
+    })),
+    ...(source?.resource_refs ?? []).map((ref) => ({
+      kind: 'resource' as const,
+      ref,
+      title: ref,
+      confidence: 0.78,
+      reason: '来源已被用户挂到此 Resource。'
+    }))
+  ];
+}
+
+function feedRelevanceScore(item: FeedItem, source: FeedSource | null | undefined): number {
+  let score = 0.32;
+  if (source?.areas?.length) score += 0.22;
+  if (source?.resource_refs?.length) score += 0.28;
+  if (source?.tags?.length) score += 0.08;
+  if (source?.priority === 'high') score += 0.1;
+  if (item.status === 'saved') score += 0.08;
+  if (item.extracted_ref || item.summary || item.excerpt) score += 0.06;
+  if (item.metadata?.comment_count || item.metadata?.score_count || item.metadata?.view_count) score += 0.04;
+  return clamp01(score);
+}
+
+function feedNoveltyScore(item: FeedItem, scopeItems: FeedItem[]): number {
+  const label = clusterLabelForTriage(item);
+  const peers = scopeItems.filter((candidate) => clusterLabelForTriage(candidate) === label).length;
+  if (peers <= 1) return 0.74;
+  if (peers === 2) return 0.58;
+  return 0.4;
+}
+
+function triageLabelForScores(relevance: number, novelty: number): FeedItemAnalysisPayload['triage_label'] {
+  if (relevance >= 0.72) return 'save';
+  if (relevance >= 0.55 && novelty >= 0.55) return 'read_now';
+  if (relevance >= 0.46) return 'skim';
+  if (novelty >= 0.7) return 'watch';
+  return 'ignore';
+}
+
+function actionKindForTriage(triage: FeedItemAnalysisPayload['triage_label'], hasResource: boolean): FeedRecommendationKind {
+  if (triage === 'save') return hasResource ? 'save_to_library_with_resource' : 'save_to_library';
+  if (triage === 'read_now') return 'read_now';
+  if (triage === 'ignore') return 'ignore';
+  return 'watch';
+}
+
+function recommendationForItem(item: FeedItem, source: FeedSource | null | undefined, scopeItems: FeedItem[]) {
+  const relevance = feedRelevanceScore(item, source);
+  const novelty = feedNoveltyScore(item, scopeItems);
+  const related = relatedRefsForSource(source);
+  const kind = actionKindForTriage(triageLabelForScores(relevance, novelty), related.some((ref) => ref.kind === 'resource'));
+  return {
+    kind,
+    label: actionLabel(kind),
+    reason: actionReason(kind, relevance, novelty),
+    item_ids: [item.id],
+    resource_ref: related.find((ref) => ref.kind === 'resource')?.ref,
+    area_ref: related.find((ref) => ref.kind === 'area')?.ref,
+    confidence: relevance
+  };
+}
+
+function whyItemMatters(
+  item: FeedItem,
+  source: FeedSource | null | undefined,
+  relevance: number,
+  related: NonNullable<FeedItemAnalysisPayload['related']>
+): string {
+  if (related.length) return `命中 ${related.map((ref) => ref.title ?? ref.ref).join('、')}，适合判断是否进入资料库。`;
+  if (source?.priority === 'high') return '来源优先级较高，即使尚未关联 Resource，也值得快速扫读。';
+  if (relevance >= 0.5) return '与订阅来源的主题较接近，可作为潜在资料候选。';
+  return `${item.title} 当前缺少明确个人上下文，默认保持观察或忽略。`;
+}
+
+function actionLabel(kind: FeedRecommendationKind): string {
+  if (kind === 'read_now') return '现在阅读';
+  if (kind === 'save_to_library') return '保存到资料库';
+  if (kind === 'save_to_library_with_resource') return '保存并关联 Resource';
+  if (kind === 'ignore') return '忽略';
+  if (kind === 'create_task') return '创建任务';
+  if (kind === 'save_report_as_note') return '保存报告为笔记';
+  return '继续观察';
+}
+
+function actionReason(kind: FeedRecommendationKind, relevance: number, novelty: number): string {
+  if (kind === 'ignore') return '相关性偏低，进入资料库的收益不高。';
+  if (kind === 'save_to_library_with_resource') return '已经命中明确 Resource，保存后可进入后续提炼。';
+  if (kind === 'save_to_library') return '相关性足够高，值得作为资料候选。';
+  if (kind === 'read_now') return '相关性和新颖度都较高，适合立即处理。';
+  return novelty >= 0.65 ? '新颖但个人关联暂弱，先观察是否形成趋势。' : '信号还不够强，等待更多重复证据。';
+}
+
+function clusterLabelForTriage(item: FeedItem, source?: FeedSource | null): string {
+  const resource = source?.resource_refs?.[0];
+  if (resource) return resource;
+  const area = source?.areas?.find((ref) => ref.primary)?.area_slug ?? source?.areas?.[0]?.area_slug;
+  if (area) return area;
+  return clusterLabel(item);
+}
+
+function repeatedClaims(items: FeedItem[]): string[] {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const claim = (item.summary ?? item.excerpt ?? item.title).slice(0, 100).toLowerCase();
+    if (!claim) continue;
+    counts.set(claim, (counts.get(claim) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([claim]) => claim)
+    .slice(0, 5);
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, Number(value.toFixed(2))));
+}
+
+function feedSourceForArtifact(
+  item: FeedItem,
+  excerpt?: string,
+  source?: FeedSource | null,
+  scopeKey?: string,
+  extraMetadata: Record<string, unknown> = {}
+) {
   return {
     kind: 'feed' as const,
     ref: item.id,
@@ -2124,6 +2549,16 @@ function feedSourceForArtifact(item: FeedItem, excerpt?: string) {
       canonical_url: item.canonical_url,
       fetch_run_id: item.fetch_run_id,
       content_hash: item.content_hash,
+      fetched_at: item.fetched_at,
+      published_at: item.published_at,
+      status: item.status,
+      scope_key: scopeKey,
+      source_title: source?.title,
+      source_priority: source?.priority,
+      area_refs: source?.areas?.map((area) => area.area_slug) ?? [],
+      resource_refs: source?.resource_refs ?? [],
+      tags: source?.tags ?? [],
+      ...extraMetadata,
       ...(item.metadata ?? {})
     }
   };
@@ -2249,6 +2684,105 @@ function xTweetIdFromItem(item: FeedItem): string | null {
   if (item.metadata?.external_id) return item.metadata.external_id;
   if (item.dedupe_key?.startsWith('x:')) return item.dedupe_key.slice('x:'.length);
   return item.url.match(/(?:status|statuses)\/(\d+)/i)?.[1] ?? null;
+}
+
+function normalizeCachedXProfile(profile: XUserProfile, cachedAt: string, fallbackHandle: string): CachedXUserProfile {
+  const handle = normalizeXHandle(profile.handle || fallbackHandle);
+  return {
+    handle,
+    ...(profile.name ? { name: profile.name } : {}),
+    ...(profile.bio ? { bio: profile.bio } : {}),
+    ...(profile.location ? { location: profile.location } : {}),
+    ...(profile.url ? { url: profile.url } : {}),
+    profile_url: profile.profile_url ?? `https://x.com/${handle}`,
+    ...(profile.avatar_url ? { avatar_url: profile.avatar_url } : {}),
+    ...(profile.verified !== undefined ? { verified: profile.verified } : {}),
+    ...(profile.followers !== undefined ? { followers: profile.followers } : {}),
+    ...(profile.following !== undefined ? { following: profile.following } : {}),
+    ...(profile.tweets !== undefined ? { tweets: profile.tweets } : {}),
+    ...(profile.created_at ? { created_at: profile.created_at } : {}),
+    cached_at: cachedAt
+  };
+}
+
+function normalizeCachedXProfileValue(value: unknown, fallbackHandle: string): CachedXUserProfile | null {
+  if (!isRecord(value)) return null;
+  const handle = normalizeXHandle(stringValue(value.handle) ?? fallbackHandle);
+  const cachedAt = stringValue(value.cached_at);
+  if (!handle || !cachedAt) return null;
+  return normalizeCachedXProfile(
+    {
+      handle,
+      ...(stringValue(value.name) ? { name: stringValue(value.name) } : {}),
+      ...(stringValue(value.bio) ? { bio: stringValue(value.bio) } : {}),
+      ...(stringValue(value.location) ? { location: stringValue(value.location) } : {}),
+      ...(stringValue(value.url) ? { url: stringValue(value.url) } : {}),
+      ...(stringValue(value.profile_url) ? { profile_url: stringValue(value.profile_url) } : {}),
+      ...(stringValue(value.avatar_url) ? { avatar_url: stringValue(value.avatar_url) } : {}),
+      ...(typeof value.verified === 'boolean' ? { verified: value.verified } : {}),
+      ...(numberValue(value.followers) !== undefined ? { followers: numberValue(value.followers) } : {}),
+      ...(numberValue(value.following) !== undefined ? { following: numberValue(value.following) } : {}),
+      ...(numberValue(value.tweets) !== undefined ? { tweets: numberValue(value.tweets) } : {}),
+      ...(stringValue(value.created_at) ? { created_at: stringValue(value.created_at) } : {})
+    },
+    cachedAt,
+    fallbackHandle
+  );
+}
+
+function xProfileCacheExpired(profile: CachedXUserProfile, nowMs: number): boolean {
+  const cached = new Date(profile.cached_at).getTime();
+  return !Number.isFinite(cached) || nowMs - cached > X_PROFILE_CACHE_TTL_MS;
+}
+
+function feedMetadataForXProfile(profile?: CachedXUserProfile): Partial<NonNullable<FeedItem['metadata']>> {
+  if (!profile) return {};
+  return {
+    author_name: profile.name,
+    author_bio: profile.bio,
+    author_location: profile.location,
+    author_url: profile.url,
+    author_profile_url: profile.profile_url,
+    author_avatar_url: profile.avatar_url,
+    author_verified: profile.verified,
+    author_followers_count: profile.followers,
+    author_following_count: profile.following,
+    author_tweet_count: profile.tweets,
+    author_profile_created_at: profile.created_at,
+    author_profile_cached_at: profile.cached_at
+  };
+}
+
+function primaryXOutboundUrl(urls?: FeedExternalUrlEntity[]): string | undefined {
+  if (!Array.isArray(urls)) return undefined;
+  return urls
+    .map((url) => {
+      if (!url || typeof url !== 'object') return undefined;
+      const entity = url as { expanded_url?: string; unwound_url?: string; url?: string };
+      return entity.expanded_url ?? entity.unwound_url ?? entity.url;
+    })
+    .find((url): url is string => Boolean(url && !/(?:^https?:\/\/)?t\.co\//i.test(url)));
+}
+
+function normalizeXHandle(value: string): string {
+  return value.trim().replace(/^@/, '').replace(/\/+$/, '');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/,/g, '').trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 }
 
 function redditPostIdFromItem(item: FeedItem): string | null {

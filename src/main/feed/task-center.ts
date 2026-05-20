@@ -15,6 +15,7 @@ import type {
   FeedTaskStatus
 } from '@shared/feed';
 import { publishTraceableEvent } from '../events/bus';
+import { publishFeedChange } from './events';
 import { createFeedStore, type FeedStore } from './store';
 
 const TASK_CENTER_ROOT = path.join('.orbit', 'feed', 'task-center');
@@ -127,6 +128,7 @@ export class FeedTaskCenter {
       }
       this.pruneHistoryUnsafe();
       await this.persistUnsafe();
+      this.publishTasksChangedUnsafe();
       return jobs;
     });
 
@@ -152,6 +154,7 @@ export class FeedTaskCenter {
       target.updated_at = now;
       target.error = undefined;
       await this.persistUnsafe();
+      this.publishTasksChangedUnsafe(target);
       return cloneTask(target);
     });
     this.scheduleDrain();
@@ -172,6 +175,7 @@ export class FeedTaskCenter {
         jobs.push(cloneTask(job));
       }
       if (jobs.length > 0) await this.persistUnsafe();
+      if (jobs.length > 0) this.publishTasksChangedUnsafe();
       return jobs;
     });
     this.scheduleDrain();
@@ -197,6 +201,7 @@ export class FeedTaskCenter {
       target.result = undefined;
       target.run_ids = [];
       await this.persistUnsafe();
+      this.publishTasksChangedUnsafe(target);
       return cloneTask(target);
     });
     this.scheduleDrain();
@@ -247,7 +252,10 @@ export class FeedTaskCenter {
     }
     this.loaded = true;
     this.loadPromise = null;
-    if (changed) await this.persistUnsafe();
+    if (changed) {
+      await this.persistUnsafe();
+      this.publishTasksChangedUnsafe();
+    }
     if (this.jobs.some((job) => ACTIVE_STATUSES.has(job.status))) this.scheduleDrain();
   }
 
@@ -284,6 +292,7 @@ export class FeedTaskCenter {
         next.lease_expires_at = new Date(now.getTime() + LEASE_MS).toISOString();
         next.error = undefined;
         await this.persistUnsafe();
+        this.publishTasksChangedUnsafe(next);
         return cloneTask(next);
       });
       if (!job) return;
@@ -311,6 +320,7 @@ export class FeedTaskCenter {
         target.error = undefined;
         this.pruneHistoryUnsafe();
         await this.persistUnsafe();
+        this.publishTasksChangedUnsafe(target);
         return cloneTask(target);
       });
       if (completed?.result) publishFeedFetchEvent(completed.result);
@@ -338,6 +348,7 @@ export class FeedTaskCenter {
         }
         this.pruneHistoryUnsafe();
         await this.persistUnsafe();
+        this.publishTasksChangedUnsafe(target);
       });
     } finally {
       this.scheduleDrain();
@@ -382,12 +393,27 @@ export class FeedTaskCenter {
     })).filter((lane) => lane.running > 0 || lane.queued > 0 || lane.retry_wait > 0);
     return {
       jobs,
+      total: jobs.length,
       running: jobs.filter((job) => job.status === 'running').length,
       queued: jobs.filter((job) => job.status === 'queued').length,
       retry_wait: jobs.filter((job) => job.status === 'retry_wait').length,
+      success: jobs.filter((job) => job.status === 'success').length,
       failed: jobs.filter((job) => job.status === 'failed').length,
+      cancelled: jobs.filter((job) => job.status === 'cancelled').length,
+      created: jobs.reduce((sum, job) => sum + (job.result?.created ?? 0), 0),
+      fetched: jobs.reduce((sum, job) => sum + (job.result?.fetched ?? 0), 0),
       lanes
     };
+  }
+
+  private publishTasksChangedUnsafe(task?: FeedTask | null): void {
+    publishFeedChange({
+      type: 'tasks_changed',
+      vault_path: this.vaultPath,
+      source_id: task?.source_id,
+      task_id: task?.id,
+      snapshot: this.snapshotUnsafe()
+    });
   }
 
   private pruneHistoryUnsafe(): void {

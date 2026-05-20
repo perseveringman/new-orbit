@@ -416,6 +416,8 @@ Implemented notes:
 - RSS fetch uses source-level dedupe and never creates Notes, Resources, or Library items by itself.
 - Save to Library is the promotion gate: it creates a first-class `LibraryItem`, marks the feed item as saved, and emits `promote.feed_to_library`.
 - Feed digest and cluster produce feed-scoped SynthesisArtifacts (`feed.digest`, `feed.cluster`) and remain outside Layer 1 truth.
+- Feed synthesis now acts as a personal signal triage engine: `feed.item.analysis`, `feed.digest`, `feed.cluster`, and `feed.report.daily` carry relevance, novelty, confidence, related Area/Resource refs, and suggested actions while staying Layer 2.
+- Feed analysis uses SDK-backed Synthesis prompts when available and deterministic local fallback when endpoints are unavailable, preserving the Save to Library promotion gate.
 - Feed Reader UI provides source management, fetch controls, filters, item stream, save/seen/ignore actions, and digest/cluster previews.
 - Feed readable extraction now calls the same Content Connector registry used by Library/mobile shares before writing `extracted_ref`.
 - X sources now normalize `@handle` / profile URLs plus `x:following` / `x:for-you` timeline feeds, fetch the latest 20 posts through OpenCLI, dedupe globally by `x:<tweet_id>`, and remain Layer 0 until explicit Save to Library.
@@ -429,6 +431,7 @@ Data structures:
 - `FeedDigestArtifact`
 - `FeedClusterArtifact`
 - `FeedRecommendation`
+- `FeedItemAnalysisPayload`
 
 UI:
 

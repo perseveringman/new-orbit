@@ -70,3 +70,14 @@ foundation into an observable, resumable execution experience.
 2. Wire fallback execution through non-Claude runtimes once adapters are production-ready.
 3. Add export/time-range/virtualized playback refinements to Developer Console if event volume grows.
 4. Add an automated long-running dog-food/soak workflow for Auto-runner and event replay.
+
+---
+
+## Phase 6.3 Feed triage addendum
+
+Feed synthesis was upgraded from foundation-level digest/cluster previews into the first pass of a personal signal triage engine.
+
+- `feed.item.analysis`, `feed.digest`, `feed.cluster`, and `feed.report.daily` now carry relevance, novelty, confidence, related Area/Resource refs, and suggested actions.
+- Feed synthesis uses SDK-backed prompts when available and deterministic local fallback when endpoints are unavailable.
+- Feed UI exposes triage labels, scores, why-it-matters rationale, related refs, and recommendation cards while preserving the explicit Save to Library gate.
+- Tests now assert that generated Feed artifacts include the new triage fields.

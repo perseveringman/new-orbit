@@ -142,6 +142,7 @@ import type {
   EnqueueFeedTaskResult,
   FeedAiSubtitleTranslationInput,
   FeedAiSubtitleTranslationResult,
+  FeedChangeEvent,
   FeedClusterPayload,
   FeedDigestPayload,
   FeedFetchResult,
@@ -802,7 +803,12 @@ const api: OrbitApi = {
     cluster: (scope?: string): Promise<FeedSynthesisResult<FeedClusterPayload>> =>
       ipcRenderer.invoke(IPC.feeds.cluster, scope),
     report: (date: string): Promise<FeedSynthesisResult<FeedReportPayload>> =>
-      ipcRenderer.invoke(IPC.feeds.report, date)
+      ipcRenderer.invoke(IPC.feeds.report, date),
+    onEvent: (cb: (event: FeedChangeEvent) => void) => {
+      const listener = (_: unknown, event: FeedChangeEvent): void => cb(event);
+      ipcRenderer.on(IPC.feeds.event, listener);
+      return () => ipcRenderer.removeListener(IPC.feeds.event, listener);
+    }
   },
   knowledgeBase: {
     list: (): Promise<KnowledgeBase[]> => ipcRenderer.invoke(IPC.knowledgeBase.list),

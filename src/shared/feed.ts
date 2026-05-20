@@ -315,10 +315,15 @@ export interface FeedTaskLaneSnapshot {
 
 export interface FeedTaskSnapshot {
   jobs: FeedTask[];
+  total: number;
   running: number;
   queued: number;
   retry_wait: number;
+  success: number;
   failed: number;
+  cancelled: number;
+  created: number;
+  fetched: number;
   lanes: FeedTaskLaneSnapshot[];
 }
 
@@ -332,6 +337,25 @@ export interface EnqueueFeedTaskInput {
 export interface EnqueueFeedTaskResult {
   jobs: FeedTask[];
   snapshot: FeedTaskSnapshot;
+}
+
+export type FeedChangeEventType =
+  | 'sources_changed'
+  | 'items_changed'
+  | 'runs_changed'
+  | 'tasks_changed'
+  | 'synthesis_changed';
+
+export interface FeedChangeEvent {
+  type: FeedChangeEventType;
+  at: string;
+  vault_path?: string;
+  source_id?: string;
+  item_id?: string;
+  run_id?: string;
+  task_id?: string;
+  synthesis_kind?: string;
+  snapshot?: FeedTaskSnapshot;
 }
 
 export type YouTubeSourceType = 'channel' | 'playlist' | 'video';
@@ -348,6 +372,16 @@ export interface FeedSourceMetadata {
   reddit_sort?: string;
   reddit_time?: string;
   hn_feed_type?: string;
+}
+
+export interface FeedExternalUrlEntity {
+  url: string;
+  expanded_url?: string;
+  display_url?: string;
+  unwound_url?: string;
+  title?: string;
+  description?: string;
+  resolved_via?: 'x_entity' | 'tco_redirect';
 }
 
 export interface FeedItemMetadata {
@@ -385,11 +419,24 @@ export interface FeedItemMetadata {
   x_timeline_type?: 'following' | 'for-you';
   x_handle?: string;
   author_handle?: string;
+  author_name?: string;
+  author_bio?: string;
+  author_location?: string;
+  author_url?: string;
+  author_profile_url?: string;
+  author_avatar_url?: string;
+  author_verified?: boolean;
+  author_followers_count?: number;
+  author_following_count?: number;
+  author_tweet_count?: number;
+  author_profile_created_at?: string;
+  author_profile_cached_at?: string;
   is_reply?: boolean;
   reply_to?: string;
   retweet_count?: number;
   reply_count?: number;
   quoted_url?: string;
+  x_urls?: FeedExternalUrlEntity[];
   subreddit?: string;
   reddit_sort?: string;
   outbound_url?: string;
@@ -418,12 +465,13 @@ export interface FeedDigestPayload {
   date: string;
   item_count: number;
   headline: string;
-  highlights: Array<{ item_id: string; source_id: string; title: string; url: string; published_at?: string; summary?: string }>;
+  highlights: FeedDigestHighlight[];
+  recommendations?: FeedRecommendation[];
 }
 
 export interface FeedClusterPayload {
   scope: string;
-  clusters: Array<{ label: string; item_ids: string[]; source_ids?: string[]; rationale: string }>;
+  clusters: FeedCluster[];
 }
 
 export interface FeedItemTranslationPayload {
@@ -475,8 +523,17 @@ export interface FeedItemAnalysisPayload {
   item_id: string;
   summary: string;
   key_points: string[];
+  key_claims?: string[];
   entities: string[];
+  why_it_matters?: string;
+  triage_label?: FeedTriageLabel;
+  relevance_score?: number;
+  novelty_score?: number;
+  confidence?: number;
+  related?: FeedRelatedRef[];
   suggested_actions: string[];
+  action_candidates?: FeedRecommendation[];
+  risks?: string[];
 }
 
 export interface FeedReportPayload {
@@ -484,7 +541,73 @@ export interface FeedReportPayload {
   item_count: number;
   digest_artifact_id?: string;
   cluster_artifact_id?: string;
-  sections: Array<{ title: string; item_ids: string[]; summary: string }>;
+  headline?: string;
+  executive_summary?: string;
+  sections: FeedReportSection[];
+  recommendations?: FeedRecommendation[];
+}
+
+export type FeedTriageLabel = 'read_now' | 'save' | 'skim' | 'watch' | 'ignore';
+export type FeedRecommendationKind =
+  | 'read_now'
+  | 'save_to_library'
+  | 'save_to_library_with_resource'
+  | 'ignore'
+  | 'watch'
+  | 'create_task'
+  | 'save_report_as_note';
+
+export interface FeedRelatedRef {
+  kind: 'area' | 'resource';
+  ref: string;
+  title?: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface FeedRecommendation {
+  kind: FeedRecommendationKind;
+  label: string;
+  reason: string;
+  item_ids?: string[];
+  resource_ref?: string;
+  area_ref?: string;
+  confidence?: number;
+}
+
+export interface FeedDigestHighlight {
+  item_id: string;
+  source_id: string;
+  title: string;
+  url: string;
+  published_at?: string;
+  summary?: string;
+  why_it_matters?: string;
+  relevance_score?: number;
+  novelty_score?: number;
+  suggested_action?: FeedRecommendationKind;
+}
+
+export interface FeedCluster {
+  label: string;
+  item_ids: string[];
+  source_ids?: string[];
+  rationale: string;
+  key_claims?: string[];
+  relevance_score?: number;
+  novelty_score?: number;
+  related?: FeedRelatedRef[];
+  suggested_actions?: FeedRecommendation[];
+}
+
+export interface FeedReportSection {
+  title: string;
+  item_ids: string[];
+  summary: string;
+  key_changes?: string[];
+  repeated_claims?: string[];
+  why_it_matters?: string;
+  recommended_item_ids?: string[];
 }
 
 export interface FeedSynthesisResult<TPayload = unknown> {

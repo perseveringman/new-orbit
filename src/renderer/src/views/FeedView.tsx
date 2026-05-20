@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   AtSign,
@@ -29,6 +29,8 @@ import type {
   FeedItem,
   FeedItemContent,
   FeedItemAnalysisPayload,
+  FeedRecommendation,
+  FeedRelatedRef,
   FeedItemStatus,
   FeedItemTranslationPayload,
   FeedReportPayload,
@@ -55,6 +57,7 @@ type FeedSynthesisArtifact =
   | SynthesisArtifact<FeedDigestPayload>
   | SynthesisArtifact<FeedClusterPayload>
   | SynthesisArtifact<FeedReportPayload>;
+type FeedSynthesisAction = 'digest' | 'cluster' | 'report';
 
 type EnrichmentArtifact =
   | SynthesisArtifact<FeedItemAnalysisPayload>
@@ -68,6 +71,8 @@ export function FeedView(): JSX.Element {
   const [taskSnapshot, setTaskSnapshot] = useState<FeedTaskSnapshot | null>(null);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const activeItemIdRef = useRef<string | null>(null);
+  const feedReloadTimerRef = useRef<number | null>(null);
   const [status, setStatus] = useState<FeedItemStatus | 'all'>('new');
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
@@ -82,6 +87,7 @@ export function FeedView(): JSX.Element {
   const [hnFeedType, setHnFeedType] = useState<'top' | 'new' | 'best' | 'show' | 'ask' | 'jobs'>('top');
   const [hnCaptureComments, setHnCaptureComments] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [synthesisBusy, setSynthesisBusy] = useState<FeedSynthesisAction | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [digest, setDigest] = useState<SynthesisArtifact<FeedDigestPayload> | null>(null);
@@ -112,6 +118,7 @@ export function FeedView(): JSX.Element {
     (taskSnapshot?.running ?? 0) + (taskSnapshot?.queued ?? 0) + (taskSnapshot?.retry_wait ?? 0);
   const activeTaskBySource = useMemo(() => taskBySource(taskSnapshot), [taskSnapshot]);
   const operationBusy = busy;
+  const synthesisOperationBusy = synthesisBusy !== null;
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -200,6 +207,25 @@ export function FeedView(): JSX.Element {
 
   useEffect(() => {
     void reload();
+  }, []);
+
+  useEffect(() => {
+    activeItemIdRef.current = activeItem?.id ?? null;
+  }, [activeItem?.id]);
+
+  useEffect(() => {
+    const off = window.orbit.feeds.onEvent((event) => {
+      if (event.type === 'tasks_changed' && event.snapshot) setTaskSnapshot(event.snapshot);
+      if (feedReloadTimerRef.current !== null) window.clearTimeout(feedReloadTimerRef.current);
+      feedReloadTimerRef.current = window.setTimeout(() => {
+        feedReloadTimerRef.current = null;
+        void reload(activeItemIdRef.current);
+      }, 120);
+    });
+    return () => {
+      off();
+      if (feedReloadTimerRef.current !== null) window.clearTimeout(feedReloadTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -407,35 +433,53 @@ export function FeedView(): JSX.Element {
   }
 
   async function runDigest(): Promise<void> {
-    setBusy(true);
+    if (synthesisBusy) return;
+    setSynthesisBusy('digest');
+    setMessage(null);
+    setError(null);
     try {
       const result = await window.orbit.feeds.digest(todayKey);
       setDigest(result.artifact);
       await reload(activeItemId);
+      setMessage('已生成今日 Feed 摘要。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成摘要失败。');
     } finally {
-      setBusy(false);
+      setSynthesisBusy(null);
     }
   }
 
   async function runCluster(): Promise<void> {
-    setBusy(true);
+    if (synthesisBusy) return;
+    setSynthesisBusy('cluster');
+    setMessage(null);
+    setError(null);
     try {
       const result = await window.orbit.feeds.cluster(activeSourceId ?? todayKey);
       setCluster(result.artifact);
       await reload(activeItemId);
+      setMessage('已生成 Feed 聚类。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成聚类失败。');
     } finally {
-      setBusy(false);
+      setSynthesisBusy(null);
     }
   }
 
   async function runReport(): Promise<void> {
-    setBusy(true);
+    if (synthesisBusy) return;
+    setSynthesisBusy('report');
+    setMessage(null);
+    setError(null);
     try {
       const result = await window.orbit.feeds.report(todayKey);
       setReport(result.artifact);
       await reload(activeItemId);
+      setMessage('已生成今日 Feed 报告。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成报告失败。');
     } finally {
-      setBusy(false);
+      setSynthesisBusy(null);
     }
   }
 
@@ -456,14 +500,18 @@ export function FeedView(): JSX.Element {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <IconButton title="每日日报" onClick={() => void runDigest()} disabled={operationBusy}>
+            <IconButton
+              title="每日日报"
+              onClick={() => void runDigest()}
+              disabled={operationBusy || synthesisOperationBusy}
+            >
               <FileText size={15} />
               <span>摘要</span>
             </IconButton>
             <IconButton
               title="聚类可见信号"
               onClick={() => void runCluster()}
-              disabled={operationBusy}
+              disabled={operationBusy || synthesisOperationBusy}
             >
               <Sparkles size={15} />
               <span>聚类</span>
@@ -471,7 +519,7 @@ export function FeedView(): JSX.Element {
             <IconButton
               title="生成每日报告"
               onClick={() => void runReport()}
-              disabled={operationBusy}
+              disabled={operationBusy || synthesisOperationBusy}
             >
               <Library size={15} />
               <span>报告</span>
@@ -705,7 +753,7 @@ export function FeedView(): JSX.Element {
         {error ? <Notice tone="rose" message={error} /> : null}
       </header>
 
-      <div className="grid h-full min-h-0 min-w-0 flex-1 grid-cols-[288px_minmax(0,1fr)] overflow-hidden">
+      <div className="grid h-full min-h-0 min-w-0 flex-1 grid-cols-[288px_minmax(0,1fr)_360px] overflow-hidden">
         <SourceRail
           sources={sources}
           sourceCounts={sourceCounts}
@@ -786,6 +834,24 @@ export function FeedView(): JSX.Element {
           </div>
         </main>
 
+        <Inspector
+          item={activeItem}
+          source={activeItem ? sourceById.get(activeItem.source_id) : undefined}
+          tab={inspectorTab}
+          setTab={setInspectorTab}
+          enrichments={enrichments}
+          digest={digest}
+          cluster={cluster}
+          report={report}
+          busy={operationBusy}
+          synthesisBusy={synthesisBusy}
+          onSave={(item) => void save(item)}
+          onSeen={(item) => void markSeen(item)}
+          onIgnore={(item) => void ignore(item)}
+          onDigest={() => void runDigest()}
+          onCluster={() => void runCluster()}
+          onReport={() => void runReport()}
+        />
       </div>
     </div>
   );
@@ -1104,6 +1170,7 @@ function Inspector({
   cluster,
   report,
   busy,
+  synthesisBusy,
   onSave,
   onSeen,
   onIgnore,
@@ -1120,6 +1187,7 @@ function Inspector({
   cluster: SynthesisArtifact<FeedClusterPayload> | null;
   report: SynthesisArtifact<FeedReportPayload> | null;
   busy: boolean;
+  synthesisBusy: FeedSynthesisAction | null;
   onSave: (item: FeedItem) => void;
   onSeen: (item: FeedItem) => void;
   onIgnore: (item: FeedItem) => void;
@@ -1375,9 +1443,21 @@ function Inspector({
               <SynthesisSummary artifact={cluster} fallback="生成聚类以分组相关信号。" />
               <SynthesisSummary artifact={report} fallback="生成报告以记录变化。" />
               <div className="mt-3 grid grid-cols-3 gap-1">
-                <MiniAction onClick={onDigest} label="摘要" />
-                <MiniAction onClick={onCluster} label="聚类" />
-                <MiniAction onClick={onReport} label="报告" />
+                <MiniAction
+                  onClick={onDigest}
+                  label={synthesisBusy === 'digest' ? '生成中' : '摘要'}
+                  disabled={Boolean(synthesisBusy)}
+                />
+                <MiniAction
+                  onClick={onCluster}
+                  label={synthesisBusy === 'cluster' ? '生成中' : '聚类'}
+                  disabled={Boolean(synthesisBusy)}
+                />
+                <MiniAction
+                  onClick={onReport}
+                  label={synthesisBusy === 'report' ? '生成中' : '报告'}
+                  disabled={Boolean(synthesisBusy)}
+                />
               </div>
             </Section>
           </div>
@@ -1415,12 +1495,43 @@ function Inspector({
             <Section title="条目分析">
               {analysis ? (
                 <div className="space-y-3 text-sm">
+                  <div className="flex flex-wrap gap-1">
+                    {analysis.payload.triage_label ? (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/30 dark:text-sky-100">
+                        {triageLabel(analysis.payload.triage_label)}
+                      </span>
+                    ) : null}
+                    {typeof analysis.payload.relevance_score === 'number' ? (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
+                        相关 {formatScore(analysis.payload.relevance_score)}
+                      </span>
+                    ) : null}
+                    {typeof analysis.payload.novelty_score === 'number' ? (
+                      <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700 dark:bg-violet-950/30 dark:text-violet-100">
+                        新颖 {formatScore(analysis.payload.novelty_score)}
+                      </span>
+                    ) : null}
+                    {typeof analysis.payload.confidence === 'number' ? (
+                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
+                        置信 {formatScore(analysis.payload.confidence)}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="leading-6 text-neutral-700 dark:text-neutral-300">
                     {analysis.payload.summary}
                   </p>
+                  {analysis.payload.why_it_matters ? (
+                    <div className="rounded-md bg-amber-50 p-2 text-xs leading-5 text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                      {analysis.payload.why_it_matters}
+                    </div>
+                  ) : null}
                   <KeyValueList title="关键点" values={analysis.payload.key_points} />
+                  <KeyValueList title="关键主张" values={analysis.payload.key_claims ?? []} />
                   <KeyValueList title="实体" values={analysis.payload.entities} inline />
+                  <RelatedRefs refs={analysis.payload.related ?? []} />
+                  <RecommendationList items={analysis.payload.action_candidates ?? []} />
                   <KeyValueList title="建议行动" values={analysis.payload.suggested_actions} />
+                  <KeyValueList title="判断风险" values={analysis.payload.risks ?? []} />
                 </div>
               ) : (
                 <p className="text-sm text-neutral-500">
@@ -1786,11 +1897,13 @@ function SynthesisSummary({
     return (
       <div className="mt-2 rounded-md bg-sky-50 p-2 text-xs text-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
         <div className="font-medium">{payload.headline}</div>
-        <div className="mt-1 text-sky-700 dark:text-sky-200">
-          {payload.highlights
-            .slice(0, 3)
-            .map((item) => item.title)
-            .join(' / ')}
+        <div className="mt-1 space-y-1 text-sky-700 dark:text-sky-200">
+          {payload.highlights.slice(0, 3).map((item) => (
+            <div key={item.item_id}>
+              {item.title}
+              {typeof item.relevance_score === 'number' ? ` · 相关 ${formatScore(item.relevance_score)}` : ''}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -1800,11 +1913,13 @@ function SynthesisSummary({
     return (
       <div className="mt-2 rounded-md bg-violet-50 p-2 text-xs text-violet-900 dark:bg-violet-950/30 dark:text-violet-100">
         <div className="font-medium">{payload.clusters.length} 个聚类</div>
-        <div className="mt-1 text-violet-700 dark:text-violet-200">
-          {payload.clusters
-            .slice(0, 3)
-            .map((item) => item.label)
-            .join(' / ')}
+        <div className="mt-1 space-y-1 text-violet-700 dark:text-violet-200">
+          {payload.clusters.slice(0, 3).map((item) => (
+            <div key={item.label}>
+              {item.label}
+              {typeof item.relevance_score === 'number' ? ` · 相关 ${formatScore(item.relevance_score)}` : ''}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -1812,12 +1927,13 @@ function SynthesisSummary({
   const payload = artifact.payload as FeedReportPayload;
   return (
     <div className="mt-2 rounded-md bg-emerald-50 p-2 text-xs text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-      <div className="font-medium">{payload.item_count} 条内容报告</div>
+      <div className="font-medium">{payload.headline ?? `${payload.item_count} 条内容报告`}</div>
       <div className="mt-1 text-emerald-700 dark:text-emerald-200">
-        {payload.sections
-          .slice(0, 3)
-          .map((item) => item.summary)
-          .join(' / ')}
+        {payload.executive_summary ??
+          payload.sections
+            .slice(0, 3)
+            .map((item) => item.summary)
+            .join(' / ')}
       </div>
     </div>
   );
@@ -1945,6 +2061,51 @@ function KeyValueList({
   );
 }
 
+function RelatedRefs({ refs }: { refs: FeedRelatedRef[] }): JSX.Element | null {
+  if (refs.length === 0) return null;
+  return (
+    <div>
+      <div className="text-xs font-medium text-neutral-500">相关方向</div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {refs.map((ref) => (
+          <span
+            key={`${ref.kind}:${ref.ref}`}
+            title={ref.reason}
+            className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700 dark:bg-sky-950/30 dark:text-sky-100"
+          >
+            {ref.kind === 'area' ? 'Area' : 'Resource'} · {ref.title ?? ref.ref} · {formatScore(ref.confidence)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecommendationList({ items }: { items: FeedRecommendation[] }): JSX.Element | null {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <div className="text-xs font-medium text-neutral-500">推荐动作</div>
+      <div className="mt-1 space-y-1">
+        {items.map((item, index) => (
+          <div
+            key={`${item.kind}:${index}`}
+            className="rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium">{item.label}</span>
+              {typeof item.confidence === 'number' ? (
+                <span className="text-[11px] text-neutral-500">{formatScore(item.confidence)}</span>
+              ) : null}
+            </div>
+            <div className="mt-1 leading-5 text-neutral-500 dark:text-neutral-400">{item.reason}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function IconButton({
   title,
   children,
@@ -1968,11 +2129,20 @@ function IconButton({
   );
 }
 
-function MiniAction({ label, onClick }: { label: string; onClick: () => void }): JSX.Element {
+function MiniAction({
+  label,
+  onClick,
+  disabled = false
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}): JSX.Element {
   return (
     <button
       onClick={onClick}
-      className="h-7 rounded-md border border-neutral-200 bg-white text-[11px] dark:border-neutral-800 dark:bg-neutral-900"
+      disabled={disabled}
+      className="h-7 rounded-md border border-neutral-200 bg-white text-[11px] disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-900"
     >
       {label}
     </button>
@@ -2020,6 +2190,18 @@ function labelForStatus(status: FeedItemStatus | 'all'): string {
   if (status === 'ignored') return '已忽略';
   if (status === 'expired') return '已过期';
   return status;
+}
+
+function triageLabel(label: NonNullable<FeedItemAnalysisPayload['triage_label']>): string {
+  if (label === 'read_now') return '现在阅读';
+  if (label === 'save') return '建议保存';
+  if (label === 'skim') return '快速扫读';
+  if (label === 'watch') return '继续观察';
+  return '建议忽略';
+}
+
+function formatScore(value: number): string {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }
 
 function taskBySource(snapshot: FeedTaskSnapshot | null): Map<string, FeedTask> {

@@ -6,6 +6,10 @@ const DEFAULT_X_LIMIT = 20;
 const OPENCLI_X_DEFAULT_TIMEOUT_MS = 45_000;
 const OPENCLI_X_TIMELINE_TIMEOUT_MS = 90_000;
 const OPENCLI_X_THREAD_TIMEOUT_MS = 60_000;
+const OPENCLI_X_PROFILE_TIMEOUT_MS = 30_000;
+const DEFAULT_TCO_RESOLUTION_TIMEOUT_MS = 5_000;
+const TCO_URL_PATTERN = /https?:\/\/t\.co\/[A-Za-z0-9]+/gi;
+const defaultTcoResolutionCache = new Map<string, Promise<string | null>>();
 
 export type XSourceType = 'profile' | 'timeline';
 export type XTimelineType = 'following' | 'for-you';
@@ -20,6 +24,36 @@ export interface XSourceDescriptor {
 export interface XListOptions {
   limit?: number;
   timeout_ms?: number;
+  resolve_tco_redirects?: boolean;
+  tco_timeout_ms?: number;
+  tco_url_resolver?: XShortUrlResolver;
+}
+
+export type XShortUrlResolver = (url: string, options?: { timeout_ms?: number }) => Promise<string | null>;
+
+export interface XPostUrlEntity {
+  url: string;
+  expanded_url?: string;
+  display_url?: string;
+  unwound_url?: string;
+  title?: string;
+  description?: string;
+  resolved_via: 'x_entity' | 'tco_redirect';
+}
+
+export interface XUserProfile {
+  handle: string;
+  name?: string;
+  bio?: string;
+  location?: string;
+  url?: string;
+  profile_url?: string;
+  avatar_url?: string;
+  verified?: boolean;
+  followers?: number;
+  following?: number;
+  tweets?: number;
+  created_at?: string;
 }
 
 export interface XPostCandidate {
@@ -36,6 +70,7 @@ export interface XPostCandidate {
   views?: number;
   is_reply?: boolean;
   reply_to?: string;
+  url_entities?: XPostUrlEntity[];
 }
 
 export interface XThreadArchive {
@@ -45,6 +80,7 @@ export interface XThreadArchive {
 export interface XFeedProvider {
   normalizeSource(input: string): XSourceDescriptor;
   listCandidates(source: XSourceDescriptor, options?: XListOptions): Promise<XPostCandidate[]>;
+  fetchProfile?(handle: string): Promise<XUserProfile | null>;
   fetchThread(tweetId: string): Promise<XThreadArchive>;
   buildMarkdown(post: XPostCandidate, thread?: XThreadArchive): string;
 }
@@ -52,6 +88,7 @@ export interface XFeedProvider {
 export const defaultXFeedProvider: XFeedProvider = {
   normalizeSource: normalizeXSource,
   listCandidates: listXPostCandidates,
+  fetchProfile: fetchXProfile,
   fetchThread: fetchXThread,
   buildMarkdown: buildXPostMarkdown
 };
@@ -108,21 +145,30 @@ async function listXPostCandidates(source: XSourceDescriptor, options: XListOpti
     const { stdout } = await runOpenCliTwitter(['timeline', '--type', timelineType, '--limit', String(limit), '-f', 'json'], {
       timeoutMs: options.timeout_ms ?? OPENCLI_X_TIMELINE_TIMEOUT_MS
     });
-    return parseXPostRecords(stdout).slice(0, limit);
+    return (await parseXPostRecords(stdout, options)).slice(0, limit);
   }
   if (!source.handle) throw new Error('x_profile_handle_missing');
   const handle = source.handle;
   const { stdout } = await runOpenCliTwitter(['search', `from:${handle}`, '--filter', 'live', '--limit', String(limit), '-f', 'json'], {
     timeoutMs: options.timeout_ms ?? OPENCLI_X_DEFAULT_TIMEOUT_MS
   });
-  return parseXPostRecords(stdout).filter((post) => post.author.toLowerCase() === handle.toLowerCase()).slice(0, limit);
+  return (await parseXPostRecords(stdout, options))
+    .filter((post) => post.author.toLowerCase() === handle.toLowerCase())
+    .slice(0, limit);
 }
 
 async function fetchXThread(tweetId: string): Promise<XThreadArchive> {
   const id = extractTweetId(tweetId);
   if (!id) throw new Error(`invalid_x_tweet_id:${tweetId}`);
   const { stdout } = await runOpenCliTwitter(['thread', id, '-f', 'json'], { timeoutMs: OPENCLI_X_THREAD_TIMEOUT_MS });
-  return { tweets: parseXPostRecords(stdout) };
+  return { tweets: await parseXPostRecords(stdout) };
+}
+
+async function fetchXProfile(handle: string): Promise<XUserProfile | null> {
+  const normalized = normalizeHandle(handle);
+  if (!normalized) return null;
+  const { stdout } = await runOpenCliTwitter(['profile', normalized, '-f', 'json'], { timeoutMs: OPENCLI_X_PROFILE_TIMEOUT_MS });
+  return parseXProfileRecords(stdout).find((profile) => profile.handle.toLowerCase() === normalized.toLowerCase()) ?? null;
 }
 
 async function runOpenCliTwitter(args: string[], options: { timeoutMs: number }): Promise<{ stdout: string; stderr: string }> {
@@ -196,38 +242,271 @@ function buildXPostMarkdown(post: XPostCandidate, thread?: XThreadArchive): stri
   return [`# ${xPostTitle(post)}`, '', `Source: ${post.canonical_url}`, '', body].join('\n').trim();
 }
 
-function parseXPostRecords(stdout: string): XPostCandidate[] {
+async function parseXPostRecords(stdout: string, options: XListOptions = {}): Promise<XPostCandidate[]> {
+  const parsed = parseJsonValue(stdout);
+  const records = Array.isArray(parsed) ? parsed : isRecord(parsed) ? [parsed] : [];
+  const posts = await Promise.all(records.map((record) => parseXPostRecord(record, options)));
+  return posts.flat();
+}
+
+async function parseXPostRecord(record: unknown, options: XListOptions): Promise<XPostCandidate[]> {
+  if (!isRecord(record)) return [];
+  const id = stringValue(record.id) ?? extractTweetId(stringValue(record.url) ?? '');
+  const author = normalizeHandle(stringValue(record.author) ?? stringValue(record.username) ?? '');
+  const rawText = stringValue(record.text) ?? stringValue(record.content) ?? '';
+  if (!id || !author || !rawText.trim()) return [];
+  const resolved = await resolveXPostTextUrls(rawText, collectXUrlEntities(record), options);
+  const url = stringValue(record.url) ?? `https://x.com/${author}/status/${id}`;
+  const canonicalUrl = canonicalXPostUrl(url, author, id);
+  const createdAt = stringValue(record.created_at) ?? stringValue(record.createdAt);
+  const publishedAt = dateIsoOrUndefined(createdAt);
+  const replyTo = stringValue(record.in_reply_to) ?? stringValue(record.in_reply_to_status_id);
+  return [
+    {
+      id,
+      author,
+      text: resolved.text,
+      url,
+      canonical_url: canonicalUrl,
+      ...(createdAt ? { created_at: createdAt } : {}),
+      ...(publishedAt ? { published_at: publishedAt } : {}),
+      likes: numberValue(record.likes),
+      retweets: numberValue(record.retweets),
+      replies: numberValue(record.replies),
+      views: numberValue(record.views),
+      is_reply: Boolean(replyTo) || resolved.text.trim().startsWith('@'),
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(resolved.url_entities.length ? { url_entities: resolved.url_entities } : {})
+    }
+  ];
+}
+
+async function resolveXPostTextUrls(
+  rawText: string,
+  entityUrls: XPostUrlEntity[],
+  options: XListOptions
+): Promise<{ text: string; url_entities: XPostUrlEntity[] }> {
+  const merged = mergeXUrlEntities(entityUrls);
+  let text = replaceXShortUrls(rawText, merged);
+  if (options.resolve_tco_redirects !== false) {
+    const resolver = options.tco_url_resolver ?? defaultResolveTcoUrl;
+    const unresolvedShortUrls = extractTcoUrls(text).filter((url) => !merged.some((entity) => entity.url === url && preferredXUrl(entity)));
+    const fallbackEntities = (
+      await Promise.all(
+        unresolvedShortUrls.map(async (url): Promise<XPostUrlEntity | null> => {
+          const expanded = await resolveTcoUrl(url, resolver, options.tco_timeout_ms);
+          return expanded ? { url, expanded_url: expanded, resolved_via: 'tco_redirect' } : null;
+        })
+      )
+    ).filter((entity): entity is XPostUrlEntity => Boolean(entity));
+    if (fallbackEntities.length) {
+      merged.push(...fallbackEntities);
+      text = replaceXShortUrls(text, fallbackEntities);
+    }
+  }
+  return { text, url_entities: mergeXUrlEntities(merged) };
+}
+
+function collectXUrlEntities(record: Record<string, unknown>): XPostUrlEntity[] {
+  return mergeXUrlEntities([
+    ...collectUrlEntitiesFromContainer(record.entities),
+    ...collectUrlEntitiesFromContainer(record.legacy),
+    ...collectUrlEntitiesFromContainer(record.extended_tweet),
+    ...collectUrlEntitiesFromContainer(record.note_tweet),
+    ...collectUrlEntitiesFromContainer(record.urls),
+    ...collectUrlEntitiesFromContainer(record.links)
+  ]);
+}
+
+function collectUrlEntitiesFromContainer(value: unknown): XPostUrlEntity[] {
+  if (Array.isArray(value)) return value.flatMap(parseXUrlEntity);
+  if (!isRecord(value)) return [];
+  return [
+    ...collectUrlEntitiesFromContainer(value.urls),
+    ...collectUrlEntitiesFromContainer(value.entities),
+    ...collectUrlEntitiesFromContainer(value.entity_set),
+    ...collectUrlEntitiesFromContainer(value.legacy),
+    ...collectUrlEntitiesFromContainer(value.result),
+    ...collectUrlEntitiesFromContainer(value.note_tweet_results)
+  ];
+}
+
+function parseXUrlEntity(value: unknown): XPostUrlEntity[] {
+  if (typeof value === 'string') {
+    const url = httpUrlOrUndefined(value);
+    return url ? [{ url, resolved_via: isTcoUrl(url) ? 'tco_redirect' : 'x_entity' }] : [];
+  }
+  if (!isRecord(value)) return [];
+  const url = httpUrlOrUndefined(stringValue(value.url) ?? stringValue(value.tco_url) ?? stringValue(value.short_url));
+  const expandedUrl = httpUrlOrUndefined(
+    stringValue(value.expanded_url) ?? stringValue(value.expandedUrl) ?? stringValue(value.expanded) ?? stringValue(value.href)
+  );
+  const unwoundUrl = httpUrlOrUndefined(stringValue(value.unwound_url) ?? stringValue(value.unwoundUrl));
+  const displayUrl = stringValue(value.display_url) ?? stringValue(value.displayUrl);
+  const fallbackUrl = url ?? expandedUrl ?? unwoundUrl;
+  if (!fallbackUrl) return [];
+  return [
+    {
+      url: url ?? fallbackUrl,
+      ...(expandedUrl ? { expanded_url: expandedUrl } : {}),
+      ...(displayUrl ? { display_url: displayUrl } : {}),
+      ...(unwoundUrl ? { unwound_url: unwoundUrl } : {}),
+      ...(stringValue(value.title) ? { title: stringValue(value.title) } : {}),
+      ...(stringValue(value.description) ? { description: stringValue(value.description) } : {}),
+      resolved_via: 'x_entity'
+    }
+  ];
+}
+
+function parseXProfileRecords(stdout: string): XUserProfile[] {
   const parsed = parseJsonValue(stdout);
   const records = Array.isArray(parsed) ? parsed : isRecord(parsed) ? [parsed] : [];
   return records.flatMap((record) => {
     if (!isRecord(record)) return [];
-    const id = stringValue(record.id) ?? extractTweetId(stringValue(record.url) ?? '');
-    const author = normalizeHandle(stringValue(record.author) ?? stringValue(record.username) ?? '');
-    const text = stringValue(record.text) ?? stringValue(record.content) ?? '';
-    if (!id || !author || !text.trim()) return [];
-    const url = stringValue(record.url) ?? `https://x.com/${author}/status/${id}`;
-    const canonicalUrl = canonicalXPostUrl(url, author, id);
-    const createdAt = stringValue(record.created_at) ?? stringValue(record.createdAt);
-    const publishedAt = dateIsoOrUndefined(createdAt);
-    const replyTo = stringValue(record.in_reply_to) ?? stringValue(record.in_reply_to_status_id);
+    const handle = normalizeHandle(
+      stringValue(record.screen_name) ??
+        stringValue(record.username) ??
+        stringValue(record.handle) ??
+        stringValue(record.author) ??
+        ''
+    );
+    if (!handle) return [];
+    const profileUrl = httpUrlOrUndefined(stringValue(record.profile_url) ?? stringValue(record.profileUrl)) ?? `https://x.com/${handle}`;
     return [
       {
-        id,
-        author,
-        text,
-        url,
-        canonical_url: canonicalUrl,
-        ...(createdAt ? { created_at: createdAt } : {}),
-        ...(publishedAt ? { published_at: publishedAt } : {}),
-        likes: numberValue(record.likes),
-        retweets: numberValue(record.retweets),
-        replies: numberValue(record.replies),
-        views: numberValue(record.views),
-        is_reply: Boolean(replyTo) || text.trim().startsWith('@'),
-        ...(replyTo ? { reply_to: replyTo } : {})
+        handle,
+        ...(stringValue(record.name) ?? stringValue(record.display_name) ? { name: stringValue(record.name) ?? stringValue(record.display_name) } : {}),
+        ...(stringValue(record.bio) ?? stringValue(record.description) ? { bio: stringValue(record.bio) ?? stringValue(record.description) } : {}),
+        ...(stringValue(record.location) ? { location: stringValue(record.location) } : {}),
+        ...(httpUrlOrUndefined(stringValue(record.url) ?? stringValue(record.website)) ? { url: httpUrlOrUndefined(stringValue(record.url) ?? stringValue(record.website)) } : {}),
+        profile_url: profileUrl,
+        ...(profileAvatarUrl(record) ? { avatar_url: profileAvatarUrl(record) } : {}),
+        ...(typeof record.verified === 'boolean' ? { verified: record.verified } : {}),
+        followers: numberValue(record.followers) ?? numberValue(record.followers_count),
+        following: numberValue(record.following) ?? numberValue(record.friends_count),
+        tweets: numberValue(record.tweets) ?? numberValue(record.statuses_count),
+        ...(dateIsoOrUndefined(stringValue(record.created_at) ?? stringValue(record.createdAt)) ? {
+          created_at: dateIsoOrUndefined(stringValue(record.created_at) ?? stringValue(record.createdAt))
+        } : {})
       }
     ];
   });
+}
+
+function profileAvatarUrl(record: Record<string, unknown>): string | undefined {
+  return httpUrlOrUndefined(
+    stringValue(record.avatar_url) ??
+      stringValue(record.avatarUrl) ??
+      stringValue(record.profile_image_url_https) ??
+      stringValue(record.profile_image_url) ??
+      stringValue(record.profileImageUrl) ??
+      stringValue(record.picture)
+  );
+}
+
+function mergeXUrlEntities(entities: XPostUrlEntity[]): XPostUrlEntity[] {
+  const byKey = new Map<string, XPostUrlEntity>();
+  for (const entity of entities) {
+    const key = entity.url;
+    const existing = byKey.get(key);
+    byKey.set(key, {
+      ...(existing ?? entity),
+      ...entity,
+      expanded_url: entity.expanded_url ?? existing?.expanded_url,
+      display_url: entity.display_url ?? existing?.display_url,
+      unwound_url: entity.unwound_url ?? existing?.unwound_url,
+      title: entity.title ?? existing?.title,
+      description: entity.description ?? existing?.description,
+      resolved_via: existing?.resolved_via === 'x_entity' || entity.resolved_via === 'x_entity' ? 'x_entity' : 'tco_redirect'
+    });
+  }
+  return [...byKey.values()];
+}
+
+function replaceXShortUrls(text: string, entities: XPostUrlEntity[]): string {
+  return [...entities]
+    .filter((entity) => isTcoUrl(entity.url))
+    .sort((a, b) => b.url.length - a.url.length)
+    .reduce((next, entity) => {
+      const replacement = preferredXUrl(entity);
+      return replacement && replacement !== entity.url ? next.split(entity.url).join(replacement) : next;
+    }, text);
+}
+
+function preferredXUrl(entity: XPostUrlEntity): string | undefined {
+  return entity.expanded_url ?? entity.unwound_url ?? (isTcoUrl(entity.url) ? undefined : entity.url);
+}
+
+function extractTcoUrls(text: string): string[] {
+  return [...new Set([...text.matchAll(TCO_URL_PATTERN)].map((match) => match[0]))];
+}
+
+async function resolveTcoUrl(url: string, resolver: XShortUrlResolver, timeoutMs?: number): Promise<string | null> {
+  const effectiveTimeoutMs = timeoutMs ?? DEFAULT_TCO_RESOLUTION_TIMEOUT_MS;
+  if (resolver === defaultResolveTcoUrl) {
+    const cacheKey = `${url}:${effectiveTimeoutMs}`;
+    let cached = defaultTcoResolutionCache.get(cacheKey);
+    if (!cached) {
+      cached = resolver(url, { timeout_ms: effectiveTimeoutMs }).catch(() => null);
+      defaultTcoResolutionCache.set(cacheKey, cached);
+    }
+    return httpUrlOrUndefined((await cached) ?? undefined) ?? null;
+  }
+  try {
+    const resolved = await resolver(url, { timeout_ms: effectiveTimeoutMs });
+    return httpUrlOrUndefined(resolved ?? undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function defaultResolveTcoUrl(url: string, options: { timeout_ms?: number } = {}): Promise<string | null> {
+  const timeoutMs = options.timeout_ms ?? DEFAULT_TCO_RESOLUTION_TIMEOUT_MS;
+  if (hasHttpProxyEnv()) {
+    const curlResolved = await resolveTcoUrlWithCurl(url, timeoutMs);
+    if (curlResolved) return curlResolved;
+  }
+  try {
+    const fetchResolved = await resolveTcoUrlWithFetch(url, timeoutMs);
+    if (fetchResolved) return fetchResolved;
+  } catch {
+    // Some local Node runtimes do not inherit curl-style proxy settings; curl remains a practical fallback.
+  }
+  return await resolveTcoUrlWithCurl(url, timeoutMs);
+}
+
+async function resolveTcoUrlWithFetch(url: string, timeoutMs: number): Promise<string | null> {
+  const response = await fetch(url, {
+    method: 'HEAD',
+    redirect: 'manual',
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: { accept: 'text/html,application/xhtml+xml,*/*;q=0.5' }
+  });
+  const location = response.headers.get('location');
+  if (!location) return null;
+  return new URL(location, url).toString();
+}
+
+async function resolveTcoUrlWithCurl(url: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const seconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+    const { stdout } = await execFileAsync(
+      'curl',
+      ['-sS', '-I', '--max-time', String(seconds), '--user-agent', 'Mozilla/5.0', url],
+      { timeout: timeoutMs + 1000, maxBuffer: 64 * 1024 }
+    );
+    const location = stdout
+      .split(/\r?\n/)
+      .map((line) => line.match(/^location:\s*(.+)$/i)?.[1]?.trim())
+      .find((value): value is string => Boolean(value));
+    return location ? new URL(location, url).toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasHttpProxyEnv(): boolean {
+  return Boolean(process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy);
 }
 
 function descriptorForHandle(value: string): XSourceDescriptor {
@@ -318,6 +597,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function httpUrlOrUndefined(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isTcoUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname.replace(/^www\./, '').toLowerCase() === 't.co';
+  } catch {
+    return false;
+  }
 }
 
 function numberValue(value: unknown): number | undefined {
