@@ -15,6 +15,7 @@ describe('IPC contract', () => {
         'capture',
         'chat',
         'context',
+        'connectors',
         'conversation',
         'dashboard',
         'dispatch',

@@ -44,6 +44,7 @@ import { registerNoteIpc } from './note/ipc';
 import { registerLibraryIpc } from './library/ipc';
 import { registerFeedIpc } from './feed/ipc';
 import { registerKnowledgeBaseIpc } from './knowledge-base/ipc';
+import { registerConnectorsIpc } from './connectors/ipc';
 import { ensureScheduledSystemTasks, registerScheduledTaskIpc } from './scheduled-task/ipc';
 import { registerTimelineIpc } from './timeline/ipc';
 import { autoStartGatewayIfNeeded, registerGatewayIpc } from './gateway/ipc';
@@ -125,7 +126,10 @@ function createWindow(): void {
     mainWindow?.webContents.setZoomFactor(DEFAULT_ZOOM_FACTOR);
   });
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show());
+  mainWindow.on('ready-to-show', () => {
+    mainWindow?.maximize();
+    mainWindow?.show();
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -417,6 +421,7 @@ function registerIpc(): void {
   registerLibraryIpc(() => currentVault?.path ?? null);
   registerFeedIpc(() => currentVault?.path ?? null);
   registerKnowledgeBaseIpc(() => currentVault?.path ?? null);
+  registerConnectorsIpc(() => currentVault?.path ?? null);
   registerScheduledTaskIpc(() => currentVault?.path ?? null);
   registerTimelineIpc(() => currentVault?.path ?? null);
   registerGatewayIpc(() => currentVault?.path ?? null);

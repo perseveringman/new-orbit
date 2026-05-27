@@ -6,7 +6,9 @@ import type { ContextPacketScope } from '@shared/context';
 import type { EvidenceSelector } from '@shared/evidence';
 import type { OpenLoopPayload, SynthesisProvenance, SynthesisSource } from '@shared/synthesis';
 import { generateWorkContextReport } from '../context/work-context';
+import { getSDKRuntime } from '../runtime/sdk/ipc';
 import { createSynthesisStore } from '../synthesis/store';
+import { buildAgentSessionReviewReport } from './agent-session-report';
 import { discoverReviewFindings } from './discovery';
 import { reviewPeriod } from './scheduler';
 import { createReviewStore, type ReviewStore } from './store';
@@ -33,6 +35,11 @@ export function registerReviewSystemIpc(getVaultPath: () => string | null): void
     const run = await store.start(kind, reviewPeriod(kind), scopeRef);
     const { findings, health } = await discoverReviewFindings(vaultPath, run);
     const synthesisStore = createSynthesisStore(vaultPath);
+    const agentSessionReport = await buildAgentSessionReviewReport(vaultPath, {
+      kind,
+      period: run.period,
+      router: getSDKRuntime(vaultPath).router
+    });
     const pmilReport = await generateWorkContextReport(vaultPath, {
       scope: reviewScope(kind, scopeRef),
       period: run.period,
@@ -64,11 +71,15 @@ export function registerReviewSystemIpc(getVaultPath: () => string | null): void
     const artifact = await synthesisStore.writeFresh({
       kind: kind === 'monthly' ? 'summary.monthly' : kind === 'daily' ? 'summary.daily' : 'review.weekly',
       scope_key: `review:${kind}:${run.period.from.slice(0, 10)}:${scopeRef ?? 'global'}`,
-      sources: [{ kind: 'raw', ref: run.id, title: `${kind} review`, metadata: { health } }],
+      sources: [
+        { kind: 'raw', ref: run.id, title: `${kind} review`, metadata: { health } },
+        ...sourcesFromEvidenceSelectors(agentSessionReport.sessions.flatMap((session) => session.evidence))
+      ],
       provenance,
       payload: {
         findings: allFindings,
         health,
+        agent_session_report: agentSessionReport,
         pmil: {
           work_context_artifact_id: workArtifact.id,
           open_loops_artifact_id: openLoopsArtifact.id,

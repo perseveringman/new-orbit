@@ -11,6 +11,7 @@ export type VaultViewKind =
   | 'memory'
   | 'review'
   | 'feeds'
+  | 'connectors'
   | 'resources'
   | 'resource'
   | 'knowledgeBase'
@@ -44,6 +45,7 @@ export type SidebarSurfaceId =
   | 'memory'
   | 'review'
   | 'feeds'
+  | 'connectors'
   | 'resources'
   | 'knowledgeBase'
   | 'scheduled'
@@ -262,6 +264,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
   },
   feeds: {
     intents: [{ id: 'overview', title: '概览', panels: ['feed-tasks', 'ask'] }]
+  },
+  connectors: {
+    intents: [{ id: 'overview', title: '概览', panels: ['inspector', 'ask'] }]
   },
   resources: {
     intents: [{ id: 'overview', title: '概览', panels: ['files', 'backlinks', 'inspector'] }]

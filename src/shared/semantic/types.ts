@@ -10,7 +10,8 @@ export const INDEXABLE_ENTITY_KINDS = [
   'area',
   'conversation',
   'synthesis_artifact',
-  'kb_doc'
+  'kb_doc',
+  'external_file'
 ] as const;
 
 export type IndexableEntityKind = (typeof INDEXABLE_ENTITY_KINDS)[number];
@@ -18,7 +19,7 @@ export type IndexableEntityKind = (typeof INDEXABLE_ENTITY_KINDS)[number];
 export type SemanticLayer = 1 | 2;
 export type SearchMatchMode = 'semantic' | 'keyword' | 'hybrid';
 export type SearchMatchType = 'semantic' | 'keyword' | 'both';
-export type SearchLayerLabel = 'truth' | 'synthesis' | 'feed-only';
+export type SearchLayerLabel = 'truth' | 'synthesis' | 'feed-only' | 'reference';
 
 export interface SemanticDocument {
   id: string;

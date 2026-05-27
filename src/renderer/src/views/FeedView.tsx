@@ -39,6 +39,7 @@ import type {
   FeedTaskSnapshot,
   FeedTaskStatus
 } from '@shared/feed';
+import { feedSynthesisArtifactToNoteInput } from '@shared/feed-synthesis-note';
 import type { SynthesisArtifact } from '@shared/synthesis';
 import { useSidebar } from '../store/sidebar';
 
@@ -88,6 +89,8 @@ export function FeedView(): JSX.Element {
   const [hnCaptureComments, setHnCaptureComments] = useState(false);
   const [busy, setBusy] = useState(false);
   const [synthesisBusy, setSynthesisBusy] = useState<FeedSynthesisAction | null>(null);
+  const [synthesisVersion, setSynthesisVersion] = useState(0);
+  const [savingSynthesisNoteId, setSavingSynthesisNoteId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [digest, setDigest] = useState<SynthesisArtifact<FeedDigestPayload> | null>(null);
@@ -145,6 +148,7 @@ export function FeedView(): JSX.Element {
   }, [activeItemId, allItems, filteredItems]);
 
   const todayKey = localDateKey(new Date());
+  const clusterScopeKey = `feed.cluster:${activeSourceId ?? todayKey}`;
 
   const metrics = useMemo(() => {
     const scopedItems = allItems.filter(
@@ -210,12 +214,34 @@ export function FeedView(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    async function loadSynthesisArtifacts(): Promise<void> {
+      const [nextDigest, nextCluster, nextReport] = await Promise.all([
+        window.orbit.synthesis.get(`feed.digest:${todayKey}`),
+        window.orbit.synthesis.get(clusterScopeKey),
+        window.orbit.synthesis.get(`feed.report.daily:${todayKey}`)
+      ]);
+      if (cancelled) return;
+      setDigest(isFeedDigestArtifact(nextDigest) ? nextDigest : null);
+      setCluster(isFeedClusterArtifact(nextCluster) ? nextCluster : null);
+      setReport(isFeedReportArtifact(nextReport) ? nextReport : null);
+    }
+    void loadSynthesisArtifacts().catch((err) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : '加载 Feed 合成结果失败。');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clusterScopeKey, synthesisVersion, todayKey]);
+
+  useEffect(() => {
     activeItemIdRef.current = activeItem?.id ?? null;
   }, [activeItem?.id]);
 
   useEffect(() => {
     const off = window.orbit.feeds.onEvent((event) => {
       if (event.type === 'tasks_changed' && event.snapshot) setTaskSnapshot(event.snapshot);
+      if (event.type === 'synthesis_changed') setSynthesisVersion((version) => version + 1);
       if (feedReloadTimerRef.current !== null) window.clearTimeout(feedReloadTimerRef.current);
       feedReloadTimerRef.current = window.setTimeout(() => {
         feedReloadTimerRef.current = null;
@@ -440,6 +466,8 @@ export function FeedView(): JSX.Element {
     try {
       const result = await window.orbit.feeds.digest(todayKey);
       setDigest(result.artifact);
+      setSynthesisVersion((version) => version + 1);
+      setInspectorTab('overview');
       await reload(activeItemId);
       setMessage('已生成今日 Feed 摘要。');
     } catch (err) {
@@ -457,6 +485,8 @@ export function FeedView(): JSX.Element {
     try {
       const result = await window.orbit.feeds.cluster(activeSourceId ?? todayKey);
       setCluster(result.artifact);
+      setSynthesisVersion((version) => version + 1);
+      setInspectorTab('overview');
       await reload(activeItemId);
       setMessage('已生成 Feed 聚类。');
     } catch (err) {
@@ -474,12 +504,29 @@ export function FeedView(): JSX.Element {
     try {
       const result = await window.orbit.feeds.report(todayKey);
       setReport(result.artifact);
+      setSynthesisVersion((version) => version + 1);
+      setInspectorTab('overview');
       await reload(activeItemId);
       setMessage('已生成今日 Feed 报告。');
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成报告失败。');
     } finally {
       setSynthesisBusy(null);
+    }
+  }
+
+  async function saveSynthesisNote(artifact: FeedSynthesisArtifact): Promise<void> {
+    if (savingSynthesisNoteId) return;
+    setSavingSynthesisNoteId(artifact.id);
+    setMessage(null);
+    setError(null);
+    try {
+      const note = await window.orbit.notes.create(feedSynthesisArtifactToNoteInput(artifact));
+      setMessage(`已保存为笔记：${note.frontmatter.title ?? note.frontmatter.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存 Feed 合成为笔记失败。');
+    } finally {
+      setSavingSynthesisNoteId(null);
     }
   }
 
@@ -810,6 +857,17 @@ export function FeedView(): JSX.Element {
               </span>
               <span>{digest || cluster || report ? '已有合成结果' : '本会话尚未生成合成结果'}</span>
             </div>
+            <FeedSynthesisTray
+              digest={digest}
+              cluster={cluster}
+              report={report}
+              synthesisBusy={synthesisBusy}
+              savingSynthesisNoteId={savingSynthesisNoteId}
+              onDigest={() => void runDigest()}
+              onCluster={() => void runCluster()}
+              onReport={() => void runReport()}
+              onSaveSynthesisNote={(artifact) => void saveSynthesisNote(artifact)}
+            />
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -845,12 +903,14 @@ export function FeedView(): JSX.Element {
           report={report}
           busy={operationBusy}
           synthesisBusy={synthesisBusy}
+          savingSynthesisNoteId={savingSynthesisNoteId}
           onSave={(item) => void save(item)}
           onSeen={(item) => void markSeen(item)}
           onIgnore={(item) => void ignore(item)}
           onDigest={() => void runDigest()}
           onCluster={() => void runCluster()}
           onReport={() => void runReport()}
+          onSaveSynthesisNote={(artifact) => void saveSynthesisNote(artifact)}
         />
       </div>
     </div>
@@ -1160,6 +1220,94 @@ function FeedItemRow({
   );
 }
 
+function FeedSynthesisTray({
+  digest,
+  cluster,
+  report,
+  synthesisBusy,
+  savingSynthesisNoteId,
+  onDigest,
+  onCluster,
+  onReport,
+  onSaveSynthesisNote
+}: {
+  digest: SynthesisArtifact<FeedDigestPayload> | null;
+  cluster: SynthesisArtifact<FeedClusterPayload> | null;
+  report: SynthesisArtifact<FeedReportPayload> | null;
+  synthesisBusy: FeedSynthesisAction | null;
+  savingSynthesisNoteId: string | null;
+  onDigest: () => void;
+  onCluster: () => void;
+  onReport: () => void;
+  onSaveSynthesisNote: (artifact: FeedSynthesisArtifact) => void;
+}): JSX.Element | null {
+  const hasResult = Boolean(digest || cluster || report);
+  if (!hasResult && !synthesisBusy) return null;
+
+  return (
+    <section className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-2.5 dark:border-neutral-800 dark:bg-neutral-900/60">
+      <div className="flex items-center justify-between gap-2">
+        <div className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-neutral-800 dark:text-neutral-100">
+          <Sparkles size={14} className="shrink-0 text-sky-600 dark:text-sky-300" />
+          <span>今日合成</span>
+        </div>
+        <div className="grid shrink-0 grid-cols-3 gap-1">
+          <MiniAction
+            onClick={onDigest}
+            label={synthesisBusy === 'digest' ? '生成中' : '摘要'}
+            disabled={Boolean(synthesisBusy)}
+          />
+          <MiniAction
+            onClick={onCluster}
+            label={synthesisBusy === 'cluster' ? '生成中' : '聚类'}
+            disabled={Boolean(synthesisBusy)}
+          />
+          <MiniAction
+            onClick={onReport}
+            label={synthesisBusy === 'report' ? '生成中' : '报告'}
+            disabled={Boolean(synthesisBusy)}
+          />
+        </div>
+      </div>
+      <div className="-mt-1 grid gap-2 md:grid-cols-3">
+        {digest ? (
+          <SynthesisSummary
+            artifact={digest}
+            fallback=""
+            onSaveNote={onSaveSynthesisNote}
+            savingNote={savingSynthesisNoteId === digest.id}
+          />
+        ) : null}
+        {cluster ? (
+          <SynthesisSummary
+            artifact={cluster}
+            fallback=""
+            onSaveNote={onSaveSynthesisNote}
+            savingNote={savingSynthesisNoteId === cluster.id}
+          />
+        ) : null}
+        {report ? (
+          <SynthesisSummary
+            artifact={report}
+            fallback=""
+            onSaveNote={onSaveSynthesisNote}
+            savingNote={savingSynthesisNoteId === report.id}
+          />
+        ) : null}
+        {synthesisBusy && !hasResult ? (
+          <div className="mt-2 rounded-md bg-sky-50 p-2 text-xs text-sky-800 dark:bg-sky-950/30 dark:text-sky-100">
+            {synthesisBusy === 'digest'
+              ? '摘要生成中'
+              : synthesisBusy === 'cluster'
+                ? '聚类生成中'
+                : '报告生成中'}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function Inspector({
   item,
   source,
@@ -1171,12 +1319,14 @@ function Inspector({
   report,
   busy,
   synthesisBusy,
+  savingSynthesisNoteId,
   onSave,
   onSeen,
   onIgnore,
   onDigest,
   onCluster,
-  onReport
+  onReport,
+  onSaveSynthesisNote
 }: {
   item: FeedItem | null;
   source?: FeedSource;
@@ -1188,12 +1338,14 @@ function Inspector({
   report: SynthesisArtifact<FeedReportPayload> | null;
   busy: boolean;
   synthesisBusy: FeedSynthesisAction | null;
+  savingSynthesisNoteId: string | null;
   onSave: (item: FeedItem) => void;
   onSeen: (item: FeedItem) => void;
   onIgnore: (item: FeedItem) => void;
   onDigest: () => void;
   onCluster: () => void;
   onReport: () => void;
+  onSaveSynthesisNote: (artifact: FeedSynthesisArtifact) => void;
 }): JSX.Element {
   const analysis = enrichments.find((artifact) => artifact.kind === 'feed.item.analysis') as
     | SynthesisArtifact<FeedItemAnalysisPayload>
@@ -1439,9 +1591,24 @@ function Inspector({
             </Section>
 
             <Section title="今日合成">
-              <SynthesisSummary artifact={digest} fallback="生成摘要以查看今日重点信号。" />
-              <SynthesisSummary artifact={cluster} fallback="生成聚类以分组相关信号。" />
-              <SynthesisSummary artifact={report} fallback="生成报告以记录变化。" />
+              <SynthesisSummary
+                artifact={digest}
+                fallback="生成摘要以查看今日重点信号。"
+                onSaveNote={onSaveSynthesisNote}
+                savingNote={savingSynthesisNoteId === digest?.id}
+              />
+              <SynthesisSummary
+                artifact={cluster}
+                fallback="生成聚类以分组相关信号。"
+                onSaveNote={onSaveSynthesisNote}
+                savingNote={savingSynthesisNoteId === cluster?.id}
+              />
+              <SynthesisSummary
+                artifact={report}
+                fallback="生成报告以记录变化。"
+                onSaveNote={onSaveSynthesisNote}
+                savingNote={savingSynthesisNoteId === report?.id}
+              />
               <div className="mt-3 grid grid-cols-3 gap-1">
                 <MiniAction
                   onClick={onDigest}
@@ -1886,17 +2053,26 @@ function FeedThumbnail({ item, compact }: { item: FeedItem; compact?: boolean })
 
 function SynthesisSummary({
   artifact,
-  fallback
+  fallback,
+  onSaveNote,
+  savingNote = false
 }: {
   artifact: FeedSynthesisArtifact | null;
   fallback: string;
+  onSaveNote?: (artifact: FeedSynthesisArtifact) => void;
+  savingNote?: boolean;
 }): JSX.Element {
   if (!artifact) return <p className="mt-2 text-xs text-neutral-500">{fallback}</p>;
   if (artifact.kind === 'feed.digest') {
     const payload = artifact.payload as FeedDigestPayload;
     return (
       <div className="mt-2 rounded-md bg-sky-50 p-2 text-xs text-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
-        <div className="font-medium">{payload.headline}</div>
+        <SynthesisSummaryHeader
+          title={payload.headline}
+          artifact={artifact}
+          onSaveNote={onSaveNote}
+          savingNote={savingNote}
+        />
         <div className="mt-1 space-y-1 text-sky-700 dark:text-sky-200">
           {payload.highlights.slice(0, 3).map((item) => (
             <div key={item.item_id}>
@@ -1912,7 +2088,12 @@ function SynthesisSummary({
     const payload = artifact.payload as FeedClusterPayload;
     return (
       <div className="mt-2 rounded-md bg-violet-50 p-2 text-xs text-violet-900 dark:bg-violet-950/30 dark:text-violet-100">
-        <div className="font-medium">{payload.clusters.length} 个聚类</div>
+        <SynthesisSummaryHeader
+          title={`${payload.clusters.length} 个聚类`}
+          artifact={artifact}
+          onSaveNote={onSaveNote}
+          savingNote={savingNote}
+        />
         <div className="mt-1 space-y-1 text-violet-700 dark:text-violet-200">
           {payload.clusters.slice(0, 3).map((item) => (
             <div key={item.label}>
@@ -1927,7 +2108,12 @@ function SynthesisSummary({
   const payload = artifact.payload as FeedReportPayload;
   return (
     <div className="mt-2 rounded-md bg-emerald-50 p-2 text-xs text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-      <div className="font-medium">{payload.headline ?? `${payload.item_count} 条内容报告`}</div>
+      <SynthesisSummaryHeader
+        title={payload.headline ?? `${payload.item_count} 条内容报告`}
+        artifact={artifact}
+        onSaveNote={onSaveNote}
+        savingNote={savingNote}
+      />
       <div className="mt-1 text-emerald-700 dark:text-emerald-200">
         {payload.executive_summary ??
           payload.sections
@@ -1935,6 +2121,34 @@ function SynthesisSummary({
             .map((item) => item.summary)
             .join(' / ')}
       </div>
+    </div>
+  );
+}
+
+function SynthesisSummaryHeader({
+  title,
+  artifact,
+  onSaveNote,
+  savingNote
+}: {
+  title: string;
+  artifact: FeedSynthesisArtifact;
+  onSaveNote?: (artifact: FeedSynthesisArtifact) => void;
+  savingNote: boolean;
+}): JSX.Element {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0 font-medium">{title}</div>
+      {onSaveNote ? (
+        <button
+          type="button"
+          disabled={savingNote}
+          onClick={() => onSaveNote(artifact)}
+          className="shrink-0 rounded border border-current/20 px-1.5 py-0.5 text-[10px] font-medium disabled:opacity-50"
+        >
+          {savingNote ? '保存中' : '存为笔记'}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -2433,6 +2647,24 @@ function localDateKey(date: Date): string {
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function isFeedDigestArtifact(
+  artifact: SynthesisArtifact | null
+): artifact is SynthesisArtifact<FeedDigestPayload> {
+  return artifact?.kind === 'feed.digest';
+}
+
+function isFeedClusterArtifact(
+  artifact: SynthesisArtifact | null
+): artifact is SynthesisArtifact<FeedClusterPayload> {
+  return artifact?.kind === 'feed.cluster';
+}
+
+function isFeedReportArtifact(
+  artifact: SynthesisArtifact | null
+): artifact is SynthesisArtifact<FeedReportPayload> {
+  return artifact?.kind === 'feed.report.daily';
 }
 
 function formatRelative(value: string): string {

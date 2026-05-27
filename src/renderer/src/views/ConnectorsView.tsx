@@ -1,0 +1,237 @@
+import { useEffect, useMemo, useState } from 'react';
+import { FolderOpen, Plug, RefreshCw, Search, Trash2 } from 'lucide-react';
+import type {
+  ConnectorConnection,
+  ConnectorDefinition,
+  ConnectorSearchHit
+} from '@shared/connectors';
+
+type LoadState = 'idle' | 'loading' | 'error';
+
+export function ConnectorsView(): JSX.Element {
+  const [definitions, setDefinitions] = useState<ConnectorDefinition[]>([]);
+  const [connections, setConnections] = useState<ConnectorConnection[]>([]);
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<ConnectorSearchHit[]>([]);
+  const [state, setState] = useState<LoadState>('idle');
+  const [message, setMessage] = useState<string | null>(null);
+
+  const obsidian = useMemo(
+    () => definitions.find((definition) => definition.id === 'obsidian') ?? null,
+    [definitions]
+  );
+
+  async function reload(): Promise<void> {
+    setState('loading');
+    setMessage(null);
+    try {
+      const [nextDefinitions, nextConnections] = await Promise.all([
+        window.orbit.connectors.definitions(),
+        window.orbit.connectors.list()
+      ]);
+      setDefinitions(nextDefinitions);
+      setConnections(nextConnections);
+      setState('idle');
+    } catch (error) {
+      setMessage((error as Error).message);
+      setState('error');
+    }
+  }
+
+  useEffect(() => {
+    void reload();
+    const off = window.orbit.connectors.onEvent(() => void reload());
+    return off;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const handle = window.setTimeout(async () => {
+      if (!query.trim()) {
+        setHits([]);
+        return;
+      }
+      const next = await window.orbit.connectors.search(query, 8).catch(() => []);
+      if (!cancelled) setHits(next);
+    }, 220);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [query]);
+
+  async function connectObsidian(): Promise<void> {
+    setMessage(null);
+    const picked = await window.orbit.connectors.chooseDirectory();
+    if (picked.canceled || !picked.path) return;
+    try {
+      await window.orbit.connectors.connect({
+        connector_id: 'obsidian',
+        display_name: 'Obsidian',
+        config: { root_path: picked.path }
+      });
+      await reload();
+      setMessage('Obsidian 已连接，AI 上下文索引会在下一次搜索或提问时刷新。');
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  }
+
+  async function scan(connectionId: string): Promise<void> {
+    setMessage(null);
+    try {
+      const result = await window.orbit.connectors.scan(connectionId);
+      await reload();
+      setMessage(`已扫描 ${result.item_count} 个条目。`);
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  }
+
+  async function remove(connectionId: string): Promise<void> {
+    setMessage(null);
+    try {
+      await window.orbit.connectors.remove(connectionId);
+      setHits([]);
+      await reload();
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  }
+
+  async function openHit(hit: ConnectorSearchHit): Promise<void> {
+    await window.orbit.connectors.open({
+      connection_id: hit.connection_id,
+      doc_ref: hit.doc_ref
+    });
+  }
+
+  return (
+    <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5">
+        <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Connectors</p>
+              <h1 className="mt-1 text-2xl font-semibold">外部连接器</h1>
+            </div>
+            <button
+              onClick={() => void reload()}
+              className="inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            >
+              <RefreshCw size={15} />
+              刷新
+            </button>
+          </div>
+
+          {message ? (
+            <p className={`mt-4 rounded-md border px-3 py-2 text-sm ${state === 'error' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300' : 'border-neutral-200 bg-neutral-50 text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300'}`}>
+              {message}
+            </p>
+          ) : null}
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex flex-col gap-4">
+            <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Plug size={17} className="text-violet-500" />
+                    <h2 className="text-sm font-semibold">{obsidian?.display_name ?? 'Obsidian'}</h2>
+                  </div>
+                  <p className="mt-2 text-sm text-neutral-500">
+                    {obsidian?.description ?? '连接本地 Markdown vault。'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => void connectObsidian()}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-md bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-neutral-300"
+                >
+                  <FolderOpen size={15} />
+                  连接目录
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(obsidian?.capabilities ?? ['list', 'read', 'search', 'index']).map((capability) => (
+                  <span key={capability} className="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                    {capability}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+                <h2 className="text-sm font-semibold">已连接</h2>
+              </div>
+              {connections.length === 0 ? (
+                <p className="px-4 py-8 text-sm text-neutral-500">暂无连接。</p>
+              ) : (
+                <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                  {connections.map((connection) => (
+                    <li key={connection.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${connection.status === 'connected' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                          <p className="truncate text-sm font-medium">{connection.display_name}</p>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-neutral-500">
+                          {String(connection.config['root_path'] ?? connection.connector_id)} · {connection.item_count} 个条目
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => void scan(connection.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2.5 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                      >
+                        <RefreshCw size={13} />
+                        扫描
+                      </button>
+                      <button
+                        onClick={() => void remove(connection.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
+                      >
+                        <Trash2 size={13} />
+                        移除
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <aside className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <label className="flex items-center gap-2 text-sm font-medium" htmlFor="connector-search">
+              <Search size={15} />
+              搜索连接器内容
+            </label>
+            <input
+              id="connector-search"
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="关键词"
+              className="mt-3 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 dark:border-neutral-700 dark:bg-neutral-950"
+            />
+            <ul className="mt-4 space-y-2">
+              {hits.map((hit) => (
+                <li key={`${hit.connection_id}:${hit.doc_ref}`}>
+                  <button
+                    onClick={() => void openHit(hit)}
+                    className="block w-full rounded-md border border-neutral-200 px-3 py-2 text-left hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-950"
+                  >
+                    <span className="block truncate text-sm font-medium">{hit.title}</span>
+                    <span className="mt-1 block line-clamp-2 text-xs leading-5 text-neutral-500">{hit.excerpt}</span>
+                  </button>
+                </li>
+              ))}
+              {query.trim() && hits.length === 0 ? (
+                <li className="text-sm text-neutral-500">没有结果。</li>
+              ) : null}
+            </ul>
+          </aside>
+        </section>
+      </div>
+    </main>
+  );
+}

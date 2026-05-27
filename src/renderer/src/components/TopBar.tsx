@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { PencilLine } from 'lucide-react';
 import { useWorkspace } from '../store/workspace';
 import { useAgent } from '../store/agent';
 import { useWorktrees } from '../store/worktrees';
 import { AboutModal } from './AboutModal';
 import { MigrationDialog } from './Modals/MigrationDialog';
+import { requestQuickCaptureOpen } from './quick-capture/events';
 
 export function TopBar(): JSX.Element {
   const { vault, settings, setTheme, closeVault } = useWorkspace();
@@ -33,6 +35,8 @@ export function TopBar(): JSX.Element {
 
   const btn =
     'rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800';
+  const primaryBtn =
+    'inline-flex items-center gap-1.5 rounded-md border border-neutral-950 bg-neutral-950 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200';
 
   return (
     <>
@@ -47,6 +51,18 @@ export function TopBar(): JSX.Element {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 py-2">
+          {vault && (
+            <button
+              type="button"
+              onClick={requestQuickCaptureOpen}
+              title="快速捕获（⌘⇧I）"
+              className={primaryBtn}
+            >
+              <PencilLine size={14} aria-hidden="true" />
+              <span>快速捕获</span>
+              <span className="hidden text-[10px] font-normal opacity-70 xl:inline">⌘⇧I</span>
+            </button>
+          )}
           {vault && (
             <span
               className="rounded-full border border-neutral-200 bg-white/70 px-2.5 py-1 text-[11px] text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400"

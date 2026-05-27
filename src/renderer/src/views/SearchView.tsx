@@ -200,7 +200,7 @@ export function SearchContent(props: {
               <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">语义搜索</p>
               <h1 className="mt-1 text-2xl font-semibold">跨 Orbit 真相与合成结果搜索</h1>
               <p className="mt-2 text-sm text-neutral-500">
-                用自然语言搜索 Notes、Library、Resources、Projects、Areas、Conversations、KB 文档与 Layer 2 产物。
+                用自然语言搜索 Notes、Library、Resources、Projects、Areas、Conversations、外部引用与 Layer 2 产物。
               </p>
             </div>
             <IndexStatusBadge status={props.status} stale={stale} onRebuild={props.onRebuild} />

@@ -170,6 +170,19 @@ import type {
   WelcomeAnalysisResult
 } from '@shared/knowledge-base';
 import type {
+  ConnectConnectorInput,
+  ConnectorChangeEvent,
+  ConnectorConnection,
+  ConnectorDefinition,
+  ConnectorDirectoryPickResult,
+  ConnectorDocumentContent,
+  ConnectorOpenInput,
+  ConnectorReadInput,
+  ConnectorScanResult,
+  ConnectorSearchHit,
+  UpdateConnectorInput
+} from '@shared/connectors';
+import type {
   CreateScheduledTaskInput,
   NaturalLanguageScheduleResult,
   ScheduledTask,
@@ -829,6 +842,31 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.knowledgeBase.search, kbId, query),
     activate: (input: ActivateKnowledgeBaseInput): Promise<Note> =>
       ipcRenderer.invoke(IPC.knowledgeBase.activate, input)
+  },
+  connectors: {
+    definitions: (): Promise<ConnectorDefinition[]> => ipcRenderer.invoke(IPC.connectors.definitions),
+    list: (): Promise<ConnectorConnection[]> => ipcRenderer.invoke(IPC.connectors.list),
+    connect: (input: ConnectConnectorInput): Promise<ConnectorConnection> =>
+      ipcRenderer.invoke(IPC.connectors.connect, input),
+    update: (connectionId: string, patch: UpdateConnectorInput): Promise<ConnectorConnection> =>
+      ipcRenderer.invoke(IPC.connectors.update, connectionId, patch),
+    remove: (connectionId: string): Promise<ConnectorConnection | null> =>
+      ipcRenderer.invoke(IPC.connectors.remove, connectionId),
+    scan: (connectionId: string): Promise<ConnectorScanResult> =>
+      ipcRenderer.invoke(IPC.connectors.scan, connectionId),
+    search: (query: string, limit?: number): Promise<ConnectorSearchHit[]> =>
+      ipcRenderer.invoke(IPC.connectors.search, query, limit),
+    read: (input: ConnectorReadInput): Promise<ConnectorDocumentContent | null> =>
+      ipcRenderer.invoke(IPC.connectors.read, input),
+    open: (input: ConnectorOpenInput): Promise<void> =>
+      ipcRenderer.invoke(IPC.connectors.open, input.connection_id, input.doc_ref),
+    chooseDirectory: (): Promise<ConnectorDirectoryPickResult> =>
+      ipcRenderer.invoke(IPC.connectors.chooseDirectory),
+    onEvent: (cb: (event: ConnectorChangeEvent) => void) => {
+      const listener = (_: unknown, event: ConnectorChangeEvent): void => cb(event);
+      ipcRenderer.on(IPC.connectors.event, listener);
+      return () => ipcRenderer.removeListener(IPC.connectors.event, listener);
+    }
   },
   onboarding: {
     status: (): Promise<OnboardingStatus> => ipcRenderer.invoke(IPC.onboarding.status),

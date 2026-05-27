@@ -25,8 +25,10 @@ import {
   type HackerNewsStoryCandidate
 } from '../src/main/feed/hackernews';
 import { createLibraryStore } from '../src/main/library/store';
+import { createNoteStore } from '../src/main/note/store';
 import type { SynthesisRuntimeRouter } from '../src/main/synthesis/runner';
 import { createSynthesisStore } from '../src/main/synthesis/store';
+import { feedSynthesisArtifactToNoteInput } from '../src/shared/feed-synthesis-note';
 import type { RuntimeRouteDecision } from '../src/shared/runtime';
 
 let tmp: string;
@@ -192,6 +194,36 @@ describe('FeedStore Phase 6.3 Layer 0 reader', () => {
     expect(digest.artifact.status).toBe('fresh');
     expect(digest.artifact.provenance.runtime).toBe('local:heuristic');
     expect(digest.artifact.payload.headline).toContain('今日 2 条信号');
+  });
+
+  it('materializes a feed synthesis artifact as a Markdown note only after explicit save', async () => {
+    const feed = createFeedStore(tmp, {
+      now: () => new Date('2026-04-28T12:00:00.000Z'),
+      fetchText: async () => rss
+    });
+    const source = await feed.createSource({ url: 'https://example.com/rss.xml' });
+    await feed.fetch(source.id);
+    const digest = await feed.digest('2026-04-28');
+    const cluster = await feed.cluster(source.id);
+    const report = await feed.dailyReport('2026-04-28', {
+      digest_artifact_id: digest.artifact.id,
+      cluster_artifact_id: cluster.artifact.id
+    });
+
+    expect(await createNoteStore(tmp).list({ include_archived: true })).toEqual([]);
+
+    const note = await createNoteStore(tmp).create(feedSynthesisArtifactToNoteInput(report.artifact));
+
+    expect(note.path).toMatch(/^notes\/daily-summaries\//);
+    expect(note.frontmatter.source).toMatchObject({
+      kind: 'synthesis',
+      ref: report.artifact.id
+    });
+    expect(note.frontmatter.synthesis_ref).toBe(report.artifact.id);
+    expect(note.frontmatter.tags).toEqual(expect.arrayContaining(['feed', 'synthesis']));
+    expect(note.body).toContain('# Feed 报告 2026-04-28');
+    expect(note.body).toContain('## 分析段落');
+    expect(note.body).toContain('Feed item one');
   });
 
   it('fetches YouTube subscriptions as Layer 0 videos and promotes transcript snapshots to Library', async () => {

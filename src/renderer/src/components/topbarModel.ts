@@ -24,8 +24,8 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: '记忆', view: { kind: 'memory' }, icon: '🧠' },
   { label: '复盘', view: { kind: 'review' }, icon: '☑' },
   { label: '信息流', view: { kind: 'feeds' }, icon: '🛰️' },
+  { label: '连接器', view: { kind: 'connectors' }, icon: '⎇' },
   { label: '资源', view: { kind: 'resources' }, icon: '🧩' },
-  { label: '知识库', view: { kind: 'knowledgeBase' }, icon: '🧠' },
   { label: '时间线', view: { kind: 'timeline' }, icon: '☼' },
   { label: '计划任务', view: { kind: 'scheduled' }, icon: '⏰' },
   { label: '网关', view: { kind: 'gateway' }, icon: '✈️' },
@@ -60,6 +60,7 @@ const WORKSPACE_DETAILS: Record<
    | 'notes'
     | 'library'
     | 'feeds'
+    | 'connectors'
     | 'search'
     | 'memory'
     | 'review'
@@ -89,6 +90,7 @@ const WORKSPACE_DETAILS: Record<
   memory: '管理被唤回的偏好、经验、兴趣和模式。',
   review: '生成每周和每月健康检查，并转化为行动。',
   feeds: '管理订阅并处理进入的信息流条目。',
+  connectors: '连接外部工具和知识源，让 AI 在 Orbit 内按需引用。',
   resources: '从重复出现的笔记、链接、人物和项目中培育主题资源工作站。',
   resource: '在单个资源空间中处理任务、材料、产出、聊天和时间线。',
   knowledgeBase: '导入已有档案，并将片段激活为笔记。',
@@ -188,6 +190,7 @@ export function deriveTopBarContext({
     view.kind === 'notes' ||
     view.kind === 'library' ||
     view.kind === 'feeds' ||
+    view.kind === 'connectors' ||
     view.kind === 'resources' ||
     view.kind === 'knowledgeBase' ||
     view.kind === 'scheduled' ||

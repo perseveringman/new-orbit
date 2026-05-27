@@ -83,6 +83,20 @@ describe('quick capture save', () => {
     await expect(fs.stat(inboxDir)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('stores markdown quick captures under the quick capture notes folder', async () => {
+    const service = createQuickCaptureService(vaultPath);
+    const result = await service.createNote({
+      content: '• 修任务详情默认信息架构 @new-orbit #ux\n- BuJo 的关键不是纸笔，是迁移摩擦 #product',
+      tags: ['capture']
+    });
+
+    expect(result.note.frontmatter.type).toBe('capture');
+    expect(result.note.path).toContain('notes/captures/quick/');
+    expect(result.note.frontmatter.source?.kind).toBe('quick_capture');
+    expect(result.note.frontmatter.tags).toEqual(['capture', 'ux', 'product']);
+    expect(result.note.body).toContain('• 修任务详情默认信息架构 @new-orbit #ux');
+  });
+
   it('suggests lightweight actions while drafting', async () => {
     const service = createQuickCaptureService(vaultPath);
     const result = await service.suggestDraft({
@@ -91,6 +105,10 @@ describe('quick capture save', () => {
 
     expect(result.suggestions.map((suggestion) => suggestion.action)).toContain('save_to_library');
     expect(result.suggestions.map((suggestion) => suggestion.action)).toContain('create_task');
+    expect(result.suggestions.map((suggestion) => suggestion.label)).toContain('保存到资料库');
+    expect(result.suggestions.map((suggestion) => suggestion.label)).toContain('创建任务');
+    expect(result.suggestions.map((suggestion) => suggestion.id)).toContain('save_to_library:https://example.com/essay');
+    expect(result.suggestions.map((suggestion) => suggestion.label)).not.toContain('Save to Library');
     expect(result.source).toBe('heuristic');
   });
 
@@ -176,6 +194,21 @@ describe('quick capture save', () => {
     );
   });
 
+  it('records deferred capture actions as readable note markers', async () => {
+    const service = createQuickCaptureService(vaultPath);
+    const result = await service.createNote({
+      content: 'Long research capture',
+      tags: ['research', '待提炼'],
+      acceptedSuggestionActions: ['distill_later', 'transcribe_voice']
+    });
+
+    expect(result.note.frontmatter.tags).toEqual(['research', '待提炼']);
+    expect(result.note.body).toContain('## 捕获处理');
+    expect(result.note.body).toContain('标记稍后提炼（#待提炼）');
+    expect(result.note.body).toContain('标记待转写（#待转写）');
+    expect(result.note.body).not.toContain('distill_later');
+  });
+
   it('renders a single-composer Capture modal with realtime suggestion affordances', () => {
     const html = renderToStaticMarkup(
       createElement(QuickCaptureModal, {
@@ -191,6 +224,14 @@ describe('quick capture save', () => {
               confidence: 0.9,
               risk: 'low',
               source: 'heuristic'
+            },
+            {
+              id: 'bookmark:https://example.com',
+              action: 'bookmark',
+              label: '收藏书签',
+              confidence: 0.7,
+              risk: 'low',
+              source: 'heuristic'
             }
           ]
         },
@@ -202,12 +243,45 @@ describe('quick capture save', () => {
 
     expect(html).toContain('输入、粘贴、拖入文件或录制语音');
     expect(html).toContain('保存到资料库');
-    expect(html).toContain('保存笔记');
+    expect(html).toContain('收藏书签');
+    expect(html).toContain('保存');
     expect(html).toContain('立即分析');
+    expect(html).not.toContain('Save to Library');
     expect(html).not.toContain('Link');
     expect(html).not.toContain('Task title');
-    expect(html).toContain('附加文件');
-    expect(html).toContain('录制语音');
+    expect(html).toContain('插入任务符号');
+    expect(html).toContain('插入想法符号');
+    expect(html).toContain('插入事件符号');
+    expect(html).toContain('关联项目');
+    expect(html).toContain('⌘1');
+    expect(html).toContain('⌘K');
+    expect(html).toContain('⌘Enter');
+    expect(html).toContain('附件');
+    expect(html).toContain('语音');
     expect(html).not.toContain('Thought-only MVP');
+  });
+
+  it('renders capture save results with follow-up destinations', () => {
+    const html = renderToStaticMarkup(
+      createElement(QuickCaptureModal, {
+        open: true,
+        saveResult: {
+          note: { id: 'note-1', title: '捕获想法', path: 'notes/captures/cap.md' },
+          libraryItems: [{ id: 'lib-1', title: '资料', kind: 'article' }],
+          inboxItems: [{ id: 'inbox-1', title: '创建任务' }],
+          markers: ['待提炼'],
+          warnings: []
+        },
+        onSave: () => undefined,
+        onClose: () => undefined
+      })
+    );
+
+    expect(html).toContain('捕获已保存');
+    expect(html).toContain('打开笔记');
+    expect(html).toContain('查看资料库');
+    expect(html).toContain('处理收件箱');
+    expect(html).toContain('#待提炼');
+    expect(html).toContain('继续捕获');
   });
 });

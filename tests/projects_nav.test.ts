@@ -6,6 +6,7 @@ import {
   applyInboxBadgeEvent,
   isPrimaryWorkspaceDestination,
   pendingMessageIdsFromItems,
+  QuickCaptureNavButton,
   WorkspaceOverflowMenu,
   WorkspaceQuickItem,
   workspaceBadgeCount
@@ -54,6 +55,14 @@ describe('ProjectsNav inbox badge', () => {
     expect(html).toContain('资源');
     expect(html).toContain('新建资源');
     expect(html).toContain('还没有资源');
+  });
+
+  it('renders a visible quick capture entry in the sidebar', () => {
+    const html = renderToStaticMarkup(createElement(QuickCaptureNavButton));
+
+    expect(html).toContain('快速捕获');
+    expect(html).toContain('想法、链接、文件');
+    expect(html).toContain('⌘⇧I');
   });
 
   it('returns sidebar pending count only for the 收件箱 destination', () => {

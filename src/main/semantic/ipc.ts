@@ -64,7 +64,8 @@ function shouldInvalidate(type: string): boolean {
     'area.',
     'conversation.',
     'synthesis.artifact.',
-    'kb.'
+    'kb.',
+    'connector.'
   ].some((prefix) => type.startsWith(prefix));
 }
 

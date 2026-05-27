@@ -17,6 +17,12 @@ import type {
 } from '@shared/capture';
 import type { SpecialMarkerKind } from '@shared/note';
 import type { RuntimeRouteDecision, SDKInvocationInput } from '@shared/runtime';
+import {
+  quickCaptureActionDetail,
+  quickCaptureActionLabel,
+  quickCaptureActionTag,
+  quickCaptureSuggestionStableId
+} from '@shared/quick-capture-actions';
 import { createInboxServiceForVault } from '../../inbox';
 import { createLibraryStore } from '../../library/store';
 import { createNoteStore } from '../../note/store';
@@ -71,10 +77,13 @@ export class QuickCaptureService {
     const tags = normalizeTags([...(input.tags ?? []), ...extractHashTags(content)]);
     const note = await createNoteStore(this.vaultPath).create({
       type: audio ? 'voice_log' : 'capture',
+      ...(audio ? {} : { subdir: 'quick' }),
       ...(input.sourceTitle ? { title: input.sourceTitle } : {}),
       body,
       tags,
-      source: sourceUrl ? { kind: 'url', ref: sourceUrl, excerpt: 'quick_capture' } : { kind: 'manual', excerpt: 'quick_capture' },
+      source: sourceUrl
+        ? { kind: 'quick_capture', ref: sourceUrl, excerpt: 'url' }
+        : { kind: 'quick_capture', excerpt: 'manual' },
       ...(input.specialKind ? { special_marker: markerFor(input.specialKind) } : {}),
       ...(audio
         ? {
@@ -160,7 +169,7 @@ function captureNoteBody(
   sourceUrl?: string,
   acceptedSuggestionActions: string[] = []
 ): string {
-  const sections = [content || 'Captured attachment.'];
+  const sections = [content || '已捕获附件。'];
   if (sourceUrl) sections.push(['## Source', '', sourceUrl].join('\n'));
   if (attachments.length > 0) {
     sections.push(
@@ -171,7 +180,13 @@ function captureNoteBody(
     );
   }
   if (acceptedSuggestionActions.length > 0) {
-    sections.push(['## Capture actions', '', ...acceptedSuggestionActions.map((action) => `- ${action}`)].join('\n'));
+    sections.push(
+      [
+        '## 捕获处理',
+        '',
+        ...acceptedSuggestionActions.map((action) => `- ${captureActionText(action)}`)
+      ].join('\n')
+    );
   }
   return sections.join('\n\n');
 }
@@ -256,9 +271,9 @@ function heuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptur
   if (url) {
     const parsed = new URL(url);
     suggestions.push({
-      id: `save_to_library:${url}`,
+      id: quickCaptureSuggestionStableId('save_to_library', { url }),
       action: 'save_to_library',
-      label: 'Save to Library',
+      label: quickCaptureActionLabel('save_to_library'),
       detail: parsed.hostname,
       confidence: 0.88,
       risk: 'low',
@@ -266,10 +281,10 @@ function heuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptur
       source: 'heuristic'
     });
     suggestions.push({
-      id: `bookmark:${url}`,
+      id: quickCaptureSuggestionStableId('bookmark', { url }),
       action: 'bookmark',
-      label: 'Bookmark',
-      detail: 'Keep as a reusable reference',
+      label: quickCaptureActionLabel('bookmark'),
+      detail: quickCaptureActionDetail('bookmark'),
       confidence: 0.62,
       risk: 'low',
       params: { url },
@@ -278,9 +293,9 @@ function heuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptur
   }
   if (looksActionable(content)) {
     suggestions.push({
-      id: 'create_task',
+      id: quickCaptureSuggestionStableId('create_task'),
       action: 'create_task',
-      label: 'Create task',
+      label: quickCaptureActionLabel('create_task'),
       detail: truncateText(firstLine(content), 80),
       confidence: 0.76,
       risk: 'proposal',
@@ -290,10 +305,10 @@ function heuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptur
   }
   if (input.hasAudio) {
     suggestions.push({
-      id: 'transcribe_voice',
+      id: quickCaptureSuggestionStableId('transcribe_voice'),
       action: 'transcribe_voice',
-      label: 'Transcribe voice',
-      detail: 'Attach transcript when a speech model is configured',
+      label: quickCaptureActionLabel('transcribe_voice'),
+      detail: quickCaptureActionDetail('transcribe_voice'),
       confidence: 0.72,
       risk: 'needs_confirm',
       source: 'heuristic'
@@ -301,10 +316,10 @@ function heuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickCaptur
   }
   if (content.length > 800) {
     suggestions.push({
-      id: 'distill_later',
+      id: quickCaptureSuggestionStableId('distill_later'),
       action: 'distill_later',
-      label: 'Distill later',
-      detail: 'Long capture with reusable signal',
+      label: quickCaptureActionLabel('distill_later'),
+      detail: quickCaptureActionDetail('distill_later'),
       confidence: 0.65,
       risk: 'needs_confirm',
       source: 'heuristic'
@@ -359,7 +374,7 @@ function captureSuggestionPrompt(input: QuickCaptureSuggestDraftInput): string {
     'You are Orbit Quick Capture. Return strict JSON only.',
     'Suggest lightweight next actions for a user capture. Do not require the user to process everything.',
     'Allowed actions: save_to_library, bookmark, create_task, transcribe_voice, distill_later.',
-    'Schema: {"title":"short optional title","tags":["kebab tags"],"suggestions":[{"action":"save_to_library","label":"Save to Library","detail":"why","confidence":0.0,"risk":"low","params":{}}]}',
+    'Schema: {"title":"short optional title","tags":["kebab tags"],"suggestions":[{"action":"save_to_library","detail":"why","confidence":0.0,"risk":"low","params":{}}]}',
     'Risk must be one of low, needs_confirm, proposal. Use proposal for task creation.',
     `Has audio: ${Boolean(input.hasAudio)}`,
     `Attachments: ${(input.attachmentNames ?? []).join(', ') || '(none)'}`,
@@ -394,7 +409,7 @@ function parseSdkSuggestions(value: unknown): QuickCaptureSuggestion[] {
       {
         id: `sdk:${action}:${index}`,
         action,
-        label: typeof record['label'] === 'string' ? record['label'].slice(0, 40) : labelForAction(action),
+        label: quickCaptureActionLabel(action),
         detail: typeof record['detail'] === 'string' ? record['detail'].slice(0, 100) : undefined,
         confidence: clamp(Number(record['confidence'] ?? 0.6), 0, 1),
         risk,
@@ -402,7 +417,10 @@ function parseSdkSuggestions(value: unknown): QuickCaptureSuggestion[] {
         source: 'sdk_fast'
       }
     ];
-  });
+  }).map((suggestion) => ({
+    ...suggestion,
+    id: quickCaptureSuggestionStableId(suggestion.action, suggestion.params)
+  }));
 }
 
 function mergeSuggestions(base: QuickCaptureSuggestion[], extra: QuickCaptureSuggestion[]): QuickCaptureSuggestion[] {
@@ -464,10 +482,16 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function labelForAction(action: QuickCaptureSuggestion['action']): string {
-  if (action === 'save_to_library') return 'Save to Library';
-  if (action === 'bookmark') return 'Bookmark';
-  if (action === 'create_task') return 'Create task';
-  if (action === 'transcribe_voice') return 'Transcribe voice';
-  return 'Distill later';
+function captureActionText(action: string): string {
+  if (
+    action === 'save_to_library' ||
+    action === 'bookmark' ||
+    action === 'create_task' ||
+    action === 'transcribe_voice' ||
+    action === 'distill_later'
+  ) {
+    const tag = quickCaptureActionTag(action);
+    return tag ? `${quickCaptureActionLabel(action)}（#${tag}）` : quickCaptureActionLabel(action);
+  }
+  return action;
 }

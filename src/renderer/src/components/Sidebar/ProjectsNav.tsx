@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PencilLine } from 'lucide-react';
 import { usePara, type WorkspaceView } from '../../store/para';
 import { useWorkspace } from '../../store/workspace';
 import type { ProjectSummaryDTO } from '@shared/ipc';
@@ -8,6 +9,7 @@ import { WORKSPACE_DESTINATIONS, type WorkspaceDestination } from '../topbarMode
 import { AreasNav } from './AreasNav';
 import { useInbox } from '../../store/inbox';
 import { ResourcesNav } from './ResourcesNav';
+import { requestQuickCaptureOpen } from '../quick-capture/events';
 
 export const PRIMARY_WORKSPACE_KINDS: WorkspaceView['kind'][] = [
   'dashboard',
@@ -108,6 +110,7 @@ export function ProjectsNav(): JSX.Element {
       <h2 className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
         工作区
       </h2>
+      <QuickCaptureNavButton />
       <ul className="space-y-0.5 text-sm">
         {primaryDestinations.map((it) => {
           const active = isQuickItemActive(view, it);
@@ -194,6 +197,30 @@ export function ProjectsNav(): JSX.Element {
 
       <ResourcesNav />
     </div>
+  );
+}
+
+export function QuickCaptureNavButton(): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={requestQuickCaptureOpen}
+      title="快速捕获（⌘⇧I）"
+      className="mb-2 flex w-full items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-2 text-left text-sm font-medium text-sky-800 shadow-sm transition hover:border-sky-300 hover:bg-sky-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100 dark:hover:border-sky-400/50 dark:hover:bg-sky-500/15"
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-sky-700 shadow-sm ring-1 ring-sky-200 dark:bg-sky-950/70 dark:text-sky-100 dark:ring-sky-500/30">
+        <PencilLine size={15} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">快速捕获</span>
+        <span className="block truncate text-[11px] font-normal text-sky-700/75 dark:text-sky-100/70">
+          想法、链接、文件
+        </span>
+      </span>
+      <span className="shrink-0 rounded border border-sky-200 bg-white/70 px-1.5 py-0.5 text-[10px] font-normal text-sky-700 dark:border-sky-400/30 dark:bg-sky-950/50 dark:text-sky-100/70">
+        ⌘⇧I
+      </span>
+    </button>
   );
 }
 

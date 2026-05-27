@@ -53,6 +53,7 @@ import { AskAnywhereView } from './AskAnywhereView';
 import { NotesView } from './NotesView';
 import { LibraryView } from './LibraryView';
 import { FeedView } from './FeedView';
+import { ConnectorsView } from './ConnectorsView';
 import { SearchView } from './SearchView';
 import { MemoryView } from './MemoryView';
 import { ReviewView } from './ReviewView';
@@ -140,6 +141,7 @@ function getCompanionSurfaceLabel(surface: string): string {
   if (surface === 'areaRoom') return '领域空间';
   if (surface === 'askAnywhere') return '随处问';
   if (surface === 'developerConsole') return '开发者控制台';
+  if (surface === 'connectors') return '连接器';
   if (surface === 'knowledgeBase') return '知识库';
   return surface.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
 }
@@ -539,6 +541,8 @@ export function VaultView(): JSX.Element {
           <LibraryView />
         ) : view.kind === 'feeds' ? (
           <FeedView />
+        ) : view.kind === 'connectors' ? (
+          <ConnectorsView />
         ) : view.kind === 'search' ? (
           <SearchView />
         ) : view.kind === 'memory' ? (

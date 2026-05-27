@@ -64,7 +64,7 @@ export class NoteStore {
     const created = input.created ?? now;
     const updated = input.updated ?? created;
     const title = input.title?.trim() || titleFromBody(input.body) || labelForType(input.type);
-    const relPath = await this.nextPath(input.type, title, created);
+    const relPath = await this.nextPath(input.type, title, created, input.subdir);
     const body = normalizeBody(input.body, title);
     const fm: NoteFrontmatter = normalizeFrontmatter({
       id,
@@ -138,8 +138,8 @@ export class NoteStore {
       .map((item) => item.note);
   }
 
-  private async nextPath(type: NoteType, title: string, nowIso: string): Promise<string> {
-    const dir = path.posix.join(NOTE_ROOT, NOTE_DIR_BY_TYPE[type]);
+  private async nextPath(type: NoteType, title: string, nowIso: string, subdir?: string): Promise<string> {
+    const dir = path.posix.join(NOTE_ROOT, NOTE_DIR_BY_TYPE[type], normalizeSubdir(subdir));
     const base =
       type === 'daily_summary'
         ? nowIso.slice(0, 10)
@@ -265,6 +265,15 @@ function labelForType(type: NoteType): string {
   if (type === 'voice_log') return 'Voice log';
   if (type === 'daily_summary') return 'Daily summary';
   return type[0].toUpperCase() + type.slice(1);
+}
+
+function normalizeSubdir(value?: string): string {
+  if (!value) return '';
+  return value
+    .split(/[\\/]+/)
+    .map((part) => slugify(part))
+    .filter(Boolean)
+    .join('/');
 }
 
 function typeFromPath(rel: string): NoteType | null {

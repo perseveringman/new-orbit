@@ -53,6 +53,7 @@ function sourceKind(kind: SearchResult['doc']['entity_kind']): SynthesisSource['
   if (kind === 'library_item') return 'library';
   if (kind === 'synthesis_artifact') return 'raw';
   if (kind === 'kb_doc') return 'kb';
+  if (kind === 'external_file') return 'raw';
   return kind;
 }
 

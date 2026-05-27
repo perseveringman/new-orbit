@@ -1,3 +1,4 @@
+import type { EvidenceSelector } from '../evidence';
 import type { SynthesisArtifact } from '../synthesis';
 
 export const REVIEW_KINDS = ['daily', 'weekly', 'monthly', 'quarterly', 'area', 'resource', 'project'] as const;
@@ -68,6 +69,40 @@ export interface ReviewRunDetail {
   run: ReviewRun;
   findings: ReviewFinding[];
   artifact?: SynthesisArtifact;
+}
+
+export interface ReviewAgentSessionReport {
+  period: { from: string; to: string };
+  total_sessions: number;
+  analyzed_sessions: number;
+  headline: string;
+  narrative: string;
+  agents: Array<{ agent: string; count: number }>;
+  projects: Array<{ project: string; count: number }>;
+  sessions: Array<{
+    source_id: string;
+    title: string;
+    agent?: string;
+    project_name?: string;
+    started_at?: string;
+    ended_at?: string;
+    updated_at: string;
+    summary: string;
+    key_points: string[];
+    open_loops: Array<{ title: string; evidence: EvidenceSelector[] }>;
+    next_actions: string[];
+    evidence: EvidenceSelector[];
+  }>;
+  open_loops: Array<{ title: string; source_id: string; evidence: EvidenceSelector[] }>;
+  next_actions: Array<{ title: string; source_id: string; evidence: EvidenceSelector[] }>;
+  coverage: {
+    scanned_sources: number;
+    period_matched: number;
+    analyzed_limit: number;
+    omitted_count: number;
+    synced_at: string;
+    message?: string;
+  };
 }
 
 export interface ReviewHealthOverview {

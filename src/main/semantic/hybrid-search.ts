@@ -91,7 +91,7 @@ function buildSnippets(doc: SemanticDocument, tokens: string[]): string[] {
 }
 
 function entityLabel(doc: SemanticDocument): string {
-  const layer = doc.layer_label === 'synthesis' ? 'Layer 2' : 'Layer 1';
+  const layer = doc.layer_label === 'synthesis' ? 'Layer 2' : doc.layer_label === 'reference' ? '外部引用' : 'Layer 1';
   return `${doc.entity_kind.replace(/_/g, ' ')} · ${layer}`;
 }
 

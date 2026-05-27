@@ -193,6 +193,19 @@ import type {
   WelcomeAnalysisResult
 } from './knowledge-base';
 import type {
+  ConnectConnectorInput,
+  ConnectorChangeEvent,
+  ConnectorConnection,
+  ConnectorDefinition,
+  ConnectorDirectoryPickResult,
+  ConnectorDocumentContent,
+  ConnectorOpenInput,
+  ConnectorReadInput,
+  ConnectorScanResult,
+  ConnectorSearchHit,
+  UpdateConnectorInput
+} from './connectors';
+import type {
   CreateScheduledTaskInput,
   NaturalLanguageScheduleResult,
   ScheduledTask,
@@ -707,6 +720,19 @@ export const IPC = {
     rescan: 'knowledgeBase:rescan',
     search: 'knowledgeBase:search',
     activate: 'knowledgeBase:activate'
+  },
+  connectors: {
+    definitions: 'connectors:definitions',
+    list: 'connectors:list',
+    connect: 'connectors:connect',
+    update: 'connectors:update',
+    remove: 'connectors:remove',
+    scan: 'connectors:scan',
+    search: 'connectors:search',
+    read: 'connectors:read',
+    open: 'connectors:open',
+    chooseDirectory: 'connectors:chooseDirectory',
+    event: 'connectors:event'
   },
   onboarding: {
     status: 'onboarding:status',
@@ -1827,6 +1853,19 @@ export interface OrbitApi {
     rescan(kbId: string): Promise<KnowledgeBase>;
     search(kbId: string | 'all', query: string): Promise<KnowledgeBaseSearchHit[]>;
     activate(input: ActivateKnowledgeBaseInput): Promise<Note>;
+  };
+  connectors: {
+    definitions(): Promise<ConnectorDefinition[]>;
+    list(): Promise<ConnectorConnection[]>;
+    connect(input: ConnectConnectorInput): Promise<ConnectorConnection>;
+    update(connectionId: string, patch: UpdateConnectorInput): Promise<ConnectorConnection>;
+    remove(connectionId: string): Promise<ConnectorConnection | null>;
+    scan(connectionId: string): Promise<ConnectorScanResult>;
+    search(query: string, limit?: number): Promise<ConnectorSearchHit[]>;
+    read(input: ConnectorReadInput): Promise<ConnectorDocumentContent | null>;
+    open(input: ConnectorOpenInput): Promise<void>;
+    chooseDirectory(): Promise<ConnectorDirectoryPickResult>;
+    onEvent(cb: (event: ConnectorChangeEvent) => void): () => void;
   };
   onboarding: {
     status(): Promise<OnboardingStatus>;

@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { ReviewFinding, ReviewKind, ReviewRun, ReviewRunDetail, ReviewSeverity, ReviewStatus } from '@shared/review';
+import type {
+  ReviewAgentSessionReport,
+  ReviewFinding,
+  ReviewKind,
+  ReviewRun,
+  ReviewRunDetail,
+  ReviewSeverity,
+  ReviewStatus
+} from '@shared/review';
 import { AnalysisProgressCard } from '../components/AnalysisProgressCard';
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
@@ -7,6 +15,7 @@ type ReviewAction = ReviewFinding['suggested_actions'][number];
 
 const REVIEW_ANALYSIS_STEPS = [
   '读取最近的项目、任务和笔记',
+  '同步并汇总外部 Agent 会话',
   '检查哪些内容还没有归属领域',
   '寻找沉睡主题和可能过期的资源',
   '扫描已读但还没有提炼的资料',
@@ -116,6 +125,7 @@ export function ReviewContent(props: {
 }): JSX.Element {
   const findings = props.detail?.findings ?? [];
   const pmil = readPMILPayload(props.detail);
+  const agentSessionReport = readAgentSessionReport(props.detail);
   const unresolvedFindings = findings.filter((finding) => !finding.resolved_at && !finding.acknowledged);
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -163,6 +173,7 @@ export function ReviewContent(props: {
               <HealthCard label="已处理" value={findings.filter((finding) => finding.resolved_at || finding.acknowledged).length} detail={props.detail?.run.status ? reviewStatusLabel(props.detail.run.status) : '未知'} />
             </section>
             <ReviewBrief findings={findings} />
+            {agentSessionReport ? <AgentSessionReviewPanel report={agentSessionReport} /> : null}
             {pmil ? <PMILReviewPanel payload={pmil} /> : null}
             <section className="grid gap-3">
               {findings.map((finding) => (
@@ -241,6 +252,82 @@ function PMILReviewPanel({ payload }: { payload: ReviewPMILPayload }): JSX.Eleme
   );
 }
 
+function AgentSessionReviewPanel({ report }: { report: ReviewAgentSessionReport }): JSX.Element {
+  const primarySessions = report.sessions.slice(0, 5);
+  return (
+    <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">AI 会话复盘</p>
+          <h2 className="mt-1 text-lg font-semibold">{report.headline}</h2>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-neutral-700 dark:text-neutral-200">{report.narrative}</p>
+        </div>
+        <span className="rounded-full border border-emerald-300 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-800 dark:text-emerald-300">
+          {report.analyzed_sessions}/{report.total_sessions} 条已分析
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <HealthCard label="外部会话" value={report.total_sessions} detail="当前周期" />
+        <HealthCard label="已分析" value={report.analyzed_sessions} detail={report.coverage.omitted_count ? `另有 ${report.coverage.omitted_count} 条未展开` : '全部展开'} />
+        <HealthCard label="未闭环" value={report.open_loops.length} detail="从会话中提取" />
+        <HealthCard label="下一步" value={report.next_actions.length} detail="候选动作" />
+      </div>
+
+      {report.agents.length || report.projects.length ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {report.agents.slice(0, 4).map((item) => (
+            <span key={`agent:${item.agent}`} className="rounded-full bg-white px-2 py-1 text-xs text-emerald-700 dark:bg-neutral-900 dark:text-emerald-300">
+              {item.agent} · {item.count}
+            </span>
+          ))}
+          {report.projects.slice(0, 4).map((item) => (
+            <span key={`project:${item.project}`} className="rounded-full bg-white px-2 py-1 text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
+              {item.project} · {item.count}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {primarySessions.length ? (
+        <div className="mt-4 grid gap-3">
+          {primarySessions.map((session) => (
+            <article key={session.source_id} className="rounded-xl border border-emerald-200 bg-white p-4 dark:border-emerald-900 dark:bg-neutral-900">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold">{session.title}</h3>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {[session.agent, session.project_name, formatReviewDate(session.ended_at ?? session.updated_at)].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                {session.next_actions[0] ? (
+                  <span className="max-w-sm rounded-lg bg-emerald-100 px-2 py-1 text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                    下一步：{session.next_actions[0]}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-3 text-sm leading-6 text-neutral-700 dark:text-neutral-200">{session.summary}</p>
+              {session.open_loops.length ? (
+                <p className="mt-2 text-xs leading-5 text-neutral-500">
+                  未闭环：{session.open_loops.slice(0, 3).map((loop) => loop.title).join('；')}
+                </p>
+              ) : session.key_points.length ? (
+                <p className="mt-2 text-xs leading-5 text-neutral-500">
+                  重点：{session.key_points.slice(0, 3).join('；')}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl border border-dashed border-emerald-300 bg-white p-4 text-sm text-neutral-500 dark:border-emerald-900 dark:bg-neutral-900">
+          {report.coverage.message ?? '这段时间没有可分析的外部 Agent 会话。'}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function readPMILPayload(detail: ReviewRunDetail | null): ReviewPMILPayload | null {
   const payload = detail?.artifact?.payload;
   if (!payload || typeof payload !== 'object' || !('pmil' in payload)) return null;
@@ -252,6 +339,28 @@ function readPMILPayload(detail: ReviewRunDetail | null): ReviewPMILPayload | nu
     current_focus: record.current_focus,
     active_threads: Array.isArray(record.active_threads) ? record.active_threads : [],
     open_loops: Array.isArray(record.open_loops) ? record.open_loops : []
+  };
+}
+
+function readAgentSessionReport(detail: ReviewRunDetail | null): ReviewAgentSessionReport | null {
+  const payload = detail?.artifact?.payload;
+  if (!payload || typeof payload !== 'object' || !('agent_session_report' in payload)) return null;
+  const report = (payload as { agent_session_report?: unknown }).agent_session_report;
+  if (!report || typeof report !== 'object') return null;
+  const record = report as Partial<ReviewAgentSessionReport>;
+  if (typeof record.headline !== 'string' || typeof record.narrative !== 'string') return null;
+  return {
+    period: normalizePeriod(record.period),
+    total_sessions: numberValue(record.total_sessions),
+    analyzed_sessions: numberValue(record.analyzed_sessions),
+    headline: record.headline,
+    narrative: record.narrative,
+    agents: Array.isArray(record.agents) ? record.agents : [],
+    projects: Array.isArray(record.projects) ? record.projects : [],
+    sessions: Array.isArray(record.sessions) ? record.sessions : [],
+    open_loops: Array.isArray(record.open_loops) ? record.open_loops : [],
+    next_actions: Array.isArray(record.next_actions) ? record.next_actions : [],
+    coverage: normalizeAgentSessionCoverage(record.coverage)
   };
 }
 
@@ -364,6 +473,47 @@ function openLoopSeverityLabel(severity: string): string {
 
 function leadingCount(text: string): string | null {
   return text.match(/^\D*(\d+)/u)?.[1] ?? null;
+}
+
+function normalizePeriod(period: unknown): ReviewAgentSessionReport['period'] {
+  if (!period || typeof period !== 'object') return { from: '', to: '' };
+  const record = period as Partial<ReviewAgentSessionReport['period']>;
+  return {
+    from: typeof record.from === 'string' ? record.from : '',
+    to: typeof record.to === 'string' ? record.to : ''
+  };
+}
+
+function normalizeAgentSessionCoverage(coverage: unknown): ReviewAgentSessionReport['coverage'] {
+  if (!coverage || typeof coverage !== 'object') {
+    return {
+      scanned_sources: 0,
+      period_matched: 0,
+      analyzed_limit: 0,
+      omitted_count: 0,
+      synced_at: ''
+    };
+  }
+  const record = coverage as Partial<ReviewAgentSessionReport['coverage']>;
+  return {
+    scanned_sources: numberValue(record.scanned_sources),
+    period_matched: numberValue(record.period_matched),
+    analyzed_limit: numberValue(record.analyzed_limit),
+    omitted_count: numberValue(record.omitted_count),
+    synced_at: typeof record.synced_at === 'string' ? record.synced_at : '',
+    ...(typeof record.message === 'string' ? { message: record.message } : {})
+  };
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function formatReviewDate(value: string): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function containsChinese(text: string): boolean {

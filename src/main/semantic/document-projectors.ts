@@ -9,6 +9,7 @@ import type { Resource } from '@shared/resource';
 import type { SemanticDocument } from '@shared/semantic';
 import type { PersonalQAPayload, SynthesisArtifact } from '@shared/synthesis';
 import { KnowledgeBaseStore } from '../knowledge-base/store';
+import { createConnectorStore } from '../connectors/store';
 import { createLibraryStore } from '../library/store';
 import { createNoteStore } from '../note/store';
 import { listProjects, type ProjectSummary } from '../project';
@@ -19,7 +20,7 @@ import { listAreas } from '../area';
 import { ConversationStore } from '../conversation/store';
 
 export async function collectSemanticDocuments(vaultPath: string): Promise<SemanticDocument[]> {
-  const [notes, libraryItems, resources, projects, areas, conversations, artifacts, kbDocs] = await Promise.all([
+  const [notes, libraryItems, resources, projects, areas, conversations, artifacts, kbDocs, connectorDocs] = await Promise.all([
     createNoteStore(vaultPath).list({ include_archived: true }),
     createLibraryStore(vaultPath).list({ include_archived: true }),
     createResourceStore(vaultPath).list({ include_archived: true }).then((items) =>
@@ -33,7 +34,8 @@ export async function collectSemanticDocuments(vaultPath: string): Promise<Seman
       return full.filter((item): item is Conversation => Boolean(item));
     }),
     createSynthesisStore(vaultPath).list({ limit: 500 }),
-    projectKnowledgeBaseDocs(vaultPath)
+    projectKnowledgeBaseDocs(vaultPath),
+    projectConnectorDocuments(vaultPath)
   ]);
   const projectDocs = await Promise.all(projects.map((project) => projectProject(vaultPath, project)));
 
@@ -45,7 +47,8 @@ export async function collectSemanticDocuments(vaultPath: string): Promise<Seman
     ...areas.map(projectArea),
     ...conversations.map(projectConversation),
     ...artifacts.map(projectSynthesisArtifact),
-    ...kbDocs
+    ...kbDocs,
+    ...connectorDocs
   ].filter((doc) => doc.content.trim().length > 0 || doc.title.trim().length > 0);
 }
 
@@ -207,6 +210,28 @@ export async function projectKnowledgeBaseDocs(vaultPath: string): Promise<Seman
         updated_at: kb.last_scanned_at ?? kb.imported_at
       });
     }
+  }
+  return docs;
+}
+
+export async function projectConnectorDocuments(vaultPath: string): Promise<SemanticDocument[]> {
+  const store = createConnectorStore(vaultPath);
+  const docs: SemanticDocument[] = [];
+  for (const doc of await store.listDocuments().catch(() => [])) {
+    const content = await store.read({ connection_id: doc.connection_id, doc_ref: doc.doc_ref, content_view: 'safe_projection' });
+    const ref = `connector:${doc.connection_id}:${doc.doc_ref}`;
+    docs.push({
+      id: `external_file:${doc.connection_id}:${doc.doc_ref}`,
+      entity_kind: 'external_file',
+      entity_ref: ref,
+      ...evidenceProjection('external_file', ref),
+      title: doc.title,
+      content: cleanMarkdown(content?.content_markdown ?? doc.excerpt ?? ''),
+      tags: [],
+      layer: 1,
+      layer_label: 'reference',
+      updated_at: doc.updated_at
+    });
   }
   return docs;
 }

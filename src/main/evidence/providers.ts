@@ -30,6 +30,7 @@ import { ConversationStore } from '../conversation/store';
 import { KnowledgeBaseStore } from '../knowledge-base/store';
 import { createLibraryStore } from '../library/store';
 import { createNoteStore } from '../note/store';
+import { listConnectorEvidenceSources, readConnectorEvidenceText } from '../connectors/evidence';
 import { toPosix, vaultRel } from '../pathGuard';
 import { listProjects, type ProjectSummary } from '../project';
 import { createResourceStore } from '../resource/store';
@@ -77,7 +78,7 @@ export async function collectOrbitEvidenceSources(
 ): Promise<EvidenceSource[]> {
   const includeActivities = options.includeActivities ?? true;
   const includeExternalAISessions = options.includeExternalAISessions ?? false;
-  const [notes, libraryItems, resources, projects, areas, conversations, tasks, activities, kbDocs, externalAISessions] = await Promise.all([
+  const [notes, libraryItems, resources, projects, areas, conversations, tasks, activities, kbDocs, connectorSources, externalAISessions] = await Promise.all([
     createNoteStore(vaultPath).list({ include_archived: true }),
     createLibraryStore(vaultPath).list({ include_archived: true }),
     createResourceStore(vaultPath).list({ include_archived: true }),
@@ -87,6 +88,7 @@ export async function collectOrbitEvidenceSources(
     listTaskRecords(vaultPath),
     includeActivities ? queryActivities(vaultPath, { limit: Math.max(1, options.activityLimit ?? 500) }) : Promise.resolve([]),
     listKnowledgeBaseDocSources(vaultPath),
+    listConnectorEvidenceSources(vaultPath),
     includeExternalAISessions
       ? resolveExternalAISessionScanOptions(vaultPath, options).then((scanOptions) => listExternalAISessionSources(scanOptions))
       : Promise.resolve([])
@@ -102,6 +104,7 @@ export async function collectOrbitEvidenceSources(
     ...tasks.map(taskSource),
     ...activities.map(activitySource),
     ...kbDocs,
+    ...connectorSources,
     ...externalAISessions
   ];
 }
@@ -513,7 +516,7 @@ async function readOrbitSourceText(
     case 'external_ai_session':
       return safeText(await readExternalAISessionSourceText(source, contentView), contentView);
     case 'external_file':
-      return '';
+      return safeText(await readConnectorEvidenceText(vaultPath, source, contentView), contentView);
   }
 }
 
@@ -522,7 +525,7 @@ function makeSource(input: SourceInput): EvidenceSource {
   const source: EvidenceSource = {
     id: evidenceSourceId(input.kind, input.ref),
     kind: input.kind,
-    ownership: input.kind === 'kb_doc' ? 'reference' : 'orbit_owned',
+    ownership: input.kind === 'kb_doc' || input.kind === 'external_file' ? 'reference' : 'orbit_owned',
     title: input.title,
     provider_id: ORBIT_EVIDENCE_PROVIDER_ID,
     canonical_ref: input.canonicalRef,

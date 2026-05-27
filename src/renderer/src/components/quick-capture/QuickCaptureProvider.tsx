@@ -1,7 +1,21 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import type { QuickCaptureSuggestDraftInput, QuickCaptureSuggestDraftResult, QuickCaptureSuggestion } from '@shared/capture';
+import {
+  quickCaptureActionDetail,
+  quickCaptureActionLabel,
+  quickCaptureActionTag,
+  quickCaptureSuggestionStableId
+} from '@shared/quick-capture-actions';
 import { useFiles } from '../../store/files';
-import { QuickCaptureModal, type QuickCaptureDraftTrigger, type QuickCapturePayload } from './QuickCaptureModal';
+import { usePara } from '../../store/para';
+import { useWorkspace } from '../../store/workspace';
+import { QUICK_CAPTURE_OPEN_EVENT } from './events';
+import {
+  QuickCaptureModal,
+  type QuickCaptureDraftTrigger,
+  type QuickCapturePayload,
+  type QuickCaptureSaveResult
+} from './QuickCaptureModal';
 
 const TYPING_ANALYZE_DELAY_MS = 1500;
 const EVENT_ANALYZE_DELAY_MS = 500;
@@ -14,12 +28,20 @@ export function QuickCaptureProvider(): JSX.Element {
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestionResult, setSuggestionResult] = useState<QuickCaptureSuggestDraftResult | null>(null);
+  const [saveResult, setSaveResult] = useState<QuickCaptureSaveResult | null>(null);
+  const [resetKey, setResetKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const analyzeTimerRef = useRef<number | null>(null);
   const analyzeSeqRef = useRef(0);
   const latestDraftRef = useRef<QuickCaptureSuggestDraftInput>({ content: '' });
   const lastAiAnalysisRef = useRef<{ signature: string; content: string; at: number } | null>(null);
   const toast = useFiles((state) => state.toast);
+  const openPath = useFiles((state) => state.openPath);
+  const vaultPath = useWorkspace((state) => state.vault?.path ?? null);
+  const resolvedTheme = useWorkspace((state) => state.resolvedTheme);
+  const projects = useWorkspace((state) => state.projects);
+  const refreshProjects = useWorkspace((state) => state.refreshProjects);
+  const setView = usePara((state) => state.setView);
 
   const openCapture = useCallback(() => {
     clearAnalyzeTimer(analyzeTimerRef);
@@ -27,13 +49,24 @@ export function QuickCaptureProvider(): JSX.Element {
     latestDraftRef.current = { content: '' };
     lastAiAnalysisRef.current = null;
     setSuggestionResult(null);
+    setSaveResult(null);
     setSuggesting(false);
     setError(null);
+    setResetKey((value) => value + 1);
     setOpen(true);
   }, []);
 
   useEffect(() => {
     return window.orbit.quickCapture.onOpen(openCapture);
+  }, [openCapture]);
+
+  useEffect(() => {
+    function onOpenFromRenderer(): void {
+      openCapture();
+    }
+
+    window.addEventListener(QUICK_CAPTURE_OPEN_EVENT, onOpenFromRenderer);
+    return () => window.removeEventListener(QUICK_CAPTURE_OPEN_EVENT, onOpenFromRenderer);
   }, [openCapture]);
 
   useEffect(() => {
@@ -55,6 +88,11 @@ export function QuickCaptureProvider(): JSX.Element {
     setSuggesting(false);
     return undefined;
   }, [open]);
+
+  useEffect(() => {
+    if (!open || projects.length > 0) return;
+    void refreshProjects();
+  }, [open, projects.length, refreshProjects]);
 
   useEffect(() => {
     return () => {
@@ -117,9 +155,10 @@ export function QuickCaptureProvider(): JSX.Element {
     setSaving(true);
     setError(null);
     try {
-      const tags = payload.suggestionResult?.tags ?? [];
+      const markers = markerTagsForSuggestions(payload.acceptedSuggestions);
+      const tags = uniqueTags([...(payload.suggestionResult?.tags ?? []), ...markers]);
       const sourceUrl = sourceUrlFromSuggestions(payload.acceptedSuggestions) ?? firstUrl(payload.content);
-      await window.orbit.capture.quick.createNote({
+      const noteResult = await window.orbit.capture.quick.createNote({
         content: payload.content,
         tags,
         attachments: await Promise.all(payload.files.map((file) => attachmentInput(file, 'file'))),
@@ -135,15 +174,40 @@ export function QuickCaptureProvider(): JSX.Element {
             }
           : {})
       });
-      await applyAcceptedSuggestions(payload.acceptedSuggestions, payload.content, tags);
-      toast(payload.acceptedSuggestions.length > 0 ? `已捕获笔记 + ${payload.acceptedSuggestions.length} 个行动` : '笔记已捕获到时间线');
+      const actionResult = await applyAcceptedSuggestions(payload.acceptedSuggestions, payload.content, tags);
+      const result: QuickCaptureSaveResult = {
+        note: {
+          id: noteResult.note.frontmatter.id,
+          title: noteResult.note.frontmatter.title ?? noteResult.note.path,
+          path: noteResult.note.path
+        },
+        libraryItems: actionResult.libraryItems,
+        inboxItems: actionResult.inboxItems,
+        markers,
+        warnings: actionResult.warnings
+      };
+      setSaveResult(result);
+      toast(summaryForResult(result));
       clearAnalyzeTimer(analyzeTimerRef);
-      setOpen(false);
     } catch (caught) {
       setError((caught as Error).message);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function openSavedNote(): Promise<void> {
+    if (!saveResult || !vaultPath) return;
+    await openPath(joinVaultPath(vaultPath, saveResult.note.path));
+    setView({ kind: 'editor' });
+    setOpen(false);
+  }
+
+  function continueCapture(): void {
+    setSaveResult(null);
+    setSuggestionResult(null);
+    setError(null);
+    setResetKey((value) => value + 1);
   }
 
   return (
@@ -153,9 +217,24 @@ export function QuickCaptureProvider(): JSX.Element {
       suggesting={suggesting}
       error={error}
       suggestionResult={suggestionResult}
+      saveResult={saveResult}
+      resetKey={resetKey}
+      dark={resolvedTheme === 'dark'}
+      vaultRoot={vaultPath}
+      projects={projects}
       onDraftChange={handleDraftChange}
       onAnalyzeNow={analyzeNow}
       onSave={(payload) => void save(payload)}
+      onContinue={continueCapture}
+      onOpenNote={() => void openSavedNote()}
+      onOpenLibrary={() => {
+        setView({ kind: 'library' });
+        setOpen(false);
+      }}
+      onOpenInbox={() => {
+        setView({ kind: 'inbox' });
+        setOpen(false);
+      }}
       onClose={() => setOpen(false)}
     />
   );
@@ -220,11 +299,21 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
   if (url) {
     const host = safeHostname(url);
     suggestions.push({
-      id: `local:save_to_library:${url}`,
+      id: quickCaptureSuggestionStableId('save_to_library', { url }),
       action: 'save_to_library',
-      label: '保存到资料库',
+      label: quickCaptureActionLabel('save_to_library'),
       detail: host,
       confidence: 0.88,
+      risk: 'low',
+      params: { url },
+      source: 'heuristic'
+    });
+    suggestions.push({
+      id: quickCaptureSuggestionStableId('bookmark', { url }),
+      action: 'bookmark',
+      label: quickCaptureActionLabel('bookmark'),
+      detail: quickCaptureActionDetail('bookmark'),
+      confidence: 0.62,
       risk: 'low',
       params: { url },
       source: 'heuristic'
@@ -232,9 +321,9 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
   }
   if (looksActionable(content)) {
     suggestions.push({
-      id: 'local:create_task',
+      id: quickCaptureSuggestionStableId('create_task'),
       action: 'create_task',
-      label: '创建任务',
+      label: quickCaptureActionLabel('create_task'),
       detail: titleFromContent(content),
       confidence: 0.74,
       risk: 'proposal',
@@ -244,10 +333,10 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
   }
   if (input.hasAudio) {
     suggestions.push({
-      id: 'local:transcribe_voice',
+      id: quickCaptureSuggestionStableId('transcribe_voice'),
       action: 'transcribe_voice',
-      label: '转写语音',
-      detail: '配置语音模型后附加转写稿',
+      label: quickCaptureActionLabel('transcribe_voice'),
+      detail: quickCaptureActionDetail('transcribe_voice'),
       confidence: 0.72,
       risk: 'needs_confirm',
       source: 'heuristic'
@@ -255,10 +344,10 @@ function localHeuristicSuggestions(input: QuickCaptureSuggestDraftInput): QuickC
   }
   if (content.length > 800) {
     suggestions.push({
-      id: 'local:distill_later',
+      id: quickCaptureSuggestionStableId('distill_later'),
       action: 'distill_later',
-      label: '稍后提炼',
-      detail: '包含可复用信号的长捕获',
+      label: quickCaptureActionLabel('distill_later'),
+      detail: quickCaptureActionDetail('distill_later'),
       confidence: 0.65,
       risk: 'needs_confirm',
       source: 'heuristic'
@@ -289,26 +378,54 @@ function titleFromDraft(content: string, attachmentNames: string[]): string | un
   return undefined;
 }
 
-async function applyAcceptedSuggestions(suggestions: QuickCaptureSuggestion[], content: string, tags: string[]): Promise<void> {
+async function applyAcceptedSuggestions(
+  suggestions: QuickCaptureSuggestion[],
+  content: string,
+  tags: string[]
+): Promise<{
+  libraryItems: QuickCaptureSaveResult['libraryItems'];
+  inboxItems: QuickCaptureSaveResult['inboxItems'];
+  warnings: string[];
+}> {
+  const libraryItems: QuickCaptureSaveResult['libraryItems'] = [];
+  const inboxItems: QuickCaptureSaveResult['inboxItems'] = [];
+  const warnings: string[] = [];
   for (const suggestion of suggestions) {
-    if (suggestion.action === 'save_to_library' || suggestion.action === 'bookmark') {
-      const url = stringParam(suggestion, 'url') ?? firstUrl(content);
-      if (!url) continue;
-      await window.orbit.capture.quick.createLink({
-        url,
-        kind: suggestion.action === 'bookmark' ? 'bookmark' : 'read_later',
-        title: stringParam(suggestion, 'title'),
-        notes: content,
-        tags
-      });
-    } else if (suggestion.action === 'create_task') {
-      await window.orbit.capture.quick.createTask({
-        title: stringParam(suggestion, 'title') ?? titleFromContent(content),
-        details: stringParam(suggestion, 'details') ?? content,
-        tags
-      });
+    try {
+      if (suggestion.action === 'save_to_library' || suggestion.action === 'bookmark') {
+        const url = stringParam(suggestion, 'url') ?? firstUrl(content);
+        if (!url) {
+          warnings.push(`${quickCaptureActionLabel(suggestion.action)}缺少链接，已跳过。`);
+          continue;
+        }
+        const result = await window.orbit.capture.quick.createLink({
+          url,
+          kind: suggestion.action === 'bookmark' ? 'bookmark' : 'read_later',
+          title: stringParam(suggestion, 'title'),
+          notes: content,
+          tags
+        });
+        libraryItems.push({
+          id: result.item.frontmatter.id,
+          title: result.item.frontmatter.title,
+          kind: result.item.frontmatter.kind
+        });
+      } else if (suggestion.action === 'create_task') {
+        const result = await window.orbit.capture.quick.createTask({
+          title: stringParam(suggestion, 'title') ?? titleFromContent(content),
+          details: stringParam(suggestion, 'details') ?? content,
+          tags
+        });
+        inboxItems.push({
+          id: result.item.id,
+          title: result.item.title
+        });
+      }
+    } catch (caught) {
+      warnings.push(`${quickCaptureActionLabel(suggestion.action)}失败：${(caught as Error).message}`);
     }
   }
+  return { libraryItems, inboxItems, warnings };
 }
 
 async function attachmentInput(file: File, kind: 'file' | 'audio'): Promise<{ name: string; dataBase64: string; mimeType?: string; kind: 'file' | 'audio' }> {
@@ -350,7 +467,7 @@ function firstUrl(value: string): string | undefined {
 }
 
 function titleFromContent(value: string): string {
-  return value.trim().split(/\r?\n/)[0]?.replace(/^(todo|task|待办)[:：]\s*/i, '').slice(0, 80) || '已捕获任务';
+  return value.trim().split(/\r?\n/)[0]?.replace(/^(todo|task|待办)[:：]\s*/i, '').slice(0, 48) || '已捕获任务';
 }
 
 function safeHostname(url: string): string | undefined {
@@ -359,4 +476,30 @@ function safeHostname(url: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function markerTagsForSuggestions(suggestions: QuickCaptureSuggestion[]): string[] {
+  return uniqueTags(
+    suggestions
+      .map((suggestion) => quickCaptureActionTag(suggestion.action))
+      .filter((tag): tag is string => Boolean(tag))
+  );
+}
+
+function uniqueTags(tags: string[]): string[] {
+  return [...new Set(tags.map((tag) => tag.trim().replace(/^#/, '')).filter(Boolean))];
+}
+
+function summaryForResult(result: QuickCaptureSaveResult): string {
+  const parts = ['笔记已捕获'];
+  if (result.libraryItems.length > 0) parts.push(`${result.libraryItems.length} 个资料库条目`);
+  if (result.inboxItems.length > 0) parts.push(`${result.inboxItems.length} 个收件箱任务`);
+  if (result.markers.length > 0) parts.push(`${result.markers.length} 个后续标记`);
+  if (result.warnings.length > 0) parts.push(`${result.warnings.length} 个行动需重试`);
+  return parts.join(' + ');
+}
+
+function joinVaultPath(vaultPath: string, relPath: string): string {
+  const separator = vaultPath.includes('\\') ? '\\' : '/';
+  return `${vaultPath.replace(/[\\/]+$/, '')}${separator}${relPath.replace(/\//g, separator)}`;
 }

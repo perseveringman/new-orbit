@@ -1,0 +1,1799 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbit 节奏视图原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f8;
+      --surface: #ffffff;
+      --surface-soft: #f9fafb;
+      --border: #dfe3e8;
+      --border-strong: #c7ced7;
+      --text: #17202a;
+      --muted: #697586;
+      --faint: #9aa4b2;
+      --ink: #111827;
+      --teal: #0f766e;
+      --teal-soft: #e7f5f2;
+      --blue: #2563eb;
+      --blue-soft: #eef4ff;
+      --amber: #b45309;
+      --amber-soft: #fff7e6;
+      --rose: #be123c;
+      --rose-soft: #fff1f2;
+      --violet: #6d28d9;
+      --violet-soft: #f4f0ff;
+      --green: #15803d;
+      --green-soft: #ecfdf3;
+      --shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 232px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: #fbfcfd;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 6px 6px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand-mark {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border-strong);
+      border-radius: 50%;
+      font-weight: 700;
+      color: var(--teal);
+      background: var(--surface);
+    }
+
+    .brand-title {
+      font-weight: 700;
+    }
+
+    .brand-sub {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .nav-group {
+      display: grid;
+      gap: 4px;
+    }
+
+    .nav-title {
+      padding: 0 8px;
+      font-size: 11px;
+      color: var(--faint);
+      font-weight: 650;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 32px;
+      border: 0;
+      border-radius: var(--radius);
+      padding: 6px 8px;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .nav-item.active {
+      background: var(--teal-soft);
+      color: var(--teal);
+      font-weight: 650;
+    }
+
+    .nav-count {
+      color: var(--faint);
+      font-size: 11px;
+    }
+
+    .content {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(10px);
+      padding: 12px 18px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .title-block {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    h1 {
+      margin: 2px 0 0;
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 760;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .segmented,
+    .date-nav,
+    .lens {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 2px;
+      height: 34px;
+    }
+
+    .segmented button,
+    .date-nav button,
+    .lens button {
+      border: 0;
+      border-radius: 6px;
+      min-width: 34px;
+      height: 28px;
+      padding: 0 9px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .segmented button.active,
+    .lens button.active {
+      background: var(--ink);
+      color: white;
+    }
+
+    .date-label {
+      min-width: 156px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 650;
+      padding: 0 8px;
+    }
+
+    .primary,
+    .secondary,
+    .ghost {
+      border-radius: var(--radius);
+      height: 34px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 650;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .primary {
+      background: var(--teal);
+      color: #fff;
+      border-color: var(--teal);
+    }
+
+    .ghost {
+      border-color: transparent;
+      color: var(--muted);
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 14px;
+      padding: 14px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .workspace,
+    .inspector {
+      min-width: 0;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .inspector {
+      position: sticky;
+      top: 76px;
+      align-self: start;
+      max-height: calc(100vh - 92px);
+      overflow: auto;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+      min-width: 0;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 740;
+    }
+
+    .panel-sub {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .panel-body {
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .glance-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+      background: var(--surface-soft);
+      min-width: 0;
+    }
+
+    .metric-value {
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 760;
+    }
+
+    .metric-label {
+      margin-top: 5px;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .split-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(310px, 0.85fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .semantic-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .semantic-column {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .semantic-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 10px;
+      background: var(--surface-soft);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .semantic-head strong {
+      font-size: 12px;
+    }
+
+    .semantic-list {
+      display: grid;
+      gap: 0;
+    }
+
+    .item-row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      text-align: left;
+      padding: 9px 10px;
+    }
+
+    .item-row:last-child {
+      border-bottom: 0;
+    }
+
+    .item-row:hover,
+    .timeline-entry:hover,
+    .capture-line:hover,
+    .day-cell:hover,
+    .month-day:hover {
+      background: #f8fafc;
+    }
+
+    .item-symbol {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      font-weight: 700;
+      color: var(--muted);
+      background: #fff;
+      flex: none;
+    }
+
+    .item-main {
+      min-width: 0;
+    }
+
+    .item-title {
+      font-size: 13px;
+      font-weight: 650;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .item-meta {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 1px 6px;
+      min-height: 18px;
+      font-size: 10px;
+      color: var(--muted);
+      background: #fff;
+      white-space: nowrap;
+    }
+
+    .badge.teal {
+      color: var(--teal);
+      border-color: #b9ddd7;
+      background: var(--teal-soft);
+    }
+
+    .badge.blue {
+      color: var(--blue);
+      border-color: #c7d7fe;
+      background: var(--blue-soft);
+    }
+
+    .badge.amber {
+      color: var(--amber);
+      border-color: #f4d28d;
+      background: var(--amber-soft);
+    }
+
+    .badge.rose {
+      color: var(--rose);
+      border-color: #fecdd3;
+      background: var(--rose-soft);
+    }
+
+    .badge.violet {
+      color: var(--violet);
+      border-color: #ddd6fe;
+      background: var(--violet-soft);
+    }
+
+    .quick-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .icon-button {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .icon-button:hover {
+      color: var(--teal);
+      border-color: #b9ddd7;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+      position: relative;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 54px;
+      top: 6px;
+      bottom: 6px;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .timeline-entry {
+      position: relative;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 9px 10px;
+      background: #fff;
+      text-align: left;
+      color: var(--text);
+      width: 100%;
+    }
+
+    .timeline-time {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      padding-top: 2px;
+      white-space: nowrap;
+    }
+
+    .timeline-entry::after {
+      content: "";
+      position: absolute;
+      left: 51px;
+      top: 17px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid var(--border-strong);
+    }
+
+    .timeline-title {
+      font-weight: 650;
+      font-size: 13px;
+    }
+
+    .timeline-summary {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .capture-block {
+      border: 1px solid #ccd6df;
+      border-radius: var(--radius);
+      background: #fbfdff;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .capture-block-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      background: #f4f8fb;
+    }
+
+    .capture-line {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      padding: 8px 10px;
+      width: 100%;
+    }
+
+    .capture-line:last-child {
+      border-bottom: 0;
+    }
+
+    .markdown {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .source-link {
+      color: var(--blue);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .review-strip {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid #f0cc82;
+      background: var(--amber-soft);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      color: #713f12;
+    }
+
+    .review-strip strong {
+      color: #713f12;
+    }
+
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      max-width: 100%;
+      min-width: 0;
+      overscroll-behavior-inline: contain;
+    }
+
+    .day-cell {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      min-height: 220px;
+      padding: 10px;
+      text-align: left;
+      color: var(--text);
+    }
+
+    .day-cell.today {
+      border-color: #91c9c0;
+      box-shadow: inset 0 0 0 1px #91c9c0;
+    }
+
+    .day-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .mini-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .mini-item {
+      border-left: 3px solid var(--border-strong);
+      padding: 5px 6px;
+      background: var(--surface-soft);
+      border-radius: 5px;
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    .mini-item.teal {
+      border-left-color: var(--teal);
+    }
+
+    .mini-item.amber {
+      border-left-color: var(--amber);
+    }
+
+    .mini-item.blue {
+      border-left-color: var(--blue);
+    }
+
+    .board-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+      gap: 14px;
+    }
+
+    .objective-list,
+    .source-list,
+    .momentum-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .objective {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+      background: #fff;
+    }
+
+    .progress {
+      height: 7px;
+      background: #edf1f5;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      background: var(--teal);
+    }
+
+    .month-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(88px, 1fr));
+      gap: 6px;
+      overflow-x: auto;
+      max-width: 100%;
+      min-width: 0;
+      overscroll-behavior-inline: contain;
+    }
+
+    .month-day {
+      min-height: 86px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 8px;
+      text-align: left;
+      color: var(--text);
+    }
+
+    .month-day.muted {
+      opacity: 0.38;
+    }
+
+    .month-num {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .heat {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 3px;
+      margin-top: 8px;
+    }
+
+    .heat i {
+      height: 8px;
+      border-radius: 2px;
+      background: #edf1f5;
+      display: block;
+    }
+
+    .heat i.l1 { background: #cce8e3; }
+    .heat i.l2 { background: #7fc8ba; }
+    .heat i.l3 { background: #0f766e; }
+    .heat i.a1 { background: #fde6b8; }
+    .heat i.a2 { background: #f59e0b; }
+    .heat i.r1 { background: #fecdd3; }
+
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .theme {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 11px;
+      background: #fff;
+    }
+
+    .theme h3 {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .theme p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .inspector-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .inspector-head {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-soft);
+    }
+
+    .inspector-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 760;
+    }
+
+    .inspector-body {
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+    }
+
+    .field-label {
+      font-size: 11px;
+      color: var(--faint);
+      font-weight: 650;
+    }
+
+    .field-value {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .note-preview {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fbfdff;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .action-bar {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .action-bar button {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+      height: 32px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .principles {
+      display: grid;
+      gap: 8px;
+    }
+
+    .principle {
+      border-left: 3px solid var(--border-strong);
+      padding: 4px 0 4px 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .empty {
+      padding: 18px;
+      color: var(--muted);
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1180px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .main {
+        grid-template-columns: 1fr;
+      }
+
+      .inspector {
+        position: static;
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .topbar-row,
+      .review-strip,
+      .split-grid,
+      .board-grid {
+        grid-template-columns: 1fr;
+        display: grid;
+      }
+
+      .toolbar {
+        justify-content: stretch;
+      }
+
+      .segmented,
+      .date-nav,
+      .lens,
+      .primary,
+      .secondary {
+        width: 100%;
+      }
+
+      .segmented button,
+      .lens button {
+        flex: 1;
+      }
+
+      .semantic-grid,
+      .theme-grid,
+      .glance-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">O</div>
+        <div>
+          <div class="brand-title">Orbit</div>
+          <div class="brand-sub">节奏原型</div>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">工作区</div>
+        <button class="nav-item active" type="button"><span>节奏</span><span class="nav-count">日周月</span></button>
+        <button class="nav-item" type="button"><span>快速捕获</span><span class="nav-count">12</span></button>
+        <button class="nav-item" type="button"><span>收件箱</span><span class="nav-count">3</span></button>
+        <button class="nav-item" type="button"><span>项目</span><span class="nav-count">5</span></button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">当前主线</div>
+        <button class="nav-item" type="button"><span>new-orbit</span><span class="nav-count">活跃</span></button>
+        <button class="nav-item" type="button"><span>PMIL 记忆层</span><span class="nav-count">复盘</span></button>
+        <button class="nav-item" type="button"><span>Library 工作台</span><span class="nav-count">待提炼</span></button>
+      </div>
+      <div class="panel">
+        <div class="panel-body principles">
+          <div class="principle">原文在 Notes，视图只是投影。</div>
+          <div class="principle">语义区用于行动，时间脊柱用于证据。</div>
+          <div class="principle">日处理，周对齐，月取舍。</div>
+        </div>
+      </div>
+    </aside>
+    <section class="content">
+      <header class="topbar">
+        <div class="topbar-row">
+          <div class="title-block">
+            <div class="eyebrow">Layer 3 Surface · Layer 1/2 Truth-backed</div>
+            <h1 id="scopeTitle">节奏</h1>
+          </div>
+          <div class="toolbar">
+            <div class="date-nav" aria-label="日期导航">
+              <button type="button" data-action="prev" title="上一段">‹</button>
+              <div class="date-label" id="dateLabel">2026-05-21</div>
+              <button type="button" data-action="next" title="下一段">›</button>
+            </div>
+            <div class="segmented" aria-label="视图切换">
+              <button type="button" data-mode="day" class="active">日</button>
+              <button type="button" data-mode="week">周</button>
+              <button type="button" data-mode="month">月</button>
+            </div>
+            <div class="lens" aria-label="呈现方式">
+              <button type="button" data-lens="split" class="active">混合</button>
+              <button type="button" data-lens="semantic">语义</button>
+              <button type="button" data-lens="timeline">时间</button>
+            </div>
+            <button class="secondary" type="button" data-action="capture">快速捕获</button>
+            <button class="primary" type="button" data-action="review">复盘当前范围</button>
+          </div>
+        </div>
+      </header>
+      <main class="main">
+        <div class="workspace" id="workspace"></div>
+        <aside class="inspector" id="inspector"></aside>
+      </main>
+    </section>
+  </div>
+
+  <script>
+    const state = {
+      mode: "day",
+      lens: "split",
+      date: "2026-05-21",
+      selectedId: "cap-0832-l1",
+      reviewGenerated: false,
+      mutationCount: 0
+    };
+
+    const typeMeta = {
+      task: { label: "任务", symbol: "•", tone: "teal" },
+      note: { label: "想法", symbol: "-", tone: "blue" },
+      event: { label: "事件", symbol: "○", tone: "amber" },
+      library: { label: "资料", symbol: "L", tone: "violet" },
+      agent: { label: "Agent", symbol: "A", tone: "green" },
+      review: { label: "复盘", symbol: "R", tone: "rose" },
+      project: { label: "项目", symbol: "P", tone: "teal" },
+      conversation: { label: "对话", symbol: "C", tone: "blue" }
+    };
+
+    const items = [
+      {
+        id: "cap-0832-l1",
+        type: "task",
+        time: "08:32",
+        title: "修任务详情默认信息架构",
+        summary: "来自快速捕获，带有 @new-orbit 和 #ux。尚未提升为正式任务。",
+        status: "候选",
+        project: "new-orbit",
+        area: "产品系统",
+        tags: ["ux", "capture"],
+        source: "notes/captures/quick/2026-05-21.md:3",
+        raw: "• 修任务详情默认信息架构 @new-orbit #ux",
+        layer: "L1 原文",
+        actions: ["完成", "迁移", "排程", "提升"]
+      },
+      {
+        id: "cap-0832-l2",
+        type: "note",
+        time: "08:32",
+        title: "BuJo 的关键不是纸笔，是迁移摩擦",
+        summary: "产品原则，适合沉淀到 Capture 设计方案。",
+        status: "待提炼",
+        project: "new-orbit",
+        area: "产品系统",
+        tags: ["product", "bujournal"],
+        source: "notes/captures/quick/2026-05-21.md:4",
+        raw: "- BuJo 的关键不是纸笔，是迁移摩擦 #product",
+        layer: "L1 原文",
+        actions: ["提炼", "关联资源", "迁移"]
+      },
+      {
+        id: "cap-0832-l3",
+        type: "event",
+        time: "08:32",
+        title: "21:30 复盘 Orbit 快速捕获方案",
+        summary: "捕获时创建的晚间复盘事件，应该出现在日视图计划区。",
+        status: "已排程",
+        project: "new-orbit",
+        area: "产品系统",
+        tags: ["review"],
+        source: "notes/captures/quick/2026-05-21.md:5",
+        raw: "○ 21:30 复盘 Orbit 快速捕获方案",
+        layer: "L1 原文",
+        scheduledFor: "21:30",
+        actions: ["完成", "改期", "关联复盘"]
+      },
+      {
+        id: "lib-1014",
+        type: "library",
+        time: "10:14",
+        title: "保存 Todoist Calendar Layout 文档",
+        summary: "借鉴未排期任务侧栏、拖入日期、周/月布局。",
+        status: "已入库",
+        project: "new-orbit",
+        area: "产品系统",
+        tags: ["reference", "calendar"],
+        source: "library/articles/todoist-calendar-layout.md",
+        raw: "library.item.added: Todoist Calendar Layout",
+        layer: "L1 Library",
+        actions: ["打开资料", "链接到方案"]
+      },
+      {
+        id: "agent-1120",
+        type: "agent",
+        time: "11:20",
+        title: "Agent 完成 QuickCapture slash 菜单调整",
+        summary: "完成尺寸、滚动条和中文标题修正，保留 typecheck 记录。",
+        status: "已完成",
+        project: "new-orbit",
+        area: "执行",
+        tags: ["agent", "ui"],
+        source: ".orbit/activity/2026-05-21.jsonl",
+        raw: "agent.run.completed: quick-capture slash compact menu",
+        layer: "L2 执行事件",
+        actions: ["查看变更", "创建复盘项"]
+      },
+      {
+        id: "task-1515",
+        type: "task",
+        time: "15:15",
+        title: "完成快速捕获快捷键策略",
+        summary: "⌘1 到 ⌘7、⌘K、⌘Enter 已完成，验证通过。",
+        status: "已完成",
+        project: "new-orbit",
+        area: "执行",
+        tags: ["keyboard", "capture"],
+        source: "01_Projects/new-orbit/tasks.md",
+        raw: "x 完成快速捕获快捷键策略 @new-orbit #keyboard",
+        layer: "L1 Task",
+        actions: ["查看任务", "写入周报"]
+      },
+      {
+        id: "conv-1638",
+        type: "conversation",
+        time: "16:38",
+        title: "讨论日周月替代 Timeline / Review",
+        summary: "形成语义工作台 + 时间脊柱的混合方案。",
+        status: "未闭环",
+        project: "new-orbit",
+        area: "产品系统",
+        tags: ["rhythm", "review"],
+        source: "conversations/2026-05-21-orbit-rhythm.md",
+        raw: "conversation.meaningful: mixed semantic workbench + timeline spine",
+        layer: "L1 Conversation",
+        actions: ["提升为方案", "生成任务"]
+      },
+      {
+        id: "review-2100",
+        type: "review",
+        time: "21:00",
+        title: "复盘发现：Timeline 和 Review 职责重叠",
+        summary: "建议合并为节奏视图，复盘动作进入当前时间范围。",
+        status: "建议",
+        project: "new-orbit",
+        area: "产品系统",
+        tags: ["review", "architecture"],
+        source: ".orbit/review/runs/review-weekly.json",
+        raw: "review.finding: merge timeline and review into scoped rhythm surface",
+        layer: "L2 Synthesis",
+        actions: ["接受建议", "稍后处理", "忽略"]
+      }
+    ];
+
+    const captures = [
+      {
+        id: "capture-0832",
+        time: "08:32",
+        file: "notes/captures/quick/2026-05-21.md",
+        lines: ["cap-0832-l1", "cap-0832-l2", "cap-0832-l3"]
+      },
+      {
+        id: "capture-1446",
+        time: "14:46",
+        file: "notes/captures/quick/2026-05-21.md",
+        lines: [
+          {
+            id: "cap-1446-l1",
+            type: "task",
+            title: "调研 Sunsama 周目标和周复盘",
+            raw: "• 调研 Sunsama 周目标和周复盘 @new-orbit #reference",
+            summary: "作为周视图 objective / review 的设计参照。",
+            status: "已提升",
+            project: "new-orbit",
+            area: "产品系统",
+            tags: ["reference"],
+            source: "notes/captures/quick/2026-05-21.md:11",
+            layer: "L1 原文",
+            actions: ["查看任务", "链接资料"]
+          },
+          {
+            id: "cap-1446-l2",
+            type: "note",
+            title: "日处理，周对齐，月取舍",
+            raw: "- 日处理，周对齐，月取舍 #principle",
+            summary: "节奏视图的信息架构原则。",
+            status: "待提炼",
+            project: "new-orbit",
+            area: "产品系统",
+            tags: ["principle"],
+            source: "notes/captures/quick/2026-05-21.md:12",
+            layer: "L1 原文",
+            actions: ["提炼", "关联愿景"]
+          }
+        ]
+      }
+    ];
+
+    const week = [
+      { date: "05-18", label: "一", focus: "Capture 输入改造", load: 6, open: 2, done: 3, items: ["统一 Markdown 编辑器", "保存到 quick notes", "保留原文"] },
+      { date: "05-19", label: "二", focus: "BuJo 状态符号", load: 8, open: 4, done: 2, items: ["x / > / < / ~ / ^", "捕获解析", "移动端同步"] },
+      { date: "05-20", label: "三", focus: "Dashboard 组件台", load: 5, open: 1, done: 4, items: ["Widget Registry", "Feed radar", "Area balance"] },
+      { date: "05-21", label: "四", focus: "节奏视图方案", load: 9, open: 5, done: 3, today: true, items: ["混合工作台", "日周月视图", "原型 demo"] },
+      { date: "05-22", label: "五", focus: "Review 合并设计", load: 7, open: 3, done: 1, items: ["复盘 findings", "时间范围动作", "迁移池"] },
+      { date: "05-23", label: "六", focus: "Library 工作台", load: 4, open: 2, done: 1, items: ["待读", "待蒸馏", "资源关联"] },
+      { date: "05-24", label: "日", focus: "周复盘", load: 3, open: 1, done: 0, items: ["目标完成", "未闭环", "下周延续"] }
+    ];
+
+    const monthDays = Array.from({ length: 35 }, (_, index) => {
+      const day = index - 2;
+      const active = day >= 1 && day <= 31;
+      const intensity = active ? ((day * 7) % 6) : 0;
+      const hasReview = [7, 14, 21, 28].includes(day);
+      return {
+        day,
+        active,
+        intensity,
+        hasReview,
+        title: day === 21 ? "节奏视图方案" : day % 5 === 0 ? "资料蒸馏" : day % 4 === 0 ? "Agent 执行" : "捕获"
+      };
+    });
+
+    function allItems() {
+      const inlineCaptureItems = captures.flatMap((block) =>
+        block.lines.map((line) => typeof line === "string" ? items.find((item) => item.id === line) : line)
+      ).filter(Boolean);
+      const seen = new Set();
+      return [...items, ...inlineCaptureItems].filter((item) => {
+        if (!item || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+    }
+
+    function itemById(id) {
+      return allItems().find((item) => item.id === id) || items[0];
+    }
+
+    function groupedItems() {
+      const groups = [
+        { id: "tasks", title: "行动候选", types: ["task"], hint: "来自捕获、任务和完成事件" },
+        { id: "events", title: "事件与排程", types: ["event"], hint: "有明确时间或需要占用日程" },
+        { id: "notes", title: "想法与笔记", types: ["note", "conversation"], hint: "保留原文，等待提炼或关联" },
+        { id: "assets", title: "资料与项目推进", types: ["library", "agent", "project"], hint: "已经进入长期知识或执行链路" },
+        { id: "loops", title: "未闭环与复盘", types: ["review"], hint: "AI 生成建议，需人审确认" }
+      ];
+      const source = allItems();
+      return groups.map((group) => ({ ...group, items: source.filter((item) => group.types.includes(item.type)) }));
+    }
+
+    function render() {
+      document.querySelectorAll("[data-mode]").forEach((button) => button.classList.toggle("active", button.dataset.mode === state.mode));
+      document.querySelectorAll("[data-lens]").forEach((button) => button.classList.toggle("active", button.dataset.lens === state.lens));
+      document.getElementById("dateLabel").textContent = labelForScope();
+      document.getElementById("scopeTitle").textContent = titleForScope();
+      document.getElementById("workspace").innerHTML = state.mode === "day" ? renderDay() : state.mode === "week" ? renderWeek() : renderMonth();
+      renderInspector();
+    }
+
+    function labelForScope() {
+      if (state.mode === "day") return state.date;
+      if (state.mode === "week") return "2026-W21 · 05-18 至 05-24";
+      return "2026-05";
+    }
+
+    function titleForScope() {
+      if (state.mode === "day") return "今日节奏";
+      if (state.mode === "week") return "本周节奏";
+      return "本月节奏";
+    }
+
+    function renderDay() {
+      const semantic = renderSemanticWorkbench("今日语义工作台");
+      const timeline = renderTimelineSpine();
+      const content = state.lens === "semantic" ? semantic : state.lens === "timeline" ? timeline : `<div class="split-grid">${semantic}${timeline}</div>`;
+      return `
+        ${renderGlance()}
+        ${renderReviewStrip("今天的复盘动作会读取捕获原文、任务完成、资料入库和 Agent 执行事件。")}
+        ${content}
+      `;
+    }
+
+    function renderWeek() {
+      const semantic = renderWeeklySemantic();
+      const calendar = renderWeekGrid();
+      const content = state.lens === "semantic" ? semantic : state.lens === "timeline" ? calendar : `<div class="board-grid">${calendar}${semantic}</div>`;
+      return `
+        ${renderWeeklyObjectivePanel()}
+        ${renderReviewStrip("周视图把 Sunsama 式周目标、Todoist 式未排期池和 Orbit 的项目动量合并到一个范围。")}
+        ${content}
+      `;
+    }
+
+    function renderMonth() {
+      const semantic = renderMonthlySemantic();
+      const calendar = renderMonthGrid();
+      const content = state.lens === "semantic" ? semantic : state.lens === "timeline" ? calendar : `<div class="workspace">${calendar}${semantic}</div>`;
+      return `
+        ${renderMonthThemes()}
+        ${renderReviewStrip("月视图不追求铺满细节，它负责看方向、动量和取舍。")}
+        ${content}
+      `;
+    }
+
+    function renderGlance() {
+      return `
+        <section class="panel">
+          <div class="panel-body glance-grid">
+            ${metric("捕获行", 12, "Notes 原文")}
+            ${metric("待迁移", 5 + state.mutationCount, "需要决定")}
+            ${metric("项目推进", 4, "new-orbit")}
+            ${metric("资料入库", 3, "待蒸馏")}
+            ${metric("复盘建议", state.reviewGenerated ? 4 : 3, "人审确认")}
+          </div>
+        </section>
+      `;
+    }
+
+    function metric(label, value, detail) {
+      return `<div class="metric"><div class="metric-value">${value}</div><div class="metric-label">${label} · ${detail}</div></div>`;
+    }
+
+    function renderReviewStrip(text) {
+      return `
+        <section class="review-strip">
+          <div>
+            <strong>${state.reviewGenerated ? "复盘已刷新" : "复盘待生成"}</strong>
+            <div class="panel-sub">${text}</div>
+          </div>
+          <button class="secondary" type="button" data-action="review">${state.reviewGenerated ? "重新复盘" : "生成复盘"}</button>
+        </section>
+      `;
+    }
+
+    function renderSemanticWorkbench(title) {
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">${title}</h2>
+              <p class="panel-sub">默认按行动语义收拢，点击任意条目可查看来源时间和原始 Markdown。</p>
+            </div>
+            <span class="badge teal">可处理</span>
+          </div>
+          <div class="panel-body semantic-grid">
+            ${groupedItems().map(renderSemanticGroup).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderSemanticGroup(group) {
+      return `
+        <div class="semantic-column">
+          <div class="semantic-head">
+            <strong>${group.title}</strong>
+            <span class="badge">${group.items.length}</span>
+          </div>
+          <div class="semantic-list">
+            ${group.items.length ? group.items.map(renderItemRow).join("") : `<div class="empty">暂无</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderItemRow(item) {
+      const meta = typeMeta[item.type] || typeMeta.note;
+      return `
+        <button class="item-row" type="button" data-select="${item.id}">
+          <span class="item-symbol">${meta.symbol}</span>
+          <span class="item-main">
+            <span class="item-title">${escapeHtml(item.title)}</span>
+            <span class="item-meta">
+              <span class="badge ${meta.tone}">${meta.label}</span>
+              <span>${item.project}</span>
+              <span>${item.status}</span>
+            </span>
+          </span>
+          <span class="quick-actions" aria-hidden="true">
+            ${(item.actions || []).slice(0, 2).map((action) => `<span class="icon-button">${actionSymbol(action)}</span>`).join("")}
+          </span>
+        </button>
+      `;
+    }
+
+    function actionSymbol(action) {
+      if (action.includes("完成")) return "x";
+      if (action.includes("迁移")) return ">";
+      if (action.includes("排程") || action.includes("改期")) return "<";
+      if (action.includes("提升") || action.includes("提炼")) return "^";
+      if (action.includes("忽略")) return "~";
+      return "·";
+    }
+
+    function renderTimelineSpine() {
+      const entries = [
+        { kind: "capture", time: "08:32", title: "快速捕获块", summary: "3 行原始 Markdown，投影为任务、想法和事件。", captureId: "capture-0832" },
+        ...items.filter((item) => !item.id.startsWith("cap-0832")).map((item) => ({ kind: "item", item })),
+        { kind: "capture", time: "14:46", title: "快速捕获块", summary: "2 行原始 Markdown，含调研任务和产品原则。", captureId: "capture-1446" }
+      ].sort((a, b) => (a.time || a.item.time).localeCompare(b.time || b.item.time));
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">时间脊柱</h2>
+              <p class="panel-sub">按发生顺序保留叙事，快速捕获作为原文块嵌入。</p>
+            </div>
+            <span class="badge blue">证据链</span>
+          </div>
+          <div class="panel-body timeline">
+            ${entries.map(renderTimelineEntry).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderTimelineEntry(entry) {
+      if (entry.kind === "capture") {
+        const capture = captures.find((block) => block.id === entry.captureId);
+        return `
+          <div class="timeline-entry">
+            <div class="timeline-time">${entry.time}</div>
+            <div>
+              <div class="timeline-title">${entry.title}</div>
+              <div class="timeline-summary">${entry.summary}</div>
+              ${renderCaptureBlock(capture)}
+            </div>
+          </div>
+        `;
+      }
+      const item = entry.item;
+      const meta = typeMeta[item.type] || typeMeta.note;
+      return `
+        <button class="timeline-entry" type="button" data-select="${item.id}">
+          <span class="timeline-time">${item.time}</span>
+          <span>
+            <span class="timeline-title">${escapeHtml(item.title)}</span>
+            <span class="timeline-summary">${escapeHtml(item.summary)}</span>
+            <span class="item-meta"><span class="badge ${meta.tone}">${meta.label}</span><span>${item.layer}</span></span>
+          </span>
+        </button>
+      `;
+    }
+
+    function renderCaptureBlock(capture) {
+      if (!capture) return "";
+      return `
+        <div class="capture-block">
+          <div class="capture-block-head">
+            <span>${capture.file}</span>
+            <span>${capture.lines.length} 行</span>
+          </div>
+          ${capture.lines.map((line) => {
+            const item = typeof line === "string" ? itemById(line) : line;
+            const meta = typeMeta[item.type] || typeMeta.note;
+            return `
+              <button class="capture-line" type="button" data-select="${item.id}">
+                <span class="item-symbol">${meta.symbol}</span>
+                <span class="markdown">${escapeHtml(item.raw)}</span>
+                <span class="source-link">查看投影</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderWeeklyObjectivePanel() {
+      const objectives = [
+        { title: "完成节奏视图策略和原型", progress: 78, detail: "关联 9 个任务，覆盖日周月" },
+        { title: "收敛快速捕获到 Notes 原文", progress: 66, detail: "解析状态符号、项目和标签" },
+        { title: "把 Review 合并进时间范围", progress: 42, detail: "待处理 findings 和证据引用" }
+      ];
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">本周目标</h2>
+              <p class="panel-sub">周视图看目标和节奏，不把每天提前塞满。</p>
+            </div>
+            <span class="badge violet">3 个主线</span>
+          </div>
+          <div class="panel-body objective-list">
+            ${objectives.map((objective) => `
+              <div class="objective">
+                <strong>${objective.title}</strong>
+                <div class="item-meta"><span>${objective.detail}</span><span>${objective.progress}%</span></div>
+                <div class="progress"><span style="width:${objective.progress}%"></span></div>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderWeekGrid() {
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">七天承载</h2>
+              <p class="panel-sub">点击某天进入日视图。每列只放关键语义，避免变成完整任务仓库。</p>
+            </div>
+            <span class="badge teal">周负载 42</span>
+          </div>
+          <div class="panel-body week-grid">
+            ${week.map((day) => `
+              <button class="day-cell ${day.today ? "today" : ""}" type="button" data-jump-day="${day.date}">
+                <div class="day-head"><span>${day.label} ${day.date}</span><span class="badge ${day.load > 7 ? "rose" : "teal"}">${day.load}</span></div>
+                <div class="panel-sub">${day.focus}</div>
+                <div class="mini-list">
+                  ${day.items.map((item, index) => `<div class="mini-item ${index === 0 ? "teal" : index === 1 ? "amber" : "blue"}">${escapeHtml(item)}</div>`).join("")}
+                </div>
+                <div class="item-meta"><span>${day.done} 完成</span><span>${day.open} 未闭环</span></div>
+              </button>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderWeeklySemantic() {
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">本周迁移池</h2>
+              <p class="panel-sub">未排期内容集中处理，借鉴 Todoist 的 No date 与 BuJo migration。</p>
+            </div>
+            <span class="badge amber">需要判断</span>
+          </div>
+          <div class="panel-body source-list">
+            ${["继续：节奏视图原型 demo", "排程：Review finding 数据并入范围查询", "放弃：单独维护旧 Timeline 入口", "提升：日处理、周对齐、月取舍"].map((text, index) => `
+              <div class="objective">
+                <div class="item-title">${text}</div>
+                <div class="item-meta"><span class="badge ${index === 2 ? "rose" : "teal"}">${index === 0 ? ">" : index === 1 ? "<" : index === 2 ? "~" : "^"}</span><span>来源：quick capture / review / task</span></div>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderMonthThemes() {
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">五月主题</h2>
+              <p class="panel-sub">月视图服务 Vision 对齐和项目取舍。</p>
+            </div>
+            <span class="badge blue">AI synthesis</span>
+          </div>
+          <div class="panel-body theme-grid">
+            ${[
+              ["Capture 变成默认入口", "快速捕获从文本框进化成 Markdown 操作纸。"],
+              ["Review 融进时间范围", "复盘不再是独立页面，而是日周月的动作。"],
+              ["Library 等待工作台化", "资料入库多，蒸馏和资源关联需要更强表面。"]
+            ].map((theme) => `<div class="theme"><h3>${theme[0]}</h3><p>${theme[1]}</p></div>`).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderMonthGrid() {
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">月度热力</h2>
+              <p class="panel-sub">每格不是塞满卡片，而是显示捕获、执行、资料、复盘的动量。</p>
+            </div>
+            <span class="badge teal">活跃 24 天</span>
+          </div>
+          <div class="panel-body month-grid">
+            ${["一", "二", "三", "四", "五", "六", "日"].map((day) => `<div class="month-num">${day}</div>`).join("")}
+            ${monthDays.map((day) => `
+              <button class="month-day ${day.active ? "" : "muted"}" type="button" ${day.active ? `data-jump-day="05-${String(day.day).padStart(2, "0")}"` : ""}>
+                <div class="month-num"><span>${day.active ? day.day : ""}</span>${day.hasReview ? `<span class="badge amber">复盘</span>` : ""}</div>
+                ${day.active ? `<div class="panel-sub">${day.title}</div><div class="heat">${renderHeat(day.intensity)}</div>` : ""}
+              </button>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderHeat(value) {
+      const classes = ["", "l1", "l2", "l3", "a1", "a2", "r1"];
+      return Array.from({ length: 5 }, (_, index) => `<i class="${classes[(value + index) % classes.length]}"></i>`).join("");
+    }
+
+    function renderMonthlySemantic() {
+      return `
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">月度取舍</h2>
+              <p class="panel-sub">从项目动量、领域平衡和未闭环判断下月要继续什么。</p>
+            </div>
+            <span class="badge rose">5 个决策</span>
+          </div>
+          <div class="panel-body momentum-list">
+            ${[
+              ["继续推进", "new-orbit 节奏视图", "本月捕获、讨论和任务都集中在此，符合 Vision-driven 工作台方向。"],
+              ["需要收束", "快速捕获工具栏", "交互已经稳定，下一步应转入数据解析和迁移。"],
+              ["暂缓", "完整外部日历同步", "当前阶段只需要事件表达，不需要做另一个 calendar client。"],
+              ["提升为资源", "BuJo 极简操作系统", "已经多次影响产品判断，适合进入 Resource。"]
+            ].map((row) => `
+              <div class="objective">
+                <div class="item-meta"><span class="badge ${row[0] === "暂缓" ? "rose" : "teal"}">${row[0]}</span><span>${row[1]}</span></div>
+                <div class="field-value">${row[2]}</div>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderInspector() {
+      const item = itemById(state.selectedId);
+      const meta = typeMeta[item.type] || typeMeta.note;
+      document.getElementById("inspector").innerHTML = `
+        <div class="inspector-card">
+          <div class="inspector-head">
+            <div class="item-meta"><span class="badge ${meta.tone}">${meta.label}</span><span>${item.layer}</span></div>
+            <h2 class="inspector-title">${escapeHtml(item.title)}</h2>
+          </div>
+          <div class="inspector-body">
+            <div class="field">
+              <div class="field-label">状态</div>
+              <div class="field-value">${item.status} · ${item.project}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">为什么出现在这里</div>
+              <div class="field-value">${escapeHtml(item.summary)}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">原始证据</div>
+              <div class="note-preview">${escapeHtml(item.raw)}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">来源</div>
+              <div class="field-value">${item.time || "范围"} · ${item.source}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">标签</div>
+              <div class="item-meta">${(item.tags || []).map((tag) => `<span class="badge">#${tag}</span>`).join("")}</div>
+            </div>
+            <div class="action-bar">
+              ${(item.actions || []).slice(0, 4).map((action) => `<button type="button" data-mutate="${item.id}:${action}">${action}</button>`).join("")}
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:12px;">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">借鉴来源</h2>
+              <p class="panel-sub">原型按交互模式吸收，不照搬页面。</p>
+            </div>
+          </div>
+          <div class="panel-body principles">
+            <div class="principle">Todoist：未排期任务侧栏，拖到日期即承诺。</div>
+            <div class="principle">Sunsama：日计划收敛工作量，周目标连接复盘。</div>
+            <div class="principle">Akiflow / Amie / Morgen：任务与日历同屏，支持 time blocking。</div>
+            <div class="principle">Notion：同一底层数据可按不同视图投影。</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function mutateItem(payload) {
+      const [id, action] = payload.split(":");
+      const item = itemById(id);
+      if (!item) return;
+      if (action.includes("完成")) item.status = "已完成";
+      else if (action.includes("迁移")) item.status = "已迁移";
+      else if (action.includes("排程") || action.includes("改期")) item.status = "已排程";
+      else if (action.includes("提升") || action.includes("提炼") || action.includes("接受")) item.status = "已提升";
+      else if (action.includes("忽略")) item.status = "已忽略";
+      state.mutationCount += 1;
+      state.selectedId = id;
+      render();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    document.addEventListener("click", (event) => {
+      const target = event.target.closest("button");
+      if (!target) return;
+
+      if (target.dataset.mode) {
+        state.mode = target.dataset.mode;
+        render();
+        return;
+      }
+
+      if (target.dataset.lens) {
+        state.lens = target.dataset.lens;
+        render();
+        return;
+      }
+
+      if (target.dataset.select) {
+        state.selectedId = target.dataset.select;
+        render();
+        return;
+      }
+
+      if (target.dataset.jumpDay) {
+        state.mode = "day";
+        state.date = `2026-${target.dataset.jumpDay}`;
+        state.lens = "split";
+        render();
+        return;
+      }
+
+      if (target.dataset.mutate) {
+        mutateItem(target.dataset.mutate);
+        return;
+      }
+
+      if (target.dataset.action === "review") {
+        state.reviewGenerated = !state.reviewGenerated;
+        state.selectedId = "review-2100";
+        render();
+        return;
+      }
+
+      if (target.dataset.action === "capture") {
+        const id = `cap-new-${Date.now()}`;
+        captures.unshift({
+          id: `capture-new-${Date.now()}`,
+          time: "现在",
+          file: "notes/captures/quick/2026-05-21.md",
+          lines: [{
+            id,
+            type: "task",
+            time: "现在",
+            title: "补充一个新的节奏视图交互细节",
+            summary: "模拟从快速捕获进入原文，再投影到行动候选。",
+            status: "候选",
+            project: "new-orbit",
+            area: "产品系统",
+            tags: ["prototype"],
+            source: "notes/captures/quick/2026-05-21.md:99",
+            raw: "• 补充一个新的节奏视图交互细节 @new-orbit #prototype",
+            layer: "L1 原文",
+            actions: ["完成", "迁移", "提升"]
+          }]
+        });
+        state.selectedId = id;
+        render();
+        return;
+      }
+
+      if (target.dataset.action === "prev" || target.dataset.action === "next") {
+        state.selectedId = target.dataset.action === "prev" ? "cap-0832-l2" : "conv-1638";
+        render();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

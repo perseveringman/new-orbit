@@ -15,6 +15,7 @@ const ITEMS: Item[] = [
   { label: '角色模板', view: { kind: 'agents' }, icon: '◌' },
   { label: '收件箱', view: { kind: 'inbox' }, icon: '📥' },
   { label: '对话', view: { kind: 'conversations' }, icon: '💬' },
+  { label: '连接器', view: { kind: 'connectors' }, icon: '⎇' },
   { label: '看板', view: { kind: 'kanban', projectUid: null }, icon: '▦' }
 ];
 

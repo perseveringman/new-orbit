@@ -13,6 +13,7 @@ export type WorkspaceView =
   | { kind: 'notes' }
   | { kind: 'library' }
   | { kind: 'feeds' }
+  | { kind: 'connectors' }
   | { kind: 'search' }
   | { kind: 'memory' }
   | { kind: 'review' }

@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   Library as LibraryIcon,
   ListTodo,
+  PlusCircle,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -34,6 +35,7 @@ import {
   type DashboardWidgetSize
 } from '@shared/dashboard';
 import type { FeedItem, FeedSource } from '@shared/feed';
+import type { CreateTaskResultDTO, ProjectSummaryDTO } from '@shared/ipc';
 import type { LibraryItem } from '@shared/library';
 import type { ResourceSummary } from '@shared/resource';
 import type { TaskExecutionMode, TaskRecord, TaskStatus } from '@shared/schemas';
@@ -48,6 +50,24 @@ import { cleanVisionExcerpt } from './dashboardText';
 const surfaceCls =
   'rounded-md border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950';
 const subtleCls = 'text-xs text-neutral-500 dark:text-neutral-400';
+const QUICK_TASK_MODES: TaskExecutionMode[] = ['agent', 'assisted', 'human'];
+
+interface QuickCreateTaskInput {
+  projectUid: string;
+  title: string;
+  executionMode: TaskExecutionMode;
+}
+
+type DashboardProjectRow = {
+  project: Pick<
+    ProjectSummaryDTO,
+    'uid' | 'name' | 'description' | 'relPath' | 'workdirMissing' | 'legacy'
+  >;
+  open: number;
+  doing: number;
+  blocked: number;
+  ready: number;
+};
 
 export function DashboardView(): JSX.Element {
   const vault = useWorkspace((s) => s.vault);
@@ -61,6 +81,7 @@ export function DashboardView(): JSX.Element {
   const entities = usePara((s) => s.entities);
   const tasks = usePara((s) => s.tasks);
   const setView = usePara((s) => s.setView);
+  const refreshPara = usePara((s) => s.refresh);
   const toast = useFiles((s) => s.toast);
   const openPath = useFiles((s) => s.openPath);
   const openTask = useTaskDetails((s) => s.openTask);
@@ -254,6 +275,22 @@ export function DashboardView(): JSX.Element {
     }
   }
 
+  async function createQuickTask(input: QuickCreateTaskInput): Promise<CreateTaskResultDTO> {
+    const mode = input.executionMode;
+    const res = await window.orbit.task.create({
+      project_uid: input.projectUid,
+      title: input.title,
+      frontmatter: {
+        status: 'todo',
+        execution_mode: mode,
+        execution_strategy: mode === 'agent' ? 'autonomous' : 'manual'
+      }
+    });
+    toast(`任务已加入执行队列：${res.relPath}`);
+    await Promise.all([refreshPara(), loadDashboard()]);
+    return res;
+  }
+
   async function persistLayout(next: DashboardLayout): Promise<void> {
     setSavingLayout(true);
     setLayout(next);
@@ -399,6 +436,7 @@ export function DashboardView(): JSX.Element {
             projectByUid={projectByUid}
             onOpenProject={openProject}
             onOpenTask={openTaskDetail}
+            onQuickCreate={createQuickTask}
           />
         );
       case 'knowledge-loop':
@@ -730,20 +768,18 @@ function ExecutionQueueContent({
   tasks,
   projectByUid,
   onOpenProject,
-  onOpenTask
+  onOpenTask,
+  onQuickCreate
 }: {
-  rows: Array<{
-    project: { uid: string; name: string; description?: string; relPath: string; workdirMissing?: boolean };
-    open: number;
-    doing: number;
-    blocked: number;
-    ready: number;
-  }>;
+  rows: DashboardProjectRow[];
   tasks: TaskRecord[];
   projectByUid: Map<string, { name: string }>;
   onOpenProject(projectUid: string): void;
   onOpenTask(task: TaskRecord): void;
+  onQuickCreate(input: QuickCreateTaskInput): Promise<CreateTaskResultDTO>;
 }): JSX.Element {
+  const quickCreateProjects = rows.map((row) => row.project).filter((project) => !project.legacy);
+
   return (
     <div className="grid min-h-[320px] lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
       <div className="min-w-0">
@@ -761,6 +797,11 @@ function ExecutionQueueContent({
                     工作目录缺失
                   </span>
                 ) : null}
+                {row.project.legacy ? (
+                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                    旧格式
+                  </span>
+                ) : null}
               </div>
               <p className="mt-1 line-clamp-1 text-xs text-neutral-500">
                 {row.project.description || row.project.relPath}
@@ -776,8 +817,11 @@ function ExecutionQueueContent({
       </div>
 
       <div className="border-t border-neutral-200 dark:border-neutral-800 lg:border-l lg:border-t-0">
-        <div className="border-b border-neutral-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:border-neutral-800">
-          下一批任务
+        <div className="border-b border-neutral-200 dark:border-neutral-800">
+          <div className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+            下一批任务
+          </div>
+          <QuickTaskComposer projects={quickCreateProjects} onCreate={onQuickCreate} />
         </div>
         {tasks.map((task) => (
           <TaskQueueRow
@@ -790,6 +834,114 @@ function ExecutionQueueContent({
         {tasks.length === 0 ? <EmptyState title="没有开放任务" detail="当前任务索引中没有等待处理的任务。" /> : null}
       </div>
     </div>
+  );
+}
+
+function QuickTaskComposer({
+  projects,
+  onCreate
+}: {
+  projects: Array<Pick<ProjectSummaryDTO, 'uid' | 'name' | 'workdirMissing'>>;
+  onCreate(input: QuickCreateTaskInput): Promise<CreateTaskResultDTO>;
+}): JSX.Element {
+  const defaultProjectUid = projects[0]?.uid ?? '';
+  const [projectUid, setProjectUid] = useState(defaultProjectUid);
+  const [title, setTitle] = useState('');
+  const [executionMode, setExecutionMode] = useState<TaskExecutionMode>('agent');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (projects.some((project) => project.uid === projectUid)) return;
+    setProjectUid(defaultProjectUid);
+  }, [defaultProjectUid, projectUid, projects]);
+
+  const titleTrimmed = title.trim();
+  const canCreate = titleTrimmed.length > 0 && projectUid.length > 0 && !busy;
+
+  async function submit(): Promise<void> {
+    if (!canCreate) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onCreate({ projectUid, title: titleTrimmed, executionMode });
+      setTitle('');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div className="border-t border-neutral-100 bg-neutral-50 px-4 py-3 text-xs text-neutral-500 dark:border-neutral-900 dark:bg-neutral-900/40">
+        先创建或迁移项目后，即可从这里快速加入任务。
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+      className="border-t border-neutral-100 bg-neutral-50 px-4 py-3 dark:border-neutral-900 dark:bg-neutral-900/40"
+    >
+      <div className="flex items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-300">
+        <PlusCircle size={14} />
+        <span>快速创建</span>
+      </div>
+      <div className="mt-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_132px_92px_auto]">
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          className="h-8 min-w-0 rounded-md border border-neutral-300 bg-white px-2 text-sm outline-none focus:border-sky-500 dark:border-neutral-700 dark:bg-neutral-950"
+          placeholder="新的执行任务"
+          disabled={busy}
+        />
+        <select
+          aria-label="任务归属项目"
+          value={projectUid}
+          onChange={(event) => setProjectUid(event.target.value)}
+          className="h-8 min-w-0 rounded-md border border-neutral-300 bg-white px-2 text-xs outline-none focus:border-sky-500 dark:border-neutral-700 dark:bg-neutral-950"
+          disabled={busy}
+        >
+          {projects.map((project) => (
+            <option key={project.uid} value={project.uid}>
+              {project.name}{project.workdirMissing ? ' · 工作目录缺失' : ''}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="任务执行模式"
+          value={executionMode}
+          onChange={(event) => setExecutionMode(event.target.value as TaskExecutionMode)}
+          className="h-8 rounded-md border border-neutral-300 bg-white px-2 text-xs outline-none focus:border-sky-500 dark:border-neutral-700 dark:bg-neutral-950"
+          disabled={busy}
+        >
+          {QUICK_TASK_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {quickTaskModeLabel(mode)}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          disabled={!canCreate}
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-sky-600 px-3 text-xs font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <PlusCircle size={14} />
+          {busy ? '创建中' : '创建'}
+        </button>
+      </div>
+      {error ? (
+        <div className="mt-2 rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
+          {error}
+        </div>
+      ) : null}
+    </form>
   );
 }
 
@@ -1291,6 +1443,16 @@ function executionModeLabel(mode: TaskExecutionMode): string {
   const labels: Record<TaskExecutionMode, string> = {
     human: '人工',
     assisted: '辅助',
+    agent: 'Agent',
+    scheduled: '计划'
+  };
+  return labels[mode];
+}
+
+function quickTaskModeLabel(mode: TaskExecutionMode): string {
+  const labels: Record<TaskExecutionMode, string> = {
+    human: '我来',
+    assisted: '协作',
     agent: 'Agent',
     scheduled: '计划'
   };

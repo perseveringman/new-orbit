@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import {
@@ -6,7 +6,7 @@ import {
   defaultHighlightStyle,
   syntaxHighlighting
 } from '@codemirror/language';
-import { Compartment, EditorState, StateField, type Extension } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState, StateField, type Extension } from '@codemirror/state';
 import {
   EditorView,
   highlightActiveLine,
@@ -24,6 +24,29 @@ import {
 
 export type MarkdownEditorMode = 'live' | 'source';
 
+export interface MarkdownLiveEditorHandle {
+  focus(): void;
+  insertText(text: string): void;
+  deleteBeforeCursor(text: string): boolean;
+  currentLineBeforeCursor(): string;
+  prefixCurrentLine(prefix: string): void;
+}
+
+export type MarkdownLiveEditorKeyCommand =
+  | 'mod-1'
+  | 'mod-2'
+  | 'mod-3'
+  | 'mod-4'
+  | 'mod-5'
+  | 'mod-6'
+  | 'mod-7'
+  | 'mod-k'
+  | 'arrow-down'
+  | 'arrow-up'
+  | 'enter'
+  | 'tab'
+  | 'escape';
+
 interface MarkdownLiveEditorProps {
   value: string;
   onChange(next: string): void;
@@ -36,6 +59,13 @@ interface MarkdownLiveEditorProps {
   vaultRoot?: string | null;
   notePath?: string;
   onBlur?(): void;
+  onPaste?(): void;
+  onKeyDown?(event: KeyboardEvent): boolean | void;
+  onKeyCommand?(command: MarkdownLiveEditorKeyCommand): boolean | void;
+  onModEnter?(): void;
+  onEscape?(): void;
+  autoFocus?: boolean;
+  editorRef?: MutableRefObject<MarkdownLiveEditorHandle | null>;
 }
 
 export function MarkdownLiveEditor({
@@ -49,7 +79,14 @@ export function MarkdownLiveEditor({
   minHeight = 320,
   vaultRoot,
   notePath,
-  onBlur
+  onBlur,
+  onPaste,
+  onKeyDown,
+  onKeyCommand,
+  onModEnter,
+  onEscape,
+  autoFocus = false,
+  editorRef
 }: MarkdownLiveEditorProps): JSX.Element {
   const host = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -59,8 +96,18 @@ export function MarkdownLiveEditor({
   const readOnlyComp = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   const onBlurRef = useRef(onBlur);
+  const onPasteRef = useRef(onPaste);
+  const onKeyDownRef = useRef(onKeyDown);
+  const onKeyCommandRef = useRef(onKeyCommand);
+  const onModEnterRef = useRef(onModEnter);
+  const onEscapeRef = useRef(onEscape);
   onChangeRef.current = onChange;
   onBlurRef.current = onBlur;
+  onPasteRef.current = onPaste;
+  onKeyDownRef.current = onKeyDown;
+  onKeyCommandRef.current = onKeyCommand;
+  onModEnterRef.current = onModEnter;
+  onEscapeRef.current = onEscape;
 
   useEffect(() => {
     if (!host.current) return;
@@ -71,7 +118,30 @@ export function MarkdownLiveEditor({
       highlightActiveLine(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       markdown(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
+      keymap.of([
+        ...quickCommandKeymap(onKeyCommandRef),
+        {
+          key: 'Mod-Enter',
+          run() {
+            const handler = onModEnterRef.current;
+            if (!handler) return false;
+            handler();
+            return true;
+          }
+        },
+        {
+          key: 'Escape',
+          run() {
+            if (onKeyCommandRef.current?.('escape') === true) return true;
+            const handler = onEscapeRef.current;
+            if (!handler) return false;
+            handler();
+            return true;
+          }
+        },
+        ...defaultKeymap,
+        ...historyKeymap
+      ]),
       previewComp.current.of(mode === 'live' ? livePreviewExtension({ vaultRoot, notePath }) : []),
       darkComp.current.of(dark ? oneDark : []),
       themeComp.current.of(editorTheme(dark, mode, minHeight)),
@@ -86,6 +156,13 @@ export function MarkdownLiveEditor({
         onChangeRef.current(update.state.doc.toString());
       }),
       EditorView.domEventHandlers({
+        keydown(event) {
+          return onKeyDownRef.current?.(event) === true;
+        },
+        paste() {
+          onPasteRef.current?.();
+          return false;
+        },
         blur() {
           onBlurRef.current?.();
           return false;
@@ -96,6 +173,7 @@ export function MarkdownLiveEditor({
     const state = EditorState.create({ doc: value, extensions });
     const view = new EditorView({ state, parent: host.current });
     viewRef.current = view;
+    if (autoFocus) window.setTimeout(() => view.focus(), 0);
 
     return () => {
       view.destroy();
@@ -104,6 +182,68 @@ export function MarkdownLiveEditor({
     // Initial mount only. Prop changes are pushed through compartments.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!editorRef) return undefined;
+    editorRef.current = {
+      focus() {
+        viewRef.current?.focus();
+      },
+      insertText(text: string) {
+        const view = viewRef.current;
+        if (!view) return;
+        const range = view.state.selection.main;
+        view.dispatch({
+          changes: { from: range.from, to: range.to, insert: text },
+          selection: EditorSelection.cursor(range.from + text.length)
+        });
+        view.focus();
+      },
+      deleteBeforeCursor(text: string) {
+        const view = viewRef.current;
+        if (!view || !text) return false;
+        const cursor = view.state.selection.main.head;
+        const from = cursor - text.length;
+        if (from < 0 || view.state.doc.sliceString(from, cursor) !== text) return false;
+        view.dispatch({
+          changes: { from, to: cursor },
+          selection: EditorSelection.cursor(from)
+        });
+        view.focus();
+        return true;
+      },
+      currentLineBeforeCursor() {
+        const view = viewRef.current;
+        if (!view) return '';
+        const cursor = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(cursor);
+        return view.state.doc.sliceString(line.from, cursor);
+      },
+      prefixCurrentLine(prefix: string) {
+        const view = viewRef.current;
+        if (!view) return;
+        const marker = `${prefix} `;
+        const cursor = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(cursor);
+        const existingMarker = /^(?:[•\-○x><~^])\s+/.exec(line.text);
+        if (existingMarker) {
+          view.dispatch({
+            changes: { from: line.from, to: line.from + existingMarker[0].length, insert: marker },
+            selection: EditorSelection.cursor(line.from + marker.length)
+          });
+        } else {
+          view.dispatch({
+            changes: { from: line.from, insert: marker },
+            selection: EditorSelection.cursor(cursor + marker.length)
+          });
+        }
+        view.focus();
+      }
+    };
+    return () => {
+      editorRef.current = null;
+    };
+  }, [editorRef]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -135,6 +275,28 @@ export function MarkdownLiveEditor({
   }, [readOnly]);
 
   return <div ref={host} className={className ?? 'h-full w-full'} />;
+}
+
+function quickCommandKeymap(
+  ref: MutableRefObject<((command: MarkdownLiveEditorKeyCommand) => boolean | void) | undefined>
+): Array<{ key: string; run(): boolean }> {
+  function run(command: MarkdownLiveEditorKeyCommand): () => boolean {
+    return () => ref.current?.(command) === true;
+  }
+  return [
+    { key: 'Mod-1', run: run('mod-1') },
+    { key: 'Mod-2', run: run('mod-2') },
+    { key: 'Mod-3', run: run('mod-3') },
+    { key: 'Mod-4', run: run('mod-4') },
+    { key: 'Mod-5', run: run('mod-5') },
+    { key: 'Mod-6', run: run('mod-6') },
+    { key: 'Mod-7', run: run('mod-7') },
+    { key: 'Mod-k', run: run('mod-k') },
+    { key: 'ArrowDown', run: run('arrow-down') },
+    { key: 'ArrowUp', run: run('arrow-up') },
+    { key: 'Enter', run: run('enter') },
+    { key: 'Tab', run: run('tab') }
+  ];
 }
 
 function livePreviewExtension(context: MarkdownLivePreviewContext): Extension {

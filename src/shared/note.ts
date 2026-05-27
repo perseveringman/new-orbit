@@ -110,6 +110,7 @@ export interface NoteFilter {
 export interface CreateNoteInput {
   id?: string;
   type: NoteType;
+  subdir?: string;
   title?: string;
   body: string;
   created?: string;
