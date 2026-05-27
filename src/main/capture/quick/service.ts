@@ -15,6 +15,7 @@ import type {
   QuickCaptureSuggestDraftResult,
   QuickCaptureSuggestion
 } from '@shared/capture';
+import type { LibraryKind, LibrarySource } from '@shared/library';
 import type { SpecialMarkerKind } from '@shared/note';
 import type { RuntimeRouteDecision, SDKInvocationInput } from '@shared/runtime';
 import {
@@ -23,6 +24,13 @@ import {
   quickCaptureActionTag,
   quickCaptureSuggestionStableId
 } from '@shared/quick-capture-actions';
+import {
+  parseContentSource,
+  writeParsedContentArtifact,
+  type ContentConnector,
+  type FetchLike,
+  type ParsedContent
+} from '../../content-connectors';
 import { createInboxServiceForVault } from '../../inbox';
 import { createLibraryStore } from '../../library/store';
 import { createNoteStore } from '../../note/store';
@@ -37,6 +45,10 @@ export interface QuickCaptureRuntimeRouter {
 
 export interface QuickCaptureServiceOptions {
   router?: QuickCaptureRuntimeRouter | null;
+  contentConnectors?: ContentConnector[];
+  fetchSource?: FetchLike;
+  contentConnectorTimeoutMs?: number;
+  now?: () => Date;
 }
 
 export class QuickCaptureService {
@@ -113,21 +125,57 @@ export class QuickCaptureService {
 
   async createLink(input: CreateCaptureLinkInput): Promise<CreateCaptureLinkResult> {
     const url = normalizeUrl(input.url);
-    const title = input.title?.trim() || titleFromUrl(url);
     const notes = input.notes?.trim();
+    const parsed = await this.parseLink(url, input.title, notes);
+    const artifact = await writeParsedContentArtifact(this.vaultPath, parsed, `quick-capture:${url}`);
+    const title = input.title?.trim() || parsed.title || titleFromNotes(notes) || titleFromUrl(url);
+    const itemUrl = parsed.canonical_url ?? parsed.source_url ?? url;
     const item = await createLibraryStore(this.vaultPath).save({
-      kind: input.kind === 'bookmark' ? 'bookmark' : 'article',
+      kind: libraryKindForQuickLink(input.kind, parsed),
       title,
-      url,
+      url: itemUrl,
       tags: normalizeTags(input.tags ?? []),
-      body: linkBody(title, url, notes, input.kind),
+      body: linkBody(title, itemUrl, notes, input.kind, parsed),
       source: {
         kind: 'quick_capture',
-        url,
+        url: parsed.source_url ?? url,
+        canonical_url: parsed.canonical_url ?? itemUrl,
+        provider: parsed.platform,
+        source_title: input.title?.trim() || parsed.title,
+        parser_hint: parsed.parser_hint,
+        content_status: parsed.status === 'success' ? 'parsed' : parsed.status,
+        content_connector_id: parsed.connector_id,
+        content_connector_version: parsed.connector_version,
+        content_error: parsed.error,
+        content_fetched_at: parsed.fetched_at,
+        ...librarySourceMetadataForParsed(parsed),
+        language: sourceLanguageForParsed(parsed, parsed.content_markdown ?? notes ?? title),
         ...(notes ? { note: notes } : {})
-      }
+      },
+      ...(artifact?.path ? { source_snapshot_ref: artifact.path } : {})
     });
     return { item };
+  }
+
+  private async parseLink(url: string, title?: string, notes?: string): Promise<ParsedContent> {
+    try {
+      return await parseContentSource(
+        {
+          url,
+          title,
+          text: notes,
+          sourceKind: 'manual'
+        },
+        {
+          connectors: this.options.contentConnectors,
+          fetch: this.options.fetchSource,
+          timeoutMs: this.options.contentConnectorTimeoutMs,
+          now: this.options.now
+        }
+      );
+    } catch (error) {
+      return failedQuickCaptureParsedContent(url, title, notes, error, this.options.now);
+    }
   }
 
   async createTask(input: CreateCaptureTaskInput): Promise<CreateCaptureTaskResult> {
@@ -191,14 +239,30 @@ function captureNoteBody(
   return sections.join('\n\n');
 }
 
-function linkBody(title: string, url: string, notes: string | undefined, kind: CreateCaptureLinkInput['kind']): string {
+function linkBody(
+  title: string,
+  url: string,
+  notes: string | undefined,
+  kind: CreateCaptureLinkInput['kind'],
+  parsed: ParsedContent
+): string {
+  const parsedBody = parsed.status === 'success' ? parsed.content_markdown?.trim() : '';
+  if (parsedBody) {
+    return [
+      notes ? ['## 快速捕获备注', '', notes].join('\n') : '',
+      parsedBody,
+      parsedBody.includes(url) ? '' : ['## Source', '', url].join('\n')
+    ].filter(Boolean).join('\n\n');
+  }
+
   return [
     `# ${title}`,
     '',
     `Source: ${url}`,
     '',
     kind === 'read_later' ? 'Status: read later' : 'Status: bookmark',
-    ...(notes ? ['', '## Notes', '', notes] : [])
+    parsed.error ? `Parse status: ${parsed.status} (${parsed.error})` : `Parse status: ${parsed.status}`,
+    ...(notes ? ['', '## 快速捕获备注', '', notes] : [])
   ].join('\n');
 }
 
@@ -246,6 +310,79 @@ function titleFromUrl(value: string): string {
   const url = new URL(value);
   const pathTitle = url.pathname.replace(/\/$/, '').split('/').pop()?.replace(/[-_]+/g, ' ').trim();
   return truncateText(pathTitle ? `${url.hostname} - ${pathTitle}` : url.hostname, 80);
+}
+
+function titleFromNotes(value: string | undefined): string | undefined {
+  const line = value
+    ?.split(/\r?\n/)
+    .map((item) => item.trim())
+    .find((item) => item && !/^https?:\/\//i.test(item) && !/^存下这段话[，,]/.test(item));
+  return line ? truncateText(line, 80) : undefined;
+}
+
+function libraryKindForQuickLink(kind: CreateCaptureLinkInput['kind'], parsed: ParsedContent): LibraryKind {
+  if (kind === 'bookmark') return 'bookmark';
+  if (parsed.platform === 'youtube') return 'video';
+  return 'article';
+}
+
+function librarySourceMetadataForParsed(parsed: ParsedContent): Partial<LibrarySource> {
+  const metadata = parsed.metadata ?? {};
+  return {
+    ...(metadataString(metadata, 'external_id') ? { external_id: metadataString(metadata, 'external_id') } : {}),
+    ...(metadataString(metadata, 'channel_name') ? { channel_name: metadataString(metadata, 'channel_name') } : {}),
+    ...(metadataString(metadata, 'channel_id') ? { channel_id: metadataString(metadata, 'channel_id') } : {}),
+    ...(metadataNumber(metadata, 'duration_seconds') !== undefined
+      ? { duration_seconds: metadataNumber(metadata, 'duration_seconds') }
+      : {}),
+    ...(metadataString(metadata, 'published_at') ? { published_at: metadataString(metadata, 'published_at') } : {}),
+    ...(metadataString(metadata, 'preferred_transcript_track_id')
+      ? { preferred_transcript_track_id: metadataString(metadata, 'preferred_transcript_track_id') }
+      : {})
+  };
+}
+
+function sourceLanguageForParsed(parsed: ParsedContent, fallback: string): string | undefined {
+  return metadataString(parsed.metadata ?? {}, 'language') ?? detectLanguage(fallback);
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string): string | undefined {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | undefined {
+  const value = metadata[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function failedQuickCaptureParsedContent(
+  url: string,
+  title: string | undefined,
+  notes: string | undefined,
+  error: unknown,
+  now?: () => Date
+): ParsedContent {
+  return {
+    platform: 'unknown',
+    parser_hint: 'generic_url',
+    status: 'failed',
+    source_url: url,
+    canonical_url: url,
+    ...(title?.trim() ? { title: title.trim() } : {}),
+    ...(notes?.trim() ? { excerpt: notes.trim() } : {}),
+    fetched_at: (now?.() ?? new Date()).toISOString(),
+    connector_id: 'none',
+    connector_version: '0',
+    error: error instanceof Error ? error.message : String(error)
+  };
+}
+
+function detectLanguage(value: string): string | undefined {
+  const sample = value.slice(0, 2000);
+  if (/[\u4e00-\u9fff]/.test(sample)) return 'zh';
+  if (/[a-zA-Z]/.test(sample)) return 'en';
+  return undefined;
 }
 
 function markerFor(kind: string): { kind: SpecialMarkerKind; icon: string } {

@@ -56,8 +56,10 @@ async function parseWithOpenCli(input: ContentParseInput, context: ContentConnec
         maxBuffer: 8 * 1024 * 1024
       });
       const parsed = parseOpenCliOutput(stdout, input, base);
-      if (parsed.content_markdown?.trim() || parsed.title || parsed.excerpt) return parsed;
-      lastError = 'opencli_empty_result';
+      if (parsed.status === 'success' && (parsed.content_markdown?.trim() || parsed.title || parsed.excerpt)) {
+        return parsed;
+      }
+      lastError = parsed.error ?? 'opencli_empty_result';
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     }
@@ -73,8 +75,8 @@ async function parseWithOpenCli(input: ContentParseInput, context: ContentConnec
 }
 
 function commandCandidates(platform: ParsedContent['platform'], url: string): string[][] {
-  if (platform === 'wechat_article') return [['weixin', 'download', url, '-f', 'json'], ['weixin', 'download', url, '-f', 'md']];
-  if (platform === 'xiaohongshu') return [['xiaohongshu', 'note', url, '-f', 'json'], ['xiaohongshu', 'download', url, '-f', 'md']];
+  if (platform === 'wechat_article') return [['weixin', 'download', '--url', url, '-f', 'json'], ['weixin', 'download', '--url', url, '-f', 'md']];
+  if (platform === 'xiaohongshu') return [['xiaohongshu', 'note', url, '-f', 'json']];
   if (platform === 'x') {
     const tweetId = extractTweetId(url) ?? url;
     return [['twitter', 'thread', tweetId, '-f', 'json'], ['twitter', 'article', tweetId, '-f', 'json']];
@@ -109,6 +111,16 @@ function parseOpenCliOutput(
       excerpt,
       content_markdown: normalizeMarkdown(content),
       metadata: { output_format: 'json' }
+    };
+  }
+  if (base.platform === 'xiaohongshu' && looksLikeMediaDownloadTable(trimmed)) {
+    return {
+      ...base,
+      status: 'failed',
+      title: stringOrNull(input.title) ?? undefined,
+      excerpt: stringOrNull(input.text) ?? undefined,
+      error: 'opencli_media_download_output_not_readable',
+      metadata: { output_format: 'text' }
     };
   }
   return {
@@ -289,4 +301,11 @@ function normalizeMarkdown(value: string): string | undefined {
     .trim()
     .slice(0, 80000);
   return normalized || undefined;
+}
+
+function looksLikeMediaDownloadTable(value: string): boolean {
+  return (
+    /\|\s*index\s*\|\s*type\s*\|\s*status\s*\|\s*size\s*\|/i.test(value) &&
+    /\|\s*\d+\s*\|\s*(image|video)\s*\|\s*success\s*\|/i.test(value)
+  );
 }

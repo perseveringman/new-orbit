@@ -11,7 +11,7 @@ export function firstUrl(value: string | null | undefined): string | null {
 }
 
 export function normalizePlatform(value: unknown): ContentPlatform {
-  if (value === 'wechat_article' || value === 'xiaohongshu' || value === 'x' || value === 'web') return value;
+  if (value === 'wechat_article' || value === 'xiaohongshu' || value === 'x' || value === 'youtube' || value === 'web') return value;
   return 'unknown';
 }
 
@@ -22,6 +22,7 @@ export function platformFromUrl(url: string | null | undefined): ContentPlatform
     if (host === 'mp.weixin.qq.com') return 'wechat_article';
     if (host.endsWith('xiaohongshu.com') || host === 'xhslink.com') return 'xiaohongshu';
     if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com')) return 'x';
+    if (host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com')) return 'youtube';
     return 'web';
   } catch {
     return 'unknown';
@@ -38,6 +39,7 @@ export function parserHintForPlatform(platform: ContentPlatform): string {
   if (platform === 'wechat_article') return 'wechat_article';
   if (platform === 'xiaohongshu') return 'xiaohongshu_note';
   if (platform === 'x') return 'x_post';
+  if (platform === 'youtube') return 'youtube_video';
   return 'generic_url';
 }
 
@@ -50,6 +52,21 @@ export function canonicalizeUrl(url: string | null, platform: ContentPlatform): 
       const match = parsed.pathname.match(/^\/([^/]+)\/status(?:es)?\/(\d+)/i);
       if (match) return `https://x.com/${match[1]}/status/${match[2]}`;
       if (parsed.hostname.includes('twitter.com')) parsed.hostname = 'x.com';
+    }
+    if (platform === 'youtube') {
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+      if (host === 'youtu.be') {
+        const videoId = parsed.pathname.split('/').filter(Boolean)[0];
+        if (videoId) return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+      if (host === 'youtube.com') {
+        const watchVideoId = parsed.searchParams.get('v');
+        if (watchVideoId) return `https://www.youtube.com/watch?v=${watchVideoId}`;
+        const segments = parsed.pathname.split('/').filter(Boolean);
+        if ((segments[0] === 'shorts' || segments[0] === 'live' || segments[0] === 'embed') && segments[1]) {
+          return `https://www.youtube.com/watch?v=${segments[1]}`;
+        }
+      }
     }
     return parsed.toString();
   } catch {
@@ -69,6 +86,7 @@ export function sourcePlatformLabel(platform: ContentPlatform): string {
   if (platform === 'wechat_article') return 'WeChat article';
   if (platform === 'xiaohongshu') return 'Xiaohongshu note';
   if (platform === 'x') return 'X post';
+  if (platform === 'youtube') return 'YouTube video';
   if (platform === 'web') return 'Web page';
   return 'Shared source';
 }

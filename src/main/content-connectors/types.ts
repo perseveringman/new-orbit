@@ -1,4 +1,4 @@
-export type ContentPlatform = 'wechat_article' | 'xiaohongshu' | 'x' | 'web' | 'unknown';
+export type ContentPlatform = 'wechat_article' | 'xiaohongshu' | 'x' | 'youtube' | 'web' | 'unknown';
 
 export type ContentParseStatus = 'success' | 'skipped' | 'failed';
 

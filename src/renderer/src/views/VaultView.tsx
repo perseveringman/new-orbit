@@ -766,5 +766,5 @@ export function VaultView(): JSX.Element {
 }
 
 export function shouldShowRightSidebar(view: WorkspaceView): boolean {
-  return view.kind !== 'askAnywhere' && view.kind !== 'runtimeSessions';
+  return view.kind !== 'askAnywhere' && view.kind !== 'runtimeSessions' && view.kind !== 'library';
 }

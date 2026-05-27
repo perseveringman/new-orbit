@@ -1,5 +1,6 @@
 import { createBuiltinContentConnector } from './builtin';
 import { createOpenCliContentConnector } from './opencli';
+import { createYouTubeContentConnector } from './youtube';
 import type {
   ContentConnector,
   ContentConnectorAttempt,
@@ -14,7 +15,7 @@ export interface ParseContentOptions extends ContentConnectorContext {
 }
 
 export function defaultContentConnectors(): ContentConnector[] {
-  return [createOpenCliContentConnector(), createBuiltinContentConnector()];
+  return [createOpenCliContentConnector(), createYouTubeContentConnector(), createBuiltinContentConnector()];
 }
 
 export async function parseContentSource(

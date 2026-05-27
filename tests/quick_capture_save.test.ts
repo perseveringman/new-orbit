@@ -10,6 +10,7 @@ import {
   isQuickCaptureAccelerator,
   QUICK_CAPTURE_ACCELERATOR
 } from '../src/main/capture';
+import type { ContentConnector } from '../src/main/content-connectors';
 import type { ActivityEventInput } from '../src/main/activity';
 import type { ThoughtPayload } from '../src/shared/inbox';
 import { QuickCaptureModal } from '../src/renderer/src/components/quick-capture/QuickCaptureModal';
@@ -162,7 +163,7 @@ describe('quick capture save', () => {
   });
 
   it('captures bookmarks, read-later links, and tasks into the correct stores', async () => {
-    const service = createQuickCaptureService(vaultPath);
+    const service = createQuickCaptureService(vaultPath, { contentConnectors: [] });
     const bookmark = await service.createLink({
       kind: 'bookmark',
       url: 'example.com/tool',
@@ -192,6 +193,211 @@ describe('quick capture save', () => {
     expect((task.item.payload as { requested_action?: string }).requested_action).toBe(
       'assign_to_project'
     );
+  });
+
+  it('parses quick-captured links into Library snapshots with connector provenance', async () => {
+    const connector: ContentConnector = {
+      id: 'test.readable',
+      version: '1.2.3',
+      priority: 100,
+      canHandle: () => true,
+      parse: async (input) => ({
+        platform: 'web',
+        parser_hint: 'generic_url',
+        status: 'success',
+        source_url: input.url ?? null,
+        canonical_url: 'https://example.com/essay',
+        title: 'Parsed Essay',
+        author: 'Orbit Author',
+        excerpt: 'A parsed excerpt.',
+        content_markdown: 'Parsed readable body for the Library.',
+        fetched_at: '2026-05-27T00:00:00.000Z',
+        connector_id: 'test.readable',
+        connector_version: '1.2.3'
+      })
+    };
+    const service = createQuickCaptureService(vaultPath, {
+      contentConnectors: [connector],
+      now: () => new Date('2026-05-27T00:00:00.000Z')
+    });
+
+    const result = await service.createLink({
+      kind: 'read_later',
+      url: 'https://example.com/essay?utm_source=test',
+      notes: '从快速捕获保存，稍后提炼。',
+      tags: ['reading']
+    });
+
+    expect(result.item.frontmatter.kind).toBe('article');
+    expect(result.item.frontmatter.title).toBe('Parsed Essay');
+    expect(result.item.frontmatter.url).toBe('https://example.com/essay');
+    expect(result.item.frontmatter.source).toMatchObject({
+      kind: 'quick_capture',
+      provider: 'web',
+      content_status: 'parsed',
+      content_connector_id: 'test.readable',
+      content_connector_version: '1.2.3',
+      content_fetched_at: '2026-05-27T00:00:00.000Z',
+      note: '从快速捕获保存，稍后提炼。'
+    });
+    expect(result.item.frontmatter.source_snapshot_ref).toContain('.orbit/content/extracted/');
+    expect(result.item.body).toContain('## 快速捕获备注');
+    expect(result.item.body).toContain('Parsed readable body for the Library.');
+    await expect(
+      fs.readFile(path.join(vaultPath, result.item.frontmatter.source_snapshot_ref ?? ''), 'utf8')
+    ).resolves.toContain('Parsed readable body for the Library.');
+  });
+
+  it('saves quick-captured YouTube read-later links as Library videos with feed metadata', async () => {
+    const connector: ContentConnector = {
+      id: 'youtube.feed-provider',
+      version: '1.0.0',
+      priority: 100,
+      canHandle: () => true,
+      parse: async (input) => ({
+        platform: 'youtube',
+        parser_hint: 'youtube_video',
+        status: 'success',
+        source_url: input.url ?? null,
+        canonical_url: 'https://www.youtube.com/watch?v=abc123',
+        title: 'Orbit Video',
+        author: 'Orbit Channel',
+        excerpt: 'Video description.',
+        content_markdown: '# Orbit Video\n\n## Transcript\n\n00:00:00 --> 00:00:02\nHello Orbit',
+        fetched_at: '2026-05-27T00:00:00.000Z',
+        connector_id: 'youtube.feed-provider',
+        connector_version: '1.0.0',
+        metadata: {
+          provider: 'youtube',
+          external_id: 'abc123',
+          channel_name: 'Orbit Channel',
+          channel_id: 'UCORBIT',
+          duration_seconds: 95,
+          published_at: '2026-05-01T00:00:00.000Z',
+          language: 'en',
+          preferred_transcript_track_id: 'youtube:auto:en'
+        }
+      })
+    };
+    const service = createQuickCaptureService(vaultPath, {
+      contentConnectors: [connector],
+      now: () => new Date('2026-05-27T00:00:00.000Z')
+    });
+
+    const result = await service.createLink({
+      kind: 'read_later',
+      url: 'https://youtu.be/abc123?t=12',
+      notes: '稍后看这个视频。'
+    });
+
+    expect(result.item.frontmatter.kind).toBe('video');
+    expect(result.item.path).toContain('library/videos/');
+    expect(result.item.frontmatter.source).toMatchObject({
+      kind: 'quick_capture',
+      provider: 'youtube',
+      external_id: 'abc123',
+      channel_name: 'Orbit Channel',
+      channel_id: 'UCORBIT',
+      duration_seconds: 95,
+      published_at: '2026-05-01T00:00:00.000Z',
+      language: 'en',
+      preferred_transcript_track_id: 'youtube:auto:en',
+      content_status: 'parsed',
+      content_connector_id: 'youtube.feed-provider'
+    });
+    expect(result.item.frontmatter.source_snapshot_ref).toContain('.orbit/content/extracted/');
+    expect(result.item.body).toContain('## Transcript');
+    expect(result.item.body).toContain('Hello Orbit');
+  });
+
+  it('keeps quick-captured links in Library when parsing fails', async () => {
+    const connector: ContentConnector = {
+      id: 'test.fail',
+      version: '1',
+      priority: 100,
+      canHandle: () => true,
+      parse: async (input) => ({
+        platform: 'web',
+        parser_hint: 'generic_url',
+        status: 'failed',
+        source_url: input.url ?? null,
+        canonical_url: input.url ?? null,
+        title: input.title ?? undefined,
+        excerpt: input.text ?? undefined,
+        fetched_at: '2026-05-27T00:00:00.000Z',
+        connector_id: 'test.fail',
+        connector_version: '1',
+        error: 'source_fetch_failed:403'
+      })
+    };
+    const service = createQuickCaptureService(vaultPath, {
+      contentConnectors: [connector],
+      now: () => new Date('2026-05-27T00:00:00.000Z')
+    });
+
+    const result = await service.createLink({
+      kind: 'bookmark',
+      url: 'https://example.com/private',
+      notes: '只保存链接也不能丢。'
+    });
+
+    expect(result.item.frontmatter.kind).toBe('bookmark');
+    expect(result.item.frontmatter.source).toMatchObject({
+      kind: 'quick_capture',
+      content_status: 'failed',
+      content_connector_id: 'test.fail',
+      content_error: 'source_fetch_failed:403'
+    });
+    expect(result.item.frontmatter.source_snapshot_ref).toBeUndefined();
+    expect(result.item.body).toContain('Parse status: failed (source_fetch_failed:403)');
+    expect(result.item.body).toContain('只保存链接也不能丢。');
+  });
+
+  it('keeps Xiaohongshu copied share text readable when the short link cannot be parsed', async () => {
+    const copiedText = [
+      '黄仁勋对聪明的理解真的是一针见血 这两天黄仁勋的一段话值得保存',
+      'http://xhslink.com/o/8QW3Rwn0MFM',
+      '存下这段话，去【小红书】速览笔记~'
+    ].join('\n');
+    const connector: ContentConnector = {
+      id: 'test.xhs.fail',
+      version: '1',
+      priority: 100,
+      canHandle: () => true,
+      parse: async (input) => ({
+        platform: 'xiaohongshu',
+        parser_hint: 'xiaohongshu_note',
+        status: 'failed',
+        source_url: input.url ?? null,
+        canonical_url: input.url ?? null,
+        excerpt: input.text ?? undefined,
+        fetched_at: '2026-05-27T00:00:00.000Z',
+        connector_id: 'test.xhs.fail',
+        connector_version: '1',
+        error: 'note requires full Xiaohongshu URL with xsec_token'
+      })
+    };
+    const service = createQuickCaptureService(vaultPath, {
+      contentConnectors: [connector],
+      now: () => new Date('2026-05-27T00:00:00.000Z')
+    });
+
+    const result = await service.createLink({
+      kind: 'read_later',
+      url: 'http://xhslink.com/o/8QW3Rwn0MFM',
+      notes: copiedText
+    });
+
+    expect(result.item.frontmatter.title).toContain('黄仁勋对聪明的理解');
+    expect(result.item.frontmatter.source).toMatchObject({
+      kind: 'quick_capture',
+      provider: 'xiaohongshu',
+      content_status: 'failed',
+      content_connector_id: 'test.xhs.fail'
+    });
+    expect(result.item.body).toContain('## 快速捕获备注');
+    expect(result.item.body).toContain('黄仁勋对聪明的理解真的是一针见血');
+    expect(result.item.body).not.toContain('| index | type | status | size |');
   });
 
   it('records deferred capture actions as readable note markers', async () => {
