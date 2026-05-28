@@ -176,6 +176,7 @@ function withTimeout<T>(
 function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknown {
   if (kind === 'summary.daily') return localDailySummary(sources);
   if (kind === 'summary.entity') return localEntitySummary(sources);
+  if (kind === 'annotation.selection') return localAnnotationSelection(sources);
   if (kind === 'emerge.resource') return localResourceEmergence(sources);
   if (kind === 'distill.library') {
     const first = sources[0];
@@ -199,6 +200,24 @@ function localSynthesis(kind: SynthesisKind, sources: SynthesisSource[]): unknow
   if (kind === 'feed.cluster') return localFeedCluster(sources);
   if (kind === 'feed.report.daily') return localFeedReport(sources);
   return {};
+}
+
+function localAnnotationSelection(sources: SynthesisSource[]): unknown {
+  const raw = sources.find((source) => source.kind === 'raw')?.metadata;
+  const action = raw?.['action'];
+  const selected = String(raw?.['selected_text'] ?? '');
+  return {
+    action:
+      action === 'translate' || action === 'explain' || action === 'formula' || action === 'related'
+        ? action
+        : 'explain',
+    title: 'AI 标注不可用',
+    body_markdown: selected
+      ? `AI Endpoint 未配置，无法生成真实 AI 标注。\n\n> ${selected.slice(0, 240)}`
+      : 'AI Endpoint 未配置，无法生成真实 AI 标注。',
+    confidence: 0,
+    warnings: ['sdk_unavailable']
+  };
 }
 
 function localDailySummary(sources: SynthesisSource[]): DailySummaryPayload {

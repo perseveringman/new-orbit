@@ -1,4 +1,5 @@
 import type { SynthesisKind } from '@shared/synthesis';
+import { annotationSelectionPrompt } from './annotation.selection.v1';
 import { classifyAreaPrompt } from './classify.area.v1';
 import { distillExternalSessionPrompt } from './distill.external_session.v1';
 import { distillLibraryPrompt } from './distill.library.v1';
@@ -27,6 +28,7 @@ export interface SynthesisPromptTemplate<TOutput = unknown> {
 const PROMPTS = [
   summaryDailyPrompt,
   summaryEntityPrompt,
+  annotationSelectionPrompt,
   distillLibraryPrompt,
   distillExternalSessionPrompt,
   entityProfilePrompt,

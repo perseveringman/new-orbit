@@ -4,6 +4,7 @@ export const SYNTHESIS_KINDS = [
   'summary.monthly',
   'summary.yearly',
   'summary.entity',
+  'annotation.selection',
   'distill.library',
   'emerge.resource',
   'relate.notes',

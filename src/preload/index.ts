@@ -144,6 +144,8 @@ import type {
   AnnotationTargetRef,
   AnnotationViewState,
   CreateAnnotationInput,
+  GenerateAnnotationInput,
+  GenerateAnnotationResult,
   UpdateAnnotationInput,
   UpdateAnnotationViewStateInput
 } from '@shared/annotation';
@@ -806,6 +808,8 @@ const api: OrbitApi = {
   annotation: {
     create: (input: CreateAnnotationInput): Promise<AnnotationRecord> =>
       ipcRenderer.invoke(IPC.annotation.create, input),
+    generate: (input: GenerateAnnotationInput): Promise<GenerateAnnotationResult> =>
+      ipcRenderer.invoke(IPC.annotation.generate, input),
     get: (id: string): Promise<AnnotationRecord | null> => ipcRenderer.invoke(IPC.annotation.get, id),
     list: (filter?: AnnotationFilter): Promise<AnnotationRecord[]> =>
       ipcRenderer.invoke(IPC.annotation.list, filter),

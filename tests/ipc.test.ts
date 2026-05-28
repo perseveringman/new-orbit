@@ -110,6 +110,7 @@ describe('IPC contract', () => {
       [
         'archive',
         'create',
+        'generate',
         'get',
         'list',
         'listForTarget',

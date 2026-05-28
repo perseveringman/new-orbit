@@ -70,10 +70,11 @@ interface LibrarySpatialReaderProps {
   onMarkRead?(itemId: string): void;
 }
 
-type SelectionActionId = 'translate' | 'explain' | 'formula' | 'related' | 'chat';
+type AnnotationSelectionActionId = 'translate' | 'explain' | 'formula' | 'related';
+type SelectionActionId = AnnotationSelectionActionId | 'chat';
 
 interface SelectionActionDefinition {
-  id: SelectionActionId;
+  id: AnnotationSelectionActionId;
   label: string;
   description: string;
   icon: LucideIcon;
@@ -257,6 +258,8 @@ export function LibrarySpatialReader({
   const activeItemRef = useRef<LibraryItem | null>(activeItem);
   const thoughtNodesRef = useRef<SpatialThoughtNode[]>([]);
   const viewStatePersistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const bodyPersistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const bodyPersistDraftsRef = useRef<Map<string, string>>(new Map());
   const [mode, setMode] = useState<ReaderMode>('reading');
   const [viewport, setViewport] = useState<SpatialViewport>(DEFAULT_VIEWPORT);
   const [windows, setWindows] = useState<SpatialReaderWindowState[]>([]);
@@ -278,6 +281,14 @@ export function LibrarySpatialReader({
     () => () => {
       viewStatePersistTimersRef.current.forEach((timer) => clearTimeout(timer));
       viewStatePersistTimersRef.current.clear();
+      bodyPersistTimersRef.current.forEach((timer) => clearTimeout(timer));
+      bodyPersistTimersRef.current.clear();
+      bodyPersistDraftsRef.current.forEach((bodyMarkdown, nodeId) => {
+        void window.orbit.annotation.update(nodeId, { body_markdown: bodyMarkdown }).catch((error) => {
+          console.error('Failed to flush annotation body', error);
+        });
+      });
+      bodyPersistDraftsRef.current.clear();
     },
     []
   );
@@ -339,6 +350,22 @@ export function LibrarySpatialReader({
         ? thoughtNodes.filter((node) => node.itemId === activeItem.frontmatter.id)
         : EMPTY_THOUGHT_NODES,
     [activeItem, thoughtNodes]
+  );
+  const openCanvasItems = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [
+            activeItem?.frontmatter.id,
+            ...windows
+              .filter((windowState) => windowState.status === 'open')
+              .map((windowState) => windowState.itemId)
+          ].filter((itemId): itemId is string => Boolean(itemId))
+        )
+      )
+        .map((itemId) => itemById.get(itemId))
+        .filter((item): item is LibraryItem => Boolean(item)),
+    [activeItem, itemById, windows]
   );
   const annotationItemIds = useMemo(
     () =>
@@ -663,13 +690,16 @@ export function LibrarySpatialReader({
     if (!selection) return;
     const item = itemById.get(selection.itemId);
     if (!item) return;
-    const node = createThoughtNode(selection, action);
+    const actionSelection = selection;
+    const node = createThoughtNode(actionSelection, action);
     if (!node) return;
-    openSelectionContext(selection);
-    appendPersistedThoughtNode(
-      buildSelectionAnnotationInput(selection, node, item, 'ai_note', { action_id: action.id }),
-      node
-    );
+    const loadingNode = {
+      ...node,
+      contentMarkdown: buildAnnotationLoadingContent(action.label)
+    };
+    openSelectionContext(actionSelection);
+    setThoughtNodes((current) => mergeThoughtNodes(current, [loadingNode]));
+    void generateSelectionAnnotation(actionSelection, loadingNode, item, action);
     clearSelection();
   }
 
@@ -681,14 +711,73 @@ export function LibrarySpatialReader({
       (node): node is SpatialThoughtNode => Boolean(node)
     );
     if (nodes.length === 0) return;
-    openSelectionContext(selection);
+    const actionSelection = selection;
+    openSelectionContext(actionSelection);
     nodes.forEach((node) => {
-      appendPersistedThoughtNode(
-        buildSelectionAnnotationInput(selection, node, item, 'ai_note', { action_id: node.actionId }),
-        node
-      );
+      const action = THOUGHT_ACTIONS.find((candidate) => candidate.id === node.actionId);
+      if (!action) return;
+      const loadingNode = {
+        ...node,
+        contentMarkdown: buildAnnotationLoadingContent(action.label)
+      };
+      setThoughtNodes((current) => mergeThoughtNodes(current, [loadingNode]));
+      void generateSelectionAnnotation(actionSelection, loadingNode, item, action);
     });
     clearSelection();
+  }
+
+  async function generateSelectionAnnotation(
+    nextSelection: ReaderSelectionState,
+    loadingNode: SpatialThoughtNode,
+    item: LibraryItem,
+    action: SelectionActionDefinition
+  ): Promise<void> {
+    try {
+      const parentAnnotationId = nextSelection.sourceNodeId;
+      const contextTarget = libraryAnnotationTarget(item.frontmatter.id, item.frontmatter.title);
+      const result = await window.orbit.annotation.generate({
+        action: action.id,
+        target: parentAnnotationId ? { kind: 'annotation', ref: parentAnnotationId } : contextTarget,
+        context_target: contextTarget,
+        anchor: {
+          kind: parentAnnotationId ? 'annotation_body_range' : 'text_quote',
+          quote: nextSelection.quote
+        },
+        selected_text: nextSelection.text,
+        canvas_item_ids: canvasItemIdsForSelection(item.frontmatter.id),
+        color: action.color,
+        ...(parentAnnotationId ? { parent_annotation_id: parentAnnotationId } : {})
+      });
+      const viewState = await window.orbit.annotation.updateViewState(LIBRARY_READER_SPACE_ID, result.annotation.id, {
+        position: loadingNode.position,
+        size: loadingNode.size,
+        status: loadingNode.status,
+        z_index: loadingNode.zIndex
+      });
+      const persistedNode =
+        annotationRecordToThoughtNode(result.annotation, itemById, viewState) ?? {
+          ...loadingNode,
+          id: result.annotation.id,
+          label: result.annotation.title,
+          contentMarkdown: result.annotation.body_markdown
+        };
+      setThoughtNodes((current) => mergeThoughtNodes(current.filter((node) => node.id !== loadingNode.id), [persistedNode]));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      updateThoughtNode(loadingNode.id, {
+        label: `${action.label}失败`,
+        contentMarkdown: `AI 生成失败：${message}\n\n请检查 Settings -> AI Endpoints 是否已经配置可用模型。`
+      });
+    }
+  }
+
+  function canvasItemIdsForSelection(primaryItemId: string): string[] {
+    return [
+      ...new Set([
+        primaryItemId,
+        ...windows.filter((windowState) => windowState.status !== 'closed').map((windowState) => windowState.itemId)
+      ])
+    ];
   }
 
   function createSelectionNote(): void {
@@ -845,6 +934,36 @@ export function LibrarySpatialReader({
     const currentNode = thoughtNodesRef.current.find((node) => node.id === nodeId);
     if (currentNode) scheduleAnnotationViewStatePersist({ ...currentNode, ...patch });
     setThoughtNodes((current) => current.map((node) => (node.id === nodeId ? { ...node, ...patch } : node)));
+  }
+
+  function updateThoughtBody(nodeId: string, bodyMarkdown: string): void {
+    updateThoughtNode(nodeId, { contentMarkdown: bodyMarkdown });
+    if (!isPersistedAnnotationId(nodeId)) return;
+    bodyPersistDraftsRef.current.set(nodeId, bodyMarkdown);
+    const existing = bodyPersistTimersRef.current.get(nodeId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      persistThoughtBody(nodeId, bodyMarkdown);
+    }, 300);
+    bodyPersistTimersRef.current.set(nodeId, timer);
+  }
+
+  function flushThoughtBody(nodeId: string): void {
+    const bodyMarkdown = bodyPersistDraftsRef.current.get(nodeId);
+    if (typeof bodyMarkdown !== 'string') return;
+    persistThoughtBody(nodeId, bodyMarkdown);
+  }
+
+  function persistThoughtBody(nodeId: string, bodyMarkdown: string): void {
+    const existing = bodyPersistTimersRef.current.get(nodeId);
+    if (existing) clearTimeout(existing);
+    bodyPersistTimersRef.current.delete(nodeId);
+    bodyPersistDraftsRef.current.delete(nodeId);
+    void window.orbit.annotation
+      .update(nodeId, { body_markdown: bodyMarkdown })
+      .catch((error) => {
+        console.error('Failed to persist annotation body', error);
+      });
   }
 
   function activateThoughtNode(nodeId: string): void {
@@ -1072,6 +1191,8 @@ export function LibrarySpatialReader({
           onResizeThought={(nodeId, size) => updateThoughtNode(nodeId, { size })}
           onCloseThought={(nodeId) => updateThoughtNode(nodeId, { status: 'closed' })}
           onMinimizeThought={(nodeId) => updateThoughtNode(nodeId, { status: 'minimized' })}
+          onUpdateThoughtBody={updateThoughtBody}
+          onFlushThoughtBody={flushThoughtBody}
           onBindThoughtConversation={bindThoughtConversation}
         />
       )}
@@ -1085,6 +1206,9 @@ export function LibrarySpatialReader({
           onCloseThought={(nodeId) => updateThoughtNode(nodeId, { status: 'closed' })}
           onMinimizeThought={(nodeId) => updateThoughtNode(nodeId, { status: 'minimized' })}
           onReaderSelection={handleReaderSelection}
+          onUpdateThoughtBody={updateThoughtBody}
+          onFlushThoughtBody={flushThoughtBody}
+          canvasItems={openCanvasItems}
           onBindThoughtConversation={bindThoughtConversation}
         />
       ) : null}
@@ -1142,6 +1266,9 @@ function ReadingThoughtLayer({
   onCloseThought,
   onMinimizeThought,
   onReaderSelection,
+  onUpdateThoughtBody,
+  onFlushThoughtBody,
+  canvasItems,
   onBindThoughtConversation
 }: {
   item: LibraryItem;
@@ -1152,6 +1279,9 @@ function ReadingThoughtLayer({
   onCloseThought(nodeId: string): void;
   onMinimizeThought(nodeId: string): void;
   onReaderSelection(selection: ReaderSelectionState): void;
+  onUpdateThoughtBody(nodeId: string, bodyMarkdown: string): void;
+  onFlushThoughtBody(nodeId: string): void;
+  canvasItems: LibraryItem[];
   onBindThoughtConversation(nodeId: string, conversationId: string): void;
 }): JSX.Element | null {
   const layerRef = useRef<HTMLDivElement>(null);
@@ -1195,9 +1325,11 @@ function ReadingThoughtLayer({
             onClose={onCloseThought}
             onMinimize={onMinimizeThought}
             onReaderSelection={onReaderSelection}
+            onUpdateBody={onUpdateThoughtBody}
+            onFlushBody={onFlushThoughtBody}
             childThoughtNodes={childThoughtNodesBySourceId.get(node.id) ?? EMPTY_THOUGHT_NODES}
             onActivateThought={onActivateThought}
-            canvasItems={[item]}
+            canvasItems={canvasItems}
             onBindConversation={onBindThoughtConversation}
           />
         ))}
@@ -1284,6 +1416,8 @@ function SpaceCanvas({
   onResizeThought,
   onCloseThought,
   onMinimizeThought,
+  onUpdateThoughtBody,
+  onFlushThoughtBody,
   onBindThoughtConversation
 }: {
   itemById: Map<string, LibraryItem>;
@@ -1307,6 +1441,8 @@ function SpaceCanvas({
   onResizeThought(nodeId: string, size: SpatialSize): void;
   onCloseThought(nodeId: string): void;
   onMinimizeThought(nodeId: string): void;
+  onUpdateThoughtBody(nodeId: string, bodyMarkdown: string): void;
+  onFlushThoughtBody(nodeId: string): void;
   onBindThoughtConversation(nodeId: string, conversationId: string): void;
 }): JSX.Element {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -1511,6 +1647,8 @@ function SpaceCanvas({
             onClose={onCloseThought}
             onMinimize={onMinimizeThought}
             onReaderSelection={onReaderSelection}
+            onUpdateBody={onUpdateThoughtBody}
+            onFlushBody={onFlushThoughtBody}
             childThoughtNodes={childThoughtNodesBySourceId.get(node.id) ?? EMPTY_THOUGHT_NODES}
             onActivateThought={onActivateThought}
             canvasItems={canvasItems}
@@ -1797,6 +1935,8 @@ function SpatialThoughtWindow({
   onClose,
   onMinimize,
   onReaderSelection,
+  onUpdateBody,
+  onFlushBody,
   childThoughtNodes,
   onActivateThought,
   canvasItems,
@@ -1811,6 +1951,8 @@ function SpatialThoughtWindow({
   onClose(nodeId: string): void;
   onMinimize(nodeId: string): void;
   onReaderSelection(selection: ReaderSelectionState): void;
+  onUpdateBody(nodeId: string, bodyMarkdown: string): void;
+  onFlushBody(nodeId: string): void;
   childThoughtNodes: SpatialThoughtNode[];
   onActivateThought(nodeId: string): void;
   canvasItems: LibraryItem[];
@@ -1821,6 +1963,7 @@ function SpatialThoughtWindow({
   const startPositionRef = useRef(node.position);
   const startSizeRef = useRef(node.size);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const chatConversationIdRef = useRef<string | null>(node.conversationId ?? null);
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [chatConversationId, setChatConversationId] = useState<string | null>(node.conversationId ?? null);
@@ -1830,7 +1973,9 @@ function SpatialThoughtWindow({
   const [chatError, setChatError] = useState<string | null>(null);
 
   useEffect(() => {
-    setChatConversationId(node.conversationId ?? null);
+    const conversationId = node.conversationId ?? null;
+    chatConversationIdRef.current = conversationId;
+    setChatConversationId(conversationId);
   }, [node.conversationId]);
 
   useEffect(() => {
@@ -1850,9 +1995,9 @@ function SpatialThoughtWindow({
   }, [chatConversationId, node.actionId]);
 
   useEffect(() => {
-    if (node.actionId !== 'chat' || !chatConversationId) return;
+    if (node.actionId !== 'chat') return;
     const off = window.orbit.chat.onRuntimeEvent((event) => {
-      if (event.conversationId !== chatConversationId) return;
+      if (!chatConversationIdRef.current || event.conversationId !== chatConversationIdRef.current) return;
       if (event.kind === 'runtime.message') {
         const payload = event.payload as RuntimeMessagePayload;
         if (payload.role === 'user') return;
@@ -1874,7 +2019,16 @@ function SpatialThoughtWindow({
       }
     });
     return off;
-  }, [chatConversationId, node.actionId]);
+  }, [node.actionId]);
+
+  useEffect(() => {
+    if (node.actionId !== 'chat' || !chatLoading) return;
+    const timer = setTimeout(() => {
+      setChatLoading(false);
+      setChatError('AI 响应超时。请检查设置里的 AI Endpoints，或稍后重试。');
+    }, 60_000);
+    return () => clearTimeout(timer);
+  }, [chatLoading, node.actionId]);
 
   async function submitChatQuestion(): Promise<void> {
     const question = chatInput.trim();
@@ -1901,8 +2055,11 @@ function SpatialThoughtWindow({
           runtimeHint: 'claude'
         });
         conversationId = conversation.id;
+        chatConversationIdRef.current = conversationId;
         setChatConversationId(conversationId);
         onBindConversation(node.id, conversationId);
+      } else {
+        chatConversationIdRef.current = conversationId;
       }
       const prompt = buildSelectionChatPrompt({
         question,
@@ -2056,16 +2213,13 @@ function SpatialThoughtWindow({
       <div
         ref={bodyRef}
         data-thought-window-body
-        className="min-h-0 flex-1 overflow-auto px-4 py-3 text-sm leading-6"
+        className={cx(
+          'min-h-0 flex-1 overflow-auto text-sm leading-6',
+          node.actionId === 'chat' ? 'p-3' : 'px-4 py-3'
+        )}
         onPointerUp={captureThoughtSelection}
         onKeyUp={captureThoughtSelection}
       >
-        <blockquote className="mb-3 border-l-2 border-amber-300 bg-white/60 py-1 pl-3 text-xs leading-5 text-amber-900/80 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100/80">
-          {getThoughtSourcePreview(node, sourceItem)}
-        </blockquote>
-        <div className="prose prose-sm max-w-none dark:prose-invert">
-          <StreamingMarkdown content={node.contentMarkdown} />
-        </div>
         {node.actionId === 'chat' ? (
           <SelectionChatPanel
             messages={chatMessages}
@@ -2075,7 +2229,18 @@ function SpatialThoughtWindow({
             onChange={setChatInput}
             onSubmit={() => void submitChatQuestion()}
           />
-        ) : null}
+        ) : node.actionId === 'note' ? (
+          <ThoughtNoteEditor
+            node={node}
+            sourceItem={sourceItem}
+            onChange={(bodyMarkdown) => onUpdateBody(node.id, bodyMarkdown)}
+            onFlush={() => onFlushBody(node.id)}
+          />
+        ) : (
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            <StreamingMarkdown content={node.contentMarkdown} />
+          </div>
+        )}
       </div>
       <div
         data-spatial-interactive
@@ -2096,6 +2261,53 @@ function SpatialThoughtWindow({
   );
 }
 
+function ThoughtNoteEditor({
+  node,
+  sourceItem,
+  onChange,
+  onFlush
+}: {
+  node: SpatialThoughtNode;
+  sourceItem: LibraryItem | null;
+  onChange(bodyMarkdown: string): void;
+  onFlush(): void;
+}): JSX.Element {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [draft, setDraft] = useState(node.contentMarkdown);
+
+  useEffect(() => {
+    setDraft(node.contentMarkdown);
+  }, [node.contentMarkdown, node.id]);
+
+  useEffect(() => {
+    if (!node.contentMarkdown.trim()) textareaRef.current?.focus();
+  }, [node.contentMarkdown, node.id]);
+
+  function updateDraft(value: string): void {
+    setDraft(value);
+    onChange(value);
+  }
+
+  return (
+    <div data-spatial-interactive className="flex h-full min-h-0 flex-col gap-2">
+      <blockquote className="shrink-0 border-l-2 border-amber-300 bg-white/60 py-1 pl-3 text-xs leading-5 text-amber-900/80 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100/80">
+        {getThoughtSourcePreview(node, sourceItem)}
+      </blockquote>
+      <textarea
+        ref={textareaRef}
+        value={draft}
+        onChange={(event) => updateDraft(event.target.value)}
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        onBlur={onFlush}
+        placeholder="写下你的判断、问题或摘录..."
+        className="min-h-0 flex-1 resize-none rounded border border-amber-200 bg-white/80 px-3 py-2 text-sm leading-6 text-amber-950 outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-200 dark:border-amber-900/70 dark:bg-neutral-950/60 dark:text-amber-50 dark:focus:border-amber-700 dark:focus:ring-amber-900/60"
+      />
+    </div>
+  );
+}
+
 function SelectionChatPanel({
   messages,
   value,
@@ -2111,20 +2323,33 @@ function SelectionChatPanel({
   onChange(value: string): void;
   onSubmit(): void;
 }): JSX.Element {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const messagesEl = messagesRef.current;
+    if (!messagesEl) return;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }, [loading, messages]);
+
   return (
     <div
       data-spatial-interactive
-      className="mt-4 rounded border border-indigo-200 bg-white/70 p-2 dark:border-indigo-900/70 dark:bg-neutral-950/50"
+      className="flex h-full min-h-0 flex-col rounded border border-indigo-200 bg-white/70 p-2 dark:border-indigo-900/70 dark:bg-neutral-950/50"
     >
       <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-200">
         <MessageCircle size={13} />
         <span>划线对话</span>
         {loading ? <Loader2 size={12} className="animate-spin" /> : null}
       </div>
-      <div className="max-h-44 space-y-2 overflow-auto pr-1">
+      <div ref={messagesRef} className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
         {messages.length === 0 ? (
           <div className="rounded bg-indigo-50 px-2 py-1.5 text-xs leading-5 text-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-100">
-            针对这段划线提问。AI 会同时看到划线内容、当前资料和空间画布里打开的资料。
+            输入问题开始对话。
           </div>
         ) : (
           messages.map((message) => (
@@ -2137,7 +2362,13 @@ function SelectionChatPanel({
                   : 'mr-6 bg-amber-100 text-amber-950 dark:bg-amber-900/50 dark:text-amber-50'
               )}
             >
-              {message.text}
+              {message.role === 'assistant' ? (
+                <div className="prose prose-xs max-w-none dark:prose-invert">
+                  <StreamingMarkdown content={message.text} />
+                </div>
+              ) : (
+                <span className="whitespace-pre-wrap">{message.text}</span>
+              )}
               {message.streaming ? <span className="ml-1 opacity-60">▌</span> : null}
             </div>
           ))
@@ -2149,16 +2380,21 @@ function SelectionChatPanel({
         </div>
       ) : null}
       <form
-        className="mt-2 flex items-end gap-2"
+        className="mt-2 flex shrink-0 items-end gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
       >
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onKeyUp={(event) => event.stopPropagation()}
           onKeyDown={(event) => {
+            event.stopPropagation();
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
               event.preventDefault();
               onSubmit();
@@ -2581,7 +2817,8 @@ function SelectionActionBar({
         />
       ))}
       <SelectionActionButton
-        label="AI Explain"
+        label="全部分析"
+        title="依次生成翻译、解释、公式解析和关联检索"
         icon={Sparkles}
         iconClassName="bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-200"
         onClick={onRunAll}
@@ -3405,47 +3642,24 @@ function buildThoughtContent(
 }
 
 function buildNoteContent(text: string, item: LibraryItem): string {
-  return [
-    '## 标注',
-    '',
-    `**来源**：${item.frontmatter.title}`,
-    '',
-    quoteMarkdown(clipText(text, 900))
-  ].join('\n');
+  void text;
+  void item;
+  return '';
+}
+
+function buildAnnotationLoadingContent(label: string): string {
+  return `正在生成${label}...`;
 }
 
 function buildSelectionChatContent(text: string, item: LibraryItem): string {
-  return [
-    '## 划线对话',
-    '',
-    `**来源**：${item.frontmatter.title}`,
-    '',
-    '### 划线',
-    quoteMarkdown(clipText(text, 900)),
-    '',
-    '### 对话上下文',
-    '- 划线部分',
-    '- 当前资料',
-    '- 空间画布内打开的所有资料'
-  ].join('\n');
+  void text;
+  void item;
+  return '';
 }
 
 function buildResourceNoteContent(item: LibraryItem): string {
-  const source = getLibraryReaderSource(item);
-  return [
-    '## 资料标注',
-    '',
-    `**来源**：${item.frontmatter.title}`,
-    '',
-    '### 范围',
-    '整篇资料',
-    '',
-    '### 记录',
-    `> ${item.frontmatter.title}`,
-    source ? `> ${source}` : null
-  ]
-    .filter((line): line is string => typeof line === 'string')
-    .join('\n');
+  void item;
+  return '';
 }
 
 function getThoughtSourcePreview(node: SpatialThoughtNode, item?: LibraryItem | null): string {
@@ -3461,6 +3675,10 @@ function libraryAnnotationTarget(itemId: string, title?: string): AnnotationTarg
     ref: itemId,
     ...(title ? { title_snapshot: title } : {})
   };
+}
+
+function isPersistedAnnotationId(id: string): boolean {
+  return id.startsWith('ann-');
 }
 
 function uniqueAnnotations(records: AnnotationRecord[]): AnnotationRecord[] {

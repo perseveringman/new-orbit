@@ -1,4 +1,5 @@
 import type { EvidenceSelector } from './evidence';
+import type { SynthesisArtifact } from './synthesis';
 
 export const ANNOTATION_TARGET_KINDS = [
   'library_item',
@@ -29,10 +30,13 @@ export const ANNOTATION_TYPES = [
 
 export const ANNOTATION_COLORS = ['yellow', 'green', 'blue', 'pink', 'purple'] as const;
 
+export const ANNOTATION_AI_ACTIONS = ['translate', 'explain', 'formula', 'related'] as const;
+
 export type AnnotationTargetKind = (typeof ANNOTATION_TARGET_KINDS)[number];
 export type AnnotationAnchorKind = (typeof ANNOTATION_ANCHOR_KINDS)[number];
 export type AnnotationType = (typeof ANNOTATION_TYPES)[number];
 export type AnnotationColor = (typeof ANNOTATION_COLORS)[number];
+export type AnnotationAiAction = (typeof ANNOTATION_AI_ACTIONS)[number];
 
 export interface AnnotationTargetRef {
   kind: AnnotationTargetKind;
@@ -155,4 +159,29 @@ export interface UpdateAnnotationViewStateInput {
   size?: AnnotationSize;
   z_index?: number;
   status?: AnnotationViewState['status'];
+}
+
+export interface GenerateAnnotationInput {
+  action: AnnotationAiAction;
+  target: AnnotationTargetRef;
+  context_target?: AnnotationTargetRef;
+  anchor: AnnotationAnchor;
+  selected_text: string;
+  canvas_item_ids?: string[];
+  color?: AnnotationColor;
+  parent_annotation_id?: string;
+}
+
+export interface GenerateAnnotationResult {
+  annotation: AnnotationRecord;
+  artifact: SynthesisArtifact<AnnotationSynthesisPayload>;
+}
+
+export interface AnnotationSynthesisPayload {
+  action: AnnotationAiAction;
+  title: string;
+  body_markdown: string;
+  summary?: string;
+  confidence?: number;
+  warnings?: string[];
 }

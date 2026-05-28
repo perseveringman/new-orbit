@@ -6,10 +6,13 @@ import type {
   AnnotationTargetRef,
   AnnotationViewState,
   CreateAnnotationInput,
+  GenerateAnnotationInput,
+  GenerateAnnotationResult,
   UpdateAnnotationInput,
   UpdateAnnotationViewStateInput
 } from '@shared/annotation';
 import { createAnnotationStore } from './store';
+import { generateAnnotation } from './service';
 
 export function registerAnnotationIpc(getVaultPath: () => string | null): void {
   const vaultPath = (): string => {
@@ -20,6 +23,10 @@ export function registerAnnotationIpc(getVaultPath: () => string | null): void {
 
   ipcMain.handle(IPC.annotation.create, (_event, input: CreateAnnotationInput): Promise<AnnotationRecord> =>
     createAnnotationStore(vaultPath()).create(input)
+  );
+
+  ipcMain.handle(IPC.annotation.generate, (_event, input: GenerateAnnotationInput): Promise<GenerateAnnotationResult> =>
+    generateAnnotation(vaultPath(), input)
   );
 
   ipcMain.handle(IPC.annotation.get, (_event, id: string): Promise<AnnotationRecord | null> =>

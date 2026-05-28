@@ -8,6 +8,7 @@ import type {
   FeedReportPayload
 } from '../feed';
 import type { NoteRelationSuggestion, NoteWorkbenchPayload } from '../note';
+import type { AnnotationSynthesisPayload } from '../annotation';
 import type { EvidenceSelector } from '../evidence';
 import type { SynthesisSource } from './types';
 
@@ -164,6 +165,7 @@ export interface OpenLoopPayload {
 export interface SynthesisPayloadMap {
   'summary.daily': DailySummaryPayload;
   'summary.entity': NoteWorkbenchPayload;
+  'annotation.selection': AnnotationSynthesisPayload;
   'distill.library': LibraryDistillPayload;
   'emerge.resource': ResourceEmergencePayload;
   'relate.notes': { relations: NoteRelationSuggestion[] };
