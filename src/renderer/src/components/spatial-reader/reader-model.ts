@@ -1,6 +1,6 @@
 import type { LibraryItem, LibraryKind } from '@shared/library';
 
-export type SpatialReaderKind = 'article' | 'pdf' | 'video' | 'bookmark';
+export type SpatialReaderKind = 'article' | 'markdown' | 'pdf' | 'epub' | 'video' | 'podcast' | 'bookmark';
 
 export interface SpatialPoint {
   x: number;
@@ -31,13 +31,18 @@ export const LIBRARY_ITEM_DRAG_MIME = 'application/x-orbit-library-item';
 
 export function getLibraryReaderKind(item: LibraryItem): SpatialReaderKind {
   const kind = item.frontmatter.kind;
+  const inferred = inferReaderKindFromSource(item);
+  if (inferred) return inferred;
   if (kind === 'pdf' || kind === 'video' || kind === 'bookmark') return kind;
-  return inferReaderKindFromSource(item) ?? 'article';
+  return 'article';
 }
 
 export function readerKindLabel(kind: SpatialReaderKind | LibraryKind): string {
+  if (kind === 'markdown') return 'Markdown 阅读器';
   if (kind === 'pdf') return 'PDF 阅读器';
+  if (kind === 'epub') return 'EPUB 阅读器';
   if (kind === 'video') return '视频阅读器';
+  if (kind === 'podcast') return '播客阅读器';
   if (kind === 'bookmark') return '书签阅读器';
   return '文章阅读器';
 }
@@ -95,8 +100,22 @@ export function readLibraryDragPayload(dataTransfer: DataTransfer): string | nul
 }
 
 function inferReaderKindFromSource(item: LibraryItem): SpatialReaderKind | null {
-  const source = `${item.frontmatter.url ?? ''} ${item.frontmatter.local_path ?? ''}`.toLowerCase();
+  const source = [
+    item.frontmatter.url,
+    item.frontmatter.local_path,
+    item.frontmatter.source?.parser_hint,
+    item.frontmatter.source?.provider
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase();
+  const body = item.body.toLowerCase();
+  if (/\.(epub)(?:$|[?#])/.test(source)) return 'epub';
   if (/\.(pdf)(?:$|[?#])/.test(source)) return 'pdf';
+  if (/\.(md|markdown|mdx)(?:$|[?#])/.test(source)) return 'markdown';
+  if (/\.(mp3|m4a|aac|wav|ogg|flac)(?:$|[?#])/.test(source)) return 'podcast';
+  if (source.includes('podcast') || source.includes('podwise')) return 'podcast';
+  if (/##\s+transcript/.test(body) && /\[[^\]]+\]\s+`\d+`/.test(body)) return 'podcast';
   if (/\.(mp4|mov|webm|m4v)(?:$|[?#])/.test(source)) return 'video';
   if (source.includes('youtube.com') || source.includes('youtu.be')) return 'video';
   return null;

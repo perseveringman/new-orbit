@@ -1,36 +1,59 @@
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
+import ePub from 'epubjs';
 import {
   BookA,
   BookOpenText,
   Braces,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
   Copy,
   ExternalLink,
   FileText,
   Film,
   Grid3X3,
+  Hash,
   Highlighter,
   LayoutGrid,
   Languages,
   Link,
+  List,
   Loader2,
   MessageCircle,
   Minus,
   NotebookPen,
+  PanelLeft,
+  PanelRight,
+  Pause,
+  Play,
   RotateCcw,
   Rows3,
+  Search,
   Send,
+  Settings2,
   Sigma,
   Sparkles,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
   X,
   ZoomIn,
   ZoomOut,
   type LucideIcon
 } from 'lucide-react';
+import { Document as PdfDocument, Page as PdfPage, pdfjs } from 'react-pdf';
 import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject
@@ -59,8 +82,31 @@ import {
   type SpatialViewport
 } from './reader-model';
 
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
 type ReaderMode = 'reading' | 'space';
 type ReaderHighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
+type RichReaderTheme = 'light' | 'sepia' | 'dark';
+type RichReaderWidth = 'narrow' | 'medium' | 'wide' | 'full';
+type RichReaderTab = 'toc' | 'search' | 'info';
+
+declare global {
+  interface Window {
+    YT?: {
+      Player?: new (elementId: string, options: Record<string, unknown>) => {
+        destroy(): void;
+        getCurrentTime?(): number;
+        seekTo?(seconds: number, allowSeekAhead: boolean): void;
+        playVideo?(): void;
+        pauseVideo?(): void;
+      };
+      PlayerState?: {
+        PLAYING: number;
+      };
+    };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
 
 interface LibrarySpatialReaderProps {
   items: LibraryItem[];
@@ -379,7 +425,6 @@ export function LibrarySpatialReader({
       ],
     [activeItem, windows]
   );
-  const annotationLoadKey = annotationItemIds.join('|');
 
   useEffect(() => {
     let cancelled = false;
@@ -421,7 +466,7 @@ export function LibrarySpatialReader({
     return () => {
       cancelled = true;
     };
-  }, [annotationLoadKey, itemById]);
+  }, [annotationItemIds, itemById]);
 
   function switchMode(nextMode: ReaderMode): void {
     setMode(nextMode);
@@ -2483,7 +2528,19 @@ function LibraryReaderSurface({
   );
   if (kind === 'pdf') {
     return (
-      <PdfReader
+      <RichPdfReader
+        item={item}
+        spacious={spacious}
+        sourceWindowId={sourceWindowId}
+        thoughtNodes={readerThoughtNodes}
+        onReaderSelection={onReaderSelection}
+        onActivateThought={onActivateThought}
+      />
+    );
+  }
+  if (kind === 'epub') {
+    return (
+      <RichEpubReader
         item={item}
         spacious={spacious}
         sourceWindowId={sourceWindowId}
@@ -2495,8 +2552,33 @@ function LibraryReaderSurface({
   }
   if (kind === 'video') {
     return (
-      <VideoReader
+      <RichYouTubeReader
         item={item}
+        spacious={spacious}
+        sourceWindowId={sourceWindowId}
+        thoughtNodes={readerThoughtNodes}
+        onReaderSelection={onReaderSelection}
+        onActivateThought={onActivateThought}
+      />
+    );
+  }
+  if (kind === 'podcast') {
+    return (
+      <RichPodcastReader
+        item={item}
+        spacious={spacious}
+        sourceWindowId={sourceWindowId}
+        thoughtNodes={readerThoughtNodes}
+        onReaderSelection={onReaderSelection}
+        onActivateThought={onActivateThought}
+      />
+    );
+  }
+  if (kind === 'markdown') {
+    return (
+      <RichMarkdownReader
+        item={item}
+        subtitle="Markdown 阅读器"
         spacious={spacious}
         sourceWindowId={sourceWindowId}
         thoughtNodes={readerThoughtNodes}
@@ -2518,14 +2600,1353 @@ function LibraryReaderSurface({
     );
   }
   return (
-    <ArticleReader
+    <RichMarkdownReader
       item={item}
+      subtitle="文章阅读器"
       spacious={spacious}
       sourceWindowId={sourceWindowId}
       thoughtNodes={readerThoughtNodes}
       onReaderSelection={onReaderSelection}
       onActivateThought={onActivateThought}
     />
+  );
+}
+
+interface RichReaderSettings {
+  theme: RichReaderTheme;
+  fontSize: number;
+  lineHeight: number;
+  width: RichReaderWidth;
+  showNavigation: boolean;
+  showContext: boolean;
+}
+
+interface RichReaderTocItem {
+  id: string;
+  title: string;
+  level: number;
+}
+
+interface RichReaderSearchResult {
+  id: string;
+  title: string;
+  text: string;
+  before?: string;
+  after?: string;
+}
+
+interface RichReaderFrameProps {
+  item: LibraryItem;
+  subtitle: string;
+  spacious?: boolean;
+  toc?: RichReaderTocItem[];
+  activeTocId?: string;
+  searchQuery?: string;
+  onSearchQueryChange?(query: string): void;
+  searchResults?: RichReaderSearchResult[];
+  onTocSelect?(id: string): void;
+  onSearchResultSelect?(result: RichReaderSearchResult): void;
+  toolbarStart?: ReactNode;
+  toolbarEnd?: ReactNode;
+  context?: ReactNode;
+  footer?: ReactNode;
+  children(settings: RichReaderSettings): ReactNode;
+}
+
+const DEFAULT_RICH_READER_SETTINGS: RichReaderSettings = {
+  theme: 'light',
+  fontSize: 16,
+  lineHeight: 1.75,
+  width: 'medium',
+  showNavigation: true,
+  showContext: true
+};
+
+function RichReaderFrame({
+  item,
+  subtitle,
+  spacious,
+  toc = [],
+  activeTocId,
+  searchQuery = '',
+  onSearchQueryChange,
+  searchResults = [],
+  onTocSelect,
+  onSearchResultSelect,
+  toolbarStart,
+  toolbarEnd,
+  context,
+  footer,
+  children
+}: RichReaderFrameProps): JSX.Element {
+  const [settings, setSettings] = useState<RichReaderSettings>(() => ({
+    ...DEFAULT_RICH_READER_SETTINGS,
+    showNavigation: Boolean(spacious),
+    showContext: Boolean(spacious)
+  }));
+  const [activeTab, setActiveTab] = useState<RichReaderTab>(toc.length > 0 ? 'toc' : 'search');
+  const source = getLibraryReaderSource(item);
+  const hasNavigation = toc.length > 0 || Boolean(onSearchQueryChange);
+  const showNavigation = settings.showNavigation && hasNavigation;
+  const showContext = settings.showContext && Boolean(context);
+
+  useEffect(() => {
+    if (activeTab === 'toc' && toc.length === 0) setActiveTab('search');
+  }, [activeTab, toc.length]);
+
+  const cssVars = {
+    '--rich-reader-font-size': `${settings.fontSize}px`,
+    '--rich-reader-line-height': `${settings.lineHeight}`
+  } as CSSProperties;
+
+  return (
+    <div
+      className={cx(
+        'flex h-full min-h-0 flex-col border-neutral-200 dark:border-neutral-800',
+        richReaderThemeClass(settings.theme)
+      )}
+      style={cssVars}
+    >
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-current/10 bg-white/90 px-2 text-neutral-800 backdrop-blur dark:bg-neutral-950/90 dark:text-neutral-100">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-current/10 bg-current/[0.04]">
+            {readerIcon(getLibraryReaderKind(item))}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-xs font-semibold">{item.frontmatter.title}</div>
+            <div className="truncate text-[10px] opacity-60">{subtitle}</div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {toolbarStart}
+          {hasNavigation ? (
+            <RichIconButton
+              label={showNavigation ? '隐藏目录与搜索' : '显示目录与搜索'}
+              active={showNavigation}
+              onClick={() => setSettings((current) => ({ ...current, showNavigation: !current.showNavigation }))}
+            >
+              <PanelLeft size={14} />
+            </RichIconButton>
+          ) : null}
+          {context ? (
+            <RichIconButton
+              label={showContext ? '隐藏上下文' : '显示上下文'}
+              active={showContext}
+              onClick={() => setSettings((current) => ({ ...current, showContext: !current.showContext }))}
+            >
+              <PanelRight size={14} />
+            </RichIconButton>
+          ) : null}
+          <RichReaderSettingsMenu settings={settings} onChange={setSettings} />
+          {toolbarEnd}
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        {showNavigation ? (
+          <aside className="hidden w-64 shrink-0 flex-col border-r border-current/10 bg-current/[0.025] lg:flex">
+            <div className="flex h-9 shrink-0 items-center gap-1 border-b border-current/10 px-2">
+              {toc.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('toc')}
+                  className={cx(
+                    'inline-flex h-6 items-center gap-1 rounded px-2 text-[11px]',
+                    activeTab === 'toc' ? 'bg-current/10 font-semibold' : 'opacity-70 hover:bg-current/5'
+                  )}
+                >
+                  <List size={12} />
+                  目录
+                </button>
+              ) : null}
+              {onSearchQueryChange ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('search')}
+                  className={cx(
+                    'inline-flex h-6 items-center gap-1 rounded px-2 text-[11px]',
+                    activeTab === 'search' ? 'bg-current/10 font-semibold' : 'opacity-70 hover:bg-current/5'
+                  )}
+                >
+                  <Search size={12} />
+                  搜索
+                </button>
+              ) : null}
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-2">
+              {activeTab === 'toc' ? (
+                toc.length > 0 ? (
+                  <div className="space-y-1">
+                    {toc.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onTocSelect?.(item.id)}
+                        className={cx(
+                          'block w-full rounded px-2 py-1 text-left text-xs leading-5 hover:bg-current/5',
+                          activeTocId === item.id && 'bg-current/10 font-semibold'
+                        )}
+                        style={{ paddingLeft: `${Math.max(8, item.level * 10)}px` }}
+                      >
+                        <span className="line-clamp-2">{item.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded border border-current/10 p-3 text-xs opacity-60">暂无目录</div>
+                )
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 opacity-45" />
+                    <input
+                      value={searchQuery}
+                      onChange={(event) => onSearchQueryChange?.(event.target.value)}
+                      placeholder="搜索当前资料"
+                      className="h-8 w-full rounded border border-current/10 bg-white/70 pl-7 pr-2 text-xs outline-none focus:ring-2 focus:ring-sky-200 dark:bg-neutral-950/60 dark:focus:ring-sky-900"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    {searchQuery.trim() && searchResults.length === 0 ? (
+                      <div className="rounded border border-current/10 p-3 text-xs opacity-60">没有匹配结果</div>
+                    ) : null}
+                    {searchResults.map((result) => (
+                      <button
+                        key={result.id}
+                        type="button"
+                        onClick={() => onSearchResultSelect?.(result)}
+                        className="block w-full rounded border border-current/10 bg-white/50 p-2 text-left text-xs hover:bg-white dark:bg-neutral-950/40 dark:hover:bg-neutral-900"
+                      >
+                        <span className="block truncate font-semibold">{result.title}</span>
+                        <span className="mt-1 block line-clamp-3 leading-5 opacity-70">
+                          {result.before ? `${result.before} ` : ''}
+                          <mark className="rounded bg-yellow-200 px-0.5 text-yellow-950">{result.text}</mark>
+                          {result.after ? ` ${result.after}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        ) : null}
+
+        <main className={cx('relative min-w-0 flex-1', spacious ? 'min-h-[520px]' : 'min-h-[320px]')}>
+          {children(settings)}
+        </main>
+
+        {showContext ? (
+          <aside className="hidden w-72 shrink-0 overflow-auto border-l border-current/10 bg-current/[0.025] p-3 text-xs lg:block">
+            {context}
+          </aside>
+        ) : null}
+      </div>
+
+      <div className="flex min-h-8 shrink-0 items-center justify-between gap-3 border-t border-current/10 px-3 py-1.5 text-[11px] opacity-70">
+        <span className="truncate">{source ?? item.frontmatter.status}</span>
+        <span className="shrink-0">{footer}</span>
+      </div>
+    </div>
+  );
+}
+
+function RichIconButton({
+  label,
+  active,
+  onClick,
+  children
+}: {
+  label: string;
+  active?: boolean;
+  onClick(): void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cx(
+        'flex h-7 w-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900',
+        active && 'bg-neutral-100 text-neutral-950 dark:bg-neutral-900 dark:text-neutral-50'
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function RichReaderSettingsMenu({
+  settings,
+  onChange
+}: {
+  settings: RichReaderSettings;
+  onChange(settings: RichReaderSettings): void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <RichIconButton label="阅读设置" active={open} onClick={() => setOpen((current) => !current)}>
+        <Settings2 size={14} />
+      </RichIconButton>
+      {open ? (
+        <div
+          data-spatial-interactive
+          className="absolute right-0 top-8 z-[80] w-64 rounded border border-neutral-200 bg-white p-3 text-xs text-neutral-800 shadow-xl dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
+        >
+          <div className="mb-2 font-semibold">阅读设置</div>
+          <label className="mb-2 block">
+            <span className="mb-1 block opacity-60">主题</span>
+            <select
+              value={settings.theme}
+              onChange={(event) => onChange({ ...settings, theme: event.target.value as RichReaderTheme })}
+              className="h-8 w-full rounded border border-neutral-200 bg-white px-2 dark:border-neutral-800 dark:bg-neutral-950"
+            >
+              <option value="light">浅色</option>
+              <option value="sepia">纸张</option>
+              <option value="dark">深色</option>
+            </select>
+          </label>
+          <label className="mb-2 block">
+            <span className="mb-1 block opacity-60">正文宽度</span>
+            <select
+              value={settings.width}
+              onChange={(event) => onChange({ ...settings, width: event.target.value as RichReaderWidth })}
+              className="h-8 w-full rounded border border-neutral-200 bg-white px-2 dark:border-neutral-800 dark:bg-neutral-950"
+            >
+              <option value="narrow">窄</option>
+              <option value="medium">中</option>
+              <option value="wide">宽</option>
+              <option value="full">全宽</option>
+            </select>
+          </label>
+          <label className="mb-2 block">
+            <span className="mb-1 block opacity-60">字号 {settings.fontSize}px</span>
+            <input
+              type="range"
+              min={13}
+              max={22}
+              value={settings.fontSize}
+              onChange={(event) => onChange({ ...settings, fontSize: Number(event.target.value) })}
+              className="w-full"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block opacity-60">行高 {settings.lineHeight.toFixed(1)}</span>
+            <input
+              type="range"
+              min={1.3}
+              max={2.2}
+              step={0.1}
+              value={settings.lineHeight}
+              onChange={(event) => onChange({ ...settings, lineHeight: Number(event.target.value) })}
+              className="w-full"
+            />
+          </label>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function richReaderThemeClass(theme: RichReaderTheme): string {
+  if (theme === 'dark') return 'bg-neutral-950 text-neutral-100';
+  if (theme === 'sepia') return 'bg-[#f5eddd] text-[#3f2f1f]';
+  return 'bg-white text-neutral-950';
+}
+
+function richReaderContentWidthClass(width: RichReaderWidth): string {
+  if (width === 'narrow') return 'max-w-2xl';
+  if (width === 'wide') return 'max-w-5xl';
+  if (width === 'full') return 'max-w-none';
+  return 'max-w-3xl';
+}
+
+interface MarkdownSection {
+  id: string;
+  title: string;
+  level: number;
+  markdown: string;
+  text: string;
+}
+
+function RichMarkdownReader({
+  item,
+  subtitle,
+  spacious,
+  sourceWindowId,
+  thoughtNodes,
+  onReaderSelection,
+  onActivateThought
+}: {
+  item: LibraryItem;
+  subtitle: string;
+  spacious?: boolean;
+} & ReaderSelectionCaptureProps): JSX.Element {
+  const sections = useMemo(() => parseMarkdownSections(item.body || `# ${item.frontmatter.title}`), [item.body, item.frontmatter.title]);
+  const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? 'document-start');
+  const [searchQuery, setSearchQuery] = useState('');
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setActiveSectionId(sections[0]?.id ?? 'document-start');
+  }, [sections]);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    const headings = Array.from(root.querySelectorAll<HTMLElement>('[data-reader-section-id]'));
+    if (headings.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        const id = visible[0]?.target.getAttribute('data-reader-section-id');
+        if (id) setActiveSectionId(id);
+      },
+      { root, rootMargin: '-12% 0px -72% 0px' }
+    );
+    headings.forEach((heading) => observer.observe(heading));
+    return () => observer.disconnect();
+  }, [sections]);
+
+  const toc = useMemo(
+    () => sections.filter((section) => section.level > 0).map((section) => ({ id: section.id, title: section.title, level: section.level })),
+    [sections]
+  );
+  const searchResults = useMemo(
+    () => searchMarkdownSections(sections, searchQuery),
+    [searchQuery, sections]
+  );
+
+  function scrollToSection(id: string): void {
+    contentRef.current?.querySelector<HTMLElement>(`[data-reader-section-id="${CSS.escape(id)}"]`)?.scrollIntoView({
+      block: 'start',
+      behavior: 'smooth'
+    });
+    setActiveSectionId(id);
+  }
+
+  return (
+    <RichReaderFrame
+      item={item}
+      subtitle={subtitle}
+      spacious={spacious}
+      toc={toc}
+      activeTocId={activeSectionId}
+      onTocSelect={scrollToSection}
+      searchQuery={searchQuery}
+      onSearchQueryChange={setSearchQuery}
+      searchResults={searchResults}
+      onSearchResultSelect={(result) => scrollToSection(result.id)}
+      context={<ReaderContextSummary item={item} sections={sections} />}
+      footer={<span>{sections.length} 个段落</span>}
+    >
+      {(settings) => (
+        <ReaderScroll
+          itemId={item.frontmatter.id}
+          sourceWindowId={sourceWindowId}
+          spacious={spacious}
+          thoughtNodes={thoughtNodes}
+          onReaderSelection={onReaderSelection}
+          onActivateThought={onActivateThought}
+          rootRef={contentRef}
+          className={cx('reader-rich-markdown', richReaderThemeClass(settings.theme))}
+          contentClassName={cx('mx-auto', richReaderContentWidthClass(settings.width))}
+          contentStyle={{
+            fontSize: 'var(--rich-reader-font-size)',
+            lineHeight: 'var(--rich-reader-line-height)'
+          }}
+        >
+          {sections.length > 0 ? (
+            <div className="space-y-8">
+              {sections.map((section) => (
+                <section key={section.id} data-reader-section-id={section.id} className="scroll-mt-6">
+                  <div className="prose prose-neutral max-w-none dark:prose-invert">
+                    <StreamingMarkdown content={section.markdown} />
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <EmptyReaderBody item={item} />
+          )}
+        </ReaderScroll>
+      )}
+    </RichReaderFrame>
+  );
+}
+
+function ReaderContextSummary({
+  item,
+  sections
+}: {
+  item: LibraryItem;
+  sections: MarkdownSection[];
+}): JSX.Element {
+  const source = getLibraryReaderSource(item);
+  const words = item.body.trim().split(/\s+/).filter(Boolean).length;
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="mb-1 text-xs font-semibold">资料信息</h3>
+        <dl className="space-y-1 opacity-75">
+          <div className="flex justify-between gap-2">
+            <dt>类型</dt>
+            <dd>{readerKindLabel(getLibraryReaderKind(item))}</dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>段落</dt>
+            <dd>{sections.length}</dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>词数</dt>
+            <dd>{words}</dd>
+          </div>
+        </dl>
+      </div>
+      {source ? (
+        <a href={source} target="_blank" rel="noreferrer" className="flex items-start gap-2 rounded border border-current/10 p-2 hover:bg-current/5">
+          <ExternalLink size={13} className="mt-0.5 shrink-0" />
+          <span className="min-w-0 break-all">{source}</span>
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function RichPdfReader({
+  item,
+  spacious,
+  sourceWindowId,
+  thoughtNodes,
+  onReaderSelection,
+  onActivateThought
+}: {
+  item: LibraryItem;
+  spacious?: boolean;
+} & ReaderSelectionCaptureProps): JSX.Element {
+  const source = getLibraryReaderSource(item);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [pageNumber, setPageNumber] = useState(1);
+  const [numPages, setNumPages] = useState(0);
+  const [textByPage, setTextByPage] = useState<Record<number, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [scrollMode, setScrollMode] = useState<'paginated' | 'scrolled'>('paginated');
+  const [pageWidth, setPageWidth] = useState(860);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    renderReaderQuoteHighlights(root, thoughtNodes ?? EMPTY_THOUGHT_NODES);
+    if (onActivateThought) decorateThoughtHighlights(root, thoughtNodes ?? EMPTY_THOUGHT_NODES, onActivateThought);
+  }, [onActivateThought, pageNumber, textByPage, thoughtNodes]);
+
+  useEffect(() => {
+    const root = contentRef.current?.parentElement;
+    if (!root) return;
+    const update = () => setPageWidth(Math.max(320, Math.min(1080, root.clientWidth - 72)));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
+
+  const searchResults = useMemo<RichReaderSearchResult[]>(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return Object.entries(textByPage)
+      .filter(([, text]) => text.toLowerCase().includes(query))
+      .map(([page, text]) => {
+        const lower = text.toLowerCase();
+        const index = lower.indexOf(query);
+        return {
+          id: page,
+          title: `第 ${page} 页`,
+          text: text.slice(index, index + query.length),
+          before: text.slice(Math.max(0, index - 44), index).trim(),
+          after: text.slice(index + query.length, Math.min(text.length, index + query.length + 44)).trim()
+        };
+      });
+  }, [searchQuery, textByPage]);
+
+  async function handlePdfLoadSuccess(pdf: { numPages: number; getPage(page: number): Promise<{ getTextContent(): Promise<{ items: Array<{ str?: string }> }> }> }): Promise<void> {
+    setNumPages(pdf.numPages);
+    const entries = await Promise.all(
+      Array.from({ length: pdf.numPages }, async (_, index) => {
+        const page = await pdf.getPage(index + 1);
+        const textContent = await page.getTextContent();
+        return [
+          index + 1,
+          textContent.items
+            .map((entry) => entry.str ?? '')
+            .filter(Boolean)
+            .join(' ')
+        ] as const;
+      })
+    );
+    setTextByPage(Object.fromEntries(entries));
+  }
+
+  function goToPage(nextPage: number): void {
+    const page = clampNumber(nextPage, 1, Math.max(1, numPages || nextPage));
+    setPageNumber(page);
+    if (scrollMode === 'scrolled') {
+      pageRefs.current[page]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function captureSelection(): void {
+    if (!onReaderSelection) return;
+    window.requestAnimationFrame(() => {
+      const root = contentRef.current;
+      if (!root) return;
+      const selection = getReaderSelectionFromRoot(item.frontmatter.id, root, sourceWindowId);
+      if (selection) onReaderSelection(selection);
+    });
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (isNativeInteractive(event.target)) return;
+    if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+      event.preventDefault();
+      goToPage(pageNumber - 1);
+    }
+    if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+      event.preventDefault();
+      goToPage(pageNumber + 1);
+    }
+  }
+
+  if (!source) {
+    return <ArticleReader item={item} spacious={spacious} sourceWindowId={sourceWindowId} thoughtNodes={thoughtNodes} onReaderSelection={onReaderSelection} onActivateThought={onActivateThought} />;
+  }
+
+  return (
+    <RichReaderFrame
+      item={item}
+      subtitle="PDF 阅读器"
+      spacious={spacious}
+      toc={Array.from({ length: numPages }, (_, index) => ({ id: String(index + 1), title: `第 ${index + 1} 页`, level: 1 }))}
+      activeTocId={String(pageNumber)}
+      onTocSelect={(id) => goToPage(Number(id))}
+      searchQuery={searchQuery}
+      onSearchQueryChange={setSearchQuery}
+      searchResults={searchResults}
+      onSearchResultSelect={(result) => goToPage(Number(result.id))}
+      toolbarStart={
+        <>
+          <RichIconButton label="上一页" onClick={() => goToPage(pageNumber - 1)}>
+            <ChevronLeft size={14} />
+          </RichIconButton>
+          <span className="w-16 text-center text-[11px] tabular-nums">
+            {pageNumber}/{numPages || '—'}
+          </span>
+          <RichIconButton label="下一页" onClick={() => goToPage(pageNumber + 1)}>
+            <ChevronRight size={14} />
+          </RichIconButton>
+          <button
+            type="button"
+            onClick={() => setScrollMode((current) => (current === 'paginated' ? 'scrolled' : 'paginated'))}
+            className="h-7 rounded px-2 text-[11px] hover:bg-neutral-100 dark:hover:bg-neutral-900"
+          >
+            {scrollMode === 'paginated' ? '单页' : '连续'}
+          </button>
+        </>
+      }
+      context={<PdfContext item={item} pageNumber={pageNumber} numPages={numPages} text={textByPage[pageNumber] ?? ''} />}
+      footer={<span>第 {pageNumber} / {numPages || '—'} 页</span>}
+    >
+      {(settings) => (
+        <div
+          tabIndex={0}
+          className={cx('h-full overflow-auto p-5 outline-none', richReaderThemeClass(settings.theme))}
+          onPointerUp={captureSelection}
+          onKeyUp={captureSelection}
+          onKeyDown={handleKeyDown}
+        >
+          <PdfDocument
+            file={source}
+            onLoadSuccess={(pdf) => void handlePdfLoadSuccess(pdf as Parameters<typeof handlePdfLoadSuccess>[0])}
+            loading={<ReaderLoading label="正在加载 PDF..." />}
+            error={<ReaderError label="PDF 加载失败，请检查文件或链接。" />}
+          >
+            <div
+              ref={contentRef}
+              data-spatial-reader-viewport
+              data-reader-resource-id={item.frontmatter.id}
+              className={cx(
+                'flex min-h-full',
+                scrollMode === 'scrolled' ? 'flex-col items-center gap-5' : 'items-start justify-center'
+              )}
+            >
+              {(scrollMode === 'scrolled' ? Array.from({ length: numPages }, (_, index) => index + 1) : [pageNumber]).map((page) => (
+                <div
+                  key={page}
+                  ref={(element) => {
+                    pageRefs.current[page] = element;
+                  }}
+                  className="overflow-hidden rounded border border-neutral-200 bg-white shadow-sm dark:border-neutral-800"
+                >
+                  <PdfPage
+                    pageNumber={page}
+                    width={pageWidth}
+                    onRenderTextLayerSuccess={() => {
+                      renderReaderQuoteHighlights(contentRef.current, thoughtNodes ?? EMPTY_THOUGHT_NODES);
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </PdfDocument>
+        </div>
+      )}
+    </RichReaderFrame>
+  );
+}
+
+function PdfContext({
+  item,
+  pageNumber,
+  numPages,
+  text
+}: {
+  item: LibraryItem;
+  pageNumber: number;
+  numPages: number;
+  text: string;
+}): JSX.Element {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-xs font-semibold">当前页面</h3>
+      <dl className="space-y-1 opacity-75">
+        <div className="flex justify-between gap-2">
+          <dt>页码</dt>
+          <dd>{pageNumber}/{numPages || '—'}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt>进度</dt>
+          <dd>{numPages ? `${Math.round((pageNumber / numPages) * 100)}%` : '—'}</dd>
+        </div>
+      </dl>
+      <div className="rounded border border-current/10 p-2">
+        <div className="mb-1 font-semibold">页面文本</div>
+        <p className="line-clamp-[12] leading-5 opacity-70">{text || item.body || 'PDF 文本提取中。'}</p>
+      </div>
+    </div>
+  );
+}
+
+interface MediaChapter {
+  id: string;
+  title: string;
+  seconds: number;
+}
+
+interface MediaTranscriptSegment {
+  id: string;
+  startMs: number;
+  text: string;
+  speaker?: string;
+}
+
+let youtubeApiPromise: Promise<NonNullable<Window['YT']>> | null = null;
+
+function RichYouTubeReader({
+  item,
+  spacious,
+  sourceWindowId,
+  thoughtNodes,
+  onReaderSelection,
+  onActivateThought
+}: {
+  item: LibraryItem;
+  spacious?: boolean;
+} & ReaderSelectionCaptureProps): JSX.Element {
+  const source = getLibraryReaderSource(item);
+  const videoId = getYouTubeVideoId(source) ?? getYouTubeVideoId(item.body);
+  const playerId = useMemo(() => `orbit-youtube-${item.frontmatter.id.replace(/[^a-z0-9_-]/gi, '-')}-${Math.random().toString(36).slice(2)}`, [item.frontmatter.id]);
+  const playerRef = useRef<InstanceType<NonNullable<NonNullable<Window['YT']>['Player']>> | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const media = useMemo(() => parseMediaDocument(item), [item]);
+
+  useEffect(() => {
+    if (!videoId) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    void loadYouTubeIframeApi()
+      .then((YT) => {
+        if (cancelled || !YT.Player) return;
+        playerRef.current = new YT.Player(playerId, {
+          videoId,
+          playerVars: { autoplay: 0, modestbranding: 1, rel: 0 },
+          events: {
+            onStateChange: (event: { data: number }) => {
+              setIsPlaying(event.data === YT.PlayerState?.PLAYING);
+            }
+          }
+        });
+        timer = window.setInterval(() => {
+          const seconds = playerRef.current?.getCurrentTime?.();
+          if (typeof seconds === 'number') setCurrentTime(seconds * 1000);
+        }, 500);
+      })
+      .catch(() => {
+        // The fallback iframe is rendered below when the API cannot load.
+      });
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearInterval(timer);
+      playerRef.current?.destroy();
+      playerRef.current = null;
+    };
+  }, [playerId, videoId]);
+
+  function seek(timeMs: number): void {
+    setCurrentTime(timeMs);
+    playerRef.current?.seekTo?.(timeMs / 1000, true);
+  }
+
+  return (
+    <RichMediaReader
+      item={item}
+      subtitle="YouTube 阅读器"
+      spacious={spacious}
+      sourceWindowId={sourceWindowId}
+      thoughtNodes={thoughtNodes}
+      onReaderSelection={onReaderSelection}
+      onActivateThought={onActivateThought}
+      currentTime={currentTime}
+      isPlaying={isPlaying}
+      onSeek={seek}
+      chapters={media.chapters}
+      transcript={media.transcript}
+      context={<MediaContext media={media} item={item} currentTime={currentTime} />}
+      hero={
+        videoId ? (
+          <div className="aspect-video w-full overflow-hidden bg-black">
+            <div id={playerId} className="h-full w-full" />
+          </div>
+        ) : source ? (
+          <iframe
+            src={getYouTubeEmbedUrl(source) ?? source}
+            title={item.frontmatter.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="aspect-video w-full border-0 bg-black"
+          />
+        ) : (
+          <ReaderError label="缺少 YouTube 链接。" />
+        )
+      }
+    />
+  );
+}
+
+function RichPodcastReader({
+  item,
+  spacious,
+  sourceWindowId,
+  thoughtNodes,
+  onReaderSelection,
+  onActivateThought
+}: {
+  item: LibraryItem;
+  spacious?: boolean;
+} & ReaderSelectionCaptureProps): JSX.Element {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const source = getPodcastAudioSource(item);
+  const youtubeId = getYouTubeVideoId(source);
+  const media = useMemo(() => parseMediaDocument(item), [item]);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [muted, setMuted] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const sync = () => {
+      setCurrentTime(audio.currentTime * 1000);
+      setIsPlaying(!audio.paused);
+      setPlaybackRate(audio.playbackRate);
+      setMuted(audio.muted || audio.volume === 0);
+    };
+    sync();
+    audio.addEventListener('timeupdate', sync);
+    audio.addEventListener('play', sync);
+    audio.addEventListener('pause', sync);
+    audio.addEventListener('ratechange', sync);
+    audio.addEventListener('volumechange', sync);
+    return () => {
+      audio.removeEventListener('timeupdate', sync);
+      audio.removeEventListener('play', sync);
+      audio.removeEventListener('pause', sync);
+      audio.removeEventListener('ratechange', sync);
+      audio.removeEventListener('volumechange', sync);
+    };
+  }, [source]);
+
+  function seek(timeMs: number): void {
+    const audio = audioRef.current;
+    if (audio) audio.currentTime = timeMs / 1000;
+    setCurrentTime(timeMs);
+  }
+
+  function togglePlayback(): void {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) void audio.play();
+    else audio.pause();
+  }
+
+  return (
+    <RichMediaReader
+      item={item}
+      subtitle="播客阅读器"
+      spacious={spacious}
+      sourceWindowId={sourceWindowId}
+      thoughtNodes={thoughtNodes}
+      onReaderSelection={onReaderSelection}
+      onActivateThought={onActivateThought}
+      currentTime={currentTime}
+      isPlaying={isPlaying}
+      onSeek={seek}
+      chapters={media.chapters}
+      transcript={media.transcript}
+      context={<MediaContext media={media} item={item} currentTime={currentTime} />}
+      hero={
+        <div className="space-y-3 rounded border border-current/10 bg-current/[0.03] p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded bg-current/10">
+              <Volume2 size={22} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">{item.frontmatter.title}</div>
+              <div className="mt-1 text-xs opacity-60">{media.summary || item.frontmatter.source?.source_title || '播客资料'}</div>
+            </div>
+          </div>
+          {source && !youtubeId ? (
+            <>
+              <audio ref={audioRef} src={source} controls className="w-full" />
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <button type="button" onClick={() => seek(Math.max(0, currentTime - 15_000))} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
+                  <SkipBack size={13} />15s
+                </button>
+                <button type="button" onClick={togglePlayback} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
+                  {isPlaying ? <Pause size={13} /> : <Play size={13} />}
+                  {isPlaying ? '暂停' : '播放'}
+                </button>
+                <button type="button" onClick={() => seek(currentTime + 15_000)} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
+                  <SkipForward size={13} />15s
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const audio = audioRef.current;
+                    if (!audio) return;
+                    audio.muted = !audio.muted;
+                    setMuted(audio.muted);
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5"
+                >
+                  {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
+                  声音
+                </button>
+                <select
+                  value={playbackRate}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    if (audioRef.current) audioRef.current.playbackRate = next;
+                    setPlaybackRate(next);
+                  }}
+                  className="h-7 rounded border border-current/10 bg-transparent px-2"
+                >
+                  {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                    <option key={rate} value={rate}>{rate}x</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : youtubeId ? (
+            <iframe
+              src={`https://www.youtube.com/embed/${youtubeId}`}
+              title={item.frontmatter.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="aspect-video w-full border-0 bg-black"
+            />
+          ) : (
+            <ReaderError label="缺少可播放音频源。" />
+          )}
+        </div>
+      }
+    />
+  );
+}
+
+function RichMediaReader({
+  item,
+  subtitle,
+  spacious,
+  sourceWindowId,
+  thoughtNodes,
+  onReaderSelection,
+  onActivateThought,
+  hero,
+  chapters,
+  transcript,
+  currentTime,
+  isPlaying,
+  onSeek,
+  context
+}: {
+  item: LibraryItem;
+  subtitle: string;
+  spacious?: boolean;
+  hero: ReactNode;
+  chapters: MediaChapter[];
+  transcript: MediaTranscriptSegment[];
+  currentTime: number;
+  isPlaying: boolean;
+  onSeek(timeMs: number): void;
+  context: ReactNode;
+} & ReaderSelectionCaptureProps): JSX.Element {
+  const [mediaTab, setMediaTab] = useState<'chapters' | 'transcript'>(chapters.length > 0 ? 'chapters' : 'transcript');
+  const activeTranscriptIndex = useMemo(() => findActiveTranscriptIndex(currentTime, transcript), [currentTime, transcript]);
+  const activeChapterIndex = useMemo(() => findActiveChapterIndex(currentTime, chapters), [chapters, currentTime]);
+
+  const toc = useMemo(
+    () =>
+      (chapters.length > 0 ? chapters : transcript).map((entry, index) => ({
+        id: String(index),
+        title: 'title' in entry ? entry.title : `${formatTime(entry.startMs)} ${entry.text}`,
+        level: 1
+      })),
+    [chapters, transcript]
+  );
+
+  return (
+    <RichReaderFrame
+      item={item}
+      subtitle={subtitle}
+      spacious={spacious}
+      toc={toc}
+      activeTocId={String(mediaTab === 'chapters' ? activeChapterIndex : activeTranscriptIndex)}
+      onTocSelect={(id) => {
+        const index = Number(id);
+        const chapter = chapters[index];
+        const segment = transcript[index];
+        onSeek(chapter ? chapter.seconds * 1000 : segment?.startMs ?? 0);
+      }}
+      toolbarStart={
+        <span className="inline-flex items-center gap-1 rounded bg-current/5 px-2 py-1 text-[11px]">
+          {isPlaying ? <Play size={11} /> : <Pause size={11} />}
+          {formatTime(currentTime)}
+        </span>
+      }
+      context={context}
+      footer={<span>{formatTime(currentTime)}</span>}
+    >
+      {(settings) => (
+        <div className={cx('h-full overflow-auto px-5 py-4', richReaderThemeClass(settings.theme))}>
+          <div className={cx('mx-auto space-y-4', richReaderContentWidthClass(settings.width))}>
+            {hero}
+            <div className="flex items-center gap-1 rounded border border-current/10 bg-current/[0.03] p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setMediaTab('chapters')}
+                className={cx('rounded px-3 py-1.5', mediaTab === 'chapters' ? 'bg-current/10 font-semibold' : 'hover:bg-current/5')}
+              >
+                章节 {chapters.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMediaTab('transcript')}
+                className={cx('rounded px-3 py-1.5', mediaTab === 'transcript' ? 'bg-current/10 font-semibold' : 'hover:bg-current/5')}
+              >
+                转写 {transcript.length}
+              </button>
+            </div>
+            <ReaderScroll
+              itemId={item.frontmatter.id}
+              sourceWindowId={sourceWindowId}
+              compact
+              thoughtNodes={thoughtNodes}
+              onReaderSelection={onReaderSelection}
+              onActivateThought={onActivateThought}
+              className={cx('max-h-[52vh] rounded border border-current/10', richReaderThemeClass(settings.theme))}
+              contentClassName="space-y-2"
+              contentStyle={{
+                fontSize: 'var(--rich-reader-font-size)',
+                lineHeight: 'var(--rich-reader-line-height)'
+              }}
+            >
+              {mediaTab === 'chapters' ? (
+                chapters.length > 0 ? chapters.map((chapter, index) => (
+                  <button
+                    key={chapter.id}
+                    type="button"
+                    onClick={() => onSeek(chapter.seconds * 1000)}
+                    className={cx(
+                      'flex w-full items-start gap-3 rounded px-3 py-2 text-left hover:bg-current/5',
+                      index === activeChapterIndex && 'bg-current/10'
+                    )}
+                  >
+                    <span className="w-16 shrink-0 font-mono text-xs opacity-60">{formatTime(chapter.seconds * 1000)}</span>
+                    <span className="font-medium">{chapter.title}</span>
+                  </button>
+                )) : <EmptyMediaState label="暂无章节信息" />
+              ) : transcript.length > 0 ? (
+                transcript.map((segment, index) => (
+                  <button
+                    key={segment.id}
+                    type="button"
+                    onClick={() => onSeek(segment.startMs)}
+                    className={cx(
+                      'flex w-full items-start gap-3 rounded px-3 py-2 text-left hover:bg-current/5',
+                      index === activeTranscriptIndex && 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-200'
+                    )}
+                  >
+                    <span className="w-16 shrink-0 font-mono text-xs opacity-60">{formatTime(segment.startMs)}</span>
+                    <span className="min-w-0">
+                      {segment.speaker ? <span className="mr-1 font-semibold opacity-70">{segment.speaker}</span> : null}
+                      {segment.text}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <EmptyMediaState label="暂无转写内容" />
+              )}
+            </ReaderScroll>
+          </div>
+        </div>
+      )}
+    </RichReaderFrame>
+  );
+}
+
+function MediaContext({
+  media,
+  item,
+  currentTime
+}: {
+  media: ReturnType<typeof parseMediaDocument>;
+  item: LibraryItem;
+  currentTime: number;
+}): JSX.Element {
+  const active = media.transcript[findActiveTranscriptIndex(currentTime, media.transcript)];
+  return (
+    <div className="space-y-3">
+      <div className="rounded border border-current/10 p-2">
+        <div className="mb-1 flex items-center gap-1 font-semibold"><Clock size={12} />当前位置</div>
+        <div className="font-mono">{formatTime(currentTime)}</div>
+        {active ? <p className="mt-2 leading-5 opacity-75">{active.text}</p> : null}
+      </div>
+      {media.summary ? (
+        <div className="rounded border border-current/10 p-2">
+          <div className="mb-1 font-semibold">摘要</div>
+          <p className="leading-5 opacity-75">{media.summary}</p>
+        </div>
+      ) : null}
+      {media.keywords.length > 0 ? (
+        <div>
+          <div className="mb-1 flex items-center gap-1 font-semibold"><Hash size={12} />关键词</div>
+          <div className="flex flex-wrap gap-1">
+            {media.keywords.map((keyword) => (
+              <span key={keyword} className="rounded-full border border-current/10 px-2 py-0.5 opacity-75">{keyword}</span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {item.frontmatter.source?.published_at ? (
+        <div className="flex items-center gap-1 opacity-60"><Calendar size={12} />{item.frontmatter.source.published_at}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function RichEpubReader({
+  item,
+  spacious,
+  sourceWindowId,
+  onReaderSelection
+}: {
+  item: LibraryItem;
+  spacious?: boolean;
+} & ReaderSelectionCaptureProps): JSX.Element {
+  const source = getLibraryReaderSource(item);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const renditionRef = useRef<{ display(target?: string): Promise<unknown>; prev(): Promise<unknown>; next(): Promise<unknown>; destroy(): void; themes?: { default(theme: Record<string, unknown>): void; select(name: string): void }; getContents?(): Array<{ document?: Document }> } | null>(null);
+  const bookRef = useRef<{ destroy?(): void; ready?: Promise<unknown>; loaded?: { navigation?: Promise<{ toc?: Array<{ label: string; href: string; subitems?: Array<{ label: string; href: string }> }> }>; metadata?: Promise<{ title?: string }> } } | null>(null);
+  const [toc, setToc] = useState<RichReaderTocItem[]>([]);
+  const [location, setLocation] = useState('');
+  const [visibleText, setVisibleText] = useState('');
+  const [mode, setMode] = useState<'paginated' | 'scrolled'>('paginated');
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!source || !containerRef.current) return;
+    const epubSource = source;
+    let cancelled = false;
+    setLoadError(null);
+
+    async function mount(): Promise<void> {
+      try {
+        const book = ePub(epubSource);
+        bookRef.current = book as typeof bookRef.current;
+        const rendition = book.renderTo(containerRef.current!, {
+          width: '100%',
+          height: '100%',
+          manager: mode === 'scrolled' ? 'continuous' : 'default',
+          flow: mode === 'scrolled' ? 'scrolled' : 'paginated',
+          allowScriptedContent: false
+        });
+        renditionRef.current = rendition as unknown as typeof renditionRef.current;
+
+        rendition.hooks?.content?.register?.((contents: { document: Document; window: Window; cfiFromRange?(range: Range): string }) => {
+          const syncSelection = () => {
+            contents.window.requestAnimationFrame(() => {
+              const selected = contents.window.getSelection?.();
+              const text = selected?.toString().trim() ?? '';
+              if (!text || !selected || selected.rangeCount === 0) return;
+              const range = selected.getRangeAt(0);
+              const frameElement = contents.document.defaultView?.frameElement;
+              const frameRect = frameElement instanceof Element ? frameElement.getBoundingClientRect() : null;
+              const baseRect = getRangeAnchorRect(range);
+              const rect = baseRect && frameRect
+                ? {
+                    ...baseRect,
+                    left: baseRect.left + frameRect.left,
+                    right: baseRect.right + frameRect.left,
+                    top: baseRect.top + frameRect.top,
+                    bottom: baseRect.bottom + frameRect.top
+                  }
+                : baseRect;
+              if (!rect) return;
+              onReaderSelection?.({
+                itemId: item.frontmatter.id,
+                text,
+                quote: { exact: text },
+                anchorRect: rect,
+                sourceWindowId
+              });
+            });
+          };
+          contents.document.addEventListener('pointerup', syncSelection);
+          contents.document.addEventListener('keyup', syncSelection);
+        });
+
+        rendition.on?.('relocated', (event: { start?: { cfi?: string } }) => {
+          if (cancelled) return;
+          const cfi = event.start?.cfi ?? '';
+          setLocation(cfi);
+          const text = rendition
+            .getContents?.()
+            ?.map((content: { document?: Document }) => content.document?.body?.innerText ?? '')
+            .filter(Boolean)
+            .join('\n\n')
+            .trim() ?? '';
+          setVisibleText(text);
+        });
+
+        await book.ready;
+        const navigation = await book.loaded?.navigation;
+        if (!cancelled) {
+          setToc(flattenEpubToc(navigation?.toc ?? []));
+        }
+        await rendition.display();
+      } catch (error) {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    void mount();
+    return () => {
+      cancelled = true;
+      renditionRef.current?.destroy();
+      bookRef.current?.destroy?.();
+      renditionRef.current = null;
+      bookRef.current = null;
+    };
+  }, [item.frontmatter.id, mode, onReaderSelection, source, sourceWindowId]);
+
+  useEffect(() => {
+    const rendition = renditionRef.current;
+    if (!rendition?.themes) return;
+    rendition.themes.default({
+      body: {
+        color: '#111827',
+        background: '#ffffff',
+        'font-size': '16px',
+        'line-height': '1.7',
+        'font-family': 'ui-serif, Georgia, serif'
+      }
+    });
+    rendition.themes.select('default');
+  }, [location]);
+
+  if (!source) {
+    return <ReaderError label="缺少 EPUB 文件来源。" />;
+  }
+
+  return (
+    <RichReaderFrame
+      item={item}
+      subtitle="EPUB 阅读器"
+      spacious={spacious}
+      toc={toc}
+      activeTocId={location}
+      onTocSelect={(id) => {
+        const target = toc.find((entry) => entry.id === id)?.id;
+        if (target) void renditionRef.current?.display(target);
+      }}
+      toolbarStart={
+        <>
+          <RichIconButton label="上一页" onClick={() => void renditionRef.current?.prev()}>
+            <ChevronLeft size={14} />
+          </RichIconButton>
+          <RichIconButton label="下一页" onClick={() => void renditionRef.current?.next()}>
+            <ChevronRight size={14} />
+          </RichIconButton>
+          <button
+            type="button"
+            onClick={() => setMode((current) => (current === 'paginated' ? 'scrolled' : 'paginated'))}
+            className="h-7 rounded px-2 text-[11px] hover:bg-neutral-100 dark:hover:bg-neutral-900"
+          >
+            {mode === 'paginated' ? '分页' : '滚动'}
+          </button>
+        </>
+      }
+      context={
+        <div className="space-y-3">
+          <div className="rounded border border-current/10 p-2">
+            <div className="mb-1 font-semibold">当前位置</div>
+            <p className="break-all font-mono text-[10px] opacity-60">{location || '加载中'}</p>
+          </div>
+          <div className="rounded border border-current/10 p-2">
+            <div className="mb-1 font-semibold">当前可见文本</div>
+            <p className="line-clamp-[14] leading-5 opacity-70">{visibleText || '翻页后会显示当前章节文本。'}</p>
+          </div>
+        </div>
+      }
+      footer={<span>{location ? '已定位' : '加载中'}</span>}
+    >
+      {() => (
+        <div className="h-full p-4">
+          {loadError ? (
+            <ReaderError label={`EPUB 加载失败：${loadError}`} />
+          ) : (
+            <div ref={containerRef} className="h-full w-full overflow-hidden rounded border border-neutral-200 bg-white dark:border-neutral-800" />
+          )}
+        </div>
+      )}
+    </RichReaderFrame>
   );
 }
 
@@ -2558,87 +3979,6 @@ function ArticleReader({
         <EmptyReaderBody item={item} />
       )}
     </ReaderScroll>
-  );
-}
-
-function PdfReader({
-  item,
-  spacious,
-  sourceWindowId,
-  thoughtNodes,
-  onReaderSelection,
-  onActivateThought
-}: {
-  item: LibraryItem;
-  spacious?: boolean;
-} & ReaderSelectionCaptureProps): JSX.Element {
-  const source = getLibraryReaderSource(item);
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-neutral-950">
-      {source ? (
-        <iframe
-          src={source}
-          title={item.frontmatter.title}
-          className="min-h-0 flex-1 border-0 bg-neutral-100 dark:bg-neutral-900"
-        />
-      ) : null}
-      <div className={cx('shrink-0 border-t border-neutral-200 dark:border-neutral-800', source ? 'max-h-[36%] overflow-auto' : 'min-h-0 flex-1 overflow-auto')}>
-        <ReaderScroll
-          itemId={item.frontmatter.id}
-          sourceWindowId={sourceWindowId}
-          spacious={spacious}
-          compact={Boolean(source)}
-          thoughtNodes={thoughtNodes}
-          onReaderSelection={onReaderSelection}
-          onActivateThought={onActivateThought}
-        >
-          <ReaderTitle item={item} />
-          {item.body.trim() ? <StreamingMarkdown content={item.body} /> : <EmptyReaderBody item={item} />}
-        </ReaderScroll>
-      </div>
-    </div>
-  );
-}
-
-function VideoReader({
-  item,
-  spacious,
-  sourceWindowId,
-  thoughtNodes,
-  onReaderSelection,
-  onActivateThought
-}: {
-  item: LibraryItem;
-  spacious?: boolean;
-} & ReaderSelectionCaptureProps): JSX.Element {
-  const source = getLibraryReaderSource(item);
-  const embed = getYouTubeEmbedUrl(source);
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-neutral-950">
-      {embed ? (
-        <iframe
-          src={embed}
-          title={item.frontmatter.title}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          className="aspect-video w-full shrink-0 border-0 bg-black"
-        />
-      ) : source ? (
-        <video src={source} controls className="aspect-video w-full shrink-0 bg-black" />
-      ) : null}
-      <ReaderScroll
-        itemId={item.frontmatter.id}
-        sourceWindowId={sourceWindowId}
-        spacious={spacious}
-        compact
-        thoughtNodes={thoughtNodes}
-        onReaderSelection={onReaderSelection}
-        onActivateThought={onActivateThought}
-      >
-        <ReaderTitle item={item} />
-        {item.body.trim() ? <StreamingMarkdown content={item.body} /> : <EmptyReaderBody item={item} />}
-      </ReaderScroll>
-    </div>
   );
 }
 
@@ -2697,7 +4037,11 @@ function ReaderScroll({
   onActivateThought,
   thoughtNodes = EMPTY_THOUGHT_NODES,
   spacious,
-  compact
+  compact,
+  rootRef: externalRootRef,
+  className,
+  contentClassName,
+  contentStyle
 }: {
   children: ReactNode;
   itemId: string;
@@ -2707,15 +4051,20 @@ function ReaderScroll({
   thoughtNodes?: SpatialThoughtNode[];
   spacious?: boolean;
   compact?: boolean;
+  rootRef?: RefObject<HTMLDivElement>;
+  className?: string;
+  contentClassName?: string;
+  contentStyle?: CSSProperties;
 }): JSX.Element {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const localRootRef = useRef<HTMLDivElement>(null);
+  const rootRef = externalRootRef ?? localRootRef;
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
     renderReaderQuoteHighlights(root, thoughtNodes);
     if (onActivateThought) decorateThoughtHighlights(root, thoughtNodes, onActivateThought);
-  }, [children, onActivateThought, thoughtNodes]);
+  }, [children, onActivateThought, rootRef, thoughtNodes]);
 
   function captureSelection(): void {
     if (!onReaderSelection) return;
@@ -2734,12 +4083,19 @@ function ReaderScroll({
       data-reader-resource-id={itemId}
       className={cx(
         'h-full min-h-0 overflow-auto bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100',
-        spacious ? 'px-8 py-8' : compact ? 'px-4 py-4' : 'px-5 py-5'
+        spacious ? 'px-8 py-8' : compact ? 'px-4 py-4' : 'px-5 py-5',
+        className
       )}
       onPointerUp={captureSelection}
       onKeyUp={captureSelection}
     >
-      {children}
+      {contentClassName || contentStyle ? (
+        <div className={contentClassName} style={contentStyle}>
+          {children}
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }
@@ -3716,6 +5072,306 @@ function libraryAnnotationTarget(itemId: string, title?: string): AnnotationTarg
 
 function isPersistedAnnotationId(id: string): boolean {
   return id.startsWith('ann-');
+}
+
+function parseMarkdownSections(markdown: string): MarkdownSection[] {
+  const lines = markdown.split('\n');
+  const sections: MarkdownSection[] = [];
+  let current: { id: string; title: string; level: number; lines: string[] } | null = null;
+  const seen = new Map<string, number>();
+
+  function pushCurrent(): void {
+    if (!current) return;
+    const chunk = current.lines.join('\n').trim();
+    sections.push({
+      id: current.id,
+      title: current.title,
+      level: current.level,
+      markdown: chunk,
+      text: stripMarkdown(chunk)
+    });
+  }
+
+  lines.forEach((line) => {
+    const match = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (match) {
+      pushCurrent();
+      const title = match[2]?.trim() || 'Untitled';
+      const base = slugifyReaderHeading(title);
+      const count = seen.get(base) ?? 0;
+      seen.set(base, count + 1);
+      current = {
+        id: count === 0 ? base : `${base}-${count + 1}`,
+        title,
+        level: match[1]?.length ?? 1,
+        lines: [line]
+      };
+      return;
+    }
+    if (!current) {
+      current = {
+        id: 'document-start',
+        title: '正文',
+        level: 0,
+        lines: []
+      };
+    }
+    current.lines.push(line);
+  });
+  pushCurrent();
+  return sections.filter((section) => section.markdown.trim());
+}
+
+function searchMarkdownSections(sections: MarkdownSection[], query: string): RichReaderSearchResult[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return [];
+  return sections
+    .filter((section) => section.text.toLowerCase().includes(normalized))
+    .map((section, index) => {
+      const lower = section.text.toLowerCase();
+      const matchIndex = lower.indexOf(normalized);
+      return {
+        id: section.id,
+        title: section.title || `匹配 ${index + 1}`,
+        text: section.text.slice(matchIndex, matchIndex + normalized.length),
+        before: section.text.slice(Math.max(0, matchIndex - 44), matchIndex).trim(),
+        after: section.text.slice(matchIndex + normalized.length, Math.min(section.text.length, matchIndex + normalized.length + 44)).trim()
+      };
+    });
+}
+
+function slugifyReaderHeading(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\u4e00-\u9fff\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'section';
+}
+
+function stripMarkdown(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*]\([^)]+\)/g, ' ')
+    .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
+    .replace(/[#>*_`~-]/g, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseMediaDocument(item: LibraryItem): {
+  summary: string;
+  description: string;
+  takeaways: string[];
+  keywords: string[];
+  chapters: MediaChapter[];
+  transcript: MediaTranscriptSegment[];
+} {
+  const body = item.body;
+  return {
+    summary: extractMarkdownSectionText(body, ['Summary', 'Video Summary', '内容摘要', '摘要']) || item.frontmatter.source?.note || '',
+    description: extractMarkdownSectionText(body, ['Description', '内容简介', '简介']),
+    takeaways: parseListItems(extractMarkdownSectionText(body, ['Takeaways', '核心要点', '要点'])),
+    keywords: parseKeywordItems(extractMarkdownSectionText(body, ['Keywords', '关键词'])),
+    chapters: parseMediaChapters(body),
+    transcript: parseMediaTranscript(body)
+  };
+}
+
+function extractMarkdownSectionText(markdown: string, names: string[]): string {
+  const wanted = new Set(names.map((name) => name.trim().toLowerCase()));
+  const lines = markdown.split('\n');
+  let collecting = false;
+  const collected: string[] = [];
+
+  for (const line of lines) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) {
+      const headingText = (heading[1] ?? '').trim().toLowerCase();
+      if (collecting) break;
+      collecting = wanted.has(headingText);
+      continue;
+    }
+    if (collecting) collected.push(line);
+  }
+
+  return collected.join('\n').trim();
+}
+
+function parseListItems(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim().replace(/^(?:[-*]|\d+\.)\s+/, ''))
+    .filter(Boolean);
+}
+
+function parseKeywordItems(text: string): string[] {
+  return parseListItems(text)
+    .flatMap((line) => line.split(/[,，、]/))
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseMediaChapters(markdown: string): MediaChapter[] {
+  const chapters: MediaChapter[] = [];
+  const lines = markdown.split('\n');
+  lines.forEach((line, index) => {
+    const match = /(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:[–—-]\s*)?(.+)/.exec(line.trim());
+    if (!match) return;
+    const seconds = parseTimestampSeconds(match[1] ?? '');
+    const title = (match[2] ?? '').replace(/^[-*]\s+/, '').trim();
+    if (!Number.isFinite(seconds) || !title) return;
+    chapters.push({ id: `chapter-${index}-${seconds}`, seconds, title });
+  });
+  return dedupeMediaChapters(chapters);
+}
+
+function parseMediaTranscript(markdown: string): MediaTranscriptSegment[] {
+  const section = extractMarkdownSectionText(markdown, ['Transcript', '转写', '字幕']) || markdown;
+  const lines = section.split('\n');
+  const segments: MediaTranscriptSegment[] = [];
+  let fallbackIndex = 0;
+  lines.forEach((line, index) => {
+    const trimmed = line.trim().replace(/&nbsp;/g, ' ');
+    if (!trimmed || trimmed.startsWith('<!--')) return;
+    const speakerMatch = /^\[([^\]]+)]\s+`?(\d{1,9})`?\s+(.+)$/.exec(trimmed);
+    if (speakerMatch) {
+      segments.push({
+        id: `segment-${index}-${speakerMatch[2]}`,
+        speaker: speakerMatch[1],
+        startMs: Number(speakerMatch[2]),
+        text: speakerMatch[3]?.trim() ?? ''
+      });
+      return;
+    }
+    const timeMatch = /^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)$/.exec(trimmed);
+    if (timeMatch) {
+      segments.push({
+        id: `segment-${index}-${timeMatch[1]}`,
+        startMs: parseTimestampSeconds(timeMatch[1] ?? '') * 1000,
+        text: timeMatch[2]?.trim() ?? ''
+      });
+      return;
+    }
+    if (trimmed.length > 80 || section !== markdown) {
+      segments.push({
+        id: `segment-auto-${index}`,
+        startMs: fallbackIndex * 30_000,
+        text: trimmed
+      });
+      fallbackIndex += 1;
+    }
+  });
+  return segments.filter((segment) => segment.text);
+}
+
+function dedupeMediaChapters(chapters: MediaChapter[]): MediaChapter[] {
+  const seen = new Set<string>();
+  return chapters.filter((chapter) => {
+    const key = `${chapter.seconds}:${chapter.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function parseTimestampSeconds(value: string): number {
+  const parts = value.split(':').map((part) => Number(part));
+  if (parts.some((part) => !Number.isFinite(part))) return 0;
+  if (parts.length === 3) return (parts[0] ?? 0) * 3600 + (parts[1] ?? 0) * 60 + (parts[2] ?? 0);
+  if (parts.length === 2) return (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+  return parts[0] ?? 0;
+}
+
+function findActiveTranscriptIndex(currentTimeMs: number, transcript: MediaTranscriptSegment[]): number {
+  return transcript.findIndex((segment, index) => {
+    const next = transcript[index + 1];
+    return currentTimeMs >= segment.startMs && (!next || currentTimeMs < next.startMs);
+  });
+}
+
+function findActiveChapterIndex(currentTimeMs: number, chapters: MediaChapter[]): number {
+  const seconds = currentTimeMs / 1000;
+  return chapters.findIndex((chapter, index) => {
+    const next = chapters[index + 1];
+    return seconds >= chapter.seconds && (!next || seconds < next.seconds);
+  });
+}
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    : `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function getYouTubeVideoId(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const match = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([^?&/#\s]+)/i.exec(input);
+  return match?.[1] ?? null;
+}
+
+function getPodcastAudioSource(item: LibraryItem): string | null {
+  const source = getLibraryReaderSource(item);
+  const bodyAudio = /audio_url:\s*['"]?([^\s'"]+)/i.exec(item.body)?.[1];
+  return bodyAudio ?? source;
+}
+
+function loadYouTubeIframeApi(): Promise<NonNullable<Window['YT']>> {
+  if (window.YT?.Player) return Promise.resolve(window.YT as NonNullable<Window['YT']>);
+  if (!youtubeApiPromise) {
+    youtubeApiPromise = new Promise((resolve, reject) => {
+      const previous = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        previous?.();
+        if (window.YT) resolve(window.YT as NonNullable<Window['YT']>);
+      };
+      if (document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) return;
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      script.onerror = () => reject(new Error('Failed to load YouTube iframe API'));
+      document.head.appendChild(script);
+    });
+  }
+  return youtubeApiPromise;
+}
+
+function flattenEpubToc(items: Array<{ label: string; href: string; subitems?: Array<{ label: string; href: string }> }>, depth = 1): RichReaderTocItem[] {
+  return items.flatMap((item) => [
+    { id: item.href, title: item.label, level: depth },
+    ...flattenEpubToc(item.subitems ?? [], depth + 1)
+  ]);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function ReaderLoading({ label }: { label: string }): JSX.Element {
+  return (
+    <div className="flex min-h-64 items-center justify-center gap-2 text-sm opacity-60">
+      <Loader2 size={16} className="animate-spin" />
+      {label}
+    </div>
+  );
+}
+
+function ReaderError({ label }: { label: string }): JSX.Element {
+  return (
+    <div className="flex min-h-64 items-center justify-center rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+      {label}
+    </div>
+  );
+}
+
+function EmptyMediaState({ label }: { label: string }): JSX.Element {
+  return <div className="rounded border border-current/10 p-4 text-sm opacity-60">{label}</div>;
 }
 
 function uniqueAnnotations(records: AnnotationRecord[]): AnnotationRecord[] {
