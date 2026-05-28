@@ -11,7 +11,8 @@ export const INDEXABLE_ENTITY_KINDS = [
   'conversation',
   'synthesis_artifact',
   'kb_doc',
-  'external_file'
+  'external_file',
+  'external_ai_session'
 ] as const;
 
 export type IndexableEntityKind = (typeof INDEXABLE_ENTITY_KINDS)[number];

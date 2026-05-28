@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, Plug, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { FolderOpen, Plug, Power, RefreshCw, Search, Trash2 } from 'lucide-react';
 import type {
   ConnectorConnection,
   ConnectorDefinition,
@@ -16,9 +16,15 @@ export function ConnectorsView(): JSX.Element {
   const [state, setState] = useState<LoadState>('idle');
   const [message, setMessage] = useState<string | null>(null);
 
-  const obsidian = useMemo(
-    () => definitions.find((definition) => definition.id === 'obsidian') ?? null,
-    [definitions]
+  const connectionsByConnector = useMemo(
+    () =>
+      connections.reduce((map, connection) => {
+        const items = map.get(connection.connector_id) ?? [];
+        items.push(connection);
+        map.set(connection.connector_id, items);
+        return map;
+      }, new Map<string, ConnectorConnection[]>()),
+    [connections]
   );
 
   async function reload(): Promise<void> {
@@ -60,18 +66,36 @@ export function ConnectorsView(): JSX.Element {
     };
   }, [query]);
 
-  async function connectObsidian(): Promise<void> {
+  async function connectDefinition(definition: ConnectorDefinition): Promise<void> {
     setMessage(null);
-    const picked = await window.orbit.connectors.chooseDirectory();
-    if (picked.canceled || !picked.path) return;
+    const config: Record<string, unknown> = {};
+    for (const field of definition.config_schema) {
+      if (field.type === 'directory') {
+        const picked = await window.orbit.connectors.chooseDirectory();
+        if (picked.canceled || !picked.path) return;
+        config[field.key] = picked.path;
+        continue;
+      }
+      if (field.required) {
+        setMessage(`${definition.display_name} 还不支持从这里配置字段：${field.label}`);
+        return;
+      }
+    }
     try {
-      await window.orbit.connectors.connect({
-        connector_id: 'obsidian',
-        display_name: 'Obsidian',
-        config: { root_path: picked.path }
-      });
+      const existing = definition.config_schema.length === 0
+        ? connections.find((connection) => connection.connector_id === definition.id)
+        : null;
+      if (existing) {
+        await window.orbit.connectors.scan(existing.id);
+      } else {
+        await window.orbit.connectors.connect({
+          connector_id: definition.id,
+          display_name: definition.display_name,
+          config
+        });
+      }
       await reload();
-      setMessage('Obsidian 已连接，AI 上下文索引会在下一次搜索或提问时刷新。');
+      setMessage(`${definition.display_name} 已连接，AI 上下文索引会在下一次搜索或提问时刷新。`);
     } catch (error) {
       setMessage((error as Error).message);
     }
@@ -100,10 +124,14 @@ export function ConnectorsView(): JSX.Element {
   }
 
   async function openHit(hit: ConnectorSearchHit): Promise<void> {
-    await window.orbit.connectors.open({
-      connection_id: hit.connection_id,
-      doc_ref: hit.doc_ref
-    });
+    try {
+      await window.orbit.connectors.open({
+        connection_id: hit.connection_id,
+        doc_ref: hit.doc_ref
+      });
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
   }
 
   return (
@@ -133,32 +161,58 @@ export function ConnectorsView(): JSX.Element {
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex flex-col gap-4">
-            <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Plug size={17} className="text-violet-500" />
-                    <h2 className="text-sm font-semibold">{obsidian?.display_name ?? 'Obsidian'}</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              {definitions.map((definition) => {
+                const related = connectionsByConnector.get(definition.id) ?? [];
+                const connected = related.some((connection) => connection.status === 'connected');
+                const icon = definition.config_schema.some((field) => field.type === 'directory')
+                  ? <FolderOpen size={15} />
+                  : <Power size={15} />;
+                return (
+                  <div key={definition.id} className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Plug size={17} className={definition.evidence_kind === 'external_ai_session' ? 'text-sky-500' : 'text-violet-500'} />
+                          <h2 className="text-sm font-semibold">{definition.display_name}</h2>
+                          {connected ? (
+                            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">
+                              已连接
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-neutral-500">
+                          {definition.description}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => void connectDefinition(definition)}
+                        className="inline-flex shrink-0 items-center gap-2 rounded-md bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-neutral-300"
+                      >
+                        {icon}
+                        {definition.config_schema.length === 0 && connected ? '重新扫描' : connectorActionLabel(definition)}
+                      </button>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {definition.capabilities.map((capability) => (
+                        <span key={capability} className="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                          {capability}
+                        </span>
+                      ))}
+                    </div>
+                    {related.length ? (
+                      <p className="mt-3 text-xs text-neutral-500">
+                        {related.length} 个连接 · {related.reduce((sum, item) => sum + item.item_count, 0)} 个条目
+                      </p>
+                    ) : null}
                   </div>
-                  <p className="mt-2 text-sm text-neutral-500">
-                    {obsidian?.description ?? '连接本地 Markdown vault。'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => void connectObsidian()}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-md bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-neutral-300"
-                >
-                  <FolderOpen size={15} />
-                  连接目录
-                </button>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {(obsidian?.capabilities ?? ['list', 'read', 'search', 'index']).map((capability) => (
-                  <span key={capability} className="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-                    {capability}
-                  </span>
-                ))}
-              </div>
+                );
+              })}
+              {definitions.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
+                  暂无可用连接器。
+                </p>
+              ) : null}
             </div>
 
             <div className="rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
@@ -177,7 +231,7 @@ export function ConnectorsView(): JSX.Element {
                           <p className="truncate text-sm font-medium">{connection.display_name}</p>
                         </div>
                         <p className="mt-1 truncate text-xs text-neutral-500">
-                          {String(connection.config['root_path'] ?? connection.connector_id)} · {connection.item_count} 个条目
+                          {connectionConfigLabel(connection)} · {connection.item_count} 个条目
                         </p>
                       </div>
                       <button
@@ -234,4 +288,17 @@ export function ConnectorsView(): JSX.Element {
       </div>
     </main>
   );
+}
+
+function connectorActionLabel(definition: ConnectorDefinition): string {
+  if (definition.config_schema.some((field) => field.type === 'directory')) return '连接目录';
+  return '启用';
+}
+
+function connectionConfigLabel(connection: ConnectorConnection): string {
+  const rootPath = connection.config['root_path'];
+  if (typeof rootPath === 'string' && rootPath) return rootPath;
+  const bridgeRoot = connection.config['bridge_root'];
+  if (typeof bridgeRoot === 'string' && bridgeRoot) return bridgeRoot;
+  return connection.connector_id;
 }

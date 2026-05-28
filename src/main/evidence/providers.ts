@@ -514,6 +514,9 @@ async function readOrbitSourceText(
     case 'kb_doc':
       return safeText(await fs.readFile(path.join(vaultPath, source.canonical_ref), 'utf8').catch(() => ''), contentView);
     case 'external_ai_session':
+      if (hasConnectorBacking(source)) {
+        return safeText(await readConnectorEvidenceText(vaultPath, source, contentView), contentView);
+      }
       return safeText(await readExternalAISessionSourceText(source, contentView), contentView);
     case 'external_file':
       return safeText(await readConnectorEvidenceText(vaultPath, source, contentView), contentView);
@@ -649,6 +652,10 @@ function entityRef(source: EvidenceSource): string {
 async function readMetadataFile(source: EvidenceSource, key: string): Promise<string> {
   const file = source.metadata?.[key];
   return typeof file === 'string' ? fs.readFile(file, 'utf8').catch(() => '') : '';
+}
+
+function hasConnectorBacking(source: EvidenceSource): boolean {
+  return typeof source.metadata?.['connector_connection_id'] === 'string' && typeof source.metadata?.['doc_ref'] === 'string';
 }
 
 function safeText(raw: string, contentView: EvidenceContentView): string {

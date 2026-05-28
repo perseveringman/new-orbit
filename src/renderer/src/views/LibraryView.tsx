@@ -67,14 +67,6 @@ export function LibraryView(): JSX.Element {
     }
   }
 
-  async function persistAnnotation(itemId: string, text: string): Promise<void> {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    await window.orbit.library.annotate(itemId, { text: trimmed, type: 'highlight' });
-    await reload();
-    setMessage('已添加标注。');
-  }
-
   async function markRead(itemId = active?.frontmatter.id): Promise<void> {
     if (!itemId) return;
     await window.orbit.library.markRead(itemId, { markRead: true, readingSecondsDelta: 1 });
@@ -171,7 +163,6 @@ export function LibraryView(): JSX.Element {
             items={allItems}
             activeItem={activeForReader}
             onActiveItemChange={setActiveId}
-            onAnnotate={(itemId, text) => persistAnnotation(itemId, text)}
             onMarkRead={(itemId) => void markRead(itemId)}
           />
         </section>

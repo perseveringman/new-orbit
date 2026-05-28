@@ -1,4 +1,4 @@
-import type { EvidenceContentView, EvidenceFingerprint, EvidencePrivacy } from './evidence';
+import type { EvidenceContentView, EvidenceFingerprint, EvidencePrivacy, EvidenceSourceKind } from './evidence';
 
 export const CONNECTOR_CATEGORIES = [
   'knowledge',
@@ -24,6 +24,7 @@ export const CONNECTOR_STATUSES = ['disconnected', 'connected', 'error'] as cons
 export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number];
 export type ConnectorCapability = (typeof CONNECTOR_CAPABILITIES)[number];
 export type ConnectorStatus = (typeof CONNECTOR_STATUSES)[number];
+export type ConnectorEvidenceKind = Extract<EvidenceSourceKind, 'external_file' | 'external_ai_session'>;
 
 export interface ConnectorDefinition {
   id: string;
@@ -31,6 +32,7 @@ export interface ConnectorDefinition {
   description: string;
   category: ConnectorCategory;
   capabilities: ConnectorCapability[];
+  evidence_kind?: ConnectorEvidenceKind;
   config_schema: ConnectorConfigField[];
   built_in: boolean;
 }
@@ -82,6 +84,7 @@ export interface ConnectorDocument {
   canonical_ref: string;
   updated_at: string;
   fingerprint: EvidenceFingerprint;
+  evidence_kind?: ConnectorEvidenceKind;
   excerpt?: string;
   metadata?: Record<string, unknown>;
 }

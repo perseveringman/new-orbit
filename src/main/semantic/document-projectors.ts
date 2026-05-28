@@ -220,11 +220,12 @@ export async function projectConnectorDocuments(vaultPath: string): Promise<Sema
   for (const doc of await store.listDocuments().catch(() => [])) {
     const content = await store.read({ connection_id: doc.connection_id, doc_ref: doc.doc_ref, content_view: 'safe_projection' });
     const ref = `connector:${doc.connection_id}:${doc.doc_ref}`;
+    const evidenceKind = doc.evidence_kind ?? 'external_file';
     docs.push({
-      id: `external_file:${doc.connection_id}:${doc.doc_ref}`,
-      entity_kind: 'external_file',
+      id: `${evidenceKind}:${doc.connection_id}:${doc.doc_ref}`,
+      entity_kind: evidenceKind,
       entity_ref: ref,
-      ...evidenceProjection('external_file', ref),
+      ...evidenceProjection(evidenceKind, ref),
       title: doc.title,
       content: cleanMarkdown(content?.content_markdown ?? doc.excerpt ?? ''),
       tags: [],

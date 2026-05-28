@@ -1,3 +1,4 @@
+import type { ConnectorEvidenceKind } from '@shared/connectors';
 import type { EvidenceContentView, EvidenceSource } from '@shared/evidence';
 import { evidenceSourceId } from '@shared/evidence';
 import { createConnectorStore } from './store';
@@ -14,9 +15,10 @@ export async function listConnectorEvidenceSources(vaultPath: string): Promise<E
   return docs.flat().map((doc) => {
     const connection = connectionById.get(doc.connection_id);
     const ref = connectorEvidenceRef(doc.connection_id, doc.doc_ref);
+    const kind = connectorEvidenceKind(doc.evidence_kind);
     return {
-      id: evidenceSourceId('external_file', ref),
-      kind: 'external_file',
+      id: evidenceSourceId(kind, ref),
+      kind,
       ownership: 'reference',
       title: doc.title,
       summary: doc.excerpt,
@@ -39,6 +41,7 @@ export async function listConnectorEvidenceSources(vaultPath: string): Promise<E
         connector_id: doc.connector_id,
         connector_name: connection?.display_name,
         doc_ref: doc.doc_ref,
+        evidence_kind: kind,
         ...(doc.metadata ?? {})
       }
     } satisfies EvidenceSource;
@@ -63,6 +66,10 @@ export async function readConnectorEvidenceText(
 
 function connectorEvidenceRef(connectionId: string, docRef: string): string {
   return `connector:${connectionId}:${docRef}`;
+}
+
+function connectorEvidenceKind(value: unknown): ConnectorEvidenceKind {
+  return value === 'external_ai_session' ? 'external_ai_session' : 'external_file';
 }
 
 function metadataString(source: EvidenceSource, key: string): string | null {

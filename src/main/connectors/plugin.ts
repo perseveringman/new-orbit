@@ -7,12 +7,17 @@ import type {
   ConnectorOpenInput,
   ConnectorSearchHit
 } from '@shared/connectors';
+import type { EvidenceContentView } from '@shared/evidence';
 
 export interface ConnectorPlugin {
   definition: ConnectorDefinition;
   normalizeConfig(input: ConnectConnectorInput['config']): Promise<Record<string, unknown>>;
   listDocuments(connection: ConnectorConnection): Promise<ConnectorDocument[]>;
-  readDocument(connection: ConnectorConnection, docRef: string): Promise<ConnectorDocumentContent | null>;
+  readDocument(
+    connection: ConnectorConnection,
+    docRef: string,
+    contentView?: EvidenceContentView
+  ): Promise<ConnectorDocumentContent | null>;
   search?(connection: ConnectorConnection, query: string, limit: number): Promise<ConnectorSearchHit[]>;
   openDocument?(connection: ConnectorConnection, input: ConnectorOpenInput): Promise<void>;
 }

@@ -162,6 +162,15 @@ import type {
   UpdateLibraryItemInput
 } from './library';
 import type {
+  AnnotationFilter,
+  AnnotationRecord,
+  AnnotationTargetRef,
+  AnnotationViewState,
+  CreateAnnotationInput,
+  UpdateAnnotationInput,
+  UpdateAnnotationViewStateInput
+} from './annotation';
+import type {
   CreateFeedSourceInput,
   EnqueueFeedTaskInput,
   EnqueueFeedTaskResult,
@@ -712,6 +721,16 @@ export const IPC = {
     archive: 'library:archive',
     distill: 'library:distill',
     acceptDistillation: 'library:acceptDistillation'
+  },
+  annotation: {
+    create: 'annotation:create',
+    get: 'annotation:get',
+    list: 'annotation:list',
+    listForTarget: 'annotation:listForTarget',
+    update: 'annotation:update',
+    archive: 'annotation:archive',
+    listViewStates: 'annotation:viewState:list',
+    updateViewState: 'annotation:viewState:update'
   },
   knowledgeBase: {
     list: 'knowledgeBase:list',
@@ -1823,6 +1842,20 @@ export interface OrbitApi {
     archive(id: string): Promise<LibraryItem>;
     distill(id: string): Promise<LibraryDistillationResult>;
     acceptDistillation(input: AcceptLibraryDistillationInput): Promise<LibraryAcceptDistillationResult>;
+  };
+  annotation: {
+    create(input: CreateAnnotationInput): Promise<AnnotationRecord>;
+    get(id: string): Promise<AnnotationRecord | null>;
+    list(filter?: AnnotationFilter): Promise<AnnotationRecord[]>;
+    listForTarget(target: AnnotationTargetRef, includeArchived?: boolean): Promise<AnnotationRecord[]>;
+    update(id: string, patch: UpdateAnnotationInput): Promise<AnnotationRecord>;
+    archive(id: string): Promise<AnnotationRecord>;
+    listViewStates(spaceId: string): Promise<AnnotationViewState[]>;
+    updateViewState(
+      spaceId: string,
+      annotationId: string,
+      patch: UpdateAnnotationViewStateInput
+    ): Promise<AnnotationViewState>;
   };
   feeds: {
     listSources(): Promise<FeedSource[]>;

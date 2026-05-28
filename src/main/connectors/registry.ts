@@ -1,8 +1,10 @@
+import { createLocalAISessionsConnectorPlugin } from './local-ai-sessions';
 import { createObsidianConnectorPlugin } from './obsidian';
 import { ConnectorPluginRegistry } from './plugin';
 
 export function createDefaultConnectorPluginRegistry(): ConnectorPluginRegistry {
   const registry = new ConnectorPluginRegistry();
   registry.register(createObsidianConnectorPlugin());
+  registry.register(createLocalAISessionsConnectorPlugin());
   return registry;
 }

@@ -8,6 +8,7 @@ describe('IPC contract', () => {
       [
         'activity',
         'agent',
+        'annotation',
         'approval',
         'area',
         'assets',
@@ -101,6 +102,23 @@ describe('IPC contract', () => {
     const keys = Object.keys(IPC.context).sort();
     expect(keys).toEqual(['buildPacket', 'workContext'].sort());
     for (const v of Object.values(IPC.context)) expect(v.startsWith('context:')).toBe(true);
+  });
+
+  it('annotation namespace declares generic annotation channels', () => {
+    const keys = Object.keys(IPC.annotation).sort();
+    expect(keys).toEqual(
+      [
+        'archive',
+        'create',
+        'get',
+        'list',
+        'listForTarget',
+        'listViewStates',
+        'update',
+        'updateViewState'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.annotation)) expect(v.startsWith('annotation:')).toBe(true);
   });
 
   it('agent namespace declares the M4 + M5 + M6 channels', () => {

@@ -139,6 +139,15 @@ import type {
   UpdateLibraryItemInput
 } from '@shared/library';
 import type {
+  AnnotationFilter,
+  AnnotationRecord,
+  AnnotationTargetRef,
+  AnnotationViewState,
+  CreateAnnotationInput,
+  UpdateAnnotationInput,
+  UpdateAnnotationViewStateInput
+} from '@shared/annotation';
+import type {
   CreateFeedSourceInput,
   EnqueueFeedTaskInput,
   EnqueueFeedTaskResult,
@@ -793,6 +802,26 @@ const api: OrbitApi = {
     distill: (id: string): Promise<LibraryDistillationResult> => ipcRenderer.invoke(IPC.library.distill, id),
     acceptDistillation: (input: AcceptLibraryDistillationInput): Promise<LibraryAcceptDistillationResult> =>
       ipcRenderer.invoke(IPC.library.acceptDistillation, input)
+  },
+  annotation: {
+    create: (input: CreateAnnotationInput): Promise<AnnotationRecord> =>
+      ipcRenderer.invoke(IPC.annotation.create, input),
+    get: (id: string): Promise<AnnotationRecord | null> => ipcRenderer.invoke(IPC.annotation.get, id),
+    list: (filter?: AnnotationFilter): Promise<AnnotationRecord[]> =>
+      ipcRenderer.invoke(IPC.annotation.list, filter),
+    listForTarget: (target: AnnotationTargetRef, includeArchived?: boolean): Promise<AnnotationRecord[]> =>
+      ipcRenderer.invoke(IPC.annotation.listForTarget, target, includeArchived),
+    update: (id: string, patch: UpdateAnnotationInput): Promise<AnnotationRecord> =>
+      ipcRenderer.invoke(IPC.annotation.update, id, patch),
+    archive: (id: string): Promise<AnnotationRecord> => ipcRenderer.invoke(IPC.annotation.archive, id),
+    listViewStates: (spaceId: string): Promise<AnnotationViewState[]> =>
+      ipcRenderer.invoke(IPC.annotation.listViewStates, spaceId),
+    updateViewState: (
+      spaceId: string,
+      annotationId: string,
+      patch: UpdateAnnotationViewStateInput
+    ): Promise<AnnotationViewState> =>
+      ipcRenderer.invoke(IPC.annotation.updateViewState, spaceId, annotationId, patch)
   },
   feeds: {
     listSources: (): Promise<FeedSource[]> => ipcRenderer.invoke(IPC.feeds.sourcesList),

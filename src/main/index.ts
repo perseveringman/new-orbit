@@ -42,6 +42,7 @@ import {
 } from './capture';
 import { registerNoteIpc } from './note/ipc';
 import { registerLibraryIpc } from './library/ipc';
+import { registerAnnotationIpc } from './annotation/ipc';
 import { registerFeedIpc } from './feed/ipc';
 import { registerKnowledgeBaseIpc } from './knowledge-base/ipc';
 import { registerConnectorsIpc } from './connectors/ipc';
@@ -419,6 +420,7 @@ function registerIpc(): void {
   registerCaptureIpc(() => currentVault?.path ?? null);
   registerNoteIpc(() => currentVault?.path ?? null);
   registerLibraryIpc(() => currentVault?.path ?? null);
+  registerAnnotationIpc(() => currentVault?.path ?? null);
   registerFeedIpc(() => currentVault?.path ?? null);
   registerKnowledgeBaseIpc(() => currentVault?.path ?? null);
   registerConnectorsIpc(() => currentVault?.path ?? null);

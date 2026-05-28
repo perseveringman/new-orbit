@@ -11,10 +11,13 @@ import {
   LayoutGrid,
   Languages,
   Link,
+  Loader2,
+  MessageCircle,
   Minus,
   NotebookPen,
   RotateCcw,
   Rows3,
+  Send,
   Sigma,
   Sparkles,
   X,
@@ -33,6 +36,14 @@ import {
   type RefObject
 } from 'react';
 import type { LibraryItem } from '@shared/library';
+import type { ChatAction, RuntimeErrorPayload, RuntimeMessagePayload } from '@shared/chat-protocol';
+import type { ConversationTurn } from '@shared/conversation';
+import type {
+  AnnotationRecord,
+  AnnotationTargetRef,
+  AnnotationViewState,
+  CreateAnnotationInput
+} from '@shared/annotation';
 import { StreamingMarkdown } from '../Timeline/StreamingMarkdown';
 import {
   getLibraryReaderKind,
@@ -56,11 +67,10 @@ interface LibrarySpatialReaderProps {
   activeItem: LibraryItem | null;
   className?: string;
   onActiveItemChange?(itemId: string): void;
-  onAnnotate?(itemId: string, text: string): Promise<void> | void;
   onMarkRead?(itemId: string): void;
 }
 
-type SelectionActionId = 'translate' | 'explain' | 'formula' | 'related';
+type SelectionActionId = 'translate' | 'explain' | 'formula' | 'related' | 'chat';
 
 interface SelectionActionDefinition {
   id: SelectionActionId;
@@ -99,12 +109,14 @@ interface SpatialThoughtNode {
   itemId: string;
   actionId: SelectionActionId | 'note';
   label: string;
+  sourceScope?: 'selection' | 'resource';
   sourceText: string;
   sourceQuote: ReaderQuoteAnchor;
   sourceWindowId?: string;
   sourceNodeId?: string;
   color: ReaderHighlightColor;
   contentMarkdown: string;
+  conversationId?: string;
   position: SpatialPoint;
   size: SpatialSize;
   status: 'open' | 'minimized' | 'closed';
@@ -141,6 +153,13 @@ interface ThoughtConnection {
   zIndex: number;
 }
 
+interface ThoughtChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  streaming?: boolean;
+}
+
 const DEFAULT_VIEWPORT: SpatialViewport = { x: 0, y: 0, zoom: 1 };
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 1.7;
@@ -149,6 +168,8 @@ const MIN_WINDOW_SIZE: SpatialSize = { width: 460, height: 320 };
 const DEFAULT_THOUGHT_SIZE: SpatialSize = { width: 390, height: 310 };
 const MIN_THOUGHT_SIZE: SpatialSize = { width: 300, height: 220 };
 const WINDOW_HEADER_DOCK_Y = 42;
+const SPATIAL_WINDOW_Z_OFFSET = 500;
+const LIBRARY_READER_SPACE_ID = 'library-workbench';
 const HIGHLIGHT_SELECTOR = '[data-reader-annotation-id]';
 const EMPTY_THOUGHT_NODES: SpatialThoughtNode[] = [];
 
@@ -165,7 +186,8 @@ const connectionColorClassByAction: Record<SpatialThoughtNode['actionId'], strin
   translate: 'stroke-sky-400',
   explain: 'stroke-emerald-400',
   formula: 'stroke-violet-400',
-  related: 'stroke-pink-400'
+  related: 'stroke-pink-400',
+  chat: 'stroke-indigo-400'
 };
 
 const THOUGHT_ACTIONS: SelectionActionDefinition[] = [
@@ -228,12 +250,13 @@ export function LibrarySpatialReader({
   activeItem,
   className,
   onActiveItemChange,
-  onAnnotate,
   onMarkRead
 }: LibrarySpatialReaderProps): JSX.Element {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const zIndexRef = useRef(140);
   const activeItemRef = useRef<LibraryItem | null>(activeItem);
+  const thoughtNodesRef = useRef<SpatialThoughtNode[]>([]);
+  const viewStatePersistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [mode, setMode] = useState<ReaderMode>('reading');
   const [viewport, setViewport] = useState<SpatialViewport>(DEFAULT_VIEWPORT);
   const [windows, setWindows] = useState<SpatialReaderWindowState[]>([]);
@@ -246,6 +269,18 @@ export function LibrarySpatialReader({
   useEffect(() => {
     activeItemRef.current = activeItem;
   }, [activeItem]);
+
+  useEffect(() => {
+    thoughtNodesRef.current = thoughtNodes;
+  }, [thoughtNodes]);
+
+  useEffect(
+    () => () => {
+      viewStatePersistTimersRef.current.forEach((timer) => clearTimeout(timer));
+      viewStatePersistTimersRef.current.clear();
+    },
+    []
+  );
 
   const getNextZIndex = useCallback(() => {
     zIndexRef.current += 1;
@@ -305,6 +340,61 @@ export function LibrarySpatialReader({
         : EMPTY_THOUGHT_NODES,
     [activeItem, thoughtNodes]
   );
+  const annotationItemIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          [
+            activeItem?.frontmatter.id,
+            ...windows.map((windowState) => windowState.itemId)
+          ].filter((itemId): itemId is string => Boolean(itemId))
+        )
+      ],
+    [activeItem, windows]
+  );
+  const annotationLoadKey = annotationItemIds.join('|');
+
+  useEffect(() => {
+    let cancelled = false;
+    if (annotationItemIds.length === 0) {
+      setThoughtNodes([]);
+      return;
+    }
+
+    async function loadAnnotations(): Promise<void> {
+      const [viewStates, annotationGroups] = await Promise.all([
+        window.orbit.annotation.listViewStates(LIBRARY_READER_SPACE_ID).catch(() => []),
+        Promise.all(
+          annotationItemIds.map((itemId) =>
+            window.orbit.annotation.listForTarget(libraryAnnotationTarget(itemId)).catch(() => [])
+          )
+        )
+      ]);
+      if (cancelled) return;
+      const viewStateById = new Map(viewStates.map((state) => [state.annotation_id, state]));
+      const records = uniqueAnnotations(annotationGroups.flat());
+      const recordNodes = records
+        .map((record, index) =>
+          annotationRecordToThoughtNode(record, itemById, viewStateById.get(record.id), index)
+        )
+        .filter((node): node is SpatialThoughtNode => Boolean(node));
+      const legacyNodes = annotationItemIds.flatMap((itemId) =>
+        legacyLibraryAnnotationsToThoughtNodes(itemById.get(itemId), viewStateById)
+      );
+      const nodes = mergeThoughtNodes(recordNodes, legacyNodes);
+      const maxZIndex = Math.max(0, ...nodes.map((node) => node.zIndex));
+      zIndexRef.current = Math.max(zIndexRef.current, maxZIndex);
+      setThoughtNodes(nodes);
+    }
+
+    void loadAnnotations().catch((error) => {
+      console.error('Failed to load annotations', error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [annotationLoadKey, itemById]);
 
   function switchMode(nextMode: ReaderMode): void {
     setMode(nextMode);
@@ -336,6 +426,11 @@ export function LibrarySpatialReader({
     const zIndexById = allocateZIndexBlock(raisedNodeIds);
     updateWindow(windowId, { status: 'open', zIndex: getNextZIndex() });
     if (zIndexById.size === 0) return;
+    raisedNodeIds.forEach((id) => {
+      const node = thoughtNodesRef.current.find((candidate) => candidate.id === id);
+      const nextZIndex = zIndexById.get(id);
+      if (node && nextZIndex) scheduleAnnotationViewStatePersist({ ...node, status: 'open', zIndex: nextZIndex });
+    });
     setThoughtNodes((current) =>
       current.map((node) => {
         const nextZIndex = zIndexById.get(node.id);
@@ -464,6 +559,7 @@ export function LibrarySpatialReader({
       itemId: item.frontmatter.id,
       actionId: action.id,
       label: action.label,
+      sourceScope: 'selection',
       sourceText: nextSelection.text,
       sourceQuote: nextSelection.quote,
       sourceWindowId: nextSelection.sourceWindowId,
@@ -476,6 +572,74 @@ export function LibrarySpatialReader({
       zIndex: getNextZIndex(),
       createdAt: timestamp,
       updatedAt: timestamp
+    };
+  }
+
+  function scheduleAnnotationViewStatePersist(node: SpatialThoughtNode): void {
+    const existing = viewStatePersistTimersRef.current.get(node.id);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      viewStatePersistTimersRef.current.delete(node.id);
+      void window.orbit.annotation
+        .updateViewState(LIBRARY_READER_SPACE_ID, node.id, {
+          position: node.position,
+          size: node.size,
+          status: node.status,
+          z_index: node.zIndex
+        })
+        .catch((error) => {
+          console.error('Failed to persist annotation view state', error);
+        });
+    }, 180);
+    viewStatePersistTimersRef.current.set(node.id, timer);
+  }
+
+  function appendPersistedThoughtNode(input: CreateAnnotationInput, fallbackNode: SpatialThoughtNode): void {
+    void window.orbit.annotation
+      .create(input)
+      .then(async (record) => {
+        const viewState = await window.orbit.annotation.updateViewState(LIBRARY_READER_SPACE_ID, record.id, {
+          position: fallbackNode.position,
+          size: fallbackNode.size,
+          status: fallbackNode.status,
+          z_index: fallbackNode.zIndex
+        });
+        const persistedNode =
+          annotationRecordToThoughtNode(record, itemById, viewState) ?? {
+            ...fallbackNode,
+            id: record.id
+          };
+        setThoughtNodes((current) => mergeThoughtNodes(current, [persistedNode]));
+      })
+      .catch((error) => {
+        console.error('Failed to create annotation', error);
+      });
+  }
+
+  function buildSelectionAnnotationInput(
+    nextSelection: ReaderSelectionState,
+    node: SpatialThoughtNode,
+    item: LibraryItem,
+    type: 'comment' | 'ai_note',
+    metadata?: Record<string, unknown>
+  ): CreateAnnotationInput {
+    const contextTarget = libraryAnnotationTarget(item.frontmatter.id, item.frontmatter.title);
+    const parentAnnotationId = nextSelection.sourceNodeId;
+    return {
+      target: parentAnnotationId
+        ? { kind: 'annotation', ref: parentAnnotationId }
+        : contextTarget,
+      context_target: contextTarget,
+      anchor: {
+        kind: parentAnnotationId ? 'annotation_body_range' : 'text_quote',
+        quote: nextSelection.quote
+      },
+      type,
+      color: node.color,
+      title: node.label,
+      body_markdown: node.contentMarkdown,
+      ...(parentAnnotationId ? { parent_annotation_id: parentAnnotationId } : {}),
+      metadata
     };
   }
 
@@ -497,21 +661,33 @@ export function LibrarySpatialReader({
 
   function runSelectionAction(action: SelectionActionDefinition): void {
     if (!selection) return;
+    const item = itemById.get(selection.itemId);
+    if (!item) return;
     const node = createThoughtNode(selection, action);
     if (!node) return;
     openSelectionContext(selection);
-    setThoughtNodes((current) => [...current, node]);
+    appendPersistedThoughtNode(
+      buildSelectionAnnotationInput(selection, node, item, 'ai_note', { action_id: action.id }),
+      node
+    );
     clearSelection();
   }
 
   function runAllSelectionActions(): void {
     if (!selection) return;
+    const item = itemById.get(selection.itemId);
+    if (!item) return;
     const nodes = THOUGHT_ACTIONS.map((action, index) => createThoughtNode(selection, action, index)).filter(
       (node): node is SpatialThoughtNode => Boolean(node)
     );
     if (nodes.length === 0) return;
     openSelectionContext(selection);
-    setThoughtNodes((current) => [...current, ...nodes]);
+    nodes.forEach((node) => {
+      appendPersistedThoughtNode(
+        buildSelectionAnnotationInput(selection, node, item, 'ai_note', { action_id: node.actionId }),
+        node
+      );
+    });
     clearSelection();
   }
 
@@ -525,6 +701,7 @@ export function LibrarySpatialReader({
       itemId: item.frontmatter.id,
       actionId: 'note',
       label: '标注',
+      sourceScope: 'selection',
       sourceText: selection.text,
       sourceQuote: selection.quote,
       sourceWindowId: selection.sourceWindowId,
@@ -539,14 +716,134 @@ export function LibrarySpatialReader({
       updatedAt: timestamp
     };
     openSelectionContext(selection);
-    setThoughtNodes((current) => [...current, noteNode]);
-    void Promise.resolve(onAnnotate?.(selection.itemId, selection.text)).catch((error) => {
-      console.error('Failed to persist library annotation', error);
-    });
+    appendPersistedThoughtNode(buildSelectionAnnotationInput(selection, noteNode, item, 'comment'), noteNode);
     clearSelection();
   }
 
+  function createSelectionChat(): void {
+    if (!selection) return;
+    const item = itemById.get(selection.itemId);
+    if (!item) return;
+    const timestamp = new Date().toISOString();
+    const chatNode: SpatialThoughtNode = {
+      id: createThoughtId('chat'),
+      itemId: item.frontmatter.id,
+      actionId: 'chat',
+      label: '划线对话',
+      sourceScope: 'selection',
+      sourceText: selection.text,
+      sourceQuote: selection.quote,
+      sourceWindowId: selection.sourceWindowId,
+      sourceNodeId: selection.sourceNodeId,
+      color: 'purple',
+      contentMarkdown: buildSelectionChatContent(selection.text, item),
+      position: getThoughtPosition(selection, 0, { width: 430, height: 360 }),
+      size: { width: 430, height: 360 },
+      status: 'open',
+      zIndex: getNextZIndex(),
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    openSelectionContext(selection);
+    appendPersistedThoughtNode(
+      buildSelectionAnnotationInput(selection, chatNode, item, 'ai_note', { action_id: 'chat' }),
+      chatNode
+    );
+    clearSelection();
+  }
+
+  function bindThoughtConversation(nodeId: string, conversationId: string): void {
+    updateThoughtNode(nodeId, { conversationId });
+    const node = thoughtNodesRef.current.find((candidate) => candidate.id === nodeId);
+    void window.orbit.annotation
+      .update(nodeId, {
+        metadata: {
+          action_id: node?.actionId ?? 'chat',
+          conversation_id: conversationId
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to bind annotation conversation', error);
+      });
+  }
+
+  function getResourceThoughtPosition(itemId: string, sourceWindowId?: string): SpatialPoint {
+    const existingCount = thoughtNodes.filter(
+      (node) => node.itemId === itemId && node.sourceScope === 'resource' && node.status !== 'closed'
+    ).length;
+    const offsetIndex = Math.min(existingCount, 6);
+    const size = DEFAULT_THOUGHT_SIZE;
+    const sourceWindow = sourceWindowId
+      ? windows.find((window) => window.id === sourceWindowId)
+      : null;
+
+    if (sourceWindow) {
+      return constrainThoughtPosition(
+        {
+          x: sourceWindow.position.x + sourceWindow.size.width + 34 + offsetIndex * 34,
+          y: sourceWindow.position.y + 74 + offsetIndex * 38
+        },
+        size
+      );
+    }
+
+    const rect = workspaceRef.current?.getBoundingClientRect();
+    return constrainThoughtPosition(
+      {
+        x: rect ? Math.max(48, rect.width - size.width - 48) : 80,
+        y: 72 + offsetIndex * 38
+      },
+      size,
+      mode === 'reading' ? DEFAULT_VIEWPORT : viewport
+    );
+  }
+
+  function createResourceNote(item: LibraryItem, sourceWindowId?: string): void {
+    const timestamp = new Date().toISOString();
+    const position = getResourceThoughtPosition(item.frontmatter.id, sourceWindowId);
+    const zIndex = getNextZIndex();
+    const node: SpatialThoughtNode = {
+      id: createThoughtId('note'),
+      itemId: item.frontmatter.id,
+      actionId: 'note',
+      label: '资料标注',
+      sourceScope: 'resource',
+      sourceText: `整篇资料：${item.frontmatter.title}`,
+      sourceQuote: { exact: '' },
+      sourceWindowId,
+      color: 'yellow',
+      contentMarkdown: buildResourceNoteContent(item),
+      position,
+      size: DEFAULT_THOUGHT_SIZE,
+      status: 'open',
+      zIndex,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    onActiveItemChange?.(item.frontmatter.id);
+    appendPersistedThoughtNode(
+      {
+        target: libraryAnnotationTarget(item.frontmatter.id, item.frontmatter.title),
+        anchor: { kind: 'whole_source' },
+        type: 'resource_note',
+        color: 'yellow',
+        title: '资料标注',
+        body_markdown: buildResourceNoteContent(item)
+      },
+      node
+    );
+  }
+
+  function createResourceNoteForWindow(windowId: string): void {
+    const sourceWindow = windows.find((window) => window.id === windowId);
+    const item = sourceWindow ? itemById.get(sourceWindow.itemId) : null;
+    if (!item) return;
+    createResourceNote(item, windowId);
+  }
+
   function updateThoughtNode(nodeId: string, patch: Partial<SpatialThoughtNode>): void {
+    const currentNode = thoughtNodesRef.current.find((node) => node.id === nodeId);
+    if (currentNode) scheduleAnnotationViewStatePersist({ ...currentNode, ...patch });
     setThoughtNodes((current) => current.map((node) => (node.id === nodeId ? { ...node, ...patch } : node)));
   }
 
@@ -554,6 +851,11 @@ export function LibrarySpatialReader({
     const raisedNodeIds = getThoughtSubtreeNodeIdsInRaiseOrder(thoughtNodes, nodeId);
     const zIndexById = allocateZIndexBlock(raisedNodeIds);
     if (zIndexById.size === 0) return;
+    raisedNodeIds.forEach((id) => {
+      const node = thoughtNodesRef.current.find((candidate) => candidate.id === id);
+      const nextZIndex = zIndexById.get(id);
+      if (node && nextZIndex) scheduleAnnotationViewStatePersist({ ...node, status: 'open', zIndex: nextZIndex });
+    });
     setThoughtNodes((current) =>
       current.map((node) => {
         const nextZIndex = zIndexById.get(node.id);
@@ -564,12 +866,17 @@ export function LibrarySpatialReader({
     );
   }
 
-  function moveAttachedThoughtNodes(sourceWindowId: string, delta: SpatialPoint): void {
+  function moveAttachedThoughtNodes(sourceWindowId: string, itemId: string, delta: SpatialPoint): void {
     if (delta.x === 0 && delta.y === 0) return;
     setThoughtNodes((current) => {
       const attachedNodeIds = new Set(
         current
-          .filter((node) => node.sourceWindowId === sourceWindowId && !node.sourceNodeId)
+          .filter(
+            (node) =>
+              !node.sourceNodeId &&
+              (node.sourceWindowId === sourceWindowId ||
+                (!node.sourceWindowId && node.itemId === itemId))
+          )
           .map((node) => node.id)
       );
       const nodeIdsToMove = new Set(attachedNodeIds);
@@ -579,17 +886,18 @@ export function LibrarySpatialReader({
         });
       });
 
-      return current.map((node) =>
-        nodeIdsToMove.has(node.id)
-          ? {
-              ...node,
-              position: {
-                x: node.position.x + delta.x,
-                y: node.position.y + delta.y
-              }
-            }
-          : node
-      );
+      return current.map((node) => {
+        if (!nodeIdsToMove.has(node.id)) return node;
+        const next = {
+          ...node,
+          position: {
+            x: node.position.x + delta.x,
+            y: node.position.y + delta.y
+          }
+        };
+        scheduleAnnotationViewStatePersist(next);
+        return next;
+      });
     });
   }
 
@@ -602,7 +910,7 @@ export function LibrarySpatialReader({
         }
       : { x: 0, y: 0 };
     updateWindow(windowId, { position });
-    moveAttachedThoughtNodes(windowId, delta);
+    if (currentWindow) moveAttachedThoughtNodes(windowId, currentWindow.itemId, delta);
   }
 
   function moveThoughtNodeWithDescendants(nodeId: string, position: SpatialPoint): void {
@@ -616,15 +924,21 @@ export function LibrarySpatialReader({
         : { x: 0, y: 0 };
       const descendantNodeIds = getDescendantThoughtNodeIds(current, nodeId);
       return current.map((node) => {
-        if (node.id === nodeId) return { ...node, position };
+        if (node.id === nodeId) {
+          const next = { ...node, position };
+          scheduleAnnotationViewStatePersist(next);
+          return next;
+        }
         if (!descendantNodeIds.has(node.id) || delta.x === 0 && delta.y === 0) return node;
-        return {
+        const next = {
           ...node,
           position: {
             x: node.position.x + delta.x,
             y: node.position.y + delta.y
           }
         };
+        scheduleAnnotationViewStatePersist(next);
+        return next;
       });
     });
   }
@@ -695,13 +1009,23 @@ export function LibrarySpatialReader({
               </IconButton>
             </>
           ) : activeItem ? (
-            <button
-              type="button"
-              onClick={() => onMarkRead?.(activeItem.frontmatter.id)}
-              className="rounded border border-neutral-200 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-900"
-            >
-              标为已读
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => createResourceNote(activeItem)}
+                className="inline-flex h-8 items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950"
+              >
+                <NotebookPen size={14} />
+                资料标注
+              </button>
+              <button
+                type="button"
+                onClick={() => onMarkRead?.(activeItem.frontmatter.id)}
+                className="rounded border border-neutral-200 px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-900"
+              >
+                标为已读
+              </button>
+            </>
           ) : null}
         </div>
       </header>
@@ -728,6 +1052,7 @@ export function LibrarySpatialReader({
           onResizeWindow={(windowId, size) => updateWindow(windowId, { size })}
           onCloseWindow={(windowId) => updateWindow(windowId, { status: 'closed' })}
           onMinimizeWindow={(windowId) => updateWindow(windowId, { status: 'minimized' })}
+          onCreateResourceNote={createResourceNoteForWindow}
           onDuplicateWindow={(windowId) => {
             const source = windows.find((window) => window.id === windowId);
             const item = source ? itemById.get(source.itemId) : null;
@@ -747,6 +1072,7 @@ export function LibrarySpatialReader({
           onResizeThought={(nodeId, size) => updateThoughtNode(nodeId, { size })}
           onCloseThought={(nodeId) => updateThoughtNode(nodeId, { status: 'closed' })}
           onMinimizeThought={(nodeId) => updateThoughtNode(nodeId, { status: 'minimized' })}
+          onBindThoughtConversation={bindThoughtConversation}
         />
       )}
       {mode === 'reading' && activeItem ? (
@@ -759,6 +1085,7 @@ export function LibrarySpatialReader({
           onCloseThought={(nodeId) => updateThoughtNode(nodeId, { status: 'closed' })}
           onMinimizeThought={(nodeId) => updateThoughtNode(nodeId, { status: 'minimized' })}
           onReaderSelection={handleReaderSelection}
+          onBindThoughtConversation={bindThoughtConversation}
         />
       ) : null}
       <SelectionActionBar
@@ -766,6 +1093,7 @@ export function LibrarySpatialReader({
         actions={THOUGHT_ACTIONS}
         onDismiss={clearSelection}
         onCreateNote={createSelectionNote}
+        onCreateChat={createSelectionChat}
         onRunAction={runSelectionAction}
         onRunAll={runAllSelectionActions}
       />
@@ -813,7 +1141,8 @@ function ReadingThoughtLayer({
   onResizeThought,
   onCloseThought,
   onMinimizeThought,
-  onReaderSelection
+  onReaderSelection,
+  onBindThoughtConversation
 }: {
   item: LibraryItem;
   thoughtNodes: SpatialThoughtNode[];
@@ -823,6 +1152,7 @@ function ReadingThoughtLayer({
   onCloseThought(nodeId: string): void;
   onMinimizeThought(nodeId: string): void;
   onReaderSelection(selection: ReaderSelectionState): void;
+  onBindThoughtConversation(nodeId: string, conversationId: string): void;
 }): JSX.Element | null {
   const layerRef = useRef<HTMLDivElement>(null);
   const openThoughtNodes = thoughtNodes.filter((node) => node.status === 'open');
@@ -867,6 +1197,8 @@ function ReadingThoughtLayer({
             onReaderSelection={onReaderSelection}
             childThoughtNodes={childThoughtNodesBySourceId.get(node.id) ?? EMPTY_THOUGHT_NODES}
             onActivateThought={onActivateThought}
+            canvasItems={[item]}
+            onBindConversation={onBindThoughtConversation}
           />
         ))}
       </div>
@@ -902,7 +1234,7 @@ function ReadingThoughtLayer({
                     </span>
                   </span>
                   <span className="mt-0.5 block truncate text-[10px] text-amber-800/70 dark:text-amber-100/60">
-                    {clipText(node.sourceText, 44)}
+                    {clipText(getThoughtSourcePreview(node, item), 44)}
                   </span>
                 </span>
               </button>
@@ -944,13 +1276,15 @@ function SpaceCanvas({
   onResizeWindow,
   onCloseWindow,
   onMinimizeWindow,
+  onCreateResourceNote,
   onDuplicateWindow,
   onReaderSelection,
   onActivateThought,
   onMoveThought,
   onResizeThought,
   onCloseThought,
-  onMinimizeThought
+  onMinimizeThought,
+  onBindThoughtConversation
 }: {
   itemById: Map<string, LibraryItem>;
   windows: SpatialReaderWindowState[];
@@ -965,6 +1299,7 @@ function SpaceCanvas({
   onResizeWindow(windowId: string, size: SpatialSize): void;
   onCloseWindow(windowId: string): void;
   onMinimizeWindow(windowId: string): void;
+  onCreateResourceNote(windowId: string): void;
   onDuplicateWindow(windowId: string): void;
   onReaderSelection(selection: ReaderSelectionState): void;
   onActivateThought(nodeId: string): void;
@@ -972,6 +1307,7 @@ function SpaceCanvas({
   onResizeThought(nodeId: string, size: SpatialSize): void;
   onCloseThought(nodeId: string): void;
   onMinimizeThought(nodeId: string): void;
+  onBindThoughtConversation(nodeId: string, conversationId: string): void;
 }): JSX.Element {
   const canvasRef = useRef<HTMLDivElement>(null);
   const viewportLayerRef = useRef<HTMLDivElement>(null);
@@ -984,6 +1320,13 @@ function SpaceCanvas({
   const minimizedThoughtNodes = thoughtNodes.filter((node) => node.status === 'minimized');
   const visibleThoughtNodes = thoughtNodes.filter((node) => node.status !== 'closed');
   const openWindowIds = useMemo(() => openWindows.map((window) => window.id), [openWindows]);
+  const canvasItems = useMemo(
+    () =>
+      Array.from(new Set(openWindows.map((window) => window.itemId)))
+        .map((itemId) => itemById.get(itemId))
+        .filter((item): item is LibraryItem => Boolean(item)),
+    [itemById, openWindows]
+  );
   const thoughtNodeIds = useMemo(() => new Set(thoughtNodes.map((node) => node.id)), [thoughtNodes]);
   const childThoughtNodesBySourceId = useMemo(() => {
     const children = new Map<string, SpatialThoughtNode[]>();
@@ -1148,6 +1491,7 @@ function SpaceCanvas({
               onResize={onResizeWindow}
               onClose={onCloseWindow}
               onMinimize={onMinimizeWindow}
+              onCreateResourceNote={onCreateResourceNote}
               onDuplicate={onDuplicateWindow}
               onReaderSelection={onReaderSelection}
               thoughtNodes={thoughtNodes}
@@ -1169,6 +1513,8 @@ function SpaceCanvas({
             onReaderSelection={onReaderSelection}
             childThoughtNodes={childThoughtNodesBySourceId.get(node.id) ?? EMPTY_THOUGHT_NODES}
             onActivateThought={onActivateThought}
+            canvasItems={canvasItems}
+            onBindConversation={onBindThoughtConversation}
           />
         ))}
       </div>
@@ -1218,7 +1564,7 @@ function SpaceCanvas({
                       </span>
                     </span>
                     <span className="mt-0.5 block truncate text-[10px] text-amber-800/70 dark:text-amber-100/60">
-                      {sourceItem?.frontmatter.title ?? '资料'} · {clipText(node.sourceText, 36)}
+                      {getThoughtSourcePreview(node, sourceItem)}
                     </span>
                   </span>
                 </button>
@@ -1275,6 +1621,7 @@ function SpatialReaderWindow({
   onResize,
   onClose,
   onMinimize,
+  onCreateResourceNote,
   onDuplicate,
   onReaderSelection,
   thoughtNodes,
@@ -1288,6 +1635,7 @@ function SpatialReaderWindow({
   onResize(windowId: string, size: SpatialSize): void;
   onClose(windowId: string): void;
   onMinimize(windowId: string): void;
+  onCreateResourceNote(windowId: string): void;
   onDuplicate(windowId: string): void;
   onReaderSelection(selection: ReaderSelectionState): void;
   thoughtNodes: SpatialThoughtNode[];
@@ -1354,6 +1702,7 @@ function SpatialReaderWindow({
       id={getSpatialReaderWindowElementId(windowState.id)}
       data-spatial-window
       data-spatial-interactive
+      data-reader-item-id={windowState.itemId}
       className={cx(
         'absolute flex min-h-[320px] min-w-[460px] flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white text-neutral-950 shadow-[0_24px_70px_-34px_rgba(15,23,42,0.65),0_0_0_1px_rgba(229,229,229,0.7)] dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100',
         (dragging || resizing) && 'select-none'
@@ -1363,7 +1712,7 @@ function SpatialReaderWindow({
         top: windowState.position.y,
         width: windowState.size.width,
         height: windowState.size.height,
-        zIndex: windowState.zIndex
+        zIndex: getSpatialWindowZIndex(windowState.zIndex)
       }}
       onPointerDownCapture={() => onActivate(windowState.id)}
     >
@@ -1406,6 +1755,9 @@ function SpatialReaderWindow({
         <IconButton label="复制阅读窗口" onClick={() => onDuplicate(windowState.id)}>
           <Copy size={14} />
         </IconButton>
+        <IconButton label="标注整篇资料" onClick={() => onCreateResourceNote(windowState.id)}>
+          <NotebookPen size={14} />
+        </IconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-hidden">
         <LibraryReaderSurface
@@ -1446,7 +1798,9 @@ function SpatialThoughtWindow({
   onMinimize,
   onReaderSelection,
   childThoughtNodes,
-  onActivateThought
+  onActivateThought,
+  canvasItems,
+  onBindConversation
 }: {
   node: SpatialThoughtNode;
   viewport: SpatialViewport;
@@ -1459,6 +1813,8 @@ function SpatialThoughtWindow({
   onReaderSelection(selection: ReaderSelectionState): void;
   childThoughtNodes: SpatialThoughtNode[];
   onActivateThought(nodeId: string): void;
+  canvasItems: LibraryItem[];
+  onBindConversation(nodeId: string, conversationId: string): void;
 }): JSX.Element {
   const dragStartRef = useRef<SpatialPoint | null>(null);
   const resizeStartRef = useRef<SpatialPoint | null>(null);
@@ -1467,6 +1823,113 @@ function SpatialThoughtWindow({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
+  const [chatConversationId, setChatConversationId] = useState<string | null>(node.conversationId ?? null);
+  const [chatMessages, setChatMessages] = useState<ThoughtChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setChatConversationId(node.conversationId ?? null);
+  }, [node.conversationId]);
+
+  useEffect(() => {
+    if (node.actionId !== 'chat' || !chatConversationId) return;
+    let cancelled = false;
+    void window.orbit.chat
+      .getConversation(chatConversationId)
+      .then((conversation) => {
+        if (cancelled || !conversation) return;
+        setChatMessages(conversation.turns.map(conversationTurnToThoughtChatMessage));
+        setChatLoading(Boolean(conversation.currentRunId));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [chatConversationId, node.actionId]);
+
+  useEffect(() => {
+    if (node.actionId !== 'chat' || !chatConversationId) return;
+    const off = window.orbit.chat.onRuntimeEvent((event) => {
+      if (event.conversationId !== chatConversationId) return;
+      if (event.kind === 'runtime.message') {
+        const payload = event.payload as RuntimeMessagePayload;
+        if (payload.role === 'user') return;
+        setChatMessages((current) => mergeAssistantRuntimeMessage(current, {
+          id: event.id,
+          runId: event.runId,
+          text: payload.text,
+          streaming: Boolean(payload.isStreaming),
+          final: Boolean(payload.isFinal)
+        }));
+      }
+      if (event.kind === 'runtime.done') {
+        setChatLoading(false);
+      }
+      if (event.kind === 'runtime.error') {
+        const payload = event.payload as RuntimeErrorPayload;
+        setChatLoading(false);
+        setChatError(payload.message);
+      }
+    });
+    return off;
+  }, [chatConversationId, node.actionId]);
+
+  async function submitChatQuestion(): Promise<void> {
+    const question = chatInput.trim();
+    if (!question || chatLoading) return;
+    setChatInput('');
+    setChatError(null);
+    setChatLoading(true);
+    setChatMessages((current) => [
+      ...current,
+      { id: `local-user-${Date.now()}`, role: 'user', text: question }
+    ]);
+    try {
+      let conversationId = chatConversationId;
+      if (!conversationId) {
+        const now = new Date().toISOString();
+        const conversation = await window.orbit.chat.createConversation({
+          anchor: {
+            kind: 'ask_anywhere_session',
+            refId: `reader-selection:${node.id}`,
+            addedAt: now
+          },
+          scope: { kind: 'library', item_id: node.itemId },
+          title: `划线对话 · ${sourceItem?.frontmatter.title ?? node.label}`,
+          runtimeHint: 'claude'
+        });
+        conversationId = conversation.id;
+        setChatConversationId(conversationId);
+        onBindConversation(node.id, conversationId);
+      }
+      const prompt = buildSelectionChatPrompt({
+        question,
+        node,
+        currentItem: sourceItem,
+        canvasItems
+      });
+      const action: ChatAction<'chat.send_message'> = {
+        kind: 'chat.send_message',
+        conversationId,
+        payload: {
+          text: prompt,
+          draft: {
+            text: prompt,
+            clientMeta: {
+              sourceSurface: 'unknown',
+              submittedAt: new Date().toISOString()
+            }
+          }
+        }
+      };
+      await window.orbit.chat.sendAction(action);
+    } catch (error) {
+      setChatLoading(false);
+      setChatError(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   useEffect(() => {
     if (!dragging) return;
@@ -1553,7 +2016,7 @@ function SpatialThoughtWindow({
         top: node.position.y,
         width: node.size.width,
         height: node.size.height,
-        zIndex: node.zIndex + 500
+        zIndex: getSpatialWindowZIndex(node.zIndex)
       }}
       onPointerDownCapture={() => onActivate(node.id)}
     >
@@ -1598,11 +2061,21 @@ function SpatialThoughtWindow({
         onKeyUp={captureThoughtSelection}
       >
         <blockquote className="mb-3 border-l-2 border-amber-300 bg-white/60 py-1 pl-3 text-xs leading-5 text-amber-900/80 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100/80">
-          {node.sourceText}
+          {getThoughtSourcePreview(node, sourceItem)}
         </blockquote>
         <div className="prose prose-sm max-w-none dark:prose-invert">
           <StreamingMarkdown content={node.contentMarkdown} />
         </div>
+        {node.actionId === 'chat' ? (
+          <SelectionChatPanel
+            messages={chatMessages}
+            value={chatInput}
+            loading={chatLoading}
+            error={chatError}
+            onChange={setChatInput}
+            onSubmit={() => void submitChatQuestion()}
+          />
+        ) : null}
       </div>
       <div
         data-spatial-interactive
@@ -1620,6 +2093,92 @@ function SpatialThoughtWindow({
         <div className="absolute bottom-1.5 right-1.5 h-3 w-3 rounded-br border-b-2 border-r-2 border-amber-500/70" />
       </div>
     </section>
+  );
+}
+
+function SelectionChatPanel({
+  messages,
+  value,
+  loading,
+  error,
+  onChange,
+  onSubmit
+}: {
+  messages: ThoughtChatMessage[];
+  value: string;
+  loading: boolean;
+  error: string | null;
+  onChange(value: string): void;
+  onSubmit(): void;
+}): JSX.Element {
+  return (
+    <div
+      data-spatial-interactive
+      className="mt-4 rounded border border-indigo-200 bg-white/70 p-2 dark:border-indigo-900/70 dark:bg-neutral-950/50"
+    >
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-200">
+        <MessageCircle size={13} />
+        <span>划线对话</span>
+        {loading ? <Loader2 size={12} className="animate-spin" /> : null}
+      </div>
+      <div className="max-h-44 space-y-2 overflow-auto pr-1">
+        {messages.length === 0 ? (
+          <div className="rounded bg-indigo-50 px-2 py-1.5 text-xs leading-5 text-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-100">
+            针对这段划线提问。AI 会同时看到划线内容、当前资料和空间画布里打开的资料。
+          </div>
+        ) : (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={cx(
+                'rounded px-2 py-1.5 text-xs leading-5',
+                message.role === 'user'
+                  ? 'ml-6 bg-indigo-600 text-white'
+                  : 'mr-6 bg-amber-100 text-amber-950 dark:bg-amber-900/50 dark:text-amber-50'
+              )}
+            >
+              {message.text}
+              {message.streaming ? <span className="ml-1 opacity-60">▌</span> : null}
+            </div>
+          ))
+        )}
+      </div>
+      {error ? (
+        <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">
+          {error}
+        </div>
+      ) : null}
+      <form
+        className="mt-2 flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              onSubmit();
+            }
+          }}
+          placeholder="针对划线提问..."
+          rows={2}
+          className="min-h-10 flex-1 resize-none rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs leading-5 text-neutral-900 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-200 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-indigo-700 dark:focus:ring-indigo-900/60"
+        />
+        <button
+          type="submit"
+          disabled={!value.trim() || loading}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded border border-indigo-200 bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-neutral-200 disabled:text-neutral-400 dark:border-indigo-900 dark:disabled:border-neutral-800 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-600"
+          aria-label="发送划线对话"
+          title="发送"
+        >
+          {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -1899,6 +2458,7 @@ function ReaderScroll({
     <div
       ref={rootRef}
       data-spatial-reader-viewport
+      data-reader-resource-id={itemId}
       className={cx(
         'h-full min-h-0 overflow-auto bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100',
         spacious ? 'px-8 py-8' : compact ? 'px-4 py-4' : 'px-5 py-5'
@@ -1955,6 +2515,7 @@ function SelectionActionBar({
   actions,
   onDismiss,
   onCreateNote,
+  onCreateChat,
   onRunAction,
   onRunAll
 }: {
@@ -1962,6 +2523,7 @@ function SelectionActionBar({
   actions: SelectionActionDefinition[];
   onDismiss(): void;
   onCreateNote(): void;
+  onCreateChat(): void;
   onRunAction(action: SelectionActionDefinition): void;
   onRunAll(): void;
 }): JSX.Element | null {
@@ -1996,10 +2558,17 @@ function SelectionActionBar({
       data-selection-action-bar
     >
       <SelectionActionButton
-        label="标记"
+        label="笔记"
         icon={Highlighter}
         iconClassName="bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-200"
         onClick={onCreateNote}
+      />
+      <SelectionActionButton
+        label="对话"
+        title="针对划线提问"
+        icon={MessageCircle}
+        iconClassName="bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-200"
+        onClick={onCreateChat}
       />
       {actions.map((action) => (
         <SelectionActionButton
@@ -2426,6 +2995,7 @@ function renderReaderQuoteHighlights(root: HTMLElement | null, nodes: SpatialTho
   const claimedRanges: HighlightMatchRange[] = [];
   const plannedHighlights = nodes
     .map((node) => {
+      if (node.sourceScope === 'resource') return null;
       const quote = node.sourceQuote.exact.trim();
       if (!quote) return null;
       const match = findHighlightQuoteMatch(contentText, quote, claimedRanges, {
@@ -2488,8 +3058,25 @@ function getElementZIndex(element: Element): number {
   return Number.isFinite(zIndex) ? zIndex : 0;
 }
 
+function getSpatialWindowZIndex(zIndex: number): number {
+  return zIndex + SPATIAL_WINDOW_Z_OFFSET;
+}
+
 function getRectCenter(rect: DOMRect): SpatialPoint {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function getRectConnectionPoint(rect: DOMRect, target: SpatialPoint): SpatialPoint {
+  if (target.x < rect.left) {
+    return { x: rect.left, y: clamp(target.y, rect.top + 24, rect.bottom - 24) };
+  }
+  if (target.x > rect.right) {
+    return { x: rect.right, y: clamp(target.y, rect.top + 24, rect.bottom - 24) };
+  }
+  if (target.y < rect.top) {
+    return { x: clamp(target.x, rect.left + 24, rect.right - 24), y: rect.top };
+  }
+  return { x: clamp(target.x, rect.left + 24, rect.right - 24), y: rect.bottom };
 }
 
 function getDistanceSquared(a: SpatialPoint, b: SpatialPoint): number {
@@ -2559,22 +3146,50 @@ function getThoughtWindowViewportRect(windowElement: HTMLElement): DOMRect {
   return (viewportElement ?? windowElement).getBoundingClientRect();
 }
 
+function getReaderElementForThoughtNode(
+  node: SpatialThoughtNode,
+  readerWindowIds: string[]
+): HTMLElement | null {
+  if (node.sourceWindowId) {
+    return document.getElementById(getSpatialReaderWindowElementId(node.sourceWindowId));
+  }
+  for (const readerWindowId of readerWindowIds) {
+    const readerElement = document.getElementById(getSpatialReaderWindowElementId(readerWindowId));
+    if (readerElement?.dataset.readerItemId === node.itemId) return readerElement;
+  }
+  return null;
+}
+
+function getVisibleReaderResourceAnchor(
+  node: SpatialThoughtNode,
+  readerWindowIds: string[]
+): { point: SpatialPoint; zIndex: number } | null {
+  const readerElement = getReaderElementForThoughtNode(node, readerWindowIds);
+  if ((node.sourceWindowId || readerWindowIds.length > 0) && !readerElement) return null;
+  const resourceElement =
+    readerElement ??
+    document.querySelector<HTMLElement>(
+      `[data-reader-resource-id="${escapeCssIdent(node.itemId)}"]`
+    );
+  if (!resourceElement) return null;
+  const targetElement = document.getElementById(getThoughtWindowElementId(node.id));
+  if (!targetElement) return null;
+  return {
+    point: getRectConnectionPoint(
+      resourceElement.getBoundingClientRect(),
+      getElementCenter(targetElement)
+    ),
+    zIndex: readerElement ? getElementZIndex(readerElement) : 0
+  };
+}
+
 function getVisibleReaderHighlight(
   node: SpatialThoughtNode,
   readerWindowIds: string[]
 ): { point: SpatialPoint; zIndex: number } | null {
-  const readerWindowId = node.sourceWindowId ?? readerWindowIds[0];
-  if (
-    node.sourceWindowId &&
-    readerWindowIds.length > 0 &&
-    !readerWindowIds.includes(node.sourceWindowId)
-  ) {
-    return null;
-  }
-  const readerElement = readerWindowId
-    ? document.getElementById(getSpatialReaderWindowElementId(readerWindowId))
-    : null;
-  if (readerWindowId && !readerElement && readerWindowIds.length > 0) return null;
+  if (node.sourceScope === 'resource') return getVisibleReaderResourceAnchor(node, readerWindowIds);
+  const readerElement = getReaderElementForThoughtNode(node, readerWindowIds);
+  if ((node.sourceWindowId || readerWindowIds.length > 0) && !readerElement) return null;
   const searchRoot: ParentNode = readerElement ?? document;
   if (getHighlightElements(searchRoot, node).length === 0) return null;
   return getVisibleHighlightInRoot({
@@ -2595,7 +3210,7 @@ function getVisibleThoughtWindowHighlight(
     node,
     root: sourceElement,
     viewportRect: getThoughtWindowViewportRect(sourceElement),
-    zIndex: sourceNode.zIndex + 500
+    zIndex: getSpatialWindowZIndex(sourceNode.zIndex)
   });
 }
 
@@ -2694,7 +3309,7 @@ function ThoughtConnectionLines({
             coordinateRoot,
             canvasZoom
           );
-          const targetZIndex = node.zIndex + 500;
+          const targetZIndex = getSpatialWindowZIndex(node.zIndex);
           return {
             id: node.id,
             from,
@@ -2799,6 +3414,159 @@ function buildNoteContent(text: string, item: LibraryItem): string {
   ].join('\n');
 }
 
+function buildSelectionChatContent(text: string, item: LibraryItem): string {
+  return [
+    '## 划线对话',
+    '',
+    `**来源**：${item.frontmatter.title}`,
+    '',
+    '### 划线',
+    quoteMarkdown(clipText(text, 900)),
+    '',
+    '### 对话上下文',
+    '- 划线部分',
+    '- 当前资料',
+    '- 空间画布内打开的所有资料'
+  ].join('\n');
+}
+
+function buildResourceNoteContent(item: LibraryItem): string {
+  const source = getLibraryReaderSource(item);
+  return [
+    '## 资料标注',
+    '',
+    `**来源**：${item.frontmatter.title}`,
+    '',
+    '### 范围',
+    '整篇资料',
+    '',
+    '### 记录',
+    `> ${item.frontmatter.title}`,
+    source ? `> ${source}` : null
+  ]
+    .filter((line): line is string => typeof line === 'string')
+    .join('\n');
+}
+
+function getThoughtSourcePreview(node: SpatialThoughtNode, item?: LibraryItem | null): string {
+  if (node.sourceScope === 'resource') {
+    return `整篇资料：${item?.frontmatter.title ?? node.sourceText.replace(/^整篇资料：/, '')}`;
+  }
+  return node.sourceText;
+}
+
+function libraryAnnotationTarget(itemId: string, title?: string): AnnotationTargetRef {
+  return {
+    kind: 'library_item',
+    ref: itemId,
+    ...(title ? { title_snapshot: title } : {})
+  };
+}
+
+function uniqueAnnotations(records: AnnotationRecord[]): AnnotationRecord[] {
+  const byId = new Map<string, AnnotationRecord>();
+  records.forEach((record) => byId.set(record.id, record));
+  return [...byId.values()];
+}
+
+function mergeThoughtNodes(...groups: SpatialThoughtNode[][]): SpatialThoughtNode[] {
+  const byId = new Map<string, SpatialThoughtNode>();
+  groups.flat().forEach((node) => byId.set(node.id, node));
+  return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+function annotationRecordToThoughtNode(
+  record: AnnotationRecord,
+  itemById: Map<string, LibraryItem>,
+  viewState?: AnnotationViewState,
+  index = 0
+): SpatialThoughtNode | null {
+  const itemId = getAnnotationLibraryItemId(record);
+  if (!itemId) return null;
+  const item = itemById.get(itemId);
+  const sourceScope = record.anchor.kind === 'whole_source' ? 'resource' : 'selection';
+  const fallbackPosition = defaultAnnotationPosition(index, sourceScope);
+  const quote = record.anchor.quote ?? { exact: '' };
+  return {
+    id: record.id,
+    itemId,
+    actionId: annotationActionId(record),
+    label: record.title,
+    sourceScope,
+    sourceText:
+      sourceScope === 'resource'
+        ? `整篇资料：${item?.frontmatter.title ?? record.target.title_snapshot ?? record.title}`
+        : quote.exact || record.title,
+    sourceQuote: quote,
+    sourceNodeId: record.parent_annotation_id ?? (record.target.kind === 'annotation' ? record.target.ref : undefined),
+    color: record.color ?? 'yellow',
+    contentMarkdown: record.body_markdown,
+    ...(typeof record.metadata?.['conversation_id'] === 'string'
+      ? { conversationId: record.metadata['conversation_id'] }
+      : {}),
+    position: viewState?.position ?? fallbackPosition,
+    size: viewState?.size ?? DEFAULT_THOUGHT_SIZE,
+    status: viewState?.status ?? 'open',
+    zIndex: viewState?.z_index ?? 160 + index,
+    createdAt: record.created_at,
+    updatedAt: record.updated_at
+  };
+}
+
+function getAnnotationLibraryItemId(record: AnnotationRecord): string | null {
+  if (record.target.kind === 'library_item') return record.target.ref;
+  if (record.context_target?.kind === 'library_item') return record.context_target.ref;
+  return null;
+}
+
+function annotationActionId(record: AnnotationRecord): SpatialThoughtNode['actionId'] {
+  const actionId = record.metadata?.['action_id'];
+  return actionId === 'translate' || actionId === 'explain' || actionId === 'formula' || actionId === 'related' || actionId === 'chat'
+    ? actionId
+    : 'note';
+}
+
+function defaultAnnotationPosition(index: number, sourceScope: SpatialThoughtNode['sourceScope']): SpatialPoint {
+  return {
+    x: sourceScope === 'resource' ? 80 + (index % 4) * 34 : 120 + (index % 4) * 34,
+    y: 90 + (index % 6) * 38
+  };
+}
+
+function legacyLibraryAnnotationsToThoughtNodes(
+  item: LibraryItem | undefined,
+  viewStateById: Map<string, AnnotationViewState>
+): SpatialThoughtNode[] {
+  if (!item?.frontmatter.annotations?.length) return [];
+  return item.frontmatter.annotations.map((annotation, index) => {
+    const id = `legacy-${annotation.id}`;
+    const viewState = viewStateById.get(id);
+    return {
+      id,
+      itemId: item.frontmatter.id,
+      actionId: 'note',
+      label: annotation.comment ? '评论' : '标注',
+      sourceScope: 'selection',
+      sourceText: annotation.text,
+      sourceQuote: { exact: annotation.text },
+      color: parseAnnotationColor(annotation.color),
+      contentMarkdown: annotation.comment
+        ? buildThoughtContent('评论', annotation.text, item, [annotation.comment])
+        : buildNoteContent(annotation.text, item),
+      position: viewState?.position ?? defaultAnnotationPosition(index, 'selection'),
+      size: viewState?.size ?? DEFAULT_THOUGHT_SIZE,
+      status: viewState?.status ?? 'open',
+      zIndex: viewState?.z_index ?? 120 + index,
+      createdAt: annotation.at,
+      updatedAt: annotation.at
+    };
+  });
+}
+
+function parseAnnotationColor(color: string | undefined): ReaderHighlightColor {
+  return color === 'green' || color === 'blue' || color === 'pink' || color === 'purple' ? color : 'yellow';
+}
+
 function quoteMarkdown(text: string): string {
   return text
     .trim()
@@ -2812,11 +3580,117 @@ function clipText(text: string, maxLength: number): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
+function buildSelectionChatPrompt({
+  question,
+  node,
+  currentItem,
+  canvasItems
+}: {
+  question: string;
+  node: SpatialThoughtNode;
+  currentItem: LibraryItem | null;
+  canvasItems: LibraryItem[];
+}): string {
+  const currentMaterial = currentItem
+    ? renderMaterialContext(currentItem, 4200)
+    : '当前资料不可用。';
+  const canvasMaterialContext = canvasItems.length
+    ? canvasItems.map((item, index) => `### ${index + 1}. ${renderMaterialContext(item, 1200)}`).join('\n\n')
+    : '空间画布里目前没有打开的其他资料。';
+  return [
+    '你正在 Orbit 阅读器里回答一次“划线对话”。',
+    '请严格基于以下三层上下文回答；如果信息不足，明确指出缺口，不要编造。',
+    '',
+    '<context_layer_1_selected_text>',
+    node.sourceText,
+    '</context_layer_1_selected_text>',
+    '',
+    '<context_layer_2_current_material>',
+    currentMaterial,
+    '</context_layer_2_current_material>',
+    '',
+    '<context_layer_3_canvas_materials>',
+    canvasMaterialContext,
+    '</context_layer_3_canvas_materials>',
+    '',
+    '<user_question>',
+    question,
+    '</user_question>',
+    '',
+    '回答要求：',
+    '- 用中文回答，除非用户明确要求其他语言。',
+    '- 先直接回答用户问题，再补充必要依据。',
+    '- 如果引用上下文，请说明来自“划线”“当前资料”或“画布资料”。'
+  ].join('\n');
+}
+
+function renderMaterialContext(item: LibraryItem, maxBodyLength: number): string {
+  const source = getLibraryReaderSource(item);
+  return [
+    `标题：${item.frontmatter.title}`,
+    `类型：${readerKindLabel(getLibraryReaderKind(item))}`,
+    source ? `来源：${source}` : null,
+    '',
+    '正文摘录：',
+    clipText(item.body, maxBodyLength)
+  ]
+    .filter((line): line is string => typeof line === 'string')
+    .join('\n');
+}
+
+function conversationTurnToThoughtChatMessage(turn: ConversationTurn): ThoughtChatMessage {
+  return {
+    id: turn.id,
+    role: turn.role === 'assistant' ? 'assistant' : 'user',
+    text: turn.role === 'user' ? extractUserQuestionFromPrompt(turn.content) : turn.content
+  };
+}
+
+function extractUserQuestionFromPrompt(content: string): string {
+  const match = content.match(/<user_question>\s*([\s\S]*?)\s*<\/user_question>/u);
+  return match?.[1]?.trim() || content;
+}
+
+function mergeAssistantRuntimeMessage(
+  current: ThoughtChatMessage[],
+  next: { id: string; runId: string; text: string; streaming: boolean; final: boolean }
+): ThoughtChatMessage[] {
+  if (!next.text.trim()) return current;
+  const last = current[current.length - 1];
+  if (next.streaming) {
+    if (last?.role === 'assistant' && last.streaming) {
+      return [
+        ...current.slice(0, -1),
+        { ...last, text: `${last.text}${next.text}` }
+      ];
+    }
+    return [
+      ...current,
+      { id: `assistant-${next.runId}`, role: 'assistant', text: next.text, streaming: true }
+    ];
+  }
+  if (last?.role === 'assistant' && last.streaming) {
+    return [
+      ...current.slice(0, -1),
+      {
+        ...last,
+        text: next.final && next.text.length >= last.text.length ? next.text : last.text,
+        streaming: false
+      }
+    ];
+  }
+  return [
+    ...current,
+    { id: next.id, role: 'assistant', text: next.text }
+  ];
+}
+
 function thoughtIcon(actionId: SpatialThoughtNode['actionId']): LucideIcon {
   if (actionId === 'translate') return Languages;
   if (actionId === 'explain') return BookA;
   if (actionId === 'formula') return Braces;
   if (actionId === 'related') return Link;
+  if (actionId === 'chat') return MessageCircle;
   return NotebookPen;
 }
 

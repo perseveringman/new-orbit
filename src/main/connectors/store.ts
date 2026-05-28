@@ -119,14 +119,21 @@ export class ConnectorStore {
 
   async read(input: ConnectorReadInput): Promise<ConnectorDocumentContent | null> {
     const connection = await this.requireConnection(input.connection_id);
-    return this.plugins.require(connection.connector_id).readDocument(connection, input.doc_ref);
+    return this.plugins.require(connection.connector_id).readDocument(connection, input.doc_ref, input.content_view);
   }
 
   async listDocuments(connectionId?: string): Promise<ConnectorDocumentContent['document'][]> {
     const connections = (await this.list()).filter((connection) =>
       connection.enabled && connection.status === 'connected' && (!connectionId || connection.id === connectionId)
     );
-    const docs = await Promise.all(connections.map((connection) => this.plugins.require(connection.connector_id).listDocuments(connection)));
+    const docs = await Promise.all(connections.map(async (connection) => {
+      const plugin = this.plugins.require(connection.connector_id);
+      const documents = await plugin.listDocuments(connection).catch(() => []);
+      return documents.map((doc) => ({
+        ...doc,
+        evidence_kind: doc.evidence_kind ?? plugin.definition.evidence_kind ?? 'external_file'
+      }));
+    }));
     return docs.flat();
   }
 
