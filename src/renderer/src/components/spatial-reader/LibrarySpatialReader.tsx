@@ -1285,6 +1285,7 @@ function ReadingThoughtLayer({
   onBindThoughtConversation(nodeId: string, conversationId: string): void;
 }): JSX.Element | null {
   const layerRef = useRef<HTMLDivElement>(null);
+  const [thoughtDockOpen, setThoughtDockOpen] = useState(false);
   const openThoughtNodes = thoughtNodes.filter((node) => node.status === 'open');
   const minimizedThoughtNodes = thoughtNodes.filter((node) => node.status === 'minimized');
   const visibleThoughtNodes = thoughtNodes.filter((node) => node.status !== 'closed');
@@ -1335,45 +1336,14 @@ function ReadingThoughtLayer({
         ))}
       </div>
 
-      <div
-        data-spatial-interactive
-        className="pointer-events-auto absolute left-3 top-16 z-[420] w-64 overflow-hidden rounded border border-amber-200 bg-white/95 text-amber-950 shadow-lg backdrop-blur dark:border-amber-900/60 dark:bg-neutral-950/95 dark:text-amber-100"
-      >
-        <div className="flex h-9 items-center justify-between border-b border-amber-200 px-3 text-xs font-semibold dark:border-amber-900/60">
-          <span>标注窗口</span>
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-100">
-            {visibleThoughtNodes.length}
-          </span>
-        </div>
-        <div className="max-h-52 overflow-y-auto p-1.5">
-          {visibleThoughtNodes.map((node) => {
-            const Icon = thoughtIcon(node.actionId);
-            return (
-              <button
-                key={node.id}
-                type="button"
-                onClick={() => onActivateThought(node.id)}
-                className="flex w-full min-w-0 items-start gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-amber-50 dark:hover:bg-amber-950/50"
-              >
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-100">
-                  <Icon size={13} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate font-medium">{node.label}</span>
-                    <span className="shrink-0 rounded border border-amber-200 px-1 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:text-amber-200">
-                      {node.status === 'minimized' ? '最小化' : '打开'}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block truncate text-[10px] text-amber-800/70 dark:text-amber-100/60">
-                    {clipText(getThoughtSourcePreview(node, item), 44)}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <ThoughtWindowDock
+        nodes={visibleThoughtNodes}
+        open={thoughtDockOpen}
+        onOpenChange={setThoughtDockOpen}
+        getSourceItem={() => item}
+        onActivateThought={onActivateThought}
+        className="left-3 top-16 z-[420]"
+      />
 
       {minimizedThoughtNodes.length > 0 ? (
         <div className="pointer-events-auto absolute bottom-3 left-3 z-[410] flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2">
@@ -1450,6 +1420,7 @@ function SpaceCanvas({
   const panStartRef = useRef<{ pointer: SpatialPoint; viewport: SpatialViewport } | null>(null);
   const openedHighlightOnPointerDownRef = useRef<string | null>(null);
   const [panning, setPanning] = useState(false);
+  const [thoughtDockOpen, setThoughtDockOpen] = useState(false);
   const openWindows = windows.filter((window) => window.status === 'open');
   const minimizedWindows = windows.filter((window) => window.status === 'minimized');
   const openThoughtNodes = thoughtNodes.filter((node) => node.status === 'open');
@@ -1669,48 +1640,14 @@ function SpaceCanvas({
         </IconButton>
       </div>
 
-      {visibleThoughtNodes.length > 0 ? (
-        <div
-          data-spatial-interactive
-          className="pointer-events-auto absolute left-3 top-3 z-[400] w-64 overflow-hidden rounded border border-amber-200 bg-white/95 text-amber-950 shadow-lg backdrop-blur dark:border-amber-900/60 dark:bg-neutral-950/95 dark:text-amber-100"
-        >
-          <div className="flex h-9 items-center justify-between border-b border-amber-200 px-3 text-xs font-semibold dark:border-amber-900/60">
-            <span>标注窗口</span>
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-100">
-              {visibleThoughtNodes.length}
-            </span>
-          </div>
-          <div className="max-h-52 overflow-y-auto p-1.5">
-            {visibleThoughtNodes.map((node) => {
-              const Icon = thoughtIcon(node.actionId);
-              const sourceItem = itemById.get(node.itemId);
-              return (
-                <button
-                  key={node.id}
-                  type="button"
-                  onClick={() => onActivateThought(node.id)}
-                  className="flex w-full min-w-0 items-start gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-amber-50 dark:hover:bg-amber-950/50"
-                >
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-100">
-                    <Icon size={13} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span className="truncate font-medium">{node.label}</span>
-                      <span className="shrink-0 rounded border border-amber-200 px-1 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:text-amber-200">
-                        {node.status === 'minimized' ? '最小化' : '打开'}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block truncate text-[10px] text-amber-800/70 dark:text-amber-100/60">
-                      {getThoughtSourcePreview(node, sourceItem)}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+      <ThoughtWindowDock
+        nodes={visibleThoughtNodes}
+        open={thoughtDockOpen}
+        onOpenChange={setThoughtDockOpen}
+        getSourceItem={(node) => itemById.get(node.itemId) ?? null}
+        onActivateThought={onActivateThought}
+        className="left-3 top-3 z-[400]"
+      />
 
       {minimizedWindows.length > 0 || minimizedThoughtNodes.length > 0 ? (
         <div className="pointer-events-auto absolute bottom-3 left-3 z-[390] flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2">
@@ -1746,6 +1683,106 @@ function SpaceCanvas({
       {dropActive ? (
         <div className="pointer-events-none absolute inset-4 z-[420] rounded-lg border-2 border-dashed border-sky-400 bg-sky-500/10" />
       ) : null}
+    </div>
+  );
+}
+
+function ThoughtWindowDock({
+  nodes,
+  open,
+  onOpenChange,
+  getSourceItem,
+  onActivateThought,
+  className
+}: {
+  nodes: SpatialThoughtNode[];
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  getSourceItem(node: SpatialThoughtNode): LibraryItem | null;
+  onActivateThought(nodeId: string): void;
+  className: string;
+}): JSX.Element | null {
+  if (nodes.length === 0) return null;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-spatial-interactive
+        aria-label={`标注窗口，${nodes.length} 个，点击展开`}
+        title="标注窗口"
+        onClick={() => onOpenChange(true)}
+        className={cx(
+          'pointer-events-auto absolute inline-flex h-10 items-center gap-2 rounded-full border border-amber-200 bg-white/95 px-3 text-xs font-semibold text-amber-900 shadow-lg backdrop-blur hover:bg-amber-50 dark:border-amber-900/60 dark:bg-neutral-950/95 dark:text-amber-100 dark:hover:bg-amber-950/60',
+          className
+        )}
+      >
+        <NotebookPen size={15} />
+        <span>标注</span>
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          {nodes.length}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      data-spatial-interactive
+      className={cx(
+        'pointer-events-auto absolute w-64 overflow-hidden rounded border border-amber-200 bg-white/95 text-amber-950 shadow-lg backdrop-blur dark:border-amber-900/60 dark:bg-neutral-950/95 dark:text-amber-100',
+        className
+      )}
+    >
+      <div className="flex h-9 items-center justify-between border-b border-amber-200 px-3 text-xs font-semibold dark:border-amber-900/60">
+        <span>标注窗口</span>
+        <div className="flex items-center gap-1.5">
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-100">
+            {nodes.length}
+          </span>
+          <button
+            type="button"
+            aria-label="收起标注窗口列表"
+            title="收起"
+            onClick={() => onOpenChange(false)}
+            className="flex h-6 w-6 items-center justify-center rounded text-amber-700 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-950"
+          >
+            <Minus size={13} />
+          </button>
+        </div>
+      </div>
+      <div className="max-h-52 overflow-y-auto p-1.5">
+        {nodes.map((node) => {
+          const Icon = thoughtIcon(node.actionId);
+          const sourceItem = getSourceItem(node);
+          return (
+            <button
+              key={node.id}
+              type="button"
+              onClick={() => {
+                onActivateThought(node.id);
+                onOpenChange(false);
+              }}
+              className="flex w-full min-w-0 items-start gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-amber-50 dark:hover:bg-amber-950/50"
+            >
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-100">
+                <Icon size={13} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-medium">{node.label}</span>
+                  <span className="shrink-0 rounded border border-amber-200 px-1 py-0.5 text-[10px] text-amber-700 dark:border-amber-900 dark:text-amber-200">
+                    {node.status === 'minimized' ? '最小化' : '打开'}
+                  </span>
+                </span>
+                <span className="mt-0.5 block truncate text-[10px] text-amber-800/70 dark:text-amber-100/60">
+                  {clipText(getThoughtSourcePreview(node, sourceItem), 48)}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
