@@ -1,7 +1,8 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ORBIT_DIR } from '@shared/constants';
 import { maskSecret } from '@shared/runtime';
 import type { SDKEndpointSecretState } from '@shared/runtime';
 import { estimateSdkCost } from '../src/main/runtime/sdk/cost';
@@ -76,8 +77,47 @@ describe('Runtime B SDK foundation', () => {
     expect(registry.resolveModel(endpoint, 'claude-3-5-sonnet-latest')).toBe('MiniMax-M2.7');
     expect(registry.resolveModel(endpoint, 'minimax-text-01')).toBe('minimax-text-01');
     const deepseek = await registry.require('deepseek');
-    expect(registry.resolveModel(deepseek, undefined, 'fast')).toBe('deepseek-chat');
+    expect(registry.resolveModel(deepseek)).toBe('deepseek-v4-flash');
+    expect(registry.resolveModel(deepseek, undefined, 'fast')).toBe('deepseek-v4-flash');
     expect(registry.resolveModel(deepseek, undefined, 'heavy')).toBe('deepseek-v4-pro');
+  });
+
+  it('refreshes unchanged legacy DeepSeek built-ins to flash by default', async () => {
+    const runtimeDir = path.join(vault, ORBIT_DIR, 'runtime');
+    await mkdir(runtimeDir, { recursive: true });
+    await writeFile(
+      path.join(runtimeDir, 'sdk-endpoints.json'),
+      `${JSON.stringify(
+        {
+          version: 1,
+          endpoints: [
+            {
+              id: 'deepseek',
+              label: 'DeepSeek',
+              provider: 'deepseek',
+              protocol: 'anthropic-compatible',
+              baseURL: 'https://api.deepseek.com/anthropic',
+              keyRef: 'sdk:endpoint:deepseek',
+              defaultModel: 'deepseek-v4-pro',
+              fastModel: 'deepseek-chat',
+              heavyModel: 'deepseek-v4-pro',
+              enabled: true,
+              builtIn: true
+            }
+          ],
+          defaults: { ask: 'deepseek' }
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const deepseek = await registry.require('deepseek');
+    expect(deepseek.defaultModel).toBe('deepseek-v4-flash');
+    expect(deepseek.fastModel).toBe('deepseek-v4-flash');
+    expect(deepseek.heavyModel).toBe('deepseek-v4-pro');
+    expect(deepseek.enabled).toBe(true);
   });
 
   it('routes Ask to SDK when an enabled endpoint has a key', async () => {

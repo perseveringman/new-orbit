@@ -163,7 +163,8 @@ describe('mobile inbound ingest', () => {
             </head>
             <body>
               <div id="js_content">
-                <p>第一段正文，应该由 Mac 侧提取。</p>
+                <p style="margin: 0 0 16px;">第一段正文，应该由 Mac 侧提取。</p>
+                <img data-src="https://mmbiz.qpic.cn/test.jpg" />
                 <p>第二段正文继续保留。</p>
               </div>
               <script></script>
@@ -189,6 +190,7 @@ describe('mobile inbound ingest', () => {
     });
     expect(item?.body).toContain('第一段正文，应该由 Mac 侧提取。');
     expect(item?.frontmatter.source_snapshot_ref).toContain('.orbit/content/extracted/');
+    expect(item?.frontmatter.source_html_ref).toContain('.orbit/content/extracted/');
     const ack = JSON.parse(await readFile(path.join(result.targetDir, '.acked'), 'utf8')) as Record<string, unknown>;
     expect(ack).toMatchObject({
       schema_version: 2,
@@ -199,6 +201,9 @@ describe('mobile inbound ingest', () => {
     await expect(
       readFile(path.join(vault, item?.frontmatter.source_snapshot_ref ?? ''), 'utf8')
     ).resolves.toContain('第一段正文，应该由 Mac 侧提取。');
+    await expect(
+      readFile(path.join(vault, item?.frontmatter.source_html_ref ?? ''), 'utf8')
+    ).resolves.toContain('data-src="https://mmbiz.qpic.cn/test.jpg"');
     expect(await createNoteStore(vault).list({ include_archived: true })).toHaveLength(0);
   });
 

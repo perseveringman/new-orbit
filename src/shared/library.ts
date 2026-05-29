@@ -1,7 +1,7 @@
 import type { NoteAreaRef } from './note';
 import type { SynthesisArtifact } from './synthesis';
 
-export const LIBRARY_KINDS = ['article', 'pdf', 'video', 'bookmark'] as const;
+export const LIBRARY_KINDS = ['article', 'markdown', 'pdf', 'epub', 'video', 'podcast', 'bookmark'] as const;
 export type LibraryKind = (typeof LIBRARY_KINDS)[number];
 
 export const LIBRARY_STATUSES = ['saved', 'reading', 'read', 'distilled', 'archived'] as const;
@@ -30,6 +30,7 @@ export interface LibrarySource {
   content_fetched_at?: string;
   channel_name?: string;
   channel_id?: string;
+  author?: string;
   duration_seconds?: number;
   fetched_at?: string;
   published_at?: string;
@@ -91,6 +92,7 @@ export interface LibraryItemFrontmatter {
   total_reading_seconds?: number;
   annotations?: LibraryAnnotation[];
   source_snapshot_ref?: string;
+  source_html_ref?: string;
   promoted_enrichment_artifact_ids?: string[];
   feed_collection_artifact_ids?: string[];
   preferred_display_artifact_id?: string;
@@ -125,6 +127,7 @@ export interface SaveLibraryItemInput {
   resource_refs?: string[];
   source?: LibrarySource;
   source_snapshot_ref?: string;
+  source_html_ref?: string;
   promoted_enrichment_artifact_ids?: string[];
   feed_collection_artifact_ids?: string[];
   preferred_display_artifact_id?: string;

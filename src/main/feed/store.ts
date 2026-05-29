@@ -619,6 +619,7 @@ export class FeedStore {
         note: input.note
       },
       source_snapshot_ref: item.extracted_ref?.path ?? item.raw_ref?.path,
+      ...(item.raw_ref?.kind === 'article_html' && item.raw_ref.path ? { source_html_ref: item.raw_ref.path } : {}),
       promoted_enrichment_artifact_ids: input.include_enrichments === false ? [] : item.enrichment_artifact_ids ?? [],
       feed_collection_artifact_ids: item.collection_artifact_ids ?? [],
       ...(preferredArtifactId ? { preferred_display_artifact_id: preferredArtifactId } : {})

@@ -26,8 +26,11 @@ const LIBRARY_ROOT = 'library';
 
 const DIR_BY_KIND: Record<LibraryKind, string> = {
   article: 'articles',
+  markdown: 'markdown',
   pdf: 'pdfs',
+  epub: 'epubs',
   video: 'videos',
+  podcast: 'podcasts',
   bookmark: 'bookmarks'
 };
 
@@ -69,6 +72,7 @@ export class LibraryStore {
       total_reading_seconds: 0,
       annotations: [],
       ...(input.source_snapshot_ref ? { source_snapshot_ref: input.source_snapshot_ref } : {}),
+      ...(input.source_html_ref ? { source_html_ref: input.source_html_ref } : {}),
       ...(input.promoted_enrichment_artifact_ids
         ? { promoted_enrichment_artifact_ids: input.promoted_enrichment_artifact_ids }
         : {}),
@@ -262,6 +266,7 @@ export class LibraryStore {
       total_reading_seconds: numberValue(parsed.data['total_reading_seconds']) ?? 0,
       annotations: Array.isArray(parsed.data['annotations']) ? (parsed.data['annotations'] as LibraryAnnotation[]) : [],
       source_snapshot_ref: stringValue(parsed.data['source_snapshot_ref']),
+      source_html_ref: stringValue(parsed.data['source_html_ref']),
       promoted_enrichment_artifact_ids: arrayOfStrings(parsed.data['promoted_enrichment_artifact_ids']),
       feed_collection_artifact_ids: arrayOfStrings(parsed.data['feed_collection_artifact_ids']),
       preferred_display_artifact_id: stringValue(parsed.data['preferred_display_artifact_id']),
@@ -359,13 +364,20 @@ function titleFromBody(body: string): string {
 
 function inferKind(url?: string, localPath?: string): LibraryKind {
   const value = `${url ?? ''} ${localPath ?? ''}`.toLowerCase();
-  if (/\.pdf(\?|$)/.test(value)) return 'pdf';
-  if (/youtube\.com|youtu\.be|vimeo\.com|\.mp4(\?|$)/.test(value)) return 'video';
+  if (/\.(md|markdown|mdx)(?:$|[?#])/.test(value)) return 'markdown';
+  if (/\.pdf(?:$|[?#])/.test(value)) return 'pdf';
+  if (/\.epub(?:$|[?#])/.test(value)) return 'epub';
+  if (/\.(mp3|m4a|aac|wav|ogg|flac)(?:$|[?#])/.test(value)) return 'podcast';
+  if (/podcast|podwise/.test(value)) return 'podcast';
+  if (/youtube\.com|youtu\.be|vimeo\.com|\.(mp4|mov|webm|m4v)(?:$|[?#])/.test(value)) return 'video';
   return url ? 'article' : 'bookmark';
 }
 
 function labelForKind(kind: LibraryKind): string {
   if (kind === 'pdf') return 'PDF';
+  if (kind === 'epub') return 'EPUB';
+  if (kind === 'markdown') return 'Markdown';
+  if (kind === 'podcast') return 'Podcast';
   return kind[0].toUpperCase() + kind.slice(1);
 }
 

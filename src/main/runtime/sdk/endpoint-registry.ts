@@ -58,10 +58,11 @@ export const BUILT_IN_SDK_ENDPOINTS: SDKEndpoint[] = [
     protocol: 'anthropic-compatible',
     baseURL: 'https://api.deepseek.com/anthropic',
     keyRef: 'sdk:endpoint:deepseek',
-    defaultModel: 'deepseek-v4-pro',
-    fastModel: 'deepseek-chat',
+    defaultModel: 'deepseek-v4-flash',
+    fastModel: 'deepseek-v4-flash',
     heavyModel: 'deepseek-v4-pro',
     modelAlias: {
+      'claude-3-5-haiku-latest': 'deepseek-v4-flash',
       'claude-3-5-sonnet-latest': 'deepseek-v4-pro'
     },
     enabled: false,
@@ -251,22 +252,36 @@ function normalizeRegistry(file: RegistryFile): RegistryFile {
 // the values as untouched defaults and refresh them to the current built-in
 // definition so users automatically pick up upstream changes (e.g. new model
 // names, base URLs). User-customized values are preserved as-is.
-const LEGACY_BUILT_IN_SNAPSHOTS: Record<string, Array<Pick<SDKEndpoint, 'baseURL' | 'defaultModel'>>> = {
+type LegacyBuiltInSnapshot = Pick<SDKEndpoint, 'baseURL' | 'defaultModel'> &
+  Partial<Pick<SDKEndpoint, 'fastModel' | 'heavyModel'>>;
+
+const LEGACY_BUILT_IN_SNAPSHOTS: Record<string, LegacyBuiltInSnapshot[]> = {
   minimax: [
     { baseURL: 'https://api.minimax.chat/anthropic', defaultModel: 'minimax-m1' },
     { baseURL: 'https://api.minimaxi.com/anthropic', defaultModel: 'minimax-m1' }
   ],
   deepseek: [
-    { baseURL: 'https://api.deepseek.com/anthropic', defaultModel: 'deepseek-chat' }
+    { baseURL: 'https://api.deepseek.com/anthropic', defaultModel: 'deepseek-chat' },
+    {
+      baseURL: 'https://api.deepseek.com/anthropic',
+      defaultModel: 'deepseek-v4-pro',
+      fastModel: 'deepseek-chat',
+      heavyModel: 'deepseek-v4-pro'
+    }
   ]
 };
 
 function isLegacyBuiltIn(id: string, endpoint: SDKEndpoint): boolean {
   const snapshots = LEGACY_BUILT_IN_SNAPSHOTS[id];
   if (!snapshots) return false;
-  return snapshots.some(
-    (snap) => snap.baseURL === endpoint.baseURL && snap.defaultModel === endpoint.defaultModel
-  );
+  return snapshots.some((snap) => {
+    if (snap.baseURL !== endpoint.baseURL || snap.defaultModel !== endpoint.defaultModel) {
+      return false;
+    }
+    if (snap.fastModel !== undefined && snap.fastModel !== endpoint.fastModel) return false;
+    if (snap.heavyModel !== undefined && snap.heavyModel !== endpoint.heavyModel) return false;
+    return true;
+  });
 }
 
 function mergeBuiltIns(endpoints: SDKEndpoint[]): SDKEndpoint[] {

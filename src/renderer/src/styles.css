@@ -59,6 +59,49 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.wechat-article-shell {
+  max-width: 677px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+  background: #ffffff;
+  color: #3f3f3f;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 16px;
+  line-height: 1.8;
+  overflow-wrap: break-word;
+}
+
+.wechat-article-body,
+.wechat-article-body * {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.wechat-article-body p {
+  margin: 0 0 1em;
+}
+
+.wechat-article-body img {
+  display: block;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 0 auto;
+}
+
+.wechat-article-body section {
+  max-width: 100% !important;
+}
+
+.wechat-article-body a {
+  color: #576b95;
+  text-decoration: none;
+}
+
+.dark .wechat-article-shell {
+  background: #0a0a0a;
+  color: #d4d4d4;
+}
+
 .ask-anywhere-command-bar {
   transform-origin: center bottom;
   animation: ask-anywhere-input-in 180ms ease-out both;

@@ -142,6 +142,7 @@ export class QuickCaptureService {
         canonical_url: parsed.canonical_url ?? itemUrl,
         provider: parsed.platform,
         source_title: input.title?.trim() || parsed.title,
+        ...(parsed.author ? { author: parsed.author } : {}),
         parser_hint: parsed.parser_hint,
         content_status: parsed.status === 'success' ? 'parsed' : parsed.status,
         content_connector_id: parsed.connector_id,
@@ -152,7 +153,8 @@ export class QuickCaptureService {
         language: sourceLanguageForParsed(parsed, parsed.content_markdown ?? notes ?? title),
         ...(notes ? { note: notes } : {})
       },
-      ...(artifact?.path ? { source_snapshot_ref: artifact.path } : {})
+      ...(artifact?.path ? { source_snapshot_ref: artifact.path } : {}),
+      ...(artifact?.htmlPath ? { source_html_ref: artifact.htmlPath } : {})
     });
     return { item };
   }

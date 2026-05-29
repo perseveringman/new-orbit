@@ -163,7 +163,7 @@ export class AnnotationStore {
   private async writeRecord(record: AnnotationRecord): Promise<void> {
     const dir = annotationRecordsDir(this.vaultPath);
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(annotationRecordPath(this.vaultPath, record.id), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+    await writeJsonFileAtomic(annotationRecordPath(this.vaultPath, record.id), record);
   }
 
   private async readOrRebuildIndex(): Promise<AnnotationIndexFile> {
@@ -202,14 +202,21 @@ export class AnnotationStore {
       updated_at: new Date().toISOString()
     };
     await fs.mkdir(annotationsRoot(this.vaultPath), { recursive: true });
-    await fs.writeFile(annotationIndexPath(this.vaultPath), `${JSON.stringify(index, null, 2)}\n`, 'utf8');
+    await writeJsonFileAtomic(annotationIndexPath(this.vaultPath), index);
     return index;
   }
 
   private async readViewStateFile(spaceId: string): Promise<AnnotationViewStateFile> {
+    const filePath = annotationViewStatePath(this.vaultPath, spaceId);
     try {
-      const raw = await fs.readFile(annotationViewStatePath(this.vaultPath, spaceId), 'utf8');
-      return normalizeViewStateFile(JSON.parse(raw));
+      const raw = await fs.readFile(filePath, 'utf8');
+      const parsed = parseJsonWithRecovery(raw);
+      const file = normalizeViewStateFile(parsed.value);
+      if (parsed.repaired) {
+        await backupCorruptJson(filePath, raw);
+        await writeJsonFileAtomic(filePath, file);
+      }
+      return file;
     } catch (error) {
       if (!isNotFoundError(error)) throw error;
       return { version: 1, states: {} };
@@ -219,7 +226,7 @@ export class AnnotationStore {
   private async writeViewStateFile(spaceId: string, file: AnnotationViewStateFile): Promise<void> {
     const dir = annotationViewStatesDir(this.vaultPath);
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(annotationViewStatePath(this.vaultPath, spaceId), `${JSON.stringify(file, null, 2)}\n`, 'utf8');
+    await writeJsonFileAtomic(annotationViewStatePath(this.vaultPath, spaceId), file);
   }
 }
 
@@ -297,6 +304,74 @@ function normalizeViewStateFile(value: unknown): AnnotationViewStateFile {
 
 function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim()))];
+}
+
+async function writeJsonFileAtomic(filePath: string, value: unknown): Promise<void> {
+  const dir = path.dirname(filePath);
+  await fs.mkdir(dir, { recursive: true });
+  const tempPath = path.join(dir, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+  await fs.writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  await fs.rename(tempPath, filePath);
+}
+
+function parseJsonWithRecovery(raw: string): { value: unknown; repaired: boolean } {
+  try {
+    return { value: JSON.parse(raw), repaired: false };
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    const prefix = firstJsonValuePrefix(raw);
+    if (!prefix) throw error;
+    return { value: JSON.parse(prefix), repaired: true };
+  }
+}
+
+function firstJsonValuePrefix(raw: string): string | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let started = false;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (!started) {
+      if (/\s/.test(char)) continue;
+      if (char !== '{' && char !== '[') return null;
+      started = true;
+      depth = 1;
+      continue;
+    }
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === '{' || char === '[') {
+      depth += 1;
+      continue;
+    }
+    if (char === '}' || char === ']') {
+      depth -= 1;
+      if (depth === 0) return raw.slice(0, index + 1);
+    }
+  }
+
+  return null;
+}
+
+async function backupCorruptJson(filePath: string, raw: string): Promise<void> {
+  const backupPath = `${filePath}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  await fs.writeFile(backupPath, raw, 'utf8');
 }
 
 function stripUndefined<T extends object>(value: T): T {

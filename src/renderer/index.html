@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: blob: orbit-media: file: http: https:; media-src 'self' data: blob: orbit-media: file: http: https:; frame-src 'self' orbit-media: file: http: https:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      content="default-src 'self'; connect-src 'self' orbit-media: file: http: https:; img-src 'self' data: blob: orbit-media: file: http: https:; media-src 'self' data: blob: orbit-media: file: http: https:; frame-src 'self' orbit-media: file: http: https:; style-src 'self' 'unsafe-inline' blob:; script-src 'self' blob: data: https://www.youtube.com https://s.ytimg.com; worker-src 'self' blob: data:"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Orbit</title>

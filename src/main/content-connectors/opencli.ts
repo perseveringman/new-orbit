@@ -9,6 +9,7 @@ import {
   sourceUrlForInput,
   stringOrNull
 } from './utils';
+import { decodeHtmlEntities, htmlToReadableMarkdown, looksLikeHtml, sanitizeReadableHtml } from './html';
 
 const execFileAsync = promisify(execFile);
 const OPENCLI_VERSION = '0.1.0';
@@ -75,7 +76,7 @@ async function parseWithOpenCli(input: ContentParseInput, context: ContentConnec
 }
 
 function commandCandidates(platform: ParsedContent['platform'], url: string): string[][] {
-  if (platform === 'wechat_article') return [['weixin', 'download', '--url', url, '-f', 'json'], ['weixin', 'download', '--url', url, '-f', 'md']];
+  if (platform === 'wechat_article') return [['weixin', 'download', '--url', url, '-f', 'json'], ['weixin', 'download', '--url', url, '-f', 'html'], ['weixin', 'download', '--url', url, '-f', 'md']];
   if (platform === 'xiaohongshu') return [['xiaohongshu', 'note', url, '-f', 'json']];
   if (platform === 'x') {
     const tweetId = extractTweetId(url) ?? url;
@@ -98,10 +99,12 @@ function parseOpenCliOutput(
     const record = json;
     const title = firstString(record, ['title', 'name', 'headline']) ?? stringOrNull(input.title) ?? sourcePlatformLabel(base.platform);
     const author = firstString(record, ['author', 'author_name', 'nickname', 'user', 'username']);
-    const content =
+    const rawContent =
       firstString(record, ['markdown', 'content_markdown', 'content', 'text', 'body']) ??
       stringOrNull(input.text) ??
       '';
+    const contentHtml = htmlFromOpenCliRecord(record, rawContent);
+    const content = contentHtml ? htmlToReadableMarkdown(contentHtml) || rawContent : rawContent;
     const excerpt = firstString(record, ['excerpt', 'summary', 'description']) ?? stringOrNull(input.text) ?? undefined;
     return {
       ...base,
@@ -110,6 +113,7 @@ function parseOpenCliOutput(
       author,
       excerpt,
       content_markdown: normalizeMarkdown(content),
+      ...(contentHtml ? { content_html: sanitizeReadableHtml(contentHtml) } : {}),
       metadata: { output_format: 'json' }
     };
   }
@@ -123,12 +127,14 @@ function parseOpenCliOutput(
       metadata: { output_format: 'text' }
     };
   }
+  const contentHtml = looksLikeHtml(trimmed) ? trimmed : undefined;
   return {
     ...base,
     status: 'success',
     title: stringOrNull(input.title) ?? sourcePlatformLabel(base.platform),
     excerpt: stringOrNull(input.text) ?? undefined,
-    content_markdown: normalizeMarkdown(trimmed || stringOrNull(input.text) || ''),
+    content_markdown: normalizeMarkdown(contentHtml ? htmlToReadableMarkdown(contentHtml) : trimmed || stringOrNull(input.text) || ''),
+    ...(contentHtml ? { content_html: sanitizeReadableHtml(contentHtml) } : {}),
     metadata: { output_format: 'text' }
   };
 }
@@ -155,11 +161,13 @@ function parseOpenCliArrayOutput(
 
   const title = firstString(first, ['title', 'name', 'headline']) ?? stringOrNull(input.title) ?? sourcePlatformLabel(base.platform);
   const author = firstString(first, ['author', 'author_name', 'nickname', 'user', 'username']);
-  const content =
+  const rawContent =
     firstString(first, ['markdown', 'content_markdown', 'content', 'text', 'body']) ??
     records.map((record) => (isRecord(record) ? firstString(record, ['content', 'text', 'body']) : undefined)).filter(Boolean).join('\n\n') ??
     stringOrNull(input.text) ??
     '';
+  const contentHtml = htmlFromOpenCliRecord(first, rawContent);
+  const content = contentHtml ? htmlToReadableMarkdown(contentHtml) || rawContent : rawContent;
   const excerpt = firstString(first, ['excerpt', 'summary', 'description']) ?? firstString(first, ['text', 'content']) ?? stringOrNull(input.text) ?? undefined;
   return {
     ...base,
@@ -168,6 +176,7 @@ function parseOpenCliArrayOutput(
     author,
     excerpt,
     content_markdown: normalizeMarkdown(content),
+    ...(contentHtml ? { content_html: sanitizeReadableHtml(contentHtml) } : {}),
     metadata: { output_format: 'json', json_shape: 'array' }
   };
 }
@@ -272,15 +281,6 @@ function extractTweetId(value: string): string | null {
   return value.match(/(?:status|statuses)\/(\d+)/i)?.[1] ?? (value.match(/^\d{8,}$/)?.[0] ?? null);
 }
 
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
 function firstString(record: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = record[key];
@@ -299,8 +299,12 @@ function normalizeMarkdown(value: string): string | undefined {
     .map((line) => line.replace(/\s+$/g, ''))
     .join('\n')
     .trim()
-    .slice(0, 80000);
+    .slice(0, 250000);
   return normalized || undefined;
+}
+
+function htmlFromOpenCliRecord(record: Record<string, unknown>, rawContent: string): string | undefined {
+  return firstString(record, ['html', 'content_html', 'source_html']) ?? (looksLikeHtml(rawContent) ? rawContent : undefined);
 }
 
 function looksLikeMediaDownloadTable(value: string): boolean {

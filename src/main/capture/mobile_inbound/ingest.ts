@@ -339,7 +339,9 @@ async function ingestLinkShareAsLibrary(
     }
   );
   const artifact = await writeParsedContentArtifact(vaultPath, parsed, manifest.id);
-  const item = await createLibraryStore(vaultPath).save(libraryInputForMobileShare(manifest, parsed, artifact?.path));
+  const item = await createLibraryStore(vaultPath).save(
+    libraryInputForMobileShare(manifest, parsed, artifact?.path, artifact?.htmlPath)
+  );
   const event = await publishMobileLibraryItemAdded(item, manifest, options.publishEvent);
   return { item, parsed, event };
 }
@@ -347,7 +349,8 @@ async function ingestLinkShareAsLibrary(
 function libraryInputForMobileShare(
   manifest: MobileCaptureManifest,
   parsed: ParsedContent,
-  sourceSnapshotRef?: string
+  sourceSnapshotRef?: string,
+  sourceHtmlRef?: string
 ): SaveLibraryItemInput {
   const context = shareContextForManifest(manifest);
   const url = parsed.canonical_url ?? parsed.source_url ?? context?.canonical_url ?? context?.source_url ?? firstUrl(manifest.content) ?? undefined;
@@ -365,6 +368,7 @@ function libraryInputForMobileShare(
       url: parsed.source_url ?? context?.source_url ?? undefined,
       canonical_url: parsed.canonical_url ?? context?.canonical_url ?? undefined,
       provider: parsed.platform,
+      ...(parsed.author ? { author: parsed.author } : {}),
       capture_id: manifest.id,
       source_title: context?.source_title ?? parsed.title,
       raw_share_text: context?.raw_share_text ?? manifest.content,
@@ -377,7 +381,8 @@ function libraryInputForMobileShare(
       content_fetched_at: parsed.fetched_at,
       language: detectLanguage(body)
     },
-    ...(sourceSnapshotRef ? { source_snapshot_ref: sourceSnapshotRef } : {})
+    ...(sourceSnapshotRef ? { source_snapshot_ref: sourceSnapshotRef } : {}),
+    ...(sourceHtmlRef ? { source_html_ref: sourceHtmlRef } : {})
   };
 }
 

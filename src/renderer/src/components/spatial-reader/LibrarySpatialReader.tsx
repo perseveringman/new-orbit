@@ -3,6 +3,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 
 import ePub from 'epubjs';
 import {
+  ArrowUp,
   BookA,
   BookOpenText,
   Braces,
@@ -11,6 +12,7 @@ import {
   ChevronRight,
   Clock,
   Copy,
+  EyeOff,
   ExternalLink,
   FileText,
   Film,
@@ -63,10 +65,12 @@ import type { ChatAction, RuntimeErrorPayload, RuntimeMessagePayload } from '@sh
 import type { ConversationTurn } from '@shared/conversation';
 import type {
   AnnotationRecord,
+  AnnotationRectAnchor,
   AnnotationTargetRef,
   AnnotationViewState,
   CreateAnnotationInput
 } from '@shared/annotation';
+import { useWorkspace } from '../../store/workspace';
 import { StreamingMarkdown } from '../Timeline/StreamingMarkdown';
 import {
   getLibraryReaderKind,
@@ -75,14 +79,16 @@ import {
   LIBRARY_ITEM_DRAG_MIME,
   readerKindLabel,
   readLibraryDragPayload,
+  normalizeLibraryReaderSource,
   type SpatialPoint,
   type SpatialReaderKind,
   type SpatialReaderWindowState,
   type SpatialSize,
   type SpatialViewport
 } from './reader-model';
+import pdfWorkerUrl from './pdf-worker-polyfill?worker&url';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 type ReaderMode = 'reading' | 'space';
 type ReaderHighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
@@ -99,6 +105,11 @@ declare global {
         seekTo?(seconds: number, allowSeekAhead: boolean): void;
         playVideo?(): void;
         pauseVideo?(): void;
+        mute?(): void;
+        unMute?(): void;
+        isMuted?(): boolean;
+        setPlaybackRate?(rate: number): void;
+        getPlaybackRate?(): number;
       };
       PlayerState?: {
         PLAYING: number;
@@ -139,6 +150,8 @@ interface ReaderSelectionState {
   itemId: string;
   text: string;
   quote: ReaderQuoteAnchor;
+  cfi?: string;
+  rects?: AnnotationRectAnchor[];
   anchorRect: {
     left: number;
     top: number;
@@ -159,6 +172,8 @@ interface SpatialThoughtNode {
   sourceScope?: 'selection' | 'resource';
   sourceText: string;
   sourceQuote: ReaderQuoteAnchor;
+  sourceCfi?: string;
+  sourceRects?: AnnotationRectAnchor[];
   sourceWindowId?: string;
   sourceNodeId?: string;
   color: ReaderHighlightColor;
@@ -192,6 +207,8 @@ interface HighlightMatchRange {
   end: number;
 }
 
+type ReaderHighlightRenderVariant = 'default' | 'pdf-text-layer';
+
 interface ThoughtConnection {
   id: string;
   from: SpatialPoint;
@@ -207,6 +224,20 @@ interface ThoughtChatMessage {
   streaming?: boolean;
 }
 
+interface ReaderWindowDragSnapshot {
+  windowId: string;
+  itemId: string;
+  parentStart: SpatialPoint;
+  attachedNodeStarts: Map<string, SpatialPoint>;
+}
+
+interface ReaderScrollToAnnotationEventDetail {
+  nodeId: string;
+  itemId: string;
+  sourceWindowId?: string;
+  page?: number;
+}
+
 const DEFAULT_VIEWPORT: SpatialViewport = { x: 0, y: 0, zoom: 1 };
 const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 1.7;
@@ -215,10 +246,21 @@ const MIN_WINDOW_SIZE: SpatialSize = { width: 460, height: 320 };
 const DEFAULT_THOUGHT_SIZE: SpatialSize = { width: 390, height: 310 };
 const MIN_THOUGHT_SIZE: SpatialSize = { width: 300, height: 220 };
 const WINDOW_HEADER_DOCK_Y = 42;
+const WINDOW_STAGGER_GAP = 34;
+const WINDOW_STAGGER_STEP: SpatialPoint = { x: 116, y: 86 };
+const WINDOW_LAYOUT_ORIGIN: SpatialPoint = { x: 48, y: 74 };
 const SPATIAL_WINDOW_Z_OFFSET = 500;
 const LIBRARY_READER_SPACE_ID = 'library-workbench';
+const READER_SCROLL_TO_ANNOTATION_EVENT = 'orbit:reader-scroll-to-annotation';
 const HIGHLIGHT_SELECTOR = '[data-reader-annotation-id]';
 const EMPTY_THOUGHT_NODES: SpatialThoughtNode[] = [];
+const MIN_PDF_ZOOM = 0.5;
+const MAX_PDF_ZOOM = 2.5;
+const PDF_PAGE_FALLBACK_SIZE: SpatialSize = { width: 612, height: 792 };
+const PDF_READER_PAGE_GAP = 20;
+const PDF_READER_PAGE_BORDER_SIZE = 2;
+const PDF_READER_MIN_PAGE_HEIGHT = 240;
+const EPUB_FRAME_PAINT_DELAYS_MS = [50, 180, 420, 900, 1600];
 
 const highlightClassByColor: Record<ReaderHighlightColor, string> = {
   yellow: 'rounded bg-yellow-200/80 px-0.5 text-inherit ring-1 ring-yellow-300/70',
@@ -226,6 +268,22 @@ const highlightClassByColor: Record<ReaderHighlightColor, string> = {
   blue: 'rounded bg-sky-200/80 px-0.5 text-inherit ring-1 ring-sky-300/70',
   pink: 'rounded bg-pink-200/80 px-0.5 text-inherit ring-1 ring-pink-300/70',
   purple: 'rounded bg-violet-200/80 px-0.5 text-inherit ring-1 ring-violet-300/70'
+};
+
+const epubHighlightColorByColor: Record<ReaderHighlightColor, string> = {
+  yellow: 'rgba(253, 224, 71, 0.42)',
+  green: 'rgba(110, 231, 183, 0.42)',
+  blue: 'rgba(125, 211, 252, 0.42)',
+  pink: 'rgba(249, 168, 212, 0.42)',
+  purple: 'rgba(196, 181, 253, 0.42)'
+};
+
+const pdfHighlightColorByColor: Record<ReaderHighlightColor, string> = {
+  yellow: 'rgba(253, 224, 71, 0.45)',
+  green: 'rgba(110, 231, 183, 0.45)',
+  blue: 'rgba(125, 211, 252, 0.45)',
+  pink: 'rgba(249, 168, 212, 0.45)',
+  purple: 'rgba(196, 181, 253, 0.45)'
 };
 
 const connectionColorClassByAction: Record<SpatialThoughtNode['actionId'], string> = {
@@ -303,6 +361,8 @@ export function LibrarySpatialReader({
   const zIndexRef = useRef(140);
   const activeItemRef = useRef<LibraryItem | null>(activeItem);
   const thoughtNodesRef = useRef<SpatialThoughtNode[]>([]);
+  const viewportRef = useRef<SpatialViewport>(DEFAULT_VIEWPORT);
+  const readerWindowDragSnapshotRef = useRef<ReaderWindowDragSnapshot | null>(null);
   const viewStatePersistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const bodyPersistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const bodyPersistDraftsRef = useRef<Map<string, string>>(new Map());
@@ -322,6 +382,10 @@ export function LibrarySpatialReader({
   useEffect(() => {
     thoughtNodesRef.current = thoughtNodes;
   }, [thoughtNodes]);
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
 
   useEffect(
     () => () => {
@@ -360,11 +424,12 @@ export function LibrarySpatialReader({
           }
         }
 
-        const visibleCount = current.filter((window) => window.status !== 'closed').length;
-        const fallbackPosition = {
-          x: 56 + (visibleCount % 4) * 42,
-          y: 72 + (visibleCount % 5) * 36
-        };
+        const fallbackPosition = findStaggeredWindowPosition({
+          windows: current,
+          size: DEFAULT_WINDOW_SIZE,
+          viewport: viewportRef.current,
+          container: workspaceRef.current
+        });
         return [
           ...current,
           {
@@ -517,7 +582,6 @@ export function LibrarySpatialReader({
     const openWindows = windows.filter((window) => window.status !== 'closed');
     if (openWindows.length === 0) return;
     const columns = layout === 'rows' ? 1 : Math.max(1, Math.ceil(Math.sqrt(openWindows.length)));
-    const gap = 28;
     setWindows((current) =>
       current.map((window) => {
         const index = openWindows.findIndex((candidate) => candidate.id === window.id);
@@ -527,10 +591,7 @@ export function LibrarySpatialReader({
         return {
           ...window,
           status: 'open',
-          position: {
-            x: 48 + column * (DEFAULT_WINDOW_SIZE.width + gap),
-            y: 74 + row * (DEFAULT_WINDOW_SIZE.height + gap)
-          },
+          position: getArrangedWindowPosition(row, column, layout),
           size: DEFAULT_WINDOW_SIZE
         };
       })
@@ -634,6 +695,8 @@ export function LibrarySpatialReader({
       sourceScope: 'selection',
       sourceText: nextSelection.text,
       sourceQuote: nextSelection.quote,
+      sourceCfi: nextSelection.cfi,
+      sourceRects: nextSelection.rects,
       sourceWindowId: nextSelection.sourceWindowId,
       sourceNodeId: nextSelection.sourceNodeId,
       color: action.color,
@@ -666,18 +729,27 @@ export function LibrarySpatialReader({
     viewStatePersistTimersRef.current.set(node.id, timer);
   }
 
+  async function persistAnnotationViewState(node: SpatialThoughtNode, annotationId = node.id): Promise<AnnotationViewState | null> {
+    try {
+      return await window.orbit.annotation.updateViewState(LIBRARY_READER_SPACE_ID, annotationId, {
+        position: node.position,
+        size: node.size,
+        status: node.status,
+        z_index: node.zIndex
+      });
+    } catch (error) {
+      console.error('Failed to persist annotation view state', error);
+      return null;
+    }
+  }
+
   function appendPersistedThoughtNode(input: CreateAnnotationInput, fallbackNode: SpatialThoughtNode): void {
     void window.orbit.annotation
       .create(input)
       .then(async (record) => {
-        const viewState = await window.orbit.annotation.updateViewState(LIBRARY_READER_SPACE_ID, record.id, {
-          position: fallbackNode.position,
-          size: fallbackNode.size,
-          status: fallbackNode.status,
-          z_index: fallbackNode.zIndex
-        });
+        const viewState = await persistAnnotationViewState(fallbackNode, record.id);
         const persistedNode =
-          annotationRecordToThoughtNode(record, itemById, viewState) ?? {
+          (viewState ? annotationRecordToThoughtNode(record, itemById, viewState) : null) ?? {
             ...fallbackNode,
             id: record.id
           };
@@ -704,7 +776,9 @@ export function LibrarySpatialReader({
       context_target: contextTarget,
       anchor: {
         kind: parentAnnotationId ? 'annotation_body_range' : 'text_quote',
-        quote: nextSelection.quote
+        quote: nextSelection.quote,
+        ...(!parentAnnotationId && nextSelection.rects?.length ? { rects: nextSelection.rects } : {}),
+        ...(nextSelection.cfi ? { range: { from: nextSelection.cfi } } : {})
       },
       type,
       color: node.color,
@@ -786,21 +860,18 @@ export function LibrarySpatialReader({
         context_target: contextTarget,
         anchor: {
           kind: parentAnnotationId ? 'annotation_body_range' : 'text_quote',
-          quote: nextSelection.quote
+          quote: nextSelection.quote,
+          ...(!parentAnnotationId && nextSelection.rects?.length ? { rects: nextSelection.rects } : {}),
+          ...(nextSelection.cfi ? { range: { from: nextSelection.cfi } } : {})
         },
         selected_text: nextSelection.text,
         canvas_item_ids: canvasItemIdsForSelection(item.frontmatter.id),
         color: action.color,
         ...(parentAnnotationId ? { parent_annotation_id: parentAnnotationId } : {})
       });
-      const viewState = await window.orbit.annotation.updateViewState(LIBRARY_READER_SPACE_ID, result.annotation.id, {
-        position: loadingNode.position,
-        size: loadingNode.size,
-        status: loadingNode.status,
-        z_index: loadingNode.zIndex
-      });
+      const viewState = await persistAnnotationViewState(loadingNode, result.annotation.id);
       const persistedNode =
-        annotationRecordToThoughtNode(result.annotation, itemById, viewState) ?? {
+        (viewState ? annotationRecordToThoughtNode(result.annotation, itemById, viewState) : null) ?? {
           ...loadingNode,
           id: result.annotation.id,
           label: result.annotation.title,
@@ -838,6 +909,8 @@ export function LibrarySpatialReader({
       sourceScope: 'selection',
       sourceText: selection.text,
       sourceQuote: selection.quote,
+      sourceCfi: selection.cfi,
+      sourceRects: selection.rects,
       sourceWindowId: selection.sourceWindowId,
       sourceNodeId: selection.sourceNodeId,
       color: 'yellow',
@@ -867,6 +940,8 @@ export function LibrarySpatialReader({
       sourceScope: 'selection',
       sourceText: selection.text,
       sourceQuote: selection.quote,
+      sourceCfi: selection.cfi,
+      sourceRects: selection.rects,
       sourceWindowId: selection.sourceWindowId,
       sourceNodeId: selection.sourceNodeId,
       color: 'purple',
@@ -1028,27 +1103,33 @@ export function LibrarySpatialReader({
           : node;
       })
     );
+    scrollToThoughtSource(nodeId);
+  }
+
+  function scrollToThoughtSource(nodeId: string): void {
+    const node = thoughtNodesRef.current.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    window.dispatchEvent(
+      new CustomEvent<ReaderScrollToAnnotationEventDetail>(READER_SCROLL_TO_ANNOTATION_EVENT, {
+        detail: {
+          nodeId,
+          itemId: node.itemId,
+          sourceWindowId: node.sourceWindowId,
+          page: node.sourceRects?.[0]?.page
+        }
+      })
+    );
+    const scroll = () => scrollThoughtSourceElementIntoView(node);
+    window.requestAnimationFrame(() => {
+      scroll();
+      window.setTimeout(scroll, 140);
+    });
   }
 
   function moveAttachedThoughtNodes(sourceWindowId: string, itemId: string, delta: SpatialPoint): void {
     if (delta.x === 0 && delta.y === 0) return;
     setThoughtNodes((current) => {
-      const attachedNodeIds = new Set(
-        current
-          .filter(
-            (node) =>
-              !node.sourceNodeId &&
-              (node.sourceWindowId === sourceWindowId ||
-                (!node.sourceWindowId && node.itemId === itemId))
-          )
-          .map((node) => node.id)
-      );
-      const nodeIdsToMove = new Set(attachedNodeIds);
-      attachedNodeIds.forEach((nodeId) => {
-        getDescendantThoughtNodeIds(current, nodeId).forEach((descendantNodeId) => {
-          nodeIdsToMove.add(descendantNodeId);
-        });
-      });
+      const nodeIdsToMove = new Set(getReaderAttachedThoughtNodeIdsInRaiseOrder(current, sourceWindowId, itemId));
 
       return current.map((node) => {
         if (!nodeIdsToMove.has(node.id)) return node;
@@ -1065,7 +1146,71 @@ export function LibrarySpatialReader({
     });
   }
 
+  function hideAllChildWindows(): void {
+    setThoughtNodes((current) =>
+      current.map((node) => {
+        if (node.status !== 'open') return node;
+        const next = { ...node, status: 'minimized' as const };
+        scheduleAnnotationViewStatePersist(next);
+        return next;
+      })
+    );
+  }
+
+  function beginReaderWindowMove(windowId: string): void {
+    const sourceWindow = windows.find((window) => window.id === windowId);
+    if (!sourceWindow) {
+      readerWindowDragSnapshotRef.current = null;
+      return;
+    }
+    const currentNodes = thoughtNodesRef.current;
+    const attachedNodeStarts = new Map<string, SpatialPoint>();
+    getReaderAttachedThoughtNodeIdsInRaiseOrder(currentNodes, windowId, sourceWindow.itemId).forEach((nodeId) => {
+      const node = currentNodes.find((candidate) => candidate.id === nodeId);
+      if (!node) return;
+      attachedNodeStarts.set(node.id, { ...node.position });
+    });
+    readerWindowDragSnapshotRef.current = {
+      windowId,
+      itemId: sourceWindow.itemId,
+      parentStart: { ...sourceWindow.position },
+      attachedNodeStarts
+    };
+  }
+
+  function endReaderWindowMove(windowId: string): void {
+    if (readerWindowDragSnapshotRef.current?.windowId === windowId) {
+      readerWindowDragSnapshotRef.current = null;
+    }
+  }
+
   function moveReaderWindowWithAttachedNodes(windowId: string, position: SpatialPoint): void {
+    const snapshot = readerWindowDragSnapshotRef.current;
+    if (snapshot?.windowId === windowId) {
+      const delta = {
+        x: position.x - snapshot.parentStart.x,
+        y: position.y - snapshot.parentStart.y
+      };
+      updateWindow(windowId, { position });
+      if (delta.x === 0 && delta.y === 0) return;
+      setThoughtNodes((current) =>
+        current.map((node) => {
+          const start = snapshot.attachedNodeStarts.get(node.id);
+          if (!start) return node;
+          const next = {
+            ...node,
+            position: {
+              x: start.x + delta.x,
+              y: start.y + delta.y
+            }
+          };
+          scheduleAnnotationViewStatePersist(next);
+          return next;
+        })
+      );
+      return;
+    }
+
     const currentWindow = windows.find((window) => window.id === windowId);
     const delta = currentWindow
       ? {
@@ -1131,7 +1276,7 @@ export function LibrarySpatialReader({
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
           <div className="flex rounded border border-neutral-200 bg-neutral-50 p-0.5 dark:border-neutral-800 dark:bg-neutral-900">
             <button
               type="button"
@@ -1212,10 +1357,13 @@ export function LibrarySpatialReader({
           onDropActiveChange={setDropActive}
           onDropItem={openDroppedItem}
           onActivateWindow={activateWindow}
+          onBeginWindowMove={beginReaderWindowMove}
           onMoveWindow={moveReaderWindowWithAttachedNodes}
+          onEndWindowMove={endReaderWindowMove}
           onResizeWindow={(windowId, size) => updateWindow(windowId, { size })}
           onCloseWindow={(windowId) => updateWindow(windowId, { status: 'closed' })}
           onMinimizeWindow={(windowId) => updateWindow(windowId, { status: 'minimized' })}
+          onHideAllChildWindows={hideAllChildWindows}
           onCreateResourceNote={createResourceNoteForWindow}
           onDuplicateWindow={(windowId) => {
             const source = windows.find((window) => window.id === windowId);
@@ -1334,6 +1482,11 @@ function ReadingThoughtLayer({
   const openThoughtNodes = thoughtNodes.filter((node) => node.status === 'open');
   const minimizedThoughtNodes = thoughtNodes.filter((node) => node.status === 'minimized');
   const visibleThoughtNodes = thoughtNodes.filter((node) => node.status !== 'closed');
+  const sourceVisibleThoughtNodeIds = useOpenSourceVisibleThoughtNodeIds({
+    nodes: thoughtNodes,
+    readerWindowIds: [],
+    coordinateRootRef: layerRef
+  });
   const childThoughtNodesBySourceId = useMemo(() => {
     const children = new Map<string, SpatialThoughtNode[]>();
     thoughtNodes.forEach((node) => {
@@ -1363,6 +1516,7 @@ function ReadingThoughtLayer({
           <SpatialThoughtWindow
             key={node.id}
             node={node}
+            hiddenBySource={!sourceVisibleThoughtNodeIds.has(node.id)}
             viewport={DEFAULT_VIEWPORT}
             sourceItem={item}
             onActivate={onActivateThought}
@@ -1419,10 +1573,13 @@ function SpaceCanvas({
   onDropActiveChange,
   onDropItem,
   onActivateWindow,
+  onBeginWindowMove,
   onMoveWindow,
+  onEndWindowMove,
   onResizeWindow,
   onCloseWindow,
   onMinimizeWindow,
+  onHideAllChildWindows,
   onCreateResourceNote,
   onDuplicateWindow,
   onReaderSelection,
@@ -1444,10 +1601,13 @@ function SpaceCanvas({
   onDropActiveChange(active: boolean): void;
   onDropItem(itemId: string, client: SpatialPoint): void;
   onActivateWindow(windowId: string): void;
+  onBeginWindowMove(windowId: string): void;
   onMoveWindow(windowId: string, position: SpatialPoint): void;
+  onEndWindowMove(windowId: string): void;
   onResizeWindow(windowId: string, size: SpatialSize): void;
   onCloseWindow(windowId: string): void;
   onMinimizeWindow(windowId: string): void;
+  onHideAllChildWindows(): void;
   onCreateResourceNote(windowId: string): void;
   onDuplicateWindow(windowId: string): void;
   onReaderSelection(selection: ReaderSelectionState): void;
@@ -1472,6 +1632,11 @@ function SpaceCanvas({
   const minimizedThoughtNodes = thoughtNodes.filter((node) => node.status === 'minimized');
   const visibleThoughtNodes = thoughtNodes.filter((node) => node.status !== 'closed');
   const openWindowIds = useMemo(() => openWindows.map((window) => window.id), [openWindows]);
+  const sourceVisibleThoughtNodeIds = useOpenSourceVisibleThoughtNodeIds({
+    nodes: thoughtNodes,
+    readerWindowIds: openWindowIds,
+    coordinateRootRef: viewportLayerRef
+  });
   const canvasItems = useMemo(
     () =>
       Array.from(new Set(openWindows.map((window) => window.itemId)))
@@ -1639,7 +1804,9 @@ function SpaceCanvas({
               item={item}
               viewport={viewport}
               onActivate={onActivateWindow}
+              onMoveStart={onBeginWindowMove}
               onMove={onMoveWindow}
+              onMoveEnd={onEndWindowMove}
               onResize={onResizeWindow}
               onClose={onCloseWindow}
               onMinimize={onMinimizeWindow}
@@ -1655,6 +1822,7 @@ function SpaceCanvas({
           <SpatialThoughtWindow
             key={node.id}
             node={node}
+            hiddenBySource={!sourceVisibleThoughtNodeIds.has(node.id)}
             viewport={viewport}
             sourceItem={itemById.get(node.itemId) ?? null}
             onActivate={onActivateThought}
@@ -1691,8 +1859,25 @@ function SpaceCanvas({
         onOpenChange={setThoughtDockOpen}
         getSourceItem={(node) => itemById.get(node.itemId) ?? null}
         onActivateThought={onActivateThought}
-        className="left-3 top-3 z-[400]"
+        className={openThoughtNodes.length > 0 ? 'left-3 top-14 z-[400]' : 'left-3 top-3 z-[400]'}
       />
+
+      {openThoughtNodes.length > 0 ? (
+        <button
+          type="button"
+          data-spatial-interactive
+          onClick={onHideAllChildWindows}
+          className="pointer-events-auto absolute left-3 top-3 z-[410] inline-flex h-10 items-center gap-2 rounded border border-neutral-200 bg-white/95 px-3 text-xs font-semibold text-neutral-700 shadow-lg backdrop-blur hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/95 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          title="隐藏所有子窗口"
+          aria-label={`隐藏所有子窗口，当前 ${openThoughtNodes.length} 个`}
+        >
+          <EyeOff size={15} />
+          <span>隐藏子窗口</span>
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-neutral-100 px-1 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+            {openThoughtNodes.length}
+          </span>
+        </button>
+      ) : null}
 
       {minimizedWindows.length > 0 || minimizedThoughtNodes.length > 0 ? (
         <div className="pointer-events-auto absolute bottom-3 left-3 z-[390] flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2">
@@ -1837,7 +2022,9 @@ function SpatialReaderWindow({
   item,
   viewport,
   onActivate,
+  onMoveStart,
   onMove,
+  onMoveEnd,
   onResize,
   onClose,
   onMinimize,
@@ -1851,7 +2038,9 @@ function SpatialReaderWindow({
   item: LibraryItem;
   viewport: SpatialViewport;
   onActivate(windowId: string): void;
+  onMoveStart(windowId: string): void;
   onMove(windowId: string, position: SpatialPoint): void;
+  onMoveEnd(windowId: string): void;
   onResize(windowId: string, size: SpatialSize): void;
   onClose(windowId: string): void;
   onMinimize(windowId: string): void;
@@ -1865,22 +2054,32 @@ function SpatialReaderWindow({
   const resizeStartRef = useRef<SpatialPoint | null>(null);
   const startPositionRef = useRef(windowState.position);
   const startSizeRef = useRef(windowState.size);
+  const onMoveRef = useRef(onMove);
+  const onMoveEndRef = useRef(onMoveEnd);
+  const viewportZoomRef = useRef(viewport.zoom);
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
   const kind = getLibraryReaderKind(item);
+
+  useEffect(() => {
+    onMoveRef.current = onMove;
+    onMoveEndRef.current = onMoveEnd;
+    viewportZoomRef.current = viewport.zoom;
+  }, [onMove, onMoveEnd, viewport.zoom]);
 
   useEffect(() => {
     if (!dragging) return;
     function onPointerMove(event: PointerEvent): void {
       const start = dragStartRef.current;
       if (!start) return;
-      onMove(windowState.id, {
-        x: startPositionRef.current.x + (event.clientX - start.x) / viewport.zoom,
-        y: startPositionRef.current.y + (event.clientY - start.y) / viewport.zoom
+      onMoveRef.current(windowState.id, {
+        x: startPositionRef.current.x + (event.clientX - start.x) / viewportZoomRef.current,
+        y: startPositionRef.current.y + (event.clientY - start.y) / viewportZoomRef.current
       });
     }
     function onPointerUp(): void {
       dragStartRef.current = null;
+      onMoveEndRef.current(windowState.id);
       setDragging(false);
     }
     window.addEventListener('pointermove', onPointerMove);
@@ -1891,7 +2090,7 @@ function SpatialReaderWindow({
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
     };
-  }, [dragging, onMove, viewport.zoom, windowState.id]);
+  }, [dragging, windowState.id]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -1955,6 +2154,7 @@ function SpatialReaderWindow({
             event.preventDefault();
             event.stopPropagation();
             onActivate(windowState.id);
+            onMoveStart(windowState.id);
             dragStartRef.current = { x: event.clientX, y: event.clientY };
             startPositionRef.current = windowState.position;
             setDragging(true);
@@ -2009,6 +2209,7 @@ function SpatialReaderWindow({
 
 function SpatialThoughtWindow({
   node,
+  hiddenBySource = false,
   viewport,
   sourceItem,
   onActivate,
@@ -2025,6 +2226,7 @@ function SpatialThoughtWindow({
   onBindConversation
 }: {
   node: SpatialThoughtNode;
+  hiddenBySource?: boolean;
   viewport: SpatialViewport;
   sourceItem: LibraryItem | null;
   onActivate(nodeId: string): void;
@@ -2246,6 +2448,7 @@ function SpatialThoughtWindow({
       id={getThoughtWindowElementId(node.id)}
       data-spatial-interactive
       data-spatial-window
+      aria-hidden={hiddenBySource || undefined}
       className={cx(
         'pointer-events-auto absolute flex min-h-[220px] min-w-[300px] flex-col overflow-hidden rounded-lg border border-amber-200 bg-amber-50 text-amber-950 shadow-[0_22px_60px_-34px_rgba(120,53,15,0.65),0_0_0_1px_rgba(251,191,36,0.35)] dark:border-amber-900/60 dark:bg-amber-950 dark:text-amber-50',
         (dragging || resizing) && 'select-none'
@@ -2255,7 +2458,8 @@ function SpatialThoughtWindow({
         top: node.position.y,
         width: node.size.width,
         height: node.size.height,
-        zIndex: getSpatialWindowZIndex(node.zIndex)
+        zIndex: getSpatialWindowZIndex(node.zIndex),
+        display: hiddenBySource ? 'none' : undefined
       }}
       onPointerDownCapture={() => onActivate(node.id)}
     >
@@ -2627,6 +2831,12 @@ interface RichReaderTocItem {
   level: number;
 }
 
+interface EpubTocEntry {
+  label: string;
+  href: string;
+  subitems?: EpubTocEntry[];
+}
+
 interface RichReaderSearchResult {
   id: string;
   title: string;
@@ -2685,7 +2895,8 @@ function RichReaderFrame({
     showContext: Boolean(spacious)
   }));
   const [activeTab, setActiveTab] = useState<RichReaderTab>(toc.length > 0 ? 'toc' : 'search');
-  const source = getLibraryReaderSource(item);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
   const hasNavigation = toc.length > 0 || Boolean(onSearchQueryChange);
   const showNavigation = settings.showNavigation && hasNavigation;
   const showContext = settings.showContext && Boolean(context);
@@ -2707,17 +2918,11 @@ function RichReaderFrame({
       )}
       style={cssVars}
     >
-      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-current/10 bg-white/90 px-2 text-neutral-800 backdrop-blur dark:bg-neutral-950/90 dark:text-neutral-100">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-current/10 bg-current/[0.04]">
-            {readerIcon(getLibraryReaderKind(item))}
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-xs font-semibold">{item.frontmatter.title}</div>
-            <div className="truncate text-[10px] opacity-60">{subtitle}</div>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
+      <div
+        className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-current/10 bg-white/80 px-2 text-neutral-800 backdrop-blur dark:bg-neutral-950/80 dark:text-neutral-100"
+        aria-label={`${subtitle}工具栏`}
+      >
+        <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
           {toolbarStart}
           {hasNavigation ? (
             <RichIconButton
@@ -3087,7 +3292,8 @@ function ReaderContextSummary({
   item: LibraryItem;
   sections: MarkdownSection[];
 }): JSX.Element {
-  const source = getLibraryReaderSource(item);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
   const words = item.body.trim().split(/\s+/).filter(Boolean).length;
   return (
     <div className="space-y-3">
@@ -3129,32 +3335,96 @@ function RichPdfReader({
   item: LibraryItem;
   spacious?: boolean;
 } & ReaderSelectionCaptureProps): JSX.Element {
-  const source = getLibraryReaderSource(item);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
   const contentRef = useRef<HTMLDivElement>(null);
+  const scrollRootRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [pageNumber, setPageNumber] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [textByPage, setTextByPage] = useState<Record<number, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [scrollMode, setScrollMode] = useState<'paginated' | 'scrolled'>('paginated');
-  const [pageWidth, setPageWidth] = useState(860);
+  const [pdfViewportSize, setPdfViewportSize] = useState<SpatialSize>({ width: 0, height: 0 });
+  const [pageSizes, setPageSizes] = useState<Record<number, SpatialSize>>({});
+  const [pdfZoom, setPdfZoom] = useState(1);
+  const shouldPrefetchPdf = Boolean(source && isLocalReaderAssetSource(source));
+  const [prefetchedPdf, setPrefetchedPdf] = useState<Uint8Array<ArrayBuffer> | null>(null);
+  const [prefetchError, setPrefetchError] = useState<string | null>(null);
+  const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const root = contentRef.current;
     if (!root) return;
-    renderReaderQuoteHighlights(root, thoughtNodes ?? EMPTY_THOUGHT_NODES);
+    renderPdfQuoteHighlights(root, thoughtNodes ?? EMPTY_THOUGHT_NODES);
     if (onActivateThought) decorateThoughtHighlights(root, thoughtNodes ?? EMPTY_THOUGHT_NODES, onActivateThought);
   }, [onActivateThought, pageNumber, textByPage, thoughtNodes]);
 
   useEffect(() => {
-    const root = contentRef.current?.parentElement;
+    const root = scrollRootRef.current;
     if (!root) return;
-    const update = () => setPageWidth(Math.max(320, Math.min(1080, root.clientWidth - 72)));
+    const update = () => {
+      const style = window.getComputedStyle(root);
+      const width = Math.max(0, root.clientWidth - cssPixelValue(style.paddingLeft) - cssPixelValue(style.paddingRight));
+      const height = Math.max(0, root.clientHeight - cssPixelValue(style.paddingTop) - cssPixelValue(style.paddingBottom));
+      setPdfViewportSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(root);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    setPageNumber(1);
+    setNumPages(0);
+    setTextByPage({});
+    setPageSizes({});
+    setPdfZoom(1);
+    setPrefetchedPdf(null);
+    setPrefetchError(null);
+    setPdfLoadError(null);
+    if (!source || !shouldPrefetchPdf) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(source);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const buffer = await response.arrayBuffer();
+        if (!cancelled) setPrefetchedPdf(new Uint8Array(buffer));
+      } catch (error) {
+        if (!cancelled) setPrefetchError((error as Error).message);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldPrefetchPdf, source]);
+
+  useEffect(() => {
+    if (scrollMode !== 'scrolled' || numPages <= 0) return;
+    const root = scrollRootRef.current;
+    if (!root) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const rootTop = root.getBoundingClientRect().top;
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => Math.abs(a.boundingClientRect.top - rootTop) - Math.abs(b.boundingClientRect.top - rootTop));
+        const nextPage = Number((visible[0]?.target as HTMLElement | undefined)?.dataset.pdfPageNumber);
+        if (Number.isFinite(nextPage) && nextPage > 0) setPageNumber(nextPage);
+      },
+      { root, threshold: [0.15, 0.35, 0.65], rootMargin: '-12% 0px -68% 0px' }
+    );
+
+    Object.values(pageRefs.current).forEach((element) => {
+      if (element) observer.observe(element);
+    });
+    return () => observer.disconnect();
+  }, [numPages, scrollMode]);
 
   const searchResults = useMemo<RichReaderSearchResult[]>(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -3174,51 +3444,134 @@ function RichPdfReader({
       });
   }, [searchQuery, textByPage]);
 
-  async function handlePdfLoadSuccess(pdf: { numPages: number; getPage(page: number): Promise<{ getTextContent(): Promise<{ items: Array<{ str?: string }> }> }> }): Promise<void> {
+  async function handlePdfLoadSuccess(pdf: {
+    numPages: number;
+    getPage(page: number): Promise<{
+      getTextContent(): Promise<{ items: Array<{ str?: string }> }>;
+      getViewport(params: { scale: number }): SpatialSize;
+    }>;
+  }): Promise<void> {
     setNumPages(pdf.numPages);
     const entries = await Promise.all(
       Array.from({ length: pdf.numPages }, async (_, index) => {
-        const page = await pdf.getPage(index + 1);
-        const textContent = await page.getTextContent();
+        const pageNumber = index + 1;
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1 });
+        const textContent = await page.getTextContent().catch(() => ({ items: [] }));
+        const text = textContent.items
+          .map((entry) => entry.str ?? '')
+          .filter(Boolean)
+          .join(' ');
         return [
-          index + 1,
-          textContent.items
-            .map((entry) => entry.str ?? '')
-            .filter(Boolean)
-            .join(' ')
+          pageNumber,
+          text,
+          { width: viewport.width, height: viewport.height }
         ] as const;
       })
     );
-    setTextByPage(Object.fromEntries(entries));
+    setTextByPage(Object.fromEntries(entries.map(([pageNumber, text]) => [pageNumber, text])));
+    setPageSizes(Object.fromEntries(entries.map(([pageNumber, , size]) => [pageNumber, size])));
   }
 
-  function goToPage(nextPage: number): void {
+  const pdfFile = useMemo(() => {
+    if (shouldPrefetchPdf) return prefetchedPdf ? { data: prefetchedPdf } : null;
+    return source;
+  }, [prefetchedPdf, shouldPrefetchPdf, source]);
+  const fittedPageHeight = Math.max(
+    PDF_READER_MIN_PAGE_HEIGHT,
+    (pdfViewportSize.height || PDF_PAGE_FALLBACK_SIZE.height) - PDF_READER_PAGE_BORDER_SIZE
+  );
+  const renderedPageHeight = Math.round(fittedPageHeight * pdfZoom);
+  const renderedPageWidth = getRenderedPdfPageWidth(pageNumber, pageSizes, renderedPageHeight);
+  const renderedNextPageWidth = getRenderedPdfPageWidth(pageNumber + 1, pageSizes, renderedPageHeight);
+  const canShowTwoPages =
+    scrollMode === 'paginated' &&
+    pageNumber < numPages &&
+    pdfViewportSize.width >= renderedPageWidth + renderedNextPageWidth + PDF_READER_PAGE_GAP + PDF_READER_PAGE_BORDER_SIZE * 4;
+  const visiblePdfPages = scrollMode === 'scrolled'
+    ? Array.from({ length: numPages }, (_, index) => index + 1)
+    : canShowTwoPages
+      ? [pageNumber, pageNumber + 1]
+      : [pageNumber];
+  const pageStep = scrollMode === 'paginated' && canShowTwoPages ? 2 : 1;
+
+  const goToPage = useCallback((nextPage: number): void => {
     const page = clampNumber(nextPage, 1, Math.max(1, numPages || nextPage));
     setPageNumber(page);
     if (scrollMode === 'scrolled') {
       pageRefs.current[page]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  }, [numPages, scrollMode]);
+
+  function updatePdfZoom(nextZoom: number): void {
+    setPdfZoom(clampNumber(Number(nextZoom.toFixed(2)), MIN_PDF_ZOOM, MAX_PDF_ZOOM));
   }
 
-  function captureSelection(): void {
+  const scrollPdfAnnotationIntoView = useCallback((nodeId: string, page?: number): void => {
+    const escapedId = escapeCssIdent(nodeId);
+    const highlight = contentRef.current?.querySelector<HTMLElement>(
+      [
+        `#${escapeCssIdent(getThoughtHighlightElementId(nodeId))}`,
+        `[data-reader-thought-id="${escapedId}"]`,
+        `[data-reader-annotation-id="${escapedId}"]`,
+        `[data-pdf-rect-highlight="${escapedId}"]`
+      ].join(',')
+    );
+    const target = highlight ?? (page ? pageRefs.current[page] : null);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }, []);
+
+  useEffect(() => {
+    function handleScrollToAnnotation(event: Event): void {
+      const detail = (event as CustomEvent<ReaderScrollToAnnotationEventDetail>).detail;
+      if (!detail || detail.itemId !== item.frontmatter.id) return;
+      if (detail.sourceWindowId && sourceWindowId && detail.sourceWindowId !== sourceWindowId) return;
+      const node = (thoughtNodes ?? EMPTY_THOUGHT_NODES).find((candidate) => candidate.id === detail.nodeId);
+      const page = detail.page ?? node?.sourceRects?.[0]?.page;
+      if (page) goToPage(page);
+      window.requestAnimationFrame(() => {
+        scrollPdfAnnotationIntoView(detail.nodeId, page);
+        window.setTimeout(() => scrollPdfAnnotationIntoView(detail.nodeId, page), 160);
+      });
+    }
+
+    window.addEventListener(READER_SCROLL_TO_ANNOTATION_EVENT, handleScrollToAnnotation);
+    return () => window.removeEventListener(READER_SCROLL_TO_ANNOTATION_EVENT, handleScrollToAnnotation);
+  }, [goToPage, item.frontmatter.id, scrollPdfAnnotationIntoView, sourceWindowId, thoughtNodes]);
+
+  const captureSelection = useCallback((): void => {
     if (!onReaderSelection) return;
     window.requestAnimationFrame(() => {
       const root = contentRef.current;
       if (!root) return;
       const selection = getReaderSelectionFromRoot(item.frontmatter.id, root, sourceWindowId);
-      if (selection) onReaderSelection(selection);
+      if (selection) {
+        onReaderSelection({
+          ...selection,
+          rects: getPdfSelectionRects(pageRefs.current)
+        });
+      }
     });
-  }
+  }, [item.frontmatter.id, onReaderSelection, sourceWindowId]);
+
+  useEffect(() => {
+    document.addEventListener('pointerup', captureSelection);
+    document.addEventListener('keyup', captureSelection);
+    return () => {
+      document.removeEventListener('pointerup', captureSelection);
+      document.removeEventListener('keyup', captureSelection);
+    };
+  }, [captureSelection]);
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     if (isNativeInteractive(event.target)) return;
     if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
       event.preventDefault();
-      goToPage(pageNumber - 1);
+      goToPage(pageNumber - pageStep);
     }
     if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
       event.preventDefault();
-      goToPage(pageNumber + 1);
+      goToPage(pageNumber + pageStep);
     }
   }
 
@@ -3240,13 +3593,13 @@ function RichPdfReader({
       onSearchResultSelect={(result) => goToPage(Number(result.id))}
       toolbarStart={
         <>
-          <RichIconButton label="上一页" onClick={() => goToPage(pageNumber - 1)}>
+          <RichIconButton label="上一页" onClick={() => goToPage(pageNumber - pageStep)}>
             <ChevronLeft size={14} />
           </RichIconButton>
           <span className="w-16 text-center text-[11px] tabular-nums">
             {pageNumber}/{numPages || '—'}
           </span>
-          <RichIconButton label="下一页" onClick={() => goToPage(pageNumber + 1)}>
+          <RichIconButton label="下一页" onClick={() => goToPage(pageNumber + pageStep)}>
             <ChevronRight size={14} />
           </RichIconButton>
           <button
@@ -3254,8 +3607,23 @@ function RichPdfReader({
             onClick={() => setScrollMode((current) => (current === 'paginated' ? 'scrolled' : 'paginated'))}
             className="h-7 rounded px-2 text-[11px] hover:bg-neutral-100 dark:hover:bg-neutral-900"
           >
-            {scrollMode === 'paginated' ? '单页' : '连续'}
+            {scrollMode === 'paginated' ? (canShowTwoPages ? '双页' : '单页') : '连续'}
           </button>
+          <RichIconButton label="缩小 PDF" onClick={() => updatePdfZoom(pdfZoom - 0.1)}>
+            <ZoomOut size={14} />
+          </RichIconButton>
+          <button
+            type="button"
+            onClick={() => updatePdfZoom(1)}
+            className="h-7 w-12 rounded px-1 text-center text-[11px] tabular-nums hover:bg-neutral-100 dark:hover:bg-neutral-900"
+            aria-label="重置 PDF 适高缩放"
+            title="重置 PDF 适高缩放"
+          >
+            {Math.round(pdfZoom * 100)}%
+          </button>
+          <RichIconButton label="放大 PDF" onClick={() => updatePdfZoom(pdfZoom + 0.1)}>
+            <ZoomIn size={14} />
+          </RichIconButton>
         </>
       }
       context={<PdfContext item={item} pageNumber={pageNumber} numPages={numPages} text={textByPage[pageNumber] ?? ''} />}
@@ -3263,50 +3631,152 @@ function RichPdfReader({
     >
       {(settings) => (
         <div
+          ref={scrollRootRef}
           tabIndex={0}
           className={cx('h-full overflow-auto p-5 outline-none', richReaderThemeClass(settings.theme))}
+          onPointerUpCapture={captureSelection}
           onPointerUp={captureSelection}
+          onMouseUp={captureSelection}
+          onKeyUpCapture={captureSelection}
           onKeyUp={captureSelection}
           onKeyDown={handleKeyDown}
         >
-          <PdfDocument
-            file={source}
-            onLoadSuccess={(pdf) => void handlePdfLoadSuccess(pdf as Parameters<typeof handlePdfLoadSuccess>[0])}
-            loading={<ReaderLoading label="正在加载 PDF..." />}
-            error={<ReaderError label="PDF 加载失败，请检查文件或链接。" />}
-          >
-            <div
-              ref={contentRef}
-              data-spatial-reader-viewport
-              data-reader-resource-id={item.frontmatter.id}
-              className={cx(
-                'flex min-h-full',
-                scrollMode === 'scrolled' ? 'flex-col items-center gap-5' : 'items-start justify-center'
-              )}
+          {prefetchError || pdfLoadError ? (
+            <ReaderError label={`PDF 加载失败：${prefetchError ?? pdfLoadError}`} />
+          ) : shouldPrefetchPdf && !prefetchedPdf ? (
+            <ReaderLoading label="正在加载 PDF..." />
+          ) : (
+            <PdfDocument
+              key={source}
+              file={pdfFile}
+              onLoadSuccess={(pdf) => void handlePdfLoadSuccess(pdf as Parameters<typeof handlePdfLoadSuccess>[0])}
+              onLoadError={(error) => setPdfLoadError(error.message)}
+              onSourceError={(error) => setPdfLoadError(error.message)}
+              loading={<ReaderLoading label="正在加载 PDF..." />}
+              error={<ReaderError label="PDF 加载失败，请检查文件或链接。" />}
             >
-              {(scrollMode === 'scrolled' ? Array.from({ length: numPages }, (_, index) => index + 1) : [pageNumber]).map((page) => (
-                <div
-                  key={page}
-                  ref={(element) => {
-                    pageRefs.current[page] = element;
-                  }}
-                  className="overflow-hidden rounded border border-neutral-200 bg-white shadow-sm dark:border-neutral-800"
-                >
-                  <PdfPage
-                    pageNumber={page}
-                    width={pageWidth}
-                    onRenderTextLayerSuccess={() => {
-                      renderReaderQuoteHighlights(contentRef.current, thoughtNodes ?? EMPTY_THOUGHT_NODES);
+              <div
+                ref={contentRef}
+                data-spatial-reader-viewport
+                data-reader-resource-id={item.frontmatter.id}
+                className={cx(
+                  'flex min-h-full',
+                  scrollMode === 'scrolled' ? 'flex-col items-center gap-5' : 'items-start justify-center gap-5'
+                )}
+              >
+                {visiblePdfPages.map((page) => (
+                  <div
+                    key={page}
+                    ref={(element) => {
+                      pageRefs.current[page] = element;
                     }}
-                  />
-                </div>
-              ))}
-            </div>
-          </PdfDocument>
+                    data-pdf-page-number={page}
+                    className="relative overflow-hidden rounded border border-neutral-200 bg-white shadow-sm dark:border-neutral-800"
+                    onClick={(event) => {
+                      const nodeId = getPdfRectHighlightNodeAtPoint({
+                        page,
+                        thoughtNodes: thoughtNodes ?? EMPTY_THOUGHT_NODES,
+                        pageElement: event.currentTarget,
+                        clientX: event.clientX,
+                        clientY: event.clientY
+                      });
+                      if (!nodeId) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onActivateThought?.(nodeId);
+                    }}
+                  >
+                    <PdfPage
+                      pageNumber={page}
+                      height={renderedPageHeight}
+                      onRenderTextLayerSuccess={() => {
+                        renderPdfQuoteHighlights(contentRef.current, thoughtNodes ?? EMPTY_THOUGHT_NODES);
+                      }}
+                    />
+                    <PdfRectHighlightOverlay
+                      page={page}
+                      thoughtNodes={thoughtNodes ?? EMPTY_THOUGHT_NODES}
+                    />
+                  </div>
+                ))}
+              </div>
+            </PdfDocument>
+          )}
         </div>
       )}
     </RichReaderFrame>
   );
+}
+
+function PdfRectHighlightOverlay({
+  page,
+  thoughtNodes
+}: {
+  page: number;
+  thoughtNodes: SpatialThoughtNode[];
+}): JSX.Element | null {
+  const rectHighlights = thoughtNodes
+    .filter((node) => node.sourceScope !== 'resource' && node.sourceRects?.some((rect) => rect.page === page))
+    .flatMap((node) =>
+      (node.sourceRects ?? [])
+        .filter((rect) => rect.page === page)
+        .map((rect, index) => ({ node, rect, index }))
+    );
+
+  if (rectHighlights.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[3]" aria-hidden="true">
+      {rectHighlights.map(({ node, rect, index }) => (
+        <span
+          key={`${node.id}-${page}-${index}`}
+          data-pdf-rect-highlight={node.id}
+          className="absolute rounded-[2px] mix-blend-multiply"
+          style={{
+            left: `${rect.x * 100}%`,
+            top: `${rect.y * 100}%`,
+            width: `${rect.width * 100}%`,
+            height: `${rect.height * 100}%`,
+            backgroundColor: pdfHighlightColorByColor[node.color]
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function getPdfRectHighlightNodeAtPoint({
+  page,
+  thoughtNodes,
+  pageElement,
+  clientX,
+  clientY
+}: {
+  page: number;
+  thoughtNodes: SpatialThoughtNode[];
+  pageElement: HTMLElement;
+  clientX: number;
+  clientY: number;
+}): string | null {
+  const pageRect = pageElement.getBoundingClientRect();
+  if (pageRect.width <= 0 || pageRect.height <= 0) return null;
+  const x = (clientX - pageRect.left) / pageRect.width;
+  const y = (clientY - pageRect.top) / pageRect.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+
+  for (const node of thoughtNodes.slice().reverse()) {
+    if (node.sourceScope === 'resource') continue;
+    const rect = node.sourceRects?.find((candidate) =>
+      candidate.page === page &&
+      x >= candidate.x &&
+      x <= candidate.x + candidate.width &&
+      y >= candidate.y &&
+      y <= candidate.y + candidate.height
+    );
+    if (rect) return node.id;
+  }
+
+  return null;
 }
 
 function PdfContext({
@@ -3356,6 +3826,57 @@ interface MediaTranscriptSegment {
 
 let youtubeApiPromise: Promise<NonNullable<Window['YT']>> | null = null;
 
+function hasActiveTextSelection(): boolean {
+  const selectedText = window.getSelection()?.toString().trim() ?? '';
+  return selectedText.length > 0;
+}
+
+function useMediaSelectionGesture(): {
+  handlePointerDownCapture(): void;
+  handlePointerUpCapture(): void;
+  handleKeyUpCapture(): void;
+  shouldSuppressSeek(): boolean;
+  syncAfterGesture(): void;
+} {
+  const hadSelectionOnPointerDownRef = useRef(false);
+  const suppressSeekRef = useRef(false);
+
+  const syncAfterGesture = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const hasSelection = hasActiveTextSelection();
+      suppressSeekRef.current = hasSelection || hadSelectionOnPointerDownRef.current;
+      hadSelectionOnPointerDownRef.current = false;
+    });
+  }, []);
+
+  const handlePointerDownCapture = useCallback(() => {
+    const hasSelection = hasActiveTextSelection();
+    hadSelectionOnPointerDownRef.current = hasSelection;
+    suppressSeekRef.current = hasSelection;
+  }, []);
+
+  const handlePointerUpCapture = useCallback(() => {
+    syncAfterGesture();
+  }, [syncAfterGesture]);
+
+  const handleKeyUpCapture = useCallback(() => {
+    syncAfterGesture();
+  }, [syncAfterGesture]);
+
+  const shouldSuppressSeek = useCallback(() => suppressSeekRef.current || hasActiveTextSelection(), []);
+
+  return useMemo(
+    () => ({
+      handlePointerDownCapture,
+      handlePointerUpCapture,
+      handleKeyUpCapture,
+      shouldSuppressSeek,
+      syncAfterGesture
+    }),
+    [handleKeyUpCapture, handlePointerDownCapture, handlePointerUpCapture, shouldSuppressSeek, syncAfterGesture]
+  );
+}
+
 function RichYouTubeReader({
   item,
   spacious,
@@ -3367,7 +3888,8 @@ function RichYouTubeReader({
   item: LibraryItem;
   spacious?: boolean;
 } & ReaderSelectionCaptureProps): JSX.Element {
-  const source = getLibraryReaderSource(item);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
   const videoId = getYouTubeVideoId(source) ?? getYouTubeVideoId(item.body);
   const playerId = useMemo(() => `orbit-youtube-${item.frontmatter.id.replace(/[^a-z0-9_-]/gi, '-')}-${Math.random().toString(36).slice(2)}`, [item.frontmatter.id]);
   const playerRef = useRef<InstanceType<NonNullable<NonNullable<Window['YT']>['Player']>> | null>(null);
@@ -3460,13 +3982,51 @@ function RichPodcastReader({
   spacious?: boolean;
 } & ReaderSelectionCaptureProps): JSX.Element {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const source = getPodcastAudioSource(item);
+  const youtubePlayerId = useMemo(() => `orbit-podcast-youtube-${item.frontmatter.id.replace(/[^a-z0-9_-]/gi, '-')}-${Math.random().toString(36).slice(2)}`, [item.frontmatter.id]);
+  const youtubePlayerRef = useRef<InstanceType<NonNullable<NonNullable<Window['YT']>['Player']>> | null>(null);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getPodcastAudioSource(item, vaultRoot);
   const youtubeId = getYouTubeVideoId(source);
   const media = useMemo(() => parseMediaDocument(item), [item]);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [muted, setMuted] = useState(false);
+
+  useEffect(() => {
+    if (!youtubeId) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    void loadYouTubeIframeApi()
+      .then((YT) => {
+        if (cancelled || !YT.Player) return;
+        youtubePlayerRef.current = new YT.Player(youtubePlayerId, {
+          videoId: youtubeId,
+          playerVars: { autoplay: 0, modestbranding: 1, rel: 0 },
+          events: {
+            onStateChange: (event: { data: number }) => {
+              setIsPlaying(event.data === YT.PlayerState?.PLAYING);
+            }
+          }
+        });
+        timer = window.setInterval(() => {
+          const player = youtubePlayerRef.current;
+          const seconds = player?.getCurrentTime?.();
+          if (typeof seconds === 'number') setCurrentTime(seconds * 1000);
+          const nextRate = player?.getPlaybackRate?.();
+          if (typeof nextRate === 'number') setPlaybackRate(nextRate);
+          const nextMuted = player?.isMuted?.();
+          if (typeof nextMuted === 'boolean') setMuted(nextMuted);
+        }, 500);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearInterval(timer);
+      youtubePlayerRef.current?.destroy();
+      youtubePlayerRef.current = null;
+    };
+  }, [youtubeId, youtubePlayerId]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -3495,14 +4055,19 @@ function RichPodcastReader({
   function seek(timeMs: number): void {
     const audio = audioRef.current;
     if (audio) audio.currentTime = timeMs / 1000;
+    youtubePlayerRef.current?.seekTo?.(timeMs / 1000, true);
     setCurrentTime(timeMs);
   }
 
   function togglePlayback(): void {
     const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) void audio.play();
-    else audio.pause();
+    if (audio) {
+      if (audio.paused) void audio.play();
+      else audio.pause();
+      return;
+    }
+    if (isPlaying) youtubePlayerRef.current?.pauseVideo?.();
+    else youtubePlayerRef.current?.playVideo?.();
   }
 
   return (
@@ -3534,56 +4099,60 @@ function RichPodcastReader({
           {source && !youtubeId ? (
             <>
               <audio ref={audioRef} src={source} controls className="w-full" />
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <button type="button" onClick={() => seek(Math.max(0, currentTime - 15_000))} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
-                  <SkipBack size={13} />15s
-                </button>
-                <button type="button" onClick={togglePlayback} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
-                  {isPlaying ? <Pause size={13} /> : <Play size={13} />}
-                  {isPlaying ? '暂停' : '播放'}
-                </button>
-                <button type="button" onClick={() => seek(currentTime + 15_000)} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
-                  <SkipForward size={13} />15s
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const audio = audioRef.current;
-                    if (!audio) return;
-                    audio.muted = !audio.muted;
-                    setMuted(audio.muted);
-                  }}
-                  className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5"
-                >
-                  {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
-                  声音
-                </button>
-                <select
-                  value={playbackRate}
-                  onChange={(event) => {
-                    const next = Number(event.target.value);
-                    if (audioRef.current) audioRef.current.playbackRate = next;
-                    setPlaybackRate(next);
-                  }}
-                  className="h-7 rounded border border-current/10 bg-transparent px-2"
-                >
-                  {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
-                    <option key={rate} value={rate}>{rate}x</option>
-                  ))}
-                </select>
-              </div>
             </>
           ) : youtubeId ? (
-            <iframe
-              src={`https://www.youtube.com/embed/${youtubeId}`}
-              title={item.frontmatter.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              className="aspect-video w-full border-0 bg-black"
-            />
+            <div className="aspect-video w-full overflow-hidden bg-black">
+              <div id={youtubePlayerId} className="h-full w-full" />
+            </div>
           ) : (
             <ReaderError label="缺少可播放音频源。" />
           )}
+          {(source && !youtubeId) || youtubeId ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" onClick={() => seek(Math.max(0, currentTime - 15_000))} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
+                <SkipBack size={13} />15s
+              </button>
+              <button type="button" onClick={togglePlayback} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
+                {isPlaying ? <Pause size={13} /> : <Play size={13} />}
+                {isPlaying ? '暂停' : '播放'}
+              </button>
+              <button type="button" onClick={() => seek(currentTime + 15_000)} className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5">
+                <SkipForward size={13} />15s
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const audio = audioRef.current;
+                  if (audio) {
+                    audio.muted = !audio.muted;
+                    setMuted(audio.muted);
+                    return;
+                  }
+                  if (muted) youtubePlayerRef.current?.unMute?.();
+                  else youtubePlayerRef.current?.mute?.();
+                  setMuted(!muted);
+                }}
+                className="inline-flex items-center gap-1 rounded border border-current/10 px-2 py-1 hover:bg-current/5"
+              >
+                {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
+                声音
+              </button>
+              <select
+                value={playbackRate}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  if (audioRef.current) audioRef.current.playbackRate = next;
+                  youtubePlayerRef.current?.setPlaybackRate?.(next);
+                  setPlaybackRate(next);
+                }}
+                className="h-7 rounded border border-current/10 bg-transparent px-2"
+              >
+                {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                  <option key={rate} value={rate}>{rate}x</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </div>
       }
     />
@@ -3618,8 +4187,19 @@ function RichMediaReader({
   context: ReactNode;
 } & ReaderSelectionCaptureProps): JSX.Element {
   const [mediaTab, setMediaTab] = useState<'chapters' | 'transcript'>(chapters.length > 0 ? 'chapters' : 'transcript');
+  const [autoFollowMode, setAutoFollowMode] = useState<'following' | 'free'>('following');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const activeItemRef = useRef<HTMLDivElement | null>(null);
+  const programmaticScrollRef = useRef(false);
+  const programmaticScrollTimerRef = useRef<number | null>(null);
+  const selectionGesture = useMediaSelectionGesture();
   const activeTranscriptIndex = useMemo(() => findActiveTranscriptIndex(currentTime, transcript), [currentTime, transcript]);
   const activeChapterIndex = useMemo(() => findActiveChapterIndex(currentTime, chapters), [chapters, currentTime]);
+  const isAutoFollowPaused = autoFollowMode === 'free';
+
+  useEffect(() => {
+    if (chapters.length === 0) setMediaTab('transcript');
+  }, [chapters.length]);
 
   const toc = useMemo(
     () =>
@@ -3630,6 +4210,67 @@ function RichMediaReader({
       })),
     [chapters, transcript]
   );
+
+  const clearProgrammaticScroll = useCallback(() => {
+    if (programmaticScrollTimerRef.current !== null) {
+      window.clearTimeout(programmaticScrollTimerRef.current);
+      programmaticScrollTimerRef.current = null;
+    }
+    programmaticScrollRef.current = false;
+  }, []);
+
+  const scrollActiveItemIntoView = useCallback(() => {
+    const container = scrollContainerRef.current;
+    const active = activeItemRef.current;
+    if (!container || !active) return;
+    const containerRect = container.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    if (activeRect.top >= containerRect.top && activeRect.bottom <= containerRect.bottom) return;
+
+    programmaticScrollRef.current = true;
+    active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (programmaticScrollTimerRef.current !== null) window.clearTimeout(programmaticScrollTimerRef.current);
+    programmaticScrollTimerRef.current = window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+      programmaticScrollTimerRef.current = null;
+    }, 450);
+  }, []);
+
+  useEffect(() => () => clearProgrammaticScroll(), [clearProgrammaticScroll]);
+
+  useEffect(() => {
+    setAutoFollowMode('following');
+  }, [mediaTab]);
+
+  useEffect(() => {
+    if (!isPlaying || isAutoFollowPaused) return;
+    scrollActiveItemIntoView();
+  }, [activeChapterIndex, activeTranscriptIndex, isAutoFollowPaused, isPlaying, scrollActiveItemIntoView]);
+
+  function handleScrollContainerScroll(): void {
+    if (!isPlaying || programmaticScrollRef.current) return;
+    setAutoFollowMode('free');
+  }
+
+  function resumeAutoFollow(): void {
+    setAutoFollowMode('following');
+    scrollActiveItemIntoView();
+  }
+
+  function handleSeekIntent(timeMs: number): void {
+    if (selectionGesture.shouldSuppressSeek()) {
+      selectionGesture.syncAfterGesture();
+      return;
+    }
+    setAutoFollowMode('following');
+    onSeek(timeMs);
+  }
+
+  function handleSeekKeyDown(event: ReactKeyboardEvent<HTMLDivElement>, timeMs: number): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleSeekIntent(timeMs);
+  }
 
   return (
     <RichReaderFrame
@@ -3642,7 +4283,7 @@ function RichMediaReader({
         const index = Number(id);
         const chapter = chapters[index];
         const segment = transcript[index];
-        onSeek(chapter ? chapter.seconds * 1000 : segment?.startMs ?? 0);
+        handleSeekIntent(chapter ? chapter.seconds * 1000 : segment?.startMs ?? 0);
       }}
       toolbarStart={
         <span className="inline-flex items-center gap-1 rounded bg-current/5 px-2 py-1 text-[11px]">
@@ -3657,68 +4298,140 @@ function RichMediaReader({
         <div className={cx('h-full overflow-auto px-5 py-4', richReaderThemeClass(settings.theme))}>
           <div className={cx('mx-auto space-y-4', richReaderContentWidthClass(settings.width))}>
             {hero}
-            <div className="flex items-center gap-1 rounded border border-current/10 bg-current/[0.03] p-1 text-xs">
+            <div className="mb-1.5 flex items-center gap-2 border-b border-current/10 pb-1 text-xs">
               <button
                 type="button"
                 onClick={() => setMediaTab('chapters')}
-                className={cx('rounded px-3 py-1.5', mediaTab === 'chapters' ? 'bg-current/10 font-semibold' : 'hover:bg-current/5')}
+                disabled={chapters.length === 0}
+                className={cx(
+                  'inline-flex items-center gap-1 rounded px-2 py-0.5 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                  mediaTab === 'chapters' ? 'bg-indigo-600 text-white' : 'text-neutral-500 hover:bg-current/5 dark:text-neutral-400'
+                )}
               >
-                章节 {chapters.length}
+                <List size={12} />
+                章节 ({chapters.length})
               </button>
               <button
                 type="button"
                 onClick={() => setMediaTab('transcript')}
-                className={cx('rounded px-3 py-1.5', mediaTab === 'transcript' ? 'bg-current/10 font-semibold' : 'hover:bg-current/5')}
+                className={cx(
+                  'inline-flex items-center gap-1 rounded px-2 py-0.5 font-medium transition-colors',
+                  mediaTab === 'transcript' ? 'bg-indigo-600 text-white' : 'text-neutral-500 hover:bg-current/5 dark:text-neutral-400'
+                )}
               >
-                转写 {transcript.length}
+                <FileText size={12} />
+                转写 ({transcript.length})
               </button>
+              <span className="ml-auto font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                {formatTime(currentTime)}
+              </span>
             </div>
             <ReaderScroll
               itemId={item.frontmatter.id}
               sourceWindowId={sourceWindowId}
               compact
+              rootRef={scrollContainerRef}
               thoughtNodes={thoughtNodes}
               onReaderSelection={onReaderSelection}
               onActivateThought={onActivateThought}
-              className={cx('max-h-[52vh] rounded border border-current/10', richReaderThemeClass(settings.theme))}
-              contentClassName="space-y-2"
+              className={cx('relative max-h-[52vh] rounded border border-current/10 !px-1.5 !py-1.5', richReaderThemeClass(settings.theme))}
+              contentClassName="space-y-0.5"
               contentStyle={{
                 fontSize: 'var(--rich-reader-font-size)',
                 lineHeight: 'var(--rich-reader-line-height)'
               }}
+              onScroll={handleScrollContainerScroll}
+              onPointerDownCapture={selectionGesture.handlePointerDownCapture}
+              onPointerUpCapture={selectionGesture.handlePointerUpCapture}
+              onKeyUpCapture={selectionGesture.handleKeyUpCapture}
             >
+              {isAutoFollowPaused ? (
+                <div className="pointer-events-none absolute right-2 top-2 z-10 flex justify-end">
+                  <div className="pointer-events-auto max-w-[220px] rounded-md border border-current/10 bg-white/95 px-2.5 py-2 text-xs shadow-sm backdrop-blur dark:bg-neutral-950/95">
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 font-medium">正在自由查看</p>
+                      <button
+                        type="button"
+                        onClick={resumeAutoFollow}
+                        className="inline-flex h-7 items-center gap-1 rounded border border-current/10 px-2 hover:bg-current/5"
+                      >
+                        <ArrowUp size={13} />
+                        回到自动滚动
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               {mediaTab === 'chapters' ? (
                 chapters.length > 0 ? chapters.map((chapter, index) => (
-                  <button
+                  <div
                     key={chapter.id}
-                    type="button"
-                    onClick={() => onSeek(chapter.seconds * 1000)}
+                    ref={index === activeChapterIndex ? activeItemRef : null}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSeekIntent(chapter.seconds * 1000)}
+                    onKeyDown={(event) => handleSeekKeyDown(event, chapter.seconds * 1000)}
                     className={cx(
-                      'flex w-full items-start gap-3 rounded px-3 py-2 text-left hover:bg-current/5',
-                      index === activeChapterIndex && 'bg-current/10'
+                      'flex w-full cursor-pointer select-text items-start gap-2 rounded px-2 py-1 text-left transition-colors hover:bg-current/5',
+                      index === activeChapterIndex && 'border-l-2 border-indigo-500 bg-indigo-500/10 hover:bg-indigo-500/10 dark:border-indigo-400'
                     )}
                   >
-                    <span className="w-16 shrink-0 font-mono text-xs opacity-60">{formatTime(chapter.seconds * 1000)}</span>
-                    <span className="font-medium">{chapter.title}</span>
-                  </button>
+                    <span
+                      className={cx(
+                        'font-mono text-[11px]',
+                        index === activeChapterIndex ? 'font-medium text-indigo-700 dark:text-indigo-200' : 'text-neutral-500 dark:text-neutral-400'
+                      )}
+                    >
+                      {formatTime(chapter.seconds * 1000)}
+                    </span>
+                    <span
+                      className={cx(
+                        'min-w-0 flex-1 leading-snug',
+                        index === activeChapterIndex ? 'font-medium text-neutral-950 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-300'
+                      )}
+                    >
+                      {chapter.title}
+                    </span>
+                  </div>
                 )) : <EmptyMediaState label="暂无章节信息" />
               ) : transcript.length > 0 ? (
                 transcript.map((segment, index) => (
-                  <button
+                  <div
                     key={segment.id}
-                    type="button"
-                    onClick={() => onSeek(segment.startMs)}
+                    ref={index === activeTranscriptIndex ? activeItemRef : null}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSeekIntent(segment.startMs)}
+                    onKeyDown={(event) => handleSeekKeyDown(event, segment.startMs)}
                     className={cx(
-                      'flex w-full items-start gap-3 rounded px-3 py-2 text-left hover:bg-current/5',
-                      index === activeTranscriptIndex && 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-200'
+                      'w-full cursor-pointer select-text rounded px-1.5 py-1 text-left transition-colors',
+                      index === activeTranscriptIndex
+                        ? 'bg-indigo-500/10 text-neutral-950 dark:text-neutral-100'
+                        : 'text-neutral-600 hover:bg-current/5 dark:text-neutral-300'
                     )}
                   >
-                    <span className="w-16 shrink-0 font-mono text-xs opacity-60">{formatTime(segment.startMs)}</span>
-                    <span className="min-w-0">
-                      {segment.speaker ? <span className="mr-1 font-semibold opacity-70">{segment.speaker}</span> : null}
+                    <span
+                      className={cx(
+                        'mr-1.5 font-mono text-[11px]',
+                        index === activeTranscriptIndex ? 'text-indigo-700 dark:text-indigo-200' : 'text-neutral-500/80 dark:text-neutral-400/80'
+                      )}
+                    >
+                      {formatTime(segment.startMs)}
+                    </span>
+                    {segment.speaker ? (
+                      <span
+                        className={cx(
+                          'mr-1 font-semibold',
+                          index === activeTranscriptIndex ? 'text-indigo-700 dark:text-indigo-200' : 'text-neutral-500 dark:text-neutral-400'
+                        )}
+                      >
+                        {segment.speaker}
+                      </span>
+                    ) : null}
+                    <span className="leading-snug">
                       {segment.text}
                     </span>
-                  </button>
+                  </div>
                 ))
               ) : (
                 <EmptyMediaState label="暂无转写内容" />
@@ -3775,30 +4488,68 @@ function RichEpubReader({
   item,
   spacious,
   sourceWindowId,
-  onReaderSelection
+  thoughtNodes,
+  onReaderSelection,
+  onActivateThought
 }: {
   item: LibraryItem;
   spacious?: boolean;
 } & ReaderSelectionCaptureProps): JSX.Element {
-  const source = getLibraryReaderSource(item);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
   const containerRef = useRef<HTMLDivElement>(null);
-  const renditionRef = useRef<{ display(target?: string): Promise<unknown>; prev(): Promise<unknown>; next(): Promise<unknown>; destroy(): void; themes?: { default(theme: Record<string, unknown>): void; select(name: string): void }; getContents?(): Array<{ document?: Document }> } | null>(null);
-  const bookRef = useRef<{ destroy?(): void; ready?: Promise<unknown>; loaded?: { navigation?: Promise<{ toc?: Array<{ label: string; href: string; subitems?: Array<{ label: string; href: string }> }> }>; metadata?: Promise<{ title?: string }> } } | null>(null);
+  const renditionRef = useRef<{
+    display(target?: string): Promise<unknown>;
+    prev(): Promise<unknown>;
+    next(): Promise<unknown>;
+    destroy(): void;
+    annotations?: {
+      add(
+        type: string,
+        cfiRange: string,
+        data?: unknown,
+        callback?: () => void,
+        className?: string,
+        styles?: Record<string, string>
+      ): void;
+      remove(cfiRange: string, type: string): void;
+    };
+    themes?: { default(theme: Record<string, unknown>): void; select(name: string): void };
+    getContents?(): Array<{ document?: Document }>;
+  } | null>(null);
+  const bookRef = useRef<{ destroy?(): void; ready?: Promise<unknown>; loaded?: { navigation?: Promise<{ toc?: EpubTocEntry[] }>; metadata?: Promise<{ title?: string }> } } | null>(null);
+  const renderedEpubCfisRef = useRef<string[]>([]);
+  const epubThoughtNodesRef = useRef<SpatialThoughtNode[]>(thoughtNodes ?? EMPTY_THOUGHT_NODES);
+  const epubActivateThoughtRef = useRef<typeof onActivateThought>(onActivateThought);
+  const epubReaderSelectionRef = useRef<typeof onReaderSelection>(onReaderSelection);
   const [toc, setToc] = useState<RichReaderTocItem[]>([]);
   const [location, setLocation] = useState('');
   const [visibleText, setVisibleText] = useState('');
-  const [mode, setMode] = useState<'paginated' | 'scrolled'>('paginated');
+  const [mode, setMode] = useState<'paginated' | 'scrolled'>('scrolled');
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    epubThoughtNodesRef.current = thoughtNodes ?? EMPTY_THOUGHT_NODES;
+  }, [thoughtNodes]);
+
+  useEffect(() => {
+    epubActivateThoughtRef.current = onActivateThought;
+  }, [onActivateThought]);
+
+  useEffect(() => {
+    epubReaderSelectionRef.current = onReaderSelection;
+  }, [onReaderSelection]);
 
   useEffect(() => {
     if (!source || !containerRef.current) return;
     const epubSource = source;
     let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
     setLoadError(null);
 
     async function mount(): Promise<void> {
       try {
-        const book = ePub(epubSource);
+        const book = ePub(await resolveEpubSourceInput(epubSource), { replacements: 'none' });
         bookRef.current = book as typeof bookRef.current;
         const rendition = book.renderTo(containerRef.current!, {
           width: '100%',
@@ -3808,14 +4559,68 @@ function RichEpubReader({
           allowScriptedContent: false
         });
         renditionRef.current = rendition as unknown as typeof renditionRef.current;
+        const refreshVisibleQuoteHighlights = () => {
+          renderEpubQuoteHighlights(
+            rendition,
+            epubThoughtNodesRef.current.filter((node) => node.sourceScope !== 'resource'),
+            epubActivateThoughtRef.current
+          );
+        };
+        rendition.themes?.default({
+          body: {
+            margin: '0 !important',
+            padding: '2rem !important',
+            color: '#111827 !important',
+            background: '#ffffff !important',
+            visibility: 'visible !important',
+            opacity: '1 !important',
+            '-webkit-text-fill-color': '#111827 !important',
+            'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important',
+            'line-height': '1.75 !important'
+          },
+          'h1,h2,h3': {
+            color: '#111827 !important',
+            'line-height': '1.25 !important'
+          },
+          p: {
+            color: '#111827 !important',
+            'font-size': '1rem !important'
+          },
+          '::selection': {
+            background: 'rgba(59, 130, 246, 0.28) !important'
+          }
+        });
+        rendition.themes?.select('default');
+        rendition.on?.('rendered', () => {
+          if (!cancelled) {
+            scheduleEpubFramePaint(rendition, containerRef.current);
+            refreshVisibleQuoteHighlights();
+          }
+        });
+        rendition.on?.('displayed', () => {
+          if (!cancelled) {
+            scheduleEpubFramePaint(rendition, containerRef.current);
+            refreshVisibleQuoteHighlights();
+          }
+        });
+
+        if (containerRef.current) {
+          resizeObserver = new ResizeObserver(() => {
+            if (!cancelled) scheduleEpubFramePaint(rendition, containerRef.current);
+          });
+          resizeObserver.observe(containerRef.current);
+        }
 
         rendition.hooks?.content?.register?.((contents: { document: Document; window: Window; cfiFromRange?(range: Range): string }) => {
+          applyEpubContentStyles(contents.document);
+
           const syncSelection = () => {
             contents.window.requestAnimationFrame(() => {
               const selected = contents.window.getSelection?.();
               const text = selected?.toString().trim() ?? '';
               if (!text || !selected || selected.rangeCount === 0) return;
               const range = selected.getRangeAt(0);
+              const cfi = contents.cfiFromRange?.(range);
               const frameElement = contents.document.defaultView?.frameElement;
               const frameRect = frameElement instanceof Element ? frameElement.getBoundingClientRect() : null;
               const baseRect = getRangeAnchorRect(range);
@@ -3829,16 +4634,18 @@ function RichEpubReader({
                   }
                 : baseRect;
               if (!rect) return;
-              onReaderSelection?.({
+              epubReaderSelectionRef.current?.({
                 itemId: item.frontmatter.id,
                 text,
                 quote: { exact: text },
+                ...(cfi ? { cfi } : {}),
                 anchorRect: rect,
                 sourceWindowId
               });
             });
           };
           contents.document.addEventListener('pointerup', syncSelection);
+          contents.document.addEventListener('mouseup', syncSelection);
           contents.document.addEventListener('keyup', syncSelection);
         });
 
@@ -3846,21 +4653,28 @@ function RichEpubReader({
           if (cancelled) return;
           const cfi = event.start?.cfi ?? '';
           setLocation(cfi);
-          const text = rendition
-            .getContents?.()
-            ?.map((content: { document?: Document }) => content.document?.body?.innerText ?? '')
-            .filter(Boolean)
-            .join('\n\n')
-            .trim() ?? '';
-          setVisibleText(text);
+          scheduleEpubFramePaint(rendition, containerRef.current);
+          refreshVisibleQuoteHighlights();
+          setVisibleText(getEpubVisibleText(rendition));
         });
 
+        const navigationPromise = (book as { loaded?: { navigation?: Promise<{ toc?: EpubTocEntry[] }> } }).loaded?.navigation;
         await book.ready;
-        const navigation = await book.loaded?.navigation;
+        if (cancelled) return;
+        const navigation = navigationPromise ? await navigationPromise.catch(() => null) : null;
+        const tocItems = flattenEpubToc(navigation?.toc ?? []);
+        if (!cancelled) setToc(tocItems);
+        await displayEpubTarget(rendition, firstEpubTocTarget(navigation?.toc ?? []));
+        await ensureEpubReadableTarget(
+          rendition,
+          containerRef.current,
+          tocItems.map((entry) => entry.id)
+        );
+        scheduleEpubFramePaint(rendition, containerRef.current);
+        refreshVisibleQuoteHighlights();
         if (!cancelled) {
-          setToc(flattenEpubToc(navigation?.toc ?? []));
+          setVisibleText(getEpubVisibleText(rendition));
         }
-        await rendition.display();
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
       }
@@ -3869,27 +4683,62 @@ function RichEpubReader({
     void mount();
     return () => {
       cancelled = true;
-      renditionRef.current?.destroy();
-      bookRef.current?.destroy?.();
+      resizeObserver?.disconnect();
+      try {
+        renditionRef.current?.destroy();
+      } catch {
+        /* epub.js can throw while tearing down a partially mounted iframe. */
+      }
+      try {
+        bookRef.current?.destroy?.();
+      } catch {
+        /* ignore epub.js cleanup failures */
+      }
       renditionRef.current = null;
       bookRef.current = null;
+      renderedEpubCfisRef.current = [];
     };
-  }, [item.frontmatter.id, mode, onReaderSelection, source, sourceWindowId]);
+  }, [item.frontmatter.id, mode, source, sourceWindowId]);
 
   useEffect(() => {
     const rendition = renditionRef.current;
-    if (!rendition?.themes) return;
-    rendition.themes.default({
-      body: {
-        color: '#111827',
-        background: '#ffffff',
-        'font-size': '16px',
-        'line-height': '1.7',
-        'font-family': 'ui-serif, Georgia, serif'
+    if (!rendition?.annotations) return;
+
+    renderedEpubCfisRef.current.forEach((cfi) => {
+      try {
+        rendition.annotations?.remove(cfi, 'highlight');
+      } catch {
+        /* epub.js can throw if the iframe moved while annotations were being refreshed. */
       }
     });
-    rendition.themes.select('default');
-  }, [location]);
+
+    const nextNodes = (thoughtNodes ?? EMPTY_THOUGHT_NODES).filter(
+      (node) => node.sourceScope !== 'resource' && Boolean(node.sourceCfi)
+    );
+
+    nextNodes.forEach((node) => {
+      const cfi = node.sourceCfi;
+      if (!cfi) return;
+      rendition.annotations?.add(
+        'highlight',
+        cfi,
+        { nodeId: node.id },
+        () => onActivateThought?.(node.id),
+        'orbit-epub-annotation-highlight',
+        {
+          fill: epubHighlightColorByColor[node.color],
+          'fill-opacity': '0.42',
+          'mix-blend-mode': 'multiply'
+        }
+      );
+    });
+
+    renderEpubQuoteHighlights(rendition, nextNodes, onActivateThought);
+
+    renderedEpubCfisRef.current = nextNodes
+      .map((node) => node.sourceCfi)
+      .filter((cfi): cfi is string => Boolean(cfi));
+  }, [onActivateThought, thoughtNodes]);
 
   if (!source) {
     return <ReaderError label="缺少 EPUB 文件来源。" />;
@@ -3942,12 +4791,281 @@ function RichEpubReader({
           {loadError ? (
             <ReaderError label={`EPUB 加载失败：${loadError}`} />
           ) : (
-            <div ref={containerRef} className="h-full w-full overflow-hidden rounded border border-neutral-200 bg-white dark:border-neutral-800" />
+            <div
+              ref={containerRef}
+              className="h-full w-full overflow-hidden rounded border border-neutral-200 bg-white [&_iframe]:!block [&_iframe]:!h-full [&_iframe]:!w-full [&_iframe]:!bg-white [&_iframe]:!opacity-100 [&_iframe]:!visible dark:border-neutral-800"
+            />
           )}
         </div>
       )}
     </RichReaderFrame>
   );
+}
+
+async function resolveEpubSourceInput(source: string): Promise<string | ArrayBuffer> {
+  if (!isLocalReaderAssetSource(source)) return source;
+  const response = await fetch(source);
+  if (!response.ok) throw new Error(`无法读取 EPUB 文件（${response.status}）`);
+  return response.arrayBuffer();
+}
+
+function scheduleEpubFramePaint(
+  rendition: {
+    resize?(width?: number, height?: number): void;
+    getContents?(): unknown;
+  },
+  container: HTMLDivElement | null
+): void {
+  if (!container) return;
+  window.requestAnimationFrame(() => forceEpubFramePaint(rendition, container));
+  EPUB_FRAME_PAINT_DELAYS_MS.forEach((delay) => {
+    window.setTimeout(() => forceEpubFramePaint(rendition, container), delay);
+  });
+}
+
+function forceEpubFramePaint(
+  rendition: {
+    resize?(width?: number, height?: number): void;
+    getContents?(): unknown;
+  },
+  container: HTMLDivElement
+): void {
+  try {
+    const rect = container.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      rendition.resize?.(Math.floor(rect.width), Math.floor(rect.height));
+    }
+
+    pruneEmptyEpubContainers(container);
+    nudgeEpubContainerPaint(container);
+
+    getEpubContents(rendition).forEach((content) => {
+      const document = content.document;
+      if (!document) return;
+      applyEpubContentStyles(document);
+      const frame = document.defaultView?.frameElement;
+      if (frame instanceof HTMLElement) {
+        frame.style.display = 'block';
+        frame.style.width = '100%';
+        frame.style.height = '100%';
+        frame.style.minHeight = '100%';
+        frame.style.background = '#ffffff';
+        frame.style.opacity = '1';
+        frame.style.visibility = 'visible';
+        frame.style.colorScheme = 'light';
+        frame.style.transform = 'translateZ(0)';
+        frame.style.backfaceVisibility = 'hidden';
+        void frame.offsetHeight;
+      }
+      document.documentElement.style.background = '#ffffff';
+      document.documentElement.style.visibility = 'visible';
+      document.documentElement.style.opacity = '1';
+      if (document.body) {
+        document.body.style.background = '#ffffff';
+        document.body.style.color = '#111827';
+        document.body.style.visibility = 'visible';
+        document.body.style.opacity = '1';
+        document.body.style.webkitTextFillColor = '#111827';
+        document.body.style.transform = 'translateZ(0)';
+        void document.body.getBoundingClientRect();
+      }
+    });
+    pruneEmptyEpubContainers(container);
+    nudgeEpubContainerPaint(container);
+  } catch {
+    /* Best-effort paint nudge for EPUB iframes. */
+  }
+}
+
+function getEpubContents(rendition: { getContents?(): unknown }): Array<{ document?: Document }> {
+  const contents = rendition.getContents?.();
+  if (Array.isArray(contents)) return contents as Array<{ document?: Document }>;
+  if (contents && typeof contents === 'object' && 'document' in contents) {
+    return [contents as { document?: Document }];
+  }
+  return [];
+}
+
+async function displayEpubTarget(
+  rendition: { display(target?: string): Promise<unknown> },
+  target?: string
+): Promise<void> {
+  try {
+    await rendition.display(target);
+  } catch {
+    if (target) await rendition.display();
+  }
+}
+
+async function ensureEpubReadableTarget(
+  rendition: {
+    display(target?: string): Promise<unknown>;
+    resize?(width?: number, height?: number): void;
+    getContents?(): unknown;
+  },
+  container: HTMLDivElement | null,
+  candidates: string[]
+): Promise<void> {
+  await waitForEpubPaint();
+  scheduleEpubFramePaint(rendition, container);
+  if (hasEpubReadableText(rendition)) return;
+
+  for (const target of uniqueEpubTargets(candidates).slice(0, 16)) {
+    try {
+      await rendition.display(target);
+      await waitForEpubPaint();
+      await waitForEpubPaint();
+      scheduleEpubFramePaint(rendition, container);
+      if (hasEpubReadableText(rendition)) return;
+    } catch {
+      /* Some EPUB TOC hrefs point at fragments epub.js cannot display directly. */
+    }
+  }
+}
+
+function uniqueEpubTargets(targets: string[]): string[] {
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const normalized = target.trim();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function firstEpubTocTarget(items: EpubTocEntry[]): string | undefined {
+  for (const item of items) {
+    if (item.href) return item.href;
+    const nested = firstEpubTocTarget(item.subitems ?? []);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function getEpubVisibleText(rendition: { getContents?(): unknown }): string {
+  return getEpubContents(rendition)
+    .map((content) => {
+      const body = content.document?.body;
+      return (body?.innerText || body?.textContent || '').replace(/\s+/g, ' ').trim();
+    })
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
+function hasEpubReadableText(rendition: { getContents?(): unknown }): boolean {
+  return getEpubVisibleText(rendition).replace(/\s/g, '').length > 16;
+}
+
+function pruneEmptyEpubContainers(container: HTMLDivElement): void {
+  const epubContainers = Array.from(container.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement && child.classList.contains('epub-container')
+  );
+  if (epubContainers.length <= 1) return;
+
+  const readableContainers = epubContainers.filter((child) =>
+    getEpubContainerText(child).replace(/\s/g, '').length > 0
+  );
+  if (readableContainers.length === 0) return;
+
+  epubContainers.forEach((child) => {
+    if (!readableContainers.includes(child)) child.remove();
+  });
+
+  if (readableContainers.length === 1) {
+    const activeContainer = readableContainers[0];
+    activeContainer.style.width = '100%';
+    activeContainer.style.height = '100%';
+    activeContainer.style.position = 'relative';
+    activeContainer.style.top = '0';
+    activeContainer.style.left = '0';
+    activeContainer.style.transform = 'none';
+  }
+}
+
+function nudgeEpubContainerPaint(container: HTMLDivElement): void {
+  Array.from(container.querySelectorAll<HTMLElement>('.epub-container, .epub-view')).forEach((element) => {
+    element.style.transform = element.style.transform || 'translateZ(0)';
+    element.style.backfaceVisibility = 'hidden';
+    if (element.scrollHeight > element.clientHeight) {
+      const scrollTop = element.scrollTop;
+      element.scrollTop = scrollTop + 1;
+      element.scrollTop = scrollTop;
+    }
+    void element.offsetHeight;
+  });
+}
+
+function getEpubContainerText(container: HTMLElement): string {
+  try {
+    const frame = container.querySelector('iframe');
+    return (frame?.contentDocument?.body?.innerText || frame?.contentDocument?.body?.textContent || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function waitForEpubPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(resolve, 40);
+    });
+  });
+}
+
+function applyEpubContentStyles(document: Document): void {
+  const existing = document.getElementById('orbit-epub-readable-style');
+  const style = existing ?? document.createElement('style');
+  style.id = 'orbit-epub-readable-style';
+  style.textContent = `
+    * {
+      visibility: visible !important;
+      opacity: 1 !important;
+      text-shadow: none !important;
+    }
+    html, body {
+      background: #ffffff !important;
+      color: #111827 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      min-height: 100% !important;
+      color-scheme: light !important;
+    }
+    body {
+      margin: 0 !important;
+      padding: 2rem !important;
+      display: block !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      line-height: 1.75 !important;
+      -webkit-text-fill-color: #111827 !important;
+    }
+    body, p, div, span, a, a:visited, em, i, strong, b, li, blockquote, section, article, h1, h2, h3, h4, h5, h6 {
+      color: #111827 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      -webkit-text-fill-color: #111827 !important;
+    }
+    p {
+      display: block !important;
+      margin: 0 0 1rem !important;
+      font-size: 1rem !important;
+    }
+    img, svg, video, canvas {
+      max-width: 100% !important;
+      height: auto !important;
+    }
+    ::selection {
+      background: rgba(59, 130, 246, 0.28) !important;
+    }
+    .orbit-epub-annotation-highlight {
+      cursor: pointer;
+    }
+  `;
+  document.head?.appendChild(style);
+}
+
+function isLocalReaderAssetSource(source: string): boolean {
+  return source.startsWith('orbit-media://') || source.startsWith('file://');
 }
 
 function ArticleReader({
@@ -3961,6 +5079,23 @@ function ArticleReader({
   item: LibraryItem;
   spacious?: boolean;
 } & ReaderSelectionCaptureProps): JSX.Element {
+  const htmlSnapshotRef = getArticleHtmlSnapshotRef(item);
+  const inlineHtml = getInlineArticleHtml(item);
+  if (htmlSnapshotRef || inlineHtml) {
+    return (
+      <HtmlArticleReader
+        item={item}
+        htmlSnapshotRef={htmlSnapshotRef ?? item.path}
+        inlineHtml={inlineHtml ?? undefined}
+        spacious={spacious}
+        sourceWindowId={sourceWindowId}
+        thoughtNodes={thoughtNodes}
+        onReaderSelection={onReaderSelection}
+        onActivateThought={onActivateThought}
+      />
+    );
+  }
+
   return (
     <ReaderScroll
       itemId={item.frontmatter.id}
@@ -3982,6 +5117,256 @@ function ArticleReader({
   );
 }
 
+function HtmlArticleReader({
+  item,
+  htmlSnapshotRef,
+  inlineHtml,
+  spacious,
+  sourceWindowId,
+  thoughtNodes,
+  onReaderSelection,
+  onActivateThought
+}: {
+  item: LibraryItem;
+  htmlSnapshotRef: string;
+  inlineHtml?: string;
+  spacious?: boolean;
+} & ReaderSelectionCaptureProps): JSX.Element {
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const [fetchedHtml, setFetchedHtml] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const snapshotUrl = useMemo(() => normalizeLibraryReaderSource(htmlSnapshotRef, vaultRoot), [htmlSnapshotRef, vaultRoot]);
+
+  useEffect(() => {
+    if (inlineHtml) {
+      setFetchedHtml(null);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setFetchedHtml(null);
+    setError(null);
+    void fetch(snapshotUrl)
+      .then((response) => {
+        if (!response.ok) throw new Error(`source_html_fetch_failed:${response.status}`);
+        return response.text();
+      })
+      .then((text) => {
+        if (!cancelled) setFetchedHtml(text);
+      })
+      .catch((nextError) => {
+        if (!cancelled) setError(nextError instanceof Error ? nextError.message : String(nextError));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inlineHtml, snapshotUrl]);
+
+  const html = inlineHtml ?? fetchedHtml;
+  const renderedHtml = useMemo(
+    () => (html ? prepareArticleSnapshotHtml(html, htmlSnapshotRef, vaultRoot) : ''),
+    [html, htmlSnapshotRef, vaultRoot]
+  );
+
+  return (
+    <ReaderScroll
+      itemId={item.frontmatter.id}
+      sourceWindowId={sourceWindowId}
+      spacious={spacious}
+      thoughtNodes={thoughtNodes}
+      onReaderSelection={onReaderSelection}
+      onActivateThought={onActivateThought}
+      className="bg-neutral-100 dark:bg-neutral-950"
+    >
+      <WeChatReaderHeader item={item} />
+      {renderedHtml ? (
+        <div className="wechat-article-shell">
+          <div className="wechat-article-body" dangerouslySetInnerHTML={{ __html: renderedHtml }} />
+        </div>
+      ) : error ? (
+        <div className="mx-auto max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+          HTML 快照读取失败，已回退到 Markdown 正文。{error}
+          <div className="mt-3 text-neutral-800 dark:text-neutral-100">
+            <StreamingMarkdown content={item.body} />
+          </div>
+        </div>
+      ) : (
+        <div className="mx-auto flex max-w-3xl items-center gap-2 rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
+          <Loader2 size={16} className="animate-spin" />
+          正在载入公众号排版快照…
+        </div>
+      )}
+    </ReaderScroll>
+  );
+}
+
+function WeChatReaderHeader({ item }: { item: LibraryItem }): JSX.Element {
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
+  const sourceMeta = item.frontmatter.source;
+  const author = sourceMeta?.author ?? sourceMeta?.channel_name ?? '微信公众号';
+  const published = sourceMeta?.published_at ?? sourceMeta?.fetched_at ?? sourceMeta?.content_fetched_at;
+  return (
+    <div className="mx-auto mb-6 max-w-[677px] bg-white px-4 pt-6 dark:bg-neutral-950 sm:px-0">
+      <div className="text-[11px] text-neutral-500">
+        <span className="rounded border border-neutral-200 px-2 py-0.5 dark:border-neutral-800">公众号文章</span>
+        <span className="ml-2">{statusLabel(item.frontmatter.status)}</span>
+        {typeof item.frontmatter.reading_progress === 'number' ? (
+          <span className="ml-2">{Math.round(item.frontmatter.reading_progress * 100)}%</span>
+        ) : null}
+      </div>
+      <h1 className="mt-3 text-[24px] font-semibold leading-[1.35] text-neutral-950 dark:text-neutral-50">
+        {item.frontmatter.title}
+      </h1>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] leading-6 text-neutral-500">
+        <span>{author}</span>
+        {published ? <span>{formatReaderDate(published)}</span> : null}
+        {source ? (
+          <a href={source} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sky-600 hover:underline dark:text-sky-400">
+            <ExternalLink size={13} />
+            原文
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function getArticleHtmlSnapshotRef(item: LibraryItem): string | null {
+  if (!item.frontmatter.source_html_ref) return null;
+  return isWeChatLibraryItem(item) ? item.frontmatter.source_html_ref : null;
+}
+
+function getInlineArticleHtml(item: LibraryItem): string | null {
+  if (!isWeChatLibraryItem(item)) return null;
+  const htmlStart = item.body.search(/<(?:article|section|div|p|img)\b/i);
+  if (htmlStart < 0) return null;
+  const html = item.body.slice(htmlStart).trim();
+  return /<\/?[a-z][\s\S]*>/i.test(html) && html.replace(/<[^>]+>/g, '').trim().length > 120 ? html : null;
+}
+
+function isWeChatLibraryItem(item: LibraryItem): boolean {
+  const source = [
+    item.frontmatter.url,
+    item.frontmatter.source?.url,
+    item.frontmatter.source?.canonical_url,
+    item.frontmatter.source?.provider,
+    item.frontmatter.source?.parser_hint
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase();
+  return source.includes('wechat_article') || source.includes('mp.weixin.qq.com');
+}
+
+function prepareArticleSnapshotHtml(raw: string, snapshotRef: string, vaultRoot?: string | null): string {
+  const document = new DOMParser().parseFromString(raw, 'text/html');
+  document
+    .querySelectorAll('script, style, link, meta, iframe, object, embed, form, input, button, textarea, select')
+    .forEach((element) => element.remove());
+
+  const baseDir = dirnamePath(snapshotRef);
+  document.querySelectorAll('*').forEach((element) => {
+    sanitizeArticleElement(element);
+    rewriteArticleMediaSource(element, 'src', baseDir, vaultRoot);
+    rewriteArticleMediaSource(element, 'poster', baseDir, vaultRoot);
+    if (element instanceof HTMLImageElement) {
+      const lazySrc =
+        element.getAttribute('data-src') ??
+        element.getAttribute('data-original') ??
+        element.getAttribute('data-backsrc');
+      const currentSrc = element.getAttribute('src');
+      if (lazySrc && (!currentSrc || isTinyDataImage(currentSrc))) {
+        element.setAttribute('src', normalizeArticleAssetSource(lazySrc, baseDir, vaultRoot));
+      }
+      element.setAttribute('loading', 'lazy');
+      element.setAttribute('decoding', 'async');
+    }
+  });
+  return document.body.innerHTML;
+}
+
+function sanitizeArticleElement(element: Element): void {
+  Array.from(element.attributes).forEach((attribute) => {
+    const name = attribute.name.toLowerCase();
+    const value = attribute.value.trim();
+    if (name.startsWith('on') || name === 'srcdoc') {
+      element.removeAttribute(attribute.name);
+      return;
+    }
+    if ((name === 'href' || name === 'src' || name === 'xlink:href') && /^javascript:/i.test(value)) {
+      element.removeAttribute(attribute.name);
+      return;
+    }
+    if (name === 'style') {
+      const safe = sanitizeArticleInlineStyle(value);
+      if (safe) element.setAttribute('style', safe);
+      else element.removeAttribute(attribute.name);
+    }
+  });
+}
+
+function rewriteArticleMediaSource(
+  element: Element,
+  attribute: 'src' | 'poster',
+  baseDir: string,
+  vaultRoot?: string | null
+): void {
+  const source = element.getAttribute(attribute);
+  if (!source || isTinyDataImage(source)) return;
+  element.setAttribute(attribute, normalizeArticleAssetSource(source, baseDir, vaultRoot));
+}
+
+function normalizeArticleAssetSource(source: string, baseDir: string, vaultRoot?: string | null): string {
+  const clean = source.trim();
+  if (!clean || clean.startsWith('#')) return clean;
+  if (clean.startsWith('//')) return `https:${clean}`;
+  if (/^(https?:|data:|blob:|orbit-media:|file:)/i.test(clean)) return clean;
+  if (clean.startsWith('/')) return clean;
+  return normalizeLibraryReaderSource(normalizeRelativePath(`${baseDir}/${clean}`), vaultRoot);
+}
+
+function sanitizeArticleInlineStyle(value: string): string {
+  return value
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !/expression\s*\(|javascript:|behavior\s*:|-moz-binding\s*:|url\s*\(/i.test(part))
+    .join('; ');
+}
+
+function isTinyDataImage(value: string): boolean {
+  return /^data:image\/(?:gif|png|svg\+xml);/i.test(value) && value.length < 180;
+}
+
+function dirnamePath(value: string): string {
+  const normalized = value.replace(/\\/g, '/');
+  const index = normalized.lastIndexOf('/');
+  return index >= 0 ? normalized.slice(0, index) : '';
+}
+
+function normalizeRelativePath(value: string): string {
+  const output: string[] = [];
+  value.replace(/\\/g, '/').split('/').forEach((part) => {
+    if (!part || part === '.') return;
+    if (part === '..') output.pop();
+    else output.push(part);
+  });
+  return output.join('/');
+}
+
+function formatReaderDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
+
 function BookmarkReader({
   item,
   spacious,
@@ -3993,7 +5378,8 @@ function BookmarkReader({
   item: LibraryItem;
   spacious?: boolean;
 } & ReaderSelectionCaptureProps): JSX.Element {
-  const source = getLibraryReaderSource(item);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
   return (
     <ReaderScroll
       itemId={item.frontmatter.id}
@@ -4041,7 +5427,11 @@ function ReaderScroll({
   rootRef: externalRootRef,
   className,
   contentClassName,
-  contentStyle
+  contentStyle,
+  onScroll,
+  onPointerDownCapture,
+  onPointerUpCapture,
+  onKeyUpCapture
 }: {
   children: ReactNode;
   itemId: string;
@@ -4055,6 +5445,10 @@ function ReaderScroll({
   className?: string;
   contentClassName?: string;
   contentStyle?: CSSProperties;
+  onScroll?(): void;
+  onPointerDownCapture?(): void;
+  onPointerUpCapture?(): void;
+  onKeyUpCapture?(): void;
 }): JSX.Element {
   const localRootRef = useRef<HTMLDivElement>(null);
   const rootRef = externalRootRef ?? localRootRef;
@@ -4066,7 +5460,7 @@ function ReaderScroll({
     if (onActivateThought) decorateThoughtHighlights(root, thoughtNodes, onActivateThought);
   }, [children, onActivateThought, rootRef, thoughtNodes]);
 
-  function captureSelection(): void {
+  const captureSelection = useCallback((): void => {
     if (!onReaderSelection) return;
     window.requestAnimationFrame(() => {
       const root = rootRef.current;
@@ -4074,7 +5468,16 @@ function ReaderScroll({
       const selection = getReaderSelectionFromRoot(itemId, root, sourceWindowId);
       if (selection) onReaderSelection(selection);
     });
-  }
+  }, [itemId, onReaderSelection, rootRef, sourceWindowId]);
+
+  useEffect(() => {
+    document.addEventListener('pointerup', captureSelection);
+    document.addEventListener('keyup', captureSelection);
+    return () => {
+      document.removeEventListener('pointerup', captureSelection);
+      document.removeEventListener('keyup', captureSelection);
+    };
+  }, [captureSelection]);
 
   return (
     <div
@@ -4086,8 +5489,19 @@ function ReaderScroll({
         spacious ? 'px-8 py-8' : compact ? 'px-4 py-4' : 'px-5 py-5',
         className
       )}
+      onPointerDownCapture={onPointerDownCapture}
+      onPointerUpCapture={() => {
+        onPointerUpCapture?.();
+        captureSelection();
+      }}
       onPointerUp={captureSelection}
+      onMouseUp={captureSelection}
+      onKeyUpCapture={() => {
+        onKeyUpCapture?.();
+        captureSelection();
+      }}
       onKeyUp={captureSelection}
+      onScroll={onScroll}
     >
       {contentClassName || contentStyle ? (
         <div className={contentClassName} style={contentStyle}>
@@ -4101,7 +5515,8 @@ function ReaderScroll({
 }
 
 function ReaderTitle({ item }: { item: LibraryItem }): JSX.Element {
-  const source = getLibraryReaderSource(item);
+  const vaultRoot = useWorkspace((state) => state.vault?.path ?? null);
+  const source = getLibraryReaderSource(item, vaultRoot);
   return (
     <div className="mx-auto mb-5 max-w-3xl">
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
@@ -4338,6 +5753,73 @@ function getReaderSelectionFromRoot(
   };
 }
 
+function getPdfSelectionRects(pageRefs: Record<number, HTMLDivElement | null>): AnnotationRectAnchor[] {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return [];
+  const range = selection.getRangeAt(0);
+  const clientRects = Array.from(range.getClientRects()).filter(
+    (rect) => rect.width > 0.5 && rect.height > 0.5
+  );
+  if (clientRects.length === 0) return [];
+
+  const pages = Object.entries(pageRefs)
+    .map(([page, element]) => ({
+      page: Number(page),
+      element,
+      rect: element?.getBoundingClientRect() ?? null
+    }))
+    .filter((entry): entry is { page: number; element: HTMLDivElement; rect: DOMRect } =>
+      Boolean(entry.element && entry.rect && Number.isFinite(entry.page))
+    );
+
+  const highlights: AnnotationRectAnchor[] = [];
+  clientRects.forEach((selectionRect) => {
+    const page = pages.find((entry) => rectsIntersect(selectionRect, entry.rect));
+    if (!page) return;
+    const left = clamp(selectionRect.left, page.rect.left, page.rect.right);
+    const right = clamp(selectionRect.right, page.rect.left, page.rect.right);
+    const top = clamp(selectionRect.top, page.rect.top, page.rect.bottom);
+    const bottom = clamp(selectionRect.bottom, page.rect.top, page.rect.bottom);
+    const width = right - left;
+    const height = bottom - top;
+    if (width <= 0.5 || height <= 0.5 || page.rect.width <= 0 || page.rect.height <= 0) return;
+    highlights.push({
+      page: page.page,
+      x: (left - page.rect.left) / page.rect.width,
+      y: (top - page.rect.top) / page.rect.height,
+      width: width / page.rect.width,
+      height: height / page.rect.height
+    });
+  });
+
+  return mergeAdjacentPdfRects(highlights);
+}
+
+function mergeAdjacentPdfRects(rects: AnnotationRectAnchor[]): AnnotationRectAnchor[] {
+  const merged: AnnotationRectAnchor[] = [];
+  rects.forEach((rect) => {
+    const previous = merged[merged.length - 1];
+    if (
+      previous &&
+      previous.page === rect.page &&
+      Math.abs(previous.y - rect.y) < 0.006 &&
+      Math.abs(previous.height - rect.height) < 0.012 &&
+      rect.x <= previous.x + previous.width + 0.01
+    ) {
+      const right = Math.max(previous.x + previous.width, rect.x + rect.width);
+      previous.x = Math.min(previous.x, rect.x);
+      previous.width = right - previous.x;
+      return;
+    }
+    merged.push({ ...rect });
+  });
+  return merged;
+}
+
+function rectsIntersect(a: DOMRect, b: DOMRect): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 function getTextOffset(root: Node, target: Node, targetOffset: number): number | null {
   let offset = 0;
   let found = false;
@@ -4448,11 +5930,37 @@ function escapeCssIdent(value: string): string {
     : value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
 }
 
+function scrollThoughtSourceElementIntoView(node: SpatialThoughtNode): void {
+  const searchRoot =
+    node.sourceWindowId
+      ? document.getElementById(getSpatialReaderWindowElementId(node.sourceWindowId))
+      : document;
+  const escapedId = escapeCssIdent(node.id);
+  const highlight = searchRoot?.querySelector<HTMLElement>(
+    [
+      `#${escapeCssIdent(getThoughtHighlightElementId(node.id))}`,
+      `[data-reader-thought-id="${escapedId}"]`,
+      `[data-reader-annotation-id="${escapedId}"]`,
+      `[data-pdf-rect-highlight="${escapedId}"]`
+    ].join(',')
+  );
+  if (highlight) {
+    highlight.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  const page = node.sourceRects?.[0]?.page;
+  if (!page) return;
+  searchRoot
+    ?.querySelector<HTMLElement>(`[data-pdf-page-number="${page}"]`)
+    ?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+}
+
 function clearReaderHighlights(root: HTMLElement): void {
   root.querySelectorAll<HTMLElement>(HIGHLIGHT_SELECTOR).forEach((node) => {
     const parent = node.parentNode;
     if (!parent) return;
-    parent.replaceChild(document.createTextNode(node.textContent ?? ''), node);
+    parent.replaceChild(root.ownerDocument.createTextNode(node.textContent ?? ''), node);
     parent.normalize();
   });
 }
@@ -4460,14 +5968,15 @@ function clearReaderHighlights(root: HTMLElement): void {
 function collectHighlightTextSegments(root: HTMLElement): HighlightTextSegment[] {
   const segments: HighlightTextSegment[] = [];
   let offset = 0;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const ownerWindow = root.ownerDocument.defaultView ?? window;
+  const walker = root.ownerDocument.createTreeWalker(root, ownerWindow.NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      if (!node.textContent?.trim()) return NodeFilter.FILTER_REJECT;
+      if (!node.textContent?.trim()) return ownerWindow.NodeFilter.FILTER_REJECT;
       const parent = node.parentElement;
-      if (!parent) return NodeFilter.FILTER_REJECT;
-      if (parent.closest(HIGHLIGHT_SELECTOR)) return NodeFilter.FILTER_REJECT;
-      if (['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
+      if (!parent) return ownerWindow.NodeFilter.FILTER_REJECT;
+      if (parent.closest(HIGHLIGHT_SELECTOR)) return ownerWindow.NodeFilter.FILTER_REJECT;
+      if (['SCRIPT', 'STYLE', 'TEXTAREA'].includes(parent.tagName)) return ownerWindow.NodeFilter.FILTER_REJECT;
+      return ownerWindow.NodeFilter.FILTER_ACCEPT;
     }
   });
 
@@ -4589,15 +6098,27 @@ function wrapHighlightSegment(
   node: Text,
   thoughtNode: SpatialThoughtNode,
   startOffset: number,
-  endOffset: number
+  endOffset: number,
+  variant: ReaderHighlightRenderVariant
 ): void {
   if (!node.parentNode || startOffset >= endOffset) return;
   const targetNode = startOffset > 0 ? node.splitText(startOffset) : node;
   targetNode.splitText(endOffset - startOffset);
 
-  const highlight = document.createElement('mark');
+  const highlight = variant === 'pdf-text-layer' ? node.ownerDocument.createElement('span') : node.ownerDocument.createElement('mark');
   highlight.dataset.readerAnnotationId = thoughtNode.id;
-  highlight.className = `${highlightClassByColor[thoughtNode.color]} cursor-pointer`;
+  if (variant === 'pdf-text-layer') {
+    highlight.className = 'highlight appended reader-pdf-annotation-highlight';
+    highlight.style.setProperty('--highlight-bg-color', pdfHighlightColorByColor[thoughtNode.color]);
+    highlight.style.setProperty('--highlight-selected-bg-color', pdfHighlightColorByColor[thoughtNode.color]);
+    highlight.style.cursor = 'pointer';
+  } else {
+    highlight.className = `${highlightClassByColor[thoughtNode.color]} cursor-pointer`;
+    highlight.style.backgroundColor = epubHighlightColorByColor[thoughtNode.color];
+    highlight.style.borderRadius = '0.125rem';
+    highlight.style.padding = '0 0.125rem';
+    highlight.style.cursor = 'pointer';
+  }
   highlight.textContent = targetNode.textContent;
   targetNode.parentNode?.replaceChild(highlight, targetNode);
 }
@@ -4605,7 +6126,8 @@ function wrapHighlightSegment(
 function applyHighlightMatch(
   segments: HighlightTextSegment[],
   node: SpatialThoughtNode,
-  match: HighlightMatchRange
+  match: HighlightMatchRange,
+  variant: ReaderHighlightRenderVariant
 ): void {
   segments
     .filter((segment) => segment.end > match.start && segment.start < match.end)
@@ -4613,11 +6135,15 @@ function applyHighlightMatch(
     .forEach((segment) => {
       const localStart = Math.max(0, match.start - segment.start);
       const localEnd = Math.min(segment.text.length, match.end - segment.start);
-      wrapHighlightSegment(segment.node, node, localStart, localEnd);
+      wrapHighlightSegment(segment.node, node, localStart, localEnd, variant);
     });
 }
 
-function renderReaderQuoteHighlights(root: HTMLElement | null, nodes: SpatialThoughtNode[]): void {
+function renderReaderQuoteHighlights(
+  root: HTMLElement | null,
+  nodes: SpatialThoughtNode[],
+  { variant = 'default' }: { variant?: ReaderHighlightRenderVariant } = {}
+): void {
   if (!root) return;
   clearReaderHighlights(root);
   const segments = collectHighlightTextSegments(root);
@@ -4641,7 +6167,25 @@ function renderReaderQuoteHighlights(root: HTMLElement | null, nodes: SpatialTho
     )
     .sort((a, b) => b.match.start - a.match.start);
 
-  plannedHighlights.forEach(({ node, match }) => applyHighlightMatch(segments, node, match));
+  plannedHighlights.forEach(({ node, match }) => applyHighlightMatch(segments, node, match, variant));
+}
+
+function renderPdfQuoteHighlights(root: HTMLElement | null, nodes: SpatialThoughtNode[]): void {
+  renderReaderQuoteHighlights(root, nodes, { variant: 'pdf-text-layer' });
+}
+
+function renderEpubQuoteHighlights(
+  rendition: { getContents?(): unknown },
+  nodes: SpatialThoughtNode[],
+  onActivateThought?: (nodeId: string) => void
+): void {
+  const contents = getEpubContents(rendition);
+  contents.forEach((content) => {
+    const root = content.document?.body;
+    if (!root) return;
+    renderReaderQuoteHighlights(root, nodes);
+    if (onActivateThought) decorateThoughtHighlights(root, nodes, onActivateThought);
+  });
 }
 
 function decorateThoughtHighlights(
@@ -4718,12 +6262,14 @@ function intersects(a: DOMRect, b: DOMRect): boolean {
 }
 
 function getHighlightElements(root: ParentNode, node: SpatialThoughtNode): HTMLElement[] {
+  const escapedId = escapeCssIdent(node.id);
   return Array.from(
     root.querySelectorAll<HTMLElement>(
       [
         `#${escapeCssIdent(getThoughtHighlightElementId(node.id))}`,
-        `[data-reader-thought-id="${escapeCssIdent(node.id)}"]`,
-        `[data-reader-annotation-id="${escapeCssIdent(node.id)}"]`
+        `[data-reader-thought-id="${escapedId}"]`,
+        `[data-reader-annotation-id="${escapedId}"]`,
+        `[data-pdf-rect-highlight="${escapedId}"]`
       ].join(',')
     )
   );
@@ -4744,6 +6290,30 @@ function getNearestHighlightPoint(
   return getRectCenter(nearestRect);
 }
 
+function getVisibleHighlightRectsInRoot({
+  node,
+  root,
+  viewportRect
+}: {
+  node: SpatialThoughtNode;
+  root: ParentNode;
+  viewportRect: DOMRect;
+}): DOMRect[] {
+  return getHighlightElements(root, node).flatMap((element) =>
+    Array.from(element.getClientRects()).filter(
+      (rect) => rect.width > 0 && rect.height > 0 && intersects(rect, viewportRect)
+    )
+  );
+}
+
+function hasVisibleHighlightInRoot(input: {
+  node: SpatialThoughtNode;
+  root: ParentNode;
+  viewportRect: DOMRect;
+}): boolean {
+  return getVisibleHighlightRectsInRoot(input).length > 0;
+}
+
 function getVisibleHighlightInRoot({
   node,
   root,
@@ -4755,11 +6325,7 @@ function getVisibleHighlightInRoot({
   viewportRect: DOMRect;
   zIndex: number;
 }): { point: SpatialPoint; zIndex: number } | null {
-  const highlightRects = getHighlightElements(root, node).flatMap((element) =>
-    Array.from(element.getClientRects()).filter(
-      (rect) => rect.width > 0 && rect.height > 0 && intersects(rect, viewportRect)
-    )
-  );
+  const highlightRects = getVisibleHighlightRectsInRoot({ node, root, viewportRect });
   const targetElement = document.getElementById(getThoughtWindowElementId(node.id));
   if (!targetElement) return null;
   const point = getNearestHighlightPoint(highlightRects, targetElement);
@@ -4855,6 +6421,180 @@ function resolveConnectionSourceAnchor(
     return getVisibleThoughtWindowHighlight(node, sourceNode);
   }
   return getVisibleReaderHighlight(node, readerWindowIds);
+}
+
+function hasVisibleReaderResourceAnchor(
+  node: SpatialThoughtNode,
+  readerWindowIds: string[]
+): boolean {
+  const readerElement = getReaderElementForThoughtNode(node, readerWindowIds);
+  if ((node.sourceWindowId || readerWindowIds.length > 0) && !readerElement) return false;
+  const resourceElement =
+    readerElement ??
+    document.querySelector<HTMLElement>(
+      `[data-reader-resource-id="${escapeCssIdent(node.itemId)}"]`
+    );
+  const rect = resourceElement?.getBoundingClientRect();
+  return Boolean(rect && rect.width > 0 && rect.height > 0);
+}
+
+function hasVisibleReaderHighlight(
+  node: SpatialThoughtNode,
+  readerWindowIds: string[]
+): boolean {
+  if (node.sourceScope === 'resource') return hasVisibleReaderResourceAnchor(node, readerWindowIds);
+  const readerElement = getReaderElementForThoughtNode(node, readerWindowIds);
+  if ((node.sourceWindowId || readerWindowIds.length > 0) && !readerElement) return false;
+  const searchRoot: ParentNode = readerElement ?? document;
+  if (getHighlightElements(searchRoot, node).length === 0) return false;
+  return hasVisibleHighlightInRoot({
+    node,
+    root: searchRoot,
+    viewportRect: readerElement ? getReaderViewportRect(readerElement) : new DOMRect(0, 0, window.innerWidth, window.innerHeight)
+  });
+}
+
+function hasVisibleThoughtWindowHighlight(
+  node: SpatialThoughtNode,
+  sourceNode: SpatialThoughtNode
+): boolean {
+  const sourceElement = document.getElementById(getThoughtWindowElementId(sourceNode.id));
+  if (!sourceElement) return false;
+  return hasVisibleHighlightInRoot({
+    node,
+    root: sourceElement,
+    viewportRect: getThoughtWindowViewportRect(sourceElement)
+  });
+}
+
+function getOpenSourceVisibleThoughtNodeIds(
+  nodes: SpatialThoughtNode[],
+  readerWindowIds: string[]
+): Set<string> {
+  const visibleNodeIds = new Set<string>();
+  const openNodes = nodes.filter((node) => node.status === 'open');
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    openNodes.forEach((node) => {
+      if (visibleNodeIds.has(node.id)) return;
+      if (!node.sourceNodeId) {
+        if (!hasVisibleReaderHighlight(node, readerWindowIds)) return;
+        visibleNodeIds.add(node.id);
+        changed = true;
+        return;
+      }
+
+      const sourceNode = nodes.find((candidate) => candidate.id === node.sourceNodeId);
+      if (!sourceNode || sourceNode.status !== 'open' || !visibleNodeIds.has(sourceNode.id)) return;
+      if (!hasVisibleThoughtWindowHighlight(node, sourceNode)) return;
+      visibleNodeIds.add(node.id);
+      changed = true;
+    });
+  }
+
+  return visibleNodeIds;
+}
+
+function areStringSetsEqual(current: Set<string>, next: Set<string>): boolean {
+  if (current.size !== next.size) return false;
+  for (const value of current) {
+    if (!next.has(value)) return false;
+  }
+  return true;
+}
+
+function useOpenSourceVisibleThoughtNodeIds({
+  nodes,
+  readerWindowIds,
+  coordinateRootRef
+}: {
+  nodes: SpatialThoughtNode[];
+  readerWindowIds: string[];
+  coordinateRootRef: RefObject<HTMLElement | null>;
+}): Set<string> {
+  const readerWindowIdsKey = readerWindowIds.join('\0');
+  const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(
+    () => new Set(nodes.filter((node) => node.status === 'open').map((node) => node.id))
+  );
+
+  useEffect(() => {
+    let frameId = 0;
+    const readerWindowIdsSnapshot = readerWindowIdsKey ? readerWindowIdsKey.split('\0') : [];
+    const update = (): void => {
+      frameId = 0;
+      const nextVisibleNodeIds = getOpenSourceVisibleThoughtNodeIds(nodes, readerWindowIdsSnapshot);
+      setVisibleNodeIds((current) =>
+        areStringSetsEqual(current, nextVisibleNodeIds) ? current : nextVisibleNodeIds
+      );
+    };
+
+    const scheduleUpdate = (): void => {
+      if (frameId) return;
+      frameId = window.requestAnimationFrame(update);
+    };
+
+    scheduleUpdate();
+    window.addEventListener('resize', scheduleUpdate);
+    window.addEventListener('scroll', scheduleUpdate, true);
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleUpdate);
+    const mutationObserver =
+      typeof MutationObserver !== 'undefined'
+        ? new MutationObserver(scheduleUpdate)
+        : null;
+    const mutationObserverOptions: MutationObserverInit = {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      attributeFilter: ['class', 'id', 'data-pdf-rect-highlight', 'data-reader-annotation-id', 'data-reader-thought-id', 'style']
+    };
+    const observedElements = new Set<HTMLElement>();
+    const observeElement = (element: HTMLElement | null): void => {
+      if (!element || observedElements.has(element)) return;
+      observedElements.add(element);
+      resizeObserver?.observe(element);
+      mutationObserver?.observe(element, mutationObserverOptions);
+    };
+
+    observeElement(coordinateRootRef.current);
+    nodes.forEach((node) => {
+      if (node.sourceNodeId) {
+        observeElement(document.getElementById(getThoughtWindowElementId(node.sourceNodeId)));
+        return;
+      }
+      const readerElement = getReaderElementForThoughtNode(node, readerWindowIdsSnapshot);
+      observeElement(
+        readerElement ??
+          document.querySelector<HTMLElement>(
+            `[data-reader-resource-id="${escapeCssIdent(node.itemId)}"]`
+          )
+      );
+    });
+
+    const delayedFrameTimers = [80, 220, 520].map((delay) => window.setTimeout(scheduleUpdate, delay));
+
+    if (mutationObserver && observedElements.size === 0) {
+      mutationObserver.observe(document.body, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+        attributeFilter: ['data-reader-annotation-id', 'data-reader-thought-id', 'data-pdf-rect-highlight']
+      });
+    }
+
+    return () => {
+      if (frameId) window.cancelAnimationFrame(frameId);
+      delayedFrameTimers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener('resize', scheduleUpdate);
+      window.removeEventListener('scroll', scheduleUpdate, true);
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    };
+  }, [coordinateRootRef, nodes, readerWindowIdsKey]);
+
+  return visibleNodeIds;
 }
 
 function screenPointToCanvasPoint(
@@ -5218,7 +6958,7 @@ function parseMediaChapters(markdown: string): MediaChapter[] {
   const chapters: MediaChapter[] = [];
   const lines = markdown.split('\n');
   lines.forEach((line, index) => {
-    const match = /(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:[–—-]\s*)?(.+)/.exec(line.trim());
+    const match = /^(?:[-*]\s*)?(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:[–—-]\s*)?(.+)/.exec(line.trim());
     if (!match) return;
     const seconds = parseTimestampSeconds(match[1] ?? '');
     const title = (match[2] ?? '').replace(/^[-*]\s+/, '').trim();
@@ -5316,10 +7056,10 @@ function getYouTubeVideoId(input: string | null | undefined): string | null {
   return match?.[1] ?? null;
 }
 
-function getPodcastAudioSource(item: LibraryItem): string | null {
-  const source = getLibraryReaderSource(item);
+function getPodcastAudioSource(item: LibraryItem, vaultRoot?: string | null): string | null {
+  const source = getLibraryReaderSource(item, vaultRoot);
   const bodyAudio = /audio_url:\s*['"]?([^\s'"]+)/i.exec(item.body)?.[1];
-  return bodyAudio ?? source;
+  return bodyAudio ? normalizeLibraryReaderSource(bodyAudio, vaultRoot) : source;
 }
 
 function loadYouTubeIframeApi(): Promise<NonNullable<Window['YT']>> {
@@ -5342,7 +7082,7 @@ function loadYouTubeIframeApi(): Promise<NonNullable<Window['YT']>> {
   return youtubeApiPromise;
 }
 
-function flattenEpubToc(items: Array<{ label: string; href: string; subitems?: Array<{ label: string; href: string }> }>, depth = 1): RichReaderTocItem[] {
+function flattenEpubToc(items: EpubTocEntry[], depth = 1): RichReaderTocItem[] {
   return items.flatMap((item) => [
     { id: item.href, title: item.label, level: depth },
     ...flattenEpubToc(item.subitems ?? [], depth + 1)
@@ -5351,6 +7091,21 @@ function flattenEpubToc(items: Array<{ label: string; href: string; subitems?: A
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function cssPixelValue(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getRenderedPdfPageWidth(
+  pageNumber: number,
+  pageSizes: Record<number, SpatialSize>,
+  renderedPageHeight: number
+): number {
+  const size = pageSizes[pageNumber] ?? pageSizes[1] ?? PDF_PAGE_FALLBACK_SIZE;
+  const aspectRatio = size.height > 0 ? size.width / size.height : PDF_PAGE_FALLBACK_SIZE.width / PDF_PAGE_FALLBACK_SIZE.height;
+  return Math.round(renderedPageHeight * aspectRatio);
 }
 
 function ReaderLoading({ label }: { label: string }): JSX.Element {
@@ -5409,6 +7164,8 @@ function annotationRecordToThoughtNode(
         ? `整篇资料：${item?.frontmatter.title ?? record.target.title_snapshot ?? record.title}`
         : quote.exact || record.title,
     sourceQuote: quote,
+    sourceCfi: typeof record.anchor.range?.from === 'string' ? record.anchor.range.from : undefined,
+    sourceRects: record.anchor.rects,
     sourceNodeId: record.parent_annotation_id ?? (record.target.kind === 'annotation' ? record.target.ref : undefined),
     color: record.color ?? 'yellow',
     contentMarkdown: record.body_markdown,
@@ -5630,6 +7387,170 @@ function clientPointToCanvasPoint(
   return {
     x: (point.x - (rect?.left ?? 0) - viewport.x) / viewport.zoom,
     y: (point.y - (rect?.top ?? 0) - viewport.y) / viewport.zoom
+  };
+}
+
+function getArrangedWindowPosition(row: number, column: number, layout: 'grid' | 'rows'): SpatialPoint {
+  const rowOffset = layout === 'rows' ? (row % 2) * 64 : (row % 2) * 32;
+  const columnOffset = layout === 'grid' ? (column % 2) * 24 : 0;
+  return {
+    x: WINDOW_LAYOUT_ORIGIN.x + column * (DEFAULT_WINDOW_SIZE.width + WINDOW_STAGGER_GAP) + rowOffset,
+    y: WINDOW_LAYOUT_ORIGIN.y + row * (DEFAULT_WINDOW_SIZE.height + WINDOW_STAGGER_GAP) + columnOffset
+  };
+}
+
+function findStaggeredWindowPosition({
+  windows,
+  size,
+  viewport,
+  container
+}: {
+  windows: SpatialReaderWindowState[];
+  size: SpatialSize;
+  viewport: SpatialViewport;
+  container: HTMLElement | null;
+}): SpatialPoint {
+  const openWindowRects = windows
+    .filter((window) => window.status === 'open')
+    .map((window) => spatialRectFromPoint(window.position, window.size));
+  const bounds = getVisibleWindowPlacementBounds(container, viewport, size);
+  const candidatePoints = buildWindowPlacementCandidates(openWindowRects.length, bounds, size);
+  let best = candidatePoints[0] ?? { x: bounds.left, y: bounds.top };
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const candidate of candidatePoints) {
+    const rect = spatialRectFromPoint(candidate, size);
+    const score = getWindowPlacementScore(rect, openWindowRects);
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+    if (score === 0) break;
+  }
+
+  return best;
+}
+
+function getVisibleWindowPlacementBounds(
+  container: HTMLElement | null,
+  viewport: SpatialViewport,
+  size: SpatialSize
+): { left: number; top: number; right: number; bottom: number } {
+  const rect = container?.getBoundingClientRect();
+  const viewportWidth = rect?.width ?? size.width * 2.4;
+  const viewportHeight = Math.max(360, (rect?.height ?? size.height * 1.8) - WINDOW_HEADER_DOCK_Y);
+  const left = Math.max(24, -viewport.x / viewport.zoom + WINDOW_LAYOUT_ORIGIN.x);
+  const top = Math.max(40, -viewport.y / viewport.zoom + WINDOW_LAYOUT_ORIGIN.y);
+  const right = Math.max(left, (-viewport.x + viewportWidth) / viewport.zoom - size.width - 32);
+  const bottom = Math.max(top, (-viewport.y + viewportHeight) / viewport.zoom - size.height - 32);
+  return { left, top, right, bottom };
+}
+
+function buildWindowPlacementCandidates(
+  openWindowCount: number,
+  bounds: { left: number; top: number; right: number; bottom: number },
+  size: SpatialSize
+): SpatialPoint[] {
+  const points: SpatialPoint[] = [];
+  const usableWidth = Math.max(1, bounds.right - bounds.left);
+  const usableHeight = Math.max(1, bounds.bottom - bounds.top);
+  const cascadeCount = Math.max(18, openWindowCount + 12);
+
+  for (let index = 0; index < cascadeCount; index += 1) {
+    const offsetIndex = openWindowCount + index;
+    points.push(
+      clampPointToBounds(
+        {
+          x: bounds.left + (offsetIndex * WINDOW_STAGGER_STEP.x) % usableWidth,
+          y: bounds.top + (offsetIndex * WINDOW_STAGGER_STEP.y) % usableHeight
+        },
+        bounds
+      )
+    );
+  }
+
+  const columns = Math.max(1, Math.floor((usableWidth + size.width + WINDOW_STAGGER_GAP) / (size.width + WINDOW_STAGGER_GAP)));
+  const rows = Math.max(5, Math.ceil((openWindowCount + 12) / columns));
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      points.push(
+        clampPointToBounds(
+          {
+            x: bounds.left + column * (size.width + WINDOW_STAGGER_GAP) + (row % 2) * 34,
+            y: bounds.top + row * (size.height + WINDOW_STAGGER_GAP) + (column % 2) * 24
+          },
+          bounds
+        )
+      );
+    }
+  }
+
+  return dedupePoints(points);
+}
+
+function clampPointToBounds(
+  point: SpatialPoint,
+  bounds: { left: number; top: number; right: number; bottom: number }
+): SpatialPoint {
+  return {
+    x: clamp(point.x, bounds.left, bounds.right),
+    y: clamp(point.y, bounds.top, bounds.bottom)
+  };
+}
+
+function dedupePoints(points: SpatialPoint[]): SpatialPoint[] {
+  const seen = new Set<string>();
+  return points.filter((point) => {
+    const key = `${Math.round(point.x)}:${Math.round(point.y)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function spatialRectFromPoint(point: SpatialPoint, size: SpatialSize): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+} {
+  return {
+    left: point.x,
+    top: point.y,
+    right: point.x + size.width,
+    bottom: point.y + size.height,
+    width: size.width,
+    height: size.height
+  };
+}
+
+function getWindowPlacementScore(
+  candidate: ReturnType<typeof spatialRectFromPoint>,
+  existing: Array<ReturnType<typeof spatialRectFromPoint>>
+): number {
+  return existing.reduce((score, rect) => {
+    const overlap = getSpatialIntersectionArea(candidate, rect);
+    if (overlap > 0) return score + overlap;
+    const distance = Math.max(1, getDistanceSquared(getSpatialRectCenter(candidate), getSpatialRectCenter(rect)));
+    return score + 1 / distance;
+  }, 0);
+}
+
+function getSpatialIntersectionArea(
+  a: ReturnType<typeof spatialRectFromPoint>,
+  b: ReturnType<typeof spatialRectFromPoint>
+): number {
+  const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+  const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  return width * height;
+}
+
+function getSpatialRectCenter(rect: ReturnType<typeof spatialRectFromPoint>): SpatialPoint {
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
   };
 }
 

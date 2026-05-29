@@ -12,6 +12,7 @@ export function registerOrbitMediaScheme(): void {
       privileges: {
         standard: true,
         secure: true,
+        corsEnabled: true,
         supportFetchAPI: true,
         stream: true
       }
@@ -67,6 +68,13 @@ function resolveInsideVault(vaultPath: string, relPath: string): string | null {
 }
 
 async function fileResponse(filePath: string, request: Request): Promise<Response> {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: mediaCorsHeaders()
+    });
+  }
+
   const stat = await fs.promises.stat(filePath);
   if (!stat.isFile()) return new Response('Media file not found.', { status: 404 });
 
@@ -85,7 +93,7 @@ async function fileResponse(filePath: string, request: Request): Promise<Respons
   const start = range?.start ?? 0;
   const end = range?.end ?? Math.max(0, size - 1);
   const contentLength = size === 0 ? 0 : end - start + 1;
-  const headers = new Headers({
+  const headers = mediaCorsHeaders({
     'accept-ranges': 'bytes',
     'content-length': String(contentLength),
     'content-type': mimeTypeForPath(filePath) ?? 'application/octet-stream'
@@ -105,6 +113,15 @@ async function fileResponse(filePath: string, request: Request): Promise<Respons
   return new Response(stream as BodyInit | null, {
     status: range ? 206 : 200,
     headers
+  });
+}
+
+function mediaCorsHeaders(init: Record<string, string> = {}): Headers {
+  return new Headers({
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, HEAD, OPTIONS',
+    'access-control-allow-headers': 'range, content-type',
+    ...init
   });
 }
 
@@ -183,6 +200,15 @@ function mimeTypeForPath(filePath: string): string | null {
       return 'video/webm';
     case '.pdf':
       return 'application/pdf';
+    case '.epub':
+      return 'application/epub+zip';
+    case '.html':
+    case '.htm':
+      return 'text/html; charset=utf-8';
+    case '.md':
+    case '.markdown':
+    case '.txt':
+      return 'text/plain; charset=utf-8';
     default:
       return null;
   }

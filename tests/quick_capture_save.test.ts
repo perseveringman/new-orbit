@@ -211,6 +211,7 @@ describe('quick capture save', () => {
         author: 'Orbit Author',
         excerpt: 'A parsed excerpt.',
         content_markdown: 'Parsed readable body for the Library.',
+        content_html: '<section style="padding: 12px"><p>Parsed readable body for the Library.</p></section>',
         fetched_at: '2026-05-27T00:00:00.000Z',
         connector_id: 'test.readable',
         connector_version: '1.2.3'
@@ -241,11 +242,15 @@ describe('quick capture save', () => {
       note: '从快速捕获保存，稍后提炼。'
     });
     expect(result.item.frontmatter.source_snapshot_ref).toContain('.orbit/content/extracted/');
+    expect(result.item.frontmatter.source_html_ref).toContain('.orbit/content/extracted/');
     expect(result.item.body).toContain('## 快速捕获备注');
     expect(result.item.body).toContain('Parsed readable body for the Library.');
     await expect(
       fs.readFile(path.join(vaultPath, result.item.frontmatter.source_snapshot_ref ?? ''), 'utf8')
     ).resolves.toContain('Parsed readable body for the Library.');
+    await expect(
+      fs.readFile(path.join(vaultPath, result.item.frontmatter.source_html_ref ?? ''), 'utf8')
+    ).resolves.toContain('<section style="padding: 12px">');
   });
 
   it('saves quick-captured YouTube read-later links as Library videos with feed metadata', async () => {

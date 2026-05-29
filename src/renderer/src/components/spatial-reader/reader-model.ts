@@ -33,7 +33,16 @@ export function getLibraryReaderKind(item: LibraryItem): SpatialReaderKind {
   const kind = item.frontmatter.kind;
   const inferred = inferReaderKindFromSource(item);
   if (inferred) return inferred;
-  if (kind === 'pdf' || kind === 'video' || kind === 'bookmark') return kind;
+  if (
+    kind === 'markdown' ||
+    kind === 'pdf' ||
+    kind === 'epub' ||
+    kind === 'video' ||
+    kind === 'podcast' ||
+    kind === 'bookmark'
+  ) {
+    return kind;
+  }
   return 'article';
 }
 
@@ -47,11 +56,32 @@ export function readerKindLabel(kind: SpatialReaderKind | LibraryKind): string {
   return '文章阅读器';
 }
 
-export function getLibraryReaderSource(item: LibraryItem): string | null {
+export function getLibraryReaderSource(item: LibraryItem, vaultRoot?: string | null): string | null {
   const localPath = item.frontmatter.local_path?.trim();
-  if (localPath) return pathLikeToUrl(localPath);
+  if (localPath) return normalizeLibraryReaderSource(localPath, vaultRoot);
   const url = item.frontmatter.url?.trim() || item.frontmatter.source?.url?.trim();
   return url || null;
+}
+
+export function normalizeLibraryReaderSource(value: string, vaultRoot?: string | null): string {
+  const clean = value.trim();
+  const parts = splitTargetReference(clean);
+  const pathPart = parts.path;
+  const suffix = `${parts.query ?? ''}${parts.hash ?? ''}`;
+
+  if (/^file:/i.test(clean)) {
+    const vaultRelative = vaultRelativeFromFileUrl(clean, vaultRoot);
+    return vaultRelative ? `${vaultMediaUrl(vaultRelative)}${suffix}` : clean;
+  }
+  if (/^(https?:|data:|blob:|orbit-media:)/i.test(clean)) return clean;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(clean) && !isAbsolutePath(pathPart)) return clean;
+
+  if (isAbsolutePath(pathPart)) {
+    const vaultRelative = vaultRelativeFromAbsolutePath(pathPart, vaultRoot);
+    return vaultRelative ? `${vaultMediaUrl(vaultRelative)}${suffix}` : `${pathToFileUrl(pathPart)}${suffix}`;
+  }
+
+  return `${vaultMediaUrl(pathPart)}${suffix}`;
 }
 
 export function getYouTubeEmbedUrl(input: string | null | undefined): string | null {
@@ -121,8 +151,71 @@ function inferReaderKindFromSource(item: LibraryItem): SpatialReaderKind | null 
   return null;
 }
 
-function pathLikeToUrl(value: string): string {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
+function splitTargetReference(target: string): { path: string; query?: string; hash?: string } {
+  const hashIndex = target.indexOf('#');
+  const beforeHash = hashIndex === -1 ? target : target.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? undefined : target.slice(hashIndex);
+  const queryIndex = beforeHash.indexOf('?');
+  if (queryIndex === -1) return { path: beforeHash, hash };
+  return {
+    path: beforeHash.slice(0, queryIndex),
+    query: beforeHash.slice(queryIndex),
+    hash
+  };
+}
+
+function isAbsolutePath(value: string): boolean {
   const normalized = value.replace(/\\/g, '/');
+  return normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized);
+}
+
+function vaultMediaUrl(relativePath: string): string {
+  const encoded = normalizePosixPath(relativePath)
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  return `orbit-media://vault/${encoded}`;
+}
+
+function vaultRelativeFromFileUrl(value: string, vaultRoot?: string | null): string | null {
+  if (!vaultRoot) return null;
+  try {
+    const url = new URL(value);
+    return vaultRelativeFromAbsolutePath(decodeURIComponent(url.pathname), vaultRoot);
+  } catch {
+    return null;
+  }
+}
+
+function vaultRelativeFromAbsolutePath(filePath: string, vaultRoot?: string | null): string | null {
+  if (!vaultRoot) return null;
+  const normalizedRoot = normalizeAbsolutePath(vaultRoot).replace(/\/+$/, '');
+  const normalizedPath = normalizeAbsolutePath(filePath);
+  const caseFold = /^[A-Za-z]:\//.test(normalizedRoot);
+  const rootForCompare = caseFold ? normalizedRoot.toLowerCase() : normalizedRoot;
+  const pathForCompare = caseFold ? normalizedPath.toLowerCase() : normalizedPath;
+  if (pathForCompare === rootForCompare) return '';
+  if (!pathForCompare.startsWith(`${rootForCompare}/`)) return null;
+  return normalizePosixPath(normalizedPath.slice(normalizedRoot.length + 1));
+}
+
+function normalizeAbsolutePath(input: string): string {
+  const normalized = input.replace(/\\/g, '/');
+  return normalized.replace(/^\/([A-Za-z]:\/)/, '$1');
+}
+
+function normalizePosixPath(input: string): string {
+  const output: string[] = [];
+  for (const part of input.replace(/\\/g, '/').split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') output.pop();
+    else output.push(part);
+  }
+  return output.join('/');
+}
+
+function pathToFileUrl(filePath: string): string {
+  let normalized = normalizeAbsolutePath(filePath);
+  if (/^[A-Za-z]:\//.test(normalized)) normalized = `/${normalized}`;
   return `file://${encodeURI(normalized).replace(/#/g, '%23').replace(/\?/g, '%3F')}`;
 }

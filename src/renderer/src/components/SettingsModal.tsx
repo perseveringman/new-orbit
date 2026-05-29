@@ -78,8 +78,8 @@ function endpointDraft(provider: SDKEndpointProvider = 'anthropic'): SDKEndpoint
     deepseek: {
       label: 'DeepSeek',
       baseURL: 'https://api.deepseek.com/anthropic',
-      defaultModel: 'deepseek-v4-pro',
-      fastModel: 'deepseek-chat',
+      defaultModel: 'deepseek-v4-flash',
+      fastModel: 'deepseek-v4-flash',
       heavyModel: 'deepseek-v4-pro'
     },
     custom: {

@@ -180,8 +180,11 @@ function statusToFilter(status: LibraryStatus | 'all'): { include_archived?: boo
 }
 
 function iconForKind(kind: LibraryKind): string {
+  if (kind === 'markdown') return 'MD';
   if (kind === 'pdf') return 'PDF';
+  if (kind === 'epub') return 'EPUB';
   if (kind === 'video') return '视频';
+  if (kind === 'podcast') return '播客';
   if (kind === 'bookmark') return '书签';
   return '文章';
 }

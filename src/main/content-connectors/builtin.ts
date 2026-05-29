@@ -13,6 +13,13 @@ import {
   sourceUrlForInput,
   stringOrNull
 } from './utils';
+import {
+  decodeHtmlEntities,
+  decodePotentialHtml,
+  htmlToReadableMarkdown,
+  looksLikeHtml,
+  sanitizeReadableHtml
+} from './html';
 
 const BUILTIN_VERSION = '1.0.0';
 
@@ -103,10 +110,11 @@ async function parseHtmlSource(
     stringOrNull(input.title) ??
     sourcePlatformLabel(platform);
   const excerpt = extractMeta(html, 'og:description') ?? extractMeta(html, 'description') ?? stringOrNull(input.text) ?? undefined;
+  const wechatHtml = platform === 'wechat_article' ? extractWeChatArticleHtml(html) : undefined;
   const content =
     platform === 'wechat_article'
-      ? extractWeChatArticleText(html) ?? htmlToMarkdown(extractElementById(html, 'js_content') ?? html)
-      : htmlToMarkdown(html);
+      ? (wechatHtml ? htmlToReadableMarkdown(wechatHtml) : extractWeChatArticleText(html) ?? htmlToReadableMarkdown(extractElementById(html, 'js_content') ?? html))
+      : htmlToReadableMarkdown(html);
   return {
     platform,
     parser_hint: stringOrNull(input.parserHint) ?? parserHintForPlatform(platform),
@@ -121,6 +129,7 @@ async function parseHtmlSource(
       undefined,
     excerpt,
     content_markdown: content || excerpt || stringOrNull(input.text) || undefined,
+    ...(wechatHtml ? { content_html: sanitizeReadableHtml(wechatHtml) } : {}),
     fetched_at: fetchedAt,
     connector_id: 'builtin.web-readable',
     connector_version: BUILTIN_VERSION
@@ -143,7 +152,7 @@ async function parseXPost(
   const data = response.json ? await response.json() : JSON.parse(await response.text());
   const record = isRecord(data) ? data : {};
   const html = typeof record.html === 'string' ? record.html : '';
-  const text = htmlToMarkdown(html);
+  const text = htmlToReadableMarkdown(html);
   const authorName = typeof record.author_name === 'string' ? record.author_name : undefined;
   return {
     platform: 'x',
@@ -194,27 +203,21 @@ function extractElementById(html: string, id: string): string | undefined {
   return matchFirst(html, new RegExp(`<[^>]+id=["']${escaped}["'][^>]*>([\\s\\S]*?)(?:<script\\b|</body>)`, 'i'));
 }
 
-function htmlToMarkdown(html: string): string {
-  return (decodeHtml(
-    html
-      .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-      .replace(/<style\b[\s\S]*?<\/style>/gi, '')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/(p|div|section|article|main|header|footer|li|blockquote|h[1-6])>/gi, '\n')
-      .replace(/<li\b[^>]*>/gi, '- ')
-      .replace(/<[^>]+>/g, '')
-  ) ?? '')
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .join('\n')
-    .slice(0, 40000);
+function extractWeChatArticleText(html: string): string | undefined {
+  const raw = extractJsStringProperty(html, 'content_noencode') ?? extractJsStringProperty(html, 'content') ?? '';
+  if (!raw) return undefined;
+  const decoded = decodePotentialHtml(raw);
+  if (looksLikeHtml(decoded)) return htmlToReadableMarkdown(decoded);
+  return plainTextToMarkdown(decoded);
 }
 
-function extractWeChatArticleText(html: string): string | undefined {
-  return plainTextToMarkdown(
-    extractJsStringProperty(html, 'content_noencode') ?? extractJsStringProperty(html, 'content') ?? ''
-  );
+function extractWeChatArticleHtml(html: string): string | undefined {
+  const rendered = extractElementById(html, 'js_content');
+  if (rendered?.trim()) return rendered;
+  const raw = extractJsStringProperty(html, 'content_noencode') ?? extractJsStringProperty(html, 'content') ?? '';
+  if (!raw) return undefined;
+  const decoded = decodePotentialHtml(raw);
+  return looksLikeHtml(decoded) ? decoded : undefined;
 }
 
 function extractWeChatAuthor(html: string): string | undefined {
@@ -248,7 +251,7 @@ function plainTextToMarkdown(value: string): string | undefined {
       .map((line) => line.replace(/\s+/g, ' ').trim())
       .filter(Boolean)
       .join('\n\n')
-      .slice(0, 40000) || undefined
+      .slice(0, 250000) || undefined
   );
 }
 
@@ -265,18 +268,6 @@ function decodeHtml(value: string): string | undefined {
     .replace(/\s+/g, ' ')
     .trim();
   return decoded || undefined;
-}
-
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)));
 }
 
 function escapeRegExp(value: string): string {

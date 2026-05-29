@@ -100,6 +100,45 @@ describe('content connectors', () => {
     expect(parsed.content_markdown).toContain('第二段"保留引号"');
   });
 
+  it('keeps WeChat js_content HTML for page-like Library rendering', async () => {
+    const parsed = await parseContentSource(
+      {
+        url: 'https://mp.weixin.qq.com/s/html123',
+        platformHint: 'wechat_article',
+        parserHint: 'wechat_article',
+        sourceKind: 'mobile_share'
+      },
+      {
+        connectors: [createBuiltinContentConnector()],
+        now: () => new Date('2026-05-28T00:00:00.000Z'),
+        fetch: async () => ({
+          ok: true,
+          status: 200,
+          text: async () => `
+            <html>
+              <head><meta property="og:title" content="微信 HTML 标题"></head>
+              <body>
+                <div id="js_content">
+                  <section style="padding: 12px; background: #f5f5f5;">
+                    <p>保留公众号排版正文。</p>
+                    <img data-src="https://mmbiz.qpic.cn/image.jpg" />
+                  </section>
+                  <script>alert('remove me')</script>
+                </div>
+              </body>
+            </html>
+          `
+        })
+      }
+    );
+
+    expect(parsed.content_markdown).toContain('保留公众号排版正文。');
+    expect(parsed.content_markdown).toContain('![图片](https://mmbiz.qpic.cn/image.jpg)');
+    expect(parsed.content_html).toContain('padding: 12px');
+    expect(parsed.content_html).toContain('data-src="https://mmbiz.qpic.cn/image.jpg"');
+    expect(parsed.content_html).not.toContain('<script>');
+  });
+
   it('passes WeChat URLs to OpenCLI using the current --url option shape', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-opencli-wechat-test-'));
     const originalPath = process.env.PATH;
@@ -144,6 +183,53 @@ console.log(JSON.stringify({
         author: 'Orbit'
       });
       expect(parsed.content_markdown).toContain('微信正文通过 OpenCLI 抓取。');
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('converts OpenCLI WeChat HTML output into Markdown while preserving the HTML snapshot', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'orbit-opencli-wechat-html-test-'));
+    const originalPath = process.env.PATH;
+    const fakeOpenCli = path.join(tmp, 'opencli');
+    await writeFile(
+      fakeOpenCli,
+      `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.join(' ') === 'weixin download --url https://mp.weixin.qq.com/s/html123 -f json') {
+  console.error('json unavailable');
+  process.exit(1);
+}
+if (args.join(' ') !== 'weixin download --url https://mp.weixin.qq.com/s/html123 -f html') {
+  console.error('unexpected args: ' + args.join(' '));
+  process.exit(64);
+}
+console.log('<section style="padding: 12px"><p>OpenCLI HTML 正文</p><img data-src="https://mmbiz.qpic.cn/html.jpg"></section>');`,
+      'utf8'
+    );
+    await chmod(fakeOpenCli, 0o755);
+    process.env.PATH = `${tmp}${path.delimiter}${originalPath ?? ''}`;
+
+    try {
+      const parsed = await parseContentSource(
+        {
+          url: 'https://mp.weixin.qq.com/s/html123',
+          platformHint: 'wechat_article',
+          parserHint: 'wechat_article',
+          sourceKind: 'manual'
+        },
+        {
+          connectors: [createOpenCliContentConnector()],
+          now: () => new Date('2026-05-28T00:00:00.000Z')
+        }
+      );
+
+      expect(parsed.status).toBe('success');
+      expect(parsed.content_markdown).toContain('OpenCLI HTML 正文');
+      expect(parsed.content_markdown).toContain('https://mmbiz.qpic.cn/html.jpg');
+      expect(parsed.content_html).toContain('padding: 12px');
+      expect(parsed.content_html).not.toContain('json unavailable');
     } finally {
       process.env.PATH = originalPath;
       await rm(tmp, { recursive: true, force: true });

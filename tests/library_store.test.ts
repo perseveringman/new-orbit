@@ -23,6 +23,7 @@ describe('LibraryStore Phase 6.2 workstation', () => {
       title: 'Deep Work',
       body: 'Focus blocks compound.',
       tags: ['productivity'],
+      source_html_ref: '.orbit/content/extracted/deep-work/source.html',
       areas: [{ area_slug: 'work', primary: true, assigned_at: '2026-04-28T00:00:00Z', assigned_by: 'user' }],
       resource_refs: ['resources/focus']
     });
@@ -30,6 +31,7 @@ describe('LibraryStore Phase 6.2 workstation', () => {
     expect(item.path).toBe('library/articles/deep-work.md');
     expect(item.frontmatter.status).toBe('saved');
     expect(item.frontmatter.source).toMatchObject({ kind: 'url', url: 'https://example.com/deep-work' });
+    expect(item.frontmatter.source_html_ref).toBe('.orbit/content/extracted/deep-work/source.html');
     expect((await library.list({ area_slug: 'work' })).map((entry) => entry.frontmatter.id)).toEqual([
       item.frontmatter.id
     ]);

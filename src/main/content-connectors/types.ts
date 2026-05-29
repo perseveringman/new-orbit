@@ -46,6 +46,7 @@ export interface ParsedContent {
   author?: string;
   excerpt?: string;
   content_markdown?: string;
+  content_html?: string;
   fetched_at: string;
   connector_id: string;
   connector_version: string;

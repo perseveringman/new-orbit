@@ -1,8 +1,8 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createAnnotationStore } from '../src/main/annotation/store';
+import { annotationViewStatesDir, createAnnotationStore } from '../src/main/annotation/store';
 
 const tempDirs: string[] = [];
 
@@ -75,5 +75,48 @@ describe('AnnotationStore', () => {
 
     const records = await store.listForTarget(libraryTarget);
     expect(records.map((record) => record.id).sort()).toEqual([child.id, parent.id].sort());
+  });
+
+  it('repairs a view state file with trailing JSON garbage', async () => {
+    const vault = await tempVault();
+    const store = createAnnotationStore(vault);
+    const viewsDir = annotationViewStatesDir(vault);
+    const viewStatePath = path.join(viewsDir, 'library-workbench.json');
+    await mkdir(viewsDir, { recursive: true });
+    await writeFile(
+      viewStatePath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          states: {
+            'ann-corrupt': {
+              space_id: 'library-workbench',
+              annotation_id: 'ann-corrupt',
+              position: { x: 12, y: 34 },
+              size: { width: 390, height: 310 },
+              z_index: 9,
+              status: 'open',
+              updated_at: '2026-05-28T00:00:00.000Z'
+            }
+          },
+          updated_at: '2026-05-28T00:00:00.000Z'
+        },
+        null,
+        2
+      )}\n\n}\n`,
+      'utf8'
+    );
+
+    const viewStates = await store.listViewStates('library-workbench');
+    expect(viewStates).toHaveLength(1);
+    expect(viewStates[0]?.annotation_id).toBe('ann-corrupt');
+    expect(JSON.parse(await readFile(viewStatePath, 'utf8'))).toMatchObject({
+      states: {
+        'ann-corrupt': {
+          position: { x: 12, y: 34 }
+        }
+      }
+    });
+    expect((await readdir(viewsDir)).some((entry) => entry.includes('library-workbench.json.corrupt-'))).toBe(true);
   });
 });
