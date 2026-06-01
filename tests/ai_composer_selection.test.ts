@@ -31,7 +31,7 @@ describe('ai composer runtime selection', () => {
     });
   });
 
-  it('repairs persisted SDK runtime selections that were stored as CLI track', () => {
+  it('repairs persisted SDK runtime selections and refreshes legacy DeepSeek defaults to flash', () => {
     const conversation = {
       id: 'c1',
       createdAt: '',
@@ -51,10 +51,66 @@ describe('ai composer runtime selection', () => {
     expect(selectionFromConversation(conversation, {})).toEqual({
       runtimeId: 'sdk:deepseek',
       endpointId: 'deepseek',
-      model: 'deepseek-v4-pro',
+      model: 'deepseek-v4-flash',
       modelTier: 'default',
       track: 'sdk_agent',
       agentProfileId: 'creative-agent'
+    });
+  });
+
+  it('keeps explicit DeepSeek heavy selections on pro', () => {
+    const conversation = {
+      id: 'c1',
+      createdAt: '',
+      updatedAt: '',
+      status: 'active',
+      anchors: [],
+      runtimeSelection: {
+        runtimeId: 'sdk:deepseek',
+        model: 'deepseek-v4-pro',
+        modelTier: 'heavy',
+        track: 'sdk_agent'
+      },
+      turns: []
+    } satisfies Conversation;
+
+    expect(selectionFromConversation(conversation, {})).toEqual({
+      runtimeId: 'sdk:deepseek',
+      endpointId: 'deepseek',
+      model: 'deepseek-v4-pro',
+      modelTier: 'heavy',
+      track: 'sdk_agent'
+    });
+  });
+
+  it('normalizes merged fallback DeepSeek defaults after loading older conversations', () => {
+    const conversation = {
+      id: 'c1',
+      createdAt: '',
+      updatedAt: '',
+      status: 'active',
+      anchors: [],
+      runtimeSelection: {
+        model: 'claude-3-5-sonnet-latest',
+        modelTier: 'default'
+      },
+      turns: []
+    } satisfies Conversation;
+
+    expect(
+      selectionFromConversation(conversation, {
+        track: 'sdk_agent',
+        runtimeId: 'sdk:deepseek',
+        endpointId: 'deepseek',
+        model: 'deepseek-v4-flash',
+        modelTier: 'default'
+      })
+    ).toEqual({
+      track: 'sdk_agent',
+      runtimeId: 'sdk:deepseek',
+      endpointId: 'deepseek',
+      model: 'deepseek-v4-flash',
+      modelTier: 'default'
     });
   });
 });

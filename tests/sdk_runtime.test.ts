@@ -124,6 +124,44 @@ describe('Runtime B SDK foundation', () => {
     expect(deepseek.enabled).toBe(true);
   });
 
+  it('refreshes previous DeepSeek pro/flash built-ins to flash by default', async () => {
+    const runtimeDir = path.join(vault, ORBIT_DIR, 'runtime');
+    await mkdir(runtimeDir, { recursive: true });
+    await writeFile(
+      path.join(runtimeDir, 'sdk-endpoints.json'),
+      `${JSON.stringify(
+        {
+          version: 1,
+          endpoints: [
+            {
+              id: 'deepseek',
+              label: 'DeepSeek',
+              provider: 'deepseek',
+              protocol: 'anthropic-compatible',
+              baseURL: 'https://api.deepseek.com/anthropic',
+              keyRef: 'sdk:endpoint:deepseek',
+              defaultModel: 'deepseek-v4-pro',
+              fastModel: 'deepseek-v4-flash',
+              heavyModel: 'deepseek-v4-pro',
+              enabled: true,
+              builtIn: true
+            }
+          ],
+          defaults: { ask: 'deepseek' }
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const deepseek = await registry.require('deepseek');
+    expect(deepseek.defaultModel).toBe('deepseek-v4-flash');
+    expect(deepseek.fastModel).toBe('deepseek-v4-flash');
+    expect(deepseek.heavyModel).toBe('deepseek-v4-pro');
+    expect(deepseek.enabled).toBe(true);
+  });
+
   it('routes Ask to SDK when an enabled endpoint has a key', async () => {
     const saved = await registry.upsert({
       id: 'custom-route',

@@ -267,6 +267,12 @@ const LEGACY_BUILT_IN_SNAPSHOTS: Record<string, LegacyBuiltInSnapshot[]> = {
       defaultModel: 'deepseek-v4-pro',
       fastModel: 'deepseek-chat',
       heavyModel: 'deepseek-v4-pro'
+    },
+    {
+      baseURL: 'https://api.deepseek.com/anthropic',
+      defaultModel: 'deepseek-v4-pro',
+      fastModel: 'deepseek-v4-flash',
+      heavyModel: 'deepseek-v4-pro'
     }
   ]
 };

@@ -146,6 +146,7 @@ export function normalizeRuntimeSelection(
   const runtimeId = selection.runtimeId?.trim();
   const inferredEndpoint = endpointFromSdkRuntimeId(runtimeId);
   const endpointId = selection.endpointId?.trim() || inferredEndpoint;
+  const model = normalizeSelectionModel(selection, endpointId);
   const track =
     (selection.track === 'cli' && endpointId) || (!selection.track && endpointId)
       ? 'sdk_agent'
@@ -153,11 +154,35 @@ export function normalizeRuntimeSelection(
   return {
     ...(runtimeId ? { runtimeId } : {}),
     ...(endpointId ? { endpointId } : {}),
-    ...(selection.model ? { model: selection.model } : {}),
+    ...(model ? { model } : {}),
     ...(selection.modelTier ? { modelTier: selection.modelTier } : {}),
     ...(track ? { track } : {}),
     ...(selection.agentProfileId ? { agentProfileId: selection.agentProfileId } : {})
   };
+}
+
+function normalizeSelectionModel(
+  selection: RuntimeSelection,
+  endpointId?: string
+): string | undefined {
+  const model = selection.model?.trim();
+  if (!model) return undefined;
+  if (
+    endpointId === 'deepseek' &&
+    selection.modelTier === 'default' &&
+    isLegacyDeepSeekDefaultModel(model)
+  ) {
+    return 'deepseek-v4-flash';
+  }
+  return model;
+}
+
+function isLegacyDeepSeekDefaultModel(model: string): boolean {
+  return (
+    model === 'deepseek-v4-pro' ||
+    model === 'deepseek-chat' ||
+    model === 'claude-3-5-sonnet-latest'
+  );
 }
 
 function endpointFromSdkRuntimeId(runtimeId?: string): string | undefined {

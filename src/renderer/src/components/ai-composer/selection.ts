@@ -9,16 +9,16 @@ export function selectionFromConversation(
   const normalizedFallback = normalizeRuntimeSelection(fallback);
   const saved = normalizeRuntimeSelection(conversation?.runtimeSelection);
   if (hasConcreteSelection(saved) || hasConcreteSelection(normalizedFallback)) {
-    return {
+    return normalizeRuntimeSelection({
       ...normalizedFallback,
       ...saved
-    };
+    });
   }
-  return {
+  return normalizeRuntimeSelection({
     ...normalizedFallback,
     ...saved,
     ...legacySelectionFromConversation(conversation)
-  };
+  });
 }
 
 export function patchFromSelection(
