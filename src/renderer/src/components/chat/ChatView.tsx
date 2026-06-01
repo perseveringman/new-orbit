@@ -10,8 +10,9 @@
  * 参考：docs/thinking-trail/2026-04-29-chat-unification-decoupling/03-chat-runtime-protocol.md §5
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RuntimeEvent } from '@shared/chat-protocol';
+import { ArrowDown } from 'lucide-react';
 import { AIComposer } from '../ai-composer';
 import { ActionBar } from './ActionBar';
 import { MessageBubble } from './MessageBubble';
@@ -23,6 +24,21 @@ import type { ChatProps } from './types';
 interface RenderItem {
   key: string;
   node: JSX.Element;
+}
+
+export const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
+
+export interface ChatScrollViewportMetrics {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}
+
+export function isChatScrollerNearBottom(
+  metrics: ChatScrollViewportMetrics,
+  threshold = CHAT_AUTOSCROLL_THRESHOLD_PX
+): boolean {
+  return metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop <= threshold;
 }
 
 export function ChatView(props: ChatProps): JSX.Element {
@@ -46,11 +62,70 @@ export function ChatView(props: ChatProps): JSX.Element {
 
   const actions = useChatActions({ conversationId, onAction });
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const autoFollowRef = useRef(true);
+  const [autoFollowing, setAutoFollowing] = useState(true);
+  const [hasBufferedUpdates, setHasBufferedUpdates] = useState(false);
 
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [events.length]);
+  }, []);
+
+  const updateAutoFollow = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const next = isChatScrollerNearBottom({
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight
+    });
+    autoFollowRef.current = next;
+    setAutoFollowing(next);
+    if (next) setHasBufferedUpdates(false);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    autoFollowRef.current = true;
+    setAutoFollowing(true);
+    setHasBufferedUpdates(false);
+    scrollToBottom();
+  }, [scrollToBottom]);
+
+  const eventScrollSignature = useMemo(
+    () =>
+      events
+        .map((event) => `${event.id}:${event.kind}:${event.at}:${getScrollablePayloadLength(event)}`)
+        .join('|'),
+    [events]
+  );
+
+  useEffect(() => {
+    autoFollowRef.current = true;
+    setAutoFollowing(true);
+    setHasBufferedUpdates(false);
+    scrollToBottom();
+  }, [conversationId, scrollToBottom]);
+
+  useEffect(() => {
+    if (autoFollowRef.current) {
+      scrollToBottom();
+      setHasBufferedUpdates(false);
+      return;
+    }
+    setHasBufferedUpdates(true);
+  }, [eventScrollSignature, isLoading, scrollToBottom]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') return;
+    const content = contentRef.current;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      if (autoFollowRef.current) scrollToBottom();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [scrollToBottom]);
 
   const items = useMemo(
     () => buildRenderItems(events, capabilities, actions.approveTool, actions.rejectTool),
@@ -68,16 +143,36 @@ export function ChatView(props: ChatProps): JSX.Element {
         onRetry={() => actions.retry()}
         onCompact={() => actions.compact()}
       />
-      <div ref={scrollerRef} className="flex-1 space-y-2 overflow-auto px-3 py-3">
-        {beforeEventsSlot}
-        {items.length === 0 && welcomeMessage ? (
-          <div className="rounded-xl border border-dashed border-neutral-300 bg-white/60 px-4 py-6 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/40 dark:text-neutral-400">
-            {welcomeMessage}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollerRef}
+          onScroll={updateAutoFollow}
+          className="h-full overflow-auto px-3 py-3"
+        >
+          <div ref={contentRef} className="space-y-2">
+            {beforeEventsSlot}
+            {items.length === 0 && welcomeMessage ? (
+              <div className="rounded-xl border border-dashed border-neutral-300 bg-white/60 px-4 py-6 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/40 dark:text-neutral-400">
+                {welcomeMessage}
+              </div>
+            ) : null}
+            {items.map((item) => (
+              <div key={item.key}>{item.node}</div>
+            ))}
           </div>
+        </div>
+        {!autoFollowing && hasBufferedUpdates ? (
+          <button
+            type="button"
+            title="回到最新消息"
+            aria-label="回到最新消息"
+            onClick={jumpToLatest}
+            className="absolute bottom-3 right-4 z-10 flex items-center gap-1 rounded-full border border-neutral-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-lg backdrop-blur transition hover:bg-neutral-100 hover:text-neutral-950 dark:border-neutral-800 dark:bg-neutral-950/95 dark:text-neutral-200 dark:hover:bg-neutral-900"
+          >
+            <ArrowDown size={14} />
+            最新消息
+          </button>
         ) : null}
-        {items.map((item) => (
-          <div key={item.key}>{item.node}</div>
-        ))}
       </div>
       <AIComposer
         disabled={!capabilities.canSendMessage}
@@ -101,6 +196,32 @@ export function ChatView(props: ChatProps): JSX.Element {
       />
     </div>
   );
+}
+
+function getScrollablePayloadLength(event: RuntimeEvent): number {
+  switch (event.kind) {
+    case 'runtime.message':
+      return (event as RuntimeEvent<'runtime.message'>).payload.text.length;
+    case 'runtime.thinking':
+      return (event as RuntimeEvent<'runtime.thinking'>).payload.text.length;
+    case 'runtime.tool_result':
+      return (event as RuntimeEvent<'runtime.tool_result'>).payload.result.length;
+    case 'runtime.tool_use':
+      return JSON.stringify((event as RuntimeEvent<'runtime.tool_use'>).payload.toolInput ?? '')
+        .length;
+    case 'runtime.awaiting_user': {
+      const payload = (event as RuntimeEvent<'runtime.awaiting_user'>).payload;
+      return [payload.title, payload.hint, payload.status].filter(Boolean).join('|').length;
+    }
+    case 'runtime.error':
+      return (event as RuntimeEvent<'runtime.error'>).payload.message.length;
+    case 'runtime.done': {
+      const payload = (event as RuntimeEvent<'runtime.done'>).payload;
+      return String(payload.reason ?? payload.exitCode ?? '').length;
+    }
+    default:
+      return JSON.stringify(event.payload ?? {}).length;
+  }
 }
 
 function buildRenderItems(

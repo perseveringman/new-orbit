@@ -7,7 +7,11 @@ import type {
   RuntimeEventPayloadMap
 } from '../src/shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '../src/shared/chat-protocol';
-import { ChatView } from '../src/renderer/src/components/chat/ChatView';
+import {
+  CHAT_AUTOSCROLL_THRESHOLD_PX,
+  ChatView,
+  isChatScrollerNearBottom
+} from '../src/renderer/src/components/chat/ChatView';
 
 function ev<K extends RuntimeEventKind>(
   kind: K,
@@ -311,5 +315,23 @@ describe('ChatView', () => {
       })
     );
     expect(html).toContain('Hi there!');
+  });
+
+  it('treats near-bottom scroll positions as auto-follow eligible', () => {
+    expect(
+      isChatScrollerNearBottom({
+        scrollTop: 452,
+        scrollHeight: 1000,
+        clientHeight: 500
+      })
+    ).toBe(true);
+    expect(
+      isChatScrollerNearBottom({
+        scrollTop: 400,
+        scrollHeight: 1000,
+        clientHeight: 500
+      })
+    ).toBe(false);
+    expect(CHAT_AUTOSCROLL_THRESHOLD_PX).toBe(48);
   });
 });
