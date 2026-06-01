@@ -6,13 +6,18 @@ export function selectionFromConversation(
   conversation: Conversation | null,
   fallback: RuntimeSelection
 ): RuntimeSelection {
+  const normalizedFallback = normalizeRuntimeSelection(fallback);
   const saved = normalizeRuntimeSelection(conversation?.runtimeSelection);
+  if (hasConcreteSelection(saved) || hasConcreteSelection(normalizedFallback)) {
+    return {
+      ...normalizedFallback,
+      ...saved
+    };
+  }
   return {
-    ...fallback,
+    ...normalizedFallback,
     ...saved,
-    ...(saved.endpointId || saved.runtimeId || saved.model
-      ? {}
-      : legacySelectionFromConversation(conversation))
+    ...legacySelectionFromConversation(conversation)
   };
 }
 
@@ -67,4 +72,8 @@ function legacySelectionFromConversation(conversation: Conversation | null): Run
     model: conversation.runtimeModelHint,
     track
   });
+}
+
+function hasConcreteSelection(selection: RuntimeSelection): boolean {
+  return Boolean(selection.endpointId || selection.runtimeId || selection.model || selection.track);
 }

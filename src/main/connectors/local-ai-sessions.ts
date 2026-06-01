@@ -11,13 +11,25 @@ import type { EvidenceContentView, EvidencePrivacy, EvidenceSource } from '@shar
 import {
   EXTERNAL_AI_SESSION_PROVIDER_ID,
   listExternalAISessionSources,
-  readExternalAISessionSourceText
+  readExternalAISessionSourceText,
+  summarizeExternalAISessionSources
 } from '../evidence/external-ai-sessions';
 import { resolveExternalAISessionScanOptions } from '../evidence/external-ai-session-settings';
 import type { ConnectorPlugin } from './plugin';
 
 const CONNECTOR_ID = 'local-ai-sessions';
 const SCANNER_ID = 'orbit.external-ai-sessions';
+export const LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME = '外部 AI 会话';
+export const LOCAL_AI_SESSIONS_CONNECTOR_ALIASES = [
+  'AI 本地会话连接器',
+  '外部 AI 会话库',
+  '本地 AI 会话',
+  '本地 AI 会话库',
+  'Runtime 会话库',
+  'Runtime 全量会话库',
+  '本地 Agent 会话源',
+  'local-ai-sessions'
+] as const;
 
 interface ParsedDocRef {
   agent: string;
@@ -29,8 +41,8 @@ export function createLocalAISessionsConnectorPlugin(vaultPath: string): Connect
   return {
     definition: {
       id: CONNECTOR_ID,
-      display_name: '本地 AI 会话',
-      description: '聚合 Claude、Codex、Amp 等本机 agent 保存的历史会话，让 Orbit AI 可检索与引用。',
+      display_name: LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME,
+      description: '聚合 Claude、Codex、Amp 等外部 AI 工具保存的历史会话，让随处问和 Orbit AI 可检索、引用与沉淀。',
       category: 'knowledge',
       capabilities: ['list', 'read', 'search', 'index', 'open_original'],
       evidence_kind: 'external_ai_session',
@@ -40,10 +52,13 @@ export function createLocalAISessionsConnectorPlugin(vaultPath: string): Connect
 
     async normalizeConfig(_input: ConnectConnectorInput['config']): Promise<Record<string, unknown>> {
       const options = await resolveExternalAISessionScanOptions(vaultPath);
+      const inventory = await summarizeExternalAISessionSources(options);
       return {
         scanner: SCANNER_ID,
         provider_id: EXTERNAL_AI_SESSION_PROVIDER_ID,
         limit: options.limit ?? 300,
+        total_count: inventory.matched_count,
+        total_candidates: inventory.total_candidates,
         root_count: options.roots?.length ?? 0,
         roots: (options.roots ?? []).map((root) => ({
           agent: root.agent,

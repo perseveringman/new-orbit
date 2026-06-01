@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { BuildContextPacketInput, ContextPacket, ContextPacketScope, ContextSection } from '@shared/context';
+import type {
+  BuildContextPacketInput,
+  ContextPacket,
+  ContextPacketScope,
+  ContextRetrievalTrace,
+  ContextSection
+} from '@shared/context';
 import {
   evidenceSourceId,
   type EvidenceChunk,
@@ -18,6 +24,13 @@ import { listEntityProfilesForResults } from './entity-profile';
 import { listExternalSessionDistillationsForResults } from './external-session-synthesis';
 import { ensurePersonalQA, listPersonalQAHits, type PersonalQAHitsResult } from './personal-qa';
 import { recallActiveMemoryContext } from '../memory/backend-registry';
+import {
+  buildRetrievalTrace,
+  gradeEvidenceResults,
+  planContextRetrieval,
+  renderAnswerGuidance,
+  type RetrievalPlan
+} from './retrieval-planner';
 
 const DEFAULT_MAX_TOKENS = 2400;
 const DEFAULT_EVIDENCE_LIMIT = 8;
@@ -32,18 +45,23 @@ export async function buildContextPacket(vaultPath: string, input: BuildContextP
   const chunkStore = createEvidenceChunkIndexStore(vaultPath);
   const graphStore = createEvidenceGraphStore(vaultPath);
   const evidenceLimit = Math.max(1, input.evidence_limit ?? DEFAULT_EVIDENCE_LIMIT);
+  const useAgenticRetrieval = input.agentic_retrieval !== false;
+  const retrievalPlan = useAgenticRetrieval ? planContextRetrieval({ query: input.query, scope }) : null;
 
   const evidenceResults = input.query?.trim()
-    ? await chunkStore.search({
-        query: input.query,
-        ...(evidenceScope ? { scope: evidenceScope } : {}),
-        limit: evidenceLimit
-      })
+    ? retrievalPlan
+      ? await searchEvidenceWithPlan(chunkStore, retrievalPlan, evidenceScope, evidenceLimit)
+      : await chunkStore.search({
+          query: input.query,
+          ...(evidenceScope ? { scope: evidenceScope } : {}),
+          limit: evidenceLimit
+        })
     : (await chunkStore.list({
         ...(evidenceScope ? { scope: evidenceScope } : {}),
         limit: evidenceLimit
       })).map((chunk) => ({ chunk, score: 0, why: 'recent scoped evidence' }));
 
+  const retrievalSufficiency = retrievalPlan ? gradeEvidenceResults(evidenceResults.filter(hasResultSource), retrievalPlan) : null;
   const evidenceSection = buildEvidenceSection(evidenceResults);
   const synthesisMode = input.synthesis_mode ?? 'ensure';
   if (synthesisMode === 'ensure') {
@@ -70,8 +88,21 @@ export async function buildContextPacket(vaultPath: string, input: BuildContextP
   const memoryRecall = await buildMemoryRecall(vaultPath, input);
   const memorySection = buildMemorySection(memoryRecall);
   const graphSection = await buildGraphSection(graphStore, evidenceResults.map((result) => result.chunk), input.graph_limit ?? DEFAULT_GRAPH_LIMIT);
+  const retrievalTrace = retrievalPlan && retrievalSufficiency
+    ? buildRetrievalTrace(retrievalPlan, evidenceResults.length, retrievalSufficiency, { graphExpanded: Boolean(graphSection) })
+    : null;
+  const answerGuidanceSection = retrievalTrace ? buildAnswerGuidanceSection(retrievalTrace) : null;
   const maxTokens = input.max_tokens ?? DEFAULT_MAX_TOKENS;
-  const sections = [buildScopeSection(scope), evidenceSection, personalQASection, externalSessionSection, entityProfileSection, memorySection, graphSection]
+  const sections = [
+    buildScopeSection(scope),
+    answerGuidanceSection,
+    evidenceSection,
+    personalQASection,
+    externalSessionSection,
+    entityProfileSection,
+    memorySection,
+    graphSection
+  ]
     .filter((section): section is ContextSection => Boolean(section))
     .sort((a, b) => a.priority - b.priority);
   const fittedSections = fitSections(sections, maxTokens);
@@ -100,6 +131,7 @@ export async function buildContextPacket(vaultPath: string, input: BuildContextP
       estimated_tokens: estimatedTokens
     },
     sections: fittedSections,
+    ...(retrievalTrace ? { retrieval: retrievalTrace } : {}),
     evidence,
     synthesis_refs: [
       ...(personalQASection && fittedSections.includes(personalQASection) ? personalQAHits.map((hit) => hit.artifact.id) : []),
@@ -123,6 +155,16 @@ function buildScopeSection(scope: ContextPacketScope): ContextSection {
   };
 }
 
+function buildAnswerGuidanceSection(trace: ContextRetrievalTrace): ContextSection {
+  return {
+    kind: 'answer_guidance',
+    title: '回答约束',
+    content: renderAnswerGuidance(trace),
+    citations: [],
+    priority: 15
+  };
+}
+
 function buildEvidenceSection(results: PacketEvidenceResult[]): ContextSection | null {
   if (!results.length) return null;
   return {
@@ -137,6 +179,36 @@ function buildEvidenceSection(results: PacketEvidenceResult[]): ContextSection |
     citations: results.map((result) => result.chunk.selector),
     priority: 20
   };
+}
+
+async function searchEvidenceWithPlan(
+  chunkStore: ReturnType<typeof createEvidenceChunkIndexStore>,
+  plan: RetrievalPlan,
+  evidenceScope: EvidenceScopeRef | null,
+  evidenceLimit: number
+): Promise<EvidenceChunkSearchResult[]> {
+  if (!plan.needsRetrieval || !plan.queries.length) return [];
+  const hits = new Map<string, EvidenceChunkSearchResult>();
+  for (const [index, query] of plan.queries.entries()) {
+    const results = await chunkStore.search({
+      query,
+      ...(evidenceScope ? { scope: evidenceScope } : {}),
+      limit: Math.max(evidenceLimit, 12)
+    });
+    for (const result of results) {
+      const existing = hits.get(result.chunk.id);
+      const decay = index === 0 ? 1 : Math.max(0.72, 1 - index * 0.08);
+      const scored: EvidenceChunkSearchResult = {
+        ...result,
+        score: Number((result.score * decay).toFixed(4)),
+        why: index === 0 ? result.why : `${result.why}; query variant ${index + 1}`
+      };
+      if (!existing || scored.score > existing.score) hits.set(result.chunk.id, scored);
+    }
+  }
+  return Array.from(hits.values())
+    .sort((a, b) => b.score - a.score || b.chunk.updated_at.localeCompare(a.chunk.updated_at))
+    .slice(0, evidenceLimit);
 }
 
 function sourceFromResult(result: PacketEvidenceResult): EvidenceSource | null {

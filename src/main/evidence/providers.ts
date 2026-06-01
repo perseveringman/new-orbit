@@ -144,7 +144,7 @@ export function createOrbitEvidenceProvider(vaultPath: string): SourceProvider {
       const source = sources.find((candidate) => candidate.id === selector.source_id)
         ?? await createEvidenceStore(vaultPath).get(selector.source_id);
       if (!source) throw new Error(`evidence_source_not_found:${selector.source_id}`);
-      const text = await readOrbitSourceText(vaultPath, source, selector.content_view);
+      const text = await readOrbitSourceText(vaultPath, source, selector.content_view, selector);
       const excerpt: EvidenceExcerpt = {
         selector,
         source,
@@ -471,7 +471,8 @@ async function listTaskRecords(vaultPath: string): Promise<TaskRecord[]> {
 async function readOrbitSourceText(
   vaultPath: string,
   source: EvidenceSource,
-  contentView: EvidenceContentView
+  contentView: EvidenceContentView,
+  selector?: EvidenceSelector
 ): Promise<string> {
   if (contentView === 'metadata') {
     return [source.title, source.summary, source.canonical_ref].filter(Boolean).join('\n');
@@ -514,10 +515,13 @@ async function readOrbitSourceText(
     case 'kb_doc':
       return safeText(await fs.readFile(path.join(vaultPath, source.canonical_ref), 'utf8').catch(() => ''), contentView);
     case 'external_ai_session':
+      if (selector?.kind === 'message_range' && typeof source.metadata?.['path'] === 'string') {
+        return safeText(await readExternalAISessionSourceText(source, contentView, selector), contentView);
+      }
       if (hasConnectorBacking(source)) {
         return safeText(await readConnectorEvidenceText(vaultPath, source, contentView), contentView);
       }
-      return safeText(await readExternalAISessionSourceText(source, contentView), contentView);
+      return safeText(await readExternalAISessionSourceText(source, contentView, selector), contentView);
     case 'external_file':
       return safeText(await readConnectorEvidenceText(vaultPath, source, contentView), contentView);
   }

@@ -3344,7 +3344,7 @@ function RichPdfReader({
   const [numPages, setNumPages] = useState(0);
   const [textByPage, setTextByPage] = useState<Record<number, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [scrollMode, setScrollMode] = useState<'paginated' | 'scrolled'>('paginated');
+  const [scrollMode, setScrollMode] = useState<'paginated' | 'scrolled'>('scrolled');
   const [pdfViewportSize, setPdfViewportSize] = useState<SpatialSize>({ width: 0, height: 0 });
   const [pageSizes, setPageSizes] = useState<Record<number, SpatialSize>>({});
   const [pdfZoom, setPdfZoom] = useState(1);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkContextReport } from '@shared/context';
-import type { EvidenceReadResult, EvidenceSelector } from '@shared/evidence';
+import type { EvidenceSelector } from '@shared/evidence';
 import type { TaskRecord, TaskStatus } from '@shared/schemas';
 import type { ProjectSummaryDTO } from '@shared/ipc';
 import type { GitHubProjectState } from '@shared/github';
@@ -11,6 +11,7 @@ import { useSidebar } from '../store/sidebar';
 import { useTaskDetails } from '../store/taskDetails';
 import { NewTaskModal } from '../components/Modals/NewTaskModal';
 import { MigrationDialog } from '../components/Modals/MigrationDialog';
+import { EvidenceReference, evidenceSelectorKey } from '../components/evidence/EvidenceReference';
 import { TerminalManager } from '../components/Terminal/TerminalManager';
 import type { TerminalManagerHandle } from '../components/Terminal/TerminalManager';
 import {
@@ -1047,49 +1048,14 @@ function ProjectEvidenceButtons({
   return (
     <div className="mt-3 flex flex-wrap gap-1.5">
       {selectors.slice(0, 3).map((selector) => (
-        <ProjectEvidenceButton key={projectEvidenceSelectorKey(selector)} selector={selector} />
+        <EvidenceReference key={projectEvidenceSelectorKey(selector)} selector={selector} tone="violet" />
       ))}
     </div>
   );
 }
 
-function ProjectEvidenceButton({ selector }: { selector: EvidenceSelector }): JSX.Element {
-  const [result, setResult] = useState<EvidenceReadResult | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function readEvidence(): Promise<void> {
-    setLoading(true);
-    try {
-      setResult(await window.orbit.evidence.read(selector));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <span className="inline-flex max-w-full flex-col gap-1">
-      <button
-        type="button"
-        onClick={() => void readEvidence()}
-        disabled={loading}
-        className="rounded-md border border-violet-300 px-2 py-0.5 text-[11px] text-violet-700 disabled:opacity-60 dark:border-violet-800 dark:text-violet-200"
-      >
-        {loading ? '读取中' : '查看证据'}
-      </button>
-      {result ? (
-        <span className="rounded-md border border-neutral-200 bg-white p-2 text-[11px] leading-5 text-neutral-600 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
-          <span className="block font-medium text-neutral-800 dark:text-neutral-100">
-            {result.source.title}
-          </span>
-          {result.excerpts[0]?.text.slice(0, 520) ?? '没有可用摘录。'}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
 function projectEvidenceSelectorKey(selector: EvidenceSelector): string {
-  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
+  return evidenceSelectorKey(selector);
 }
 
 function withPMILTimeout<T>(promise: Promise<T>, ms = 15000): Promise<T> {

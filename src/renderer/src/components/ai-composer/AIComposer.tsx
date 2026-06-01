@@ -1,5 +1,7 @@
 import {
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -7,6 +9,7 @@ import {
   type FormEvent,
   type ReactNode
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Bot,
   Check,
@@ -59,6 +62,8 @@ const FALLBACK_OPTIONS: ComposerOptions = {
   defaultSelection: { agentProfileId: 'default-agent' }
 };
 
+const useBrowserLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
 export function AIComposer({
   disabled = false,
   submitting = false,
@@ -100,7 +105,7 @@ export function AIComposer({
     currentSelection.agentProfileId ?? options.defaultSelection.agentProfileId ?? options.profiles[0]?.id ?? '';
   const availableModels = modelsForSelection(options, currentSelection);
   const modelValue = selectedModelValue(availableModels, currentSelection);
-  const skillOptions = options.skills ?? [];
+  const skillOptions = useMemo(() => options.skills ?? [], [options.skills]);
 
   useEffect(() => {
     if (selection) setLocalSelection(normalizeRuntimeSelection(selection));
@@ -431,9 +436,70 @@ function SkillPicker({
   onChange: (next: string[]) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [popoverStyle, setPopoverStyle] = useState({
+    left: 0,
+    top: 0,
+    width: 320,
+    maxHeight: 288
+  });
   const selectedSet = new Set(selected);
   const activeOptions = options ?? [];
   const label = selected.length > 0 ? `技能 ${selected.length}` : '技能 自动';
+
+  useBrowserLayoutEffect(() => {
+    if (!open) return;
+    function updatePosition(): void {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const viewportPadding = 12;
+      const gap = 8;
+      const width = Math.min(320, window.innerWidth - viewportPadding * 2);
+      const left = Math.min(
+        Math.max(viewportPadding, rect.left),
+        window.innerWidth - width - viewportPadding
+      );
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const spaceAbove = rect.top - viewportPadding;
+      const showBelow = spaceBelow >= 220 || spaceBelow >= spaceAbove;
+      const available = Math.max(128, Math.min(288, (showBelow ? spaceBelow : spaceAbove) - gap));
+      setPopoverStyle({
+        left,
+        top: showBelow ? rect.bottom + gap : Math.max(viewportPadding, rect.top - available - gap),
+        width,
+        maxHeight: available
+      });
+    }
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [activeOptions.length, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function closeOnOutside(event: MouseEvent): void {
+      const target = event.target as Node | null;
+      if (target && (buttonRef.current?.contains(target) || popoverRef.current?.contains(target))) {
+        return;
+      }
+      setOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent): void {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', closeOnOutside, true);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
 
   function toggle(id: string): void {
     onChange(selectedSet.has(id) ? selected.filter((item) => item !== id) : [...selected, id]);
@@ -442,6 +508,7 @@ function SkillPicker({
   return (
     <div className="relative shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         aria-label="选择技能"
         disabled={disabled}
@@ -451,8 +518,17 @@ function SkillPicker({
         <Sparkles size={14} className="text-neutral-500 dark:text-neutral-400" />
         <span className="truncate">{label}</span>
       </button>
-      {open && !disabled ? (
-        <div className="absolute left-0 top-10 z-30 w-80 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-950">
+      {open && !disabled && typeof document !== 'undefined' ? createPortal(
+        <div
+          ref={popoverRef}
+          style={{
+            left: popoverStyle.left,
+            top: popoverStyle.top,
+            width: popoverStyle.width,
+            maxHeight: popoverStyle.maxHeight
+          }}
+          className="fixed z-[1000] overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-950"
+        >
           <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
             <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">选择技能</span>
             <button
@@ -466,7 +542,7 @@ function SkillPicker({
               自动匹配
             </button>
           </div>
-          <div className="max-h-72 overflow-y-auto p-2">
+          <div className="overflow-y-auto p-2" style={{ maxHeight: Math.max(96, popoverStyle.maxHeight - 40) }}>
             {activeOptions.map((skill) => {
               const checked = selectedSet.has(skill.id);
               return (
@@ -506,7 +582,8 @@ function SkillPicker({
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

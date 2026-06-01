@@ -10,6 +10,8 @@ import { WRITE_TOOL_DEFS } from './write';
 import { PROPOSE_TOOL_DEFS } from './propose';
 import { WEB_TOOL_DEFS } from './web';
 import { SHELL_TOOL_DEFS } from './shell';
+import { SKILL_TOOL_DEFS } from './skill';
+import { GATEWAY_TOOL_DEFS } from './gateway';
 import { BROWSER_TOOL_DEFS } from './browser';
 import { SUBAGENT_TOOL_DEFS } from './subagent';
 import { OPENCLAW_PLANNED_TOOL_VIEWS } from './openclaw-parity';
@@ -23,8 +25,10 @@ export const PHASE_B_TOOL_DEFS: readonly AgentToolDef[] = [...READ_TOOL_DEFS, ..
 /** Phase C：B + propose 系列（agent 提议 → 用户审批）。 */
 export const PHASE_C_TOOL_DEFS: readonly AgentToolDef[] = [
   ...READ_TOOL_DEFS,
+  ...SKILL_TOOL_DEFS,
   ...WEB_TOOL_DEFS,
   ...SHELL_TOOL_DEFS,
+  ...GATEWAY_TOOL_DEFS,
   ...BROWSER_TOOL_DEFS,
   ...SUBAGENT_TOOL_DEFS,
   ...WRITE_TOOL_DEFS,
@@ -35,8 +39,10 @@ export const OPENCLAW_PARITY_PLANNED_TOOL_VIEWS = OPENCLAW_PLANNED_TOOL_VIEWS;
 
 export {
   READ_TOOL_DEFS,
+  SKILL_TOOL_DEFS,
   WEB_TOOL_DEFS,
   SHELL_TOOL_DEFS,
+  GATEWAY_TOOL_DEFS,
   BROWSER_TOOL_DEFS,
   SUBAGENT_TOOL_DEFS,
   WRITE_TOOL_DEFS,

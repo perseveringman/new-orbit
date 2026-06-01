@@ -25,6 +25,7 @@ describe('ASK_ANYWHERE_SYSTEM_PROMPT', () => {
     expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/orbit_task_propose/);
     expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/orbit_task_list/);
     expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/orbit_search/);
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/orbit_skill_read/);
   });
 
   it('mentions the is_error feedback loop so the agent self-corrects after a failed tool', () => {
@@ -33,5 +34,18 @@ describe('ASK_ANYWHERE_SYSTEM_PROMPT', () => {
 
   it('warns against inventing non-existent tool names', () => {
     expect(ASK_ANYWHERE_SYSTEM_PROMPT.toLowerCase()).toMatch(/never.*invent|do not invent|don'?t invent/);
+  });
+
+  it('requires loading matching skills instead of hardcoding slash-command behavior', () => {
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/first call `orbit_skill_read`/);
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/Claude Desktop/);
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/Orbit skill configuration/);
+  });
+
+  it('keeps internal retrieval machinery out of normal user answers', () => {
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/Answer the user's actual question first/);
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/Treat `pmil_context_packet`/);
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/Do not invent counts, dates, causes, or citations/);
+    expect(ASK_ANYWHERE_SYSTEM_PROMPT).toMatch(/Distinguish "总发现" from "当前索引"/);
   });
 });

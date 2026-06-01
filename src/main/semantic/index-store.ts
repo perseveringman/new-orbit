@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { ORBIT_DIR } from '@shared/constants';
 import type { EmbeddingRecord, SemanticDocument, SemanticIndexFile, SemanticIndexStatus } from '@shared/semantic';
 import { normalizeSearchQuery, type SearchQuery, type SearchResult } from '@shared/semantic';
@@ -231,7 +232,7 @@ export function createSemanticIndexStore(vaultPath: string): SemanticIndexStore 
 }
 
 function safeFileName(value: string): string {
-  return Buffer.from(value).toString('base64url');
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function documentText(doc: SemanticDocument): string {

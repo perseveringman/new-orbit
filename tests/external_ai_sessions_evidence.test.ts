@@ -93,6 +93,12 @@ describe('external AI session evidence source', () => {
     expect(read.excerpts[0].text).toContain('PMIL external agent session truth layer');
     expect(read.excerpts[0].text).not.toContain('large hidden tool output');
     expect(results[0].chunk.source_id).toBe(source.id);
+    expect(results[0].chunk.selector.kind).toBe('message_range');
+    expect(results[0].chunk.selector.range?.from).toBe(0);
+    expect(results[0].chunk.selector.range?.to).toBe(1);
+    const rangedRead = await provider.read(results[0].chunk.selector);
+    expect(rangedRead.excerpts[0].text).toContain('PMIL external agent session truth layer');
+    expect(rangedRead.excerpts[0].text).not.toContain('large hidden tool output');
   });
 
   it('reads Copilot runtime event logs through nested data payloads', async () => {

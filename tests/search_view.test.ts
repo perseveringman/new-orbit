@@ -104,7 +104,7 @@ describe('SearchContent', () => {
     expect(html).toContain('PMIL 上下文包');
     expect(html).toContain('Personal QA');
     expect(html).toContain('GraphRAG improves recall');
-    expect(html).toContain('查看证据');
+    expect(html).toContain('打开来源');
     expect(html).toContain('召回记忆');
     expect(html).toContain('Memory preference');
     expect(html).toContain('有帮助');

@@ -132,6 +132,50 @@ describe('SkillLoader', () => {
     expect((await disabledLoader.load())[0]?.disabledReason).toContain('app.features.thoughts.enabled');
   });
 
+  it('infers skill env requirements and marks missing skill config', async () => {
+    await writeSkill(
+      appDir,
+      'get',
+      'description: x',
+      'Use Authorization: $GETNOTE_API_KEY and X-Client-ID: $GETNOTE_CLIENT_ID.'
+    );
+    const loader = new SkillLoader({ vaultPath: null, appSkillsDir: appDir });
+    const skill = (await loader.load())[0];
+    expect(skill?.requires.env).toEqual(['GETNOTE_API_KEY', 'GETNOTE_CLIENT_ID']);
+    expect(skill?.runtimeStatus.missingEnv).toEqual(['GETNOTE_API_KEY', 'GETNOTE_CLIENT_ID']);
+    expect(skill?.disabledReason).toContain('GETNOTE_API_KEY');
+  });
+
+  it('reads skill runtime config without exposing secret values', async () => {
+    await writeSkill(
+      appDir,
+      'get',
+      'description: x',
+      'Use Authorization: $GETNOTE_API_KEY and X-Client-ID: $GETNOTE_CLIENT_ID.'
+    );
+    await writeFile(
+      path.join(appDir, 'config.json'),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          get: {
+            env: {
+              GETNOTE_API_KEY: 'gk_live_secret',
+              GETNOTE_CLIENT_ID: 'cli_secret'
+            }
+          }
+        }
+      }),
+      'utf8'
+    );
+    const loader = new SkillLoader({ vaultPath: null, appSkillsDir: appDir });
+    const skill = (await loader.load())[0];
+    expect(skill?.runtimeStatus.configuredEnv).toEqual(['GETNOTE_API_KEY', 'GETNOTE_CLIENT_ID']);
+    expect(skill?.runtimeStatus.missingEnv).toEqual([]);
+    expect(skill?.disabledReason).toBeUndefined();
+    expect(JSON.stringify(skill)).not.toContain('gk_live_secret');
+  });
+
   it('drops invalid frontmatter values gracefully', async () => {
     await writeSkill(
       appDir,

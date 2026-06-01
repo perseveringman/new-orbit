@@ -15,6 +15,8 @@ export function ConnectorsView(): JSX.Element {
   const [hits, setHits] = useState<ConnectorSearchHit[]>([]);
   const [state, setState] = useState<LoadState>('idle');
   const [message, setMessage] = useState<string | null>(null);
+  const [busyConnectorId, setBusyConnectorId] = useState<string | null>(null);
+  const [busyConnectionId, setBusyConnectionId] = useState<string | null>(null);
 
   const connectionsByConnector = useMemo(
     () =>
@@ -81,10 +83,13 @@ export function ConnectorsView(): JSX.Element {
         return;
       }
     }
+    const existing = definition.config_schema.length === 0
+      ? connections.find((connection) => connection.connector_id === definition.id)
+      : null;
+    setBusyConnectorId(definition.id);
+    setBusyConnectionId(existing?.id ?? null);
+    setMessage(`${definition.display_name} 正在${existing ? '重新扫描' : '启用'}…`);
     try {
-      const existing = definition.config_schema.length === 0
-        ? connections.find((connection) => connection.connector_id === definition.id)
-        : null;
       if (existing) {
         await window.orbit.connectors.scan(existing.id);
       } else {
@@ -95,31 +100,40 @@ export function ConnectorsView(): JSX.Element {
         });
       }
       await reload();
-      setMessage(`${definition.display_name} 已连接，AI 上下文索引会在下一次搜索或提问时刷新。`);
+      setMessage(`${definition.display_name} 已${existing ? '重新扫描' : '启用'}，AI 上下文索引会在下一次搜索或提问时刷新。`);
     } catch (error) {
       setMessage((error as Error).message);
+    } finally {
+      setBusyConnectorId((current) => current === definition.id ? null : current);
+      setBusyConnectionId((current) => current === existing?.id ? null : current);
     }
   }
 
   async function scan(connectionId: string): Promise<void> {
-    setMessage(null);
+    setBusyConnectionId(connectionId);
+    setMessage('正在扫描连接器内容…');
     try {
       const result = await window.orbit.connectors.scan(connectionId);
       await reload();
       setMessage(`已扫描 ${result.item_count} 个条目。`);
     } catch (error) {
       setMessage((error as Error).message);
+    } finally {
+      setBusyConnectionId((current) => current === connectionId ? null : current);
     }
   }
 
   async function remove(connectionId: string): Promise<void> {
-    setMessage(null);
+    setBusyConnectionId(connectionId);
+    setMessage('正在移除连接器…');
     try {
       await window.orbit.connectors.remove(connectionId);
       setHits([]);
       await reload();
     } catch (error) {
       setMessage((error as Error).message);
+    } finally {
+      setBusyConnectionId((current) => current === connectionId ? null : current);
     }
   }
 
@@ -165,9 +179,14 @@ export function ConnectorsView(): JSX.Element {
               {definitions.map((definition) => {
                 const related = connectionsByConnector.get(definition.id) ?? [];
                 const connected = related.some((connection) => connection.status === 'connected');
+                const busy = busyConnectorId === definition.id;
                 const icon = definition.config_schema.some((field) => field.type === 'directory')
                   ? <FolderOpen size={15} />
                   : <Power size={15} />;
+                const actionLabel = busy
+                  ? (connected ? '扫描中…' : '启用中…')
+                  : (definition.config_schema.length === 0 && connected ? '重新扫描' : connectorActionLabel(definition));
+                const statsLabel = connectorStatsLabel(definition, related);
                 return (
                   <div key={definition.id} className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
                     <div className="flex items-start justify-between gap-3">
@@ -187,10 +206,11 @@ export function ConnectorsView(): JSX.Element {
                       </div>
                       <button
                         onClick={() => void connectDefinition(definition)}
-                        className="inline-flex shrink-0 items-center gap-2 rounded-md bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-neutral-300"
+                        disabled={busy}
+                        className="inline-flex shrink-0 items-center gap-2 rounded-md bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-950 dark:hover:bg-neutral-300"
                       >
-                        {icon}
-                        {definition.config_schema.length === 0 && connected ? '重新扫描' : connectorActionLabel(definition)}
+                        {busy ? <RefreshCw size={15} className="animate-spin" /> : icon}
+                        {actionLabel}
                       </button>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -200,9 +220,9 @@ export function ConnectorsView(): JSX.Element {
                         </span>
                       ))}
                     </div>
-                    {related.length ? (
+                    {statsLabel ? (
                       <p className="mt-3 text-xs text-neutral-500">
-                        {related.length} 个连接 · {related.reduce((sum, item) => sum + item.item_count, 0)} 个条目
+                        {statsLabel}
                       </p>
                     ) : null}
                   </div>
@@ -223,33 +243,38 @@ export function ConnectorsView(): JSX.Element {
                 <p className="px-4 py-8 text-sm text-neutral-500">暂无连接。</p>
               ) : (
                 <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
-                  {connections.map((connection) => (
-                    <li key={connection.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${connection.status === 'connected' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                          <p className="truncate text-sm font-medium">{connection.display_name}</p>
-                        </div>
+                  {connections.map((connection) => {
+                    const busy = busyConnectionId === connection.id;
+                    return (
+                      <li key={connection.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${connection.status === 'connected' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                            <p className="truncate text-sm font-medium">{connection.display_name}</p>
+                          </div>
                         <p className="mt-1 truncate text-xs text-neutral-500">
-                          {connectionConfigLabel(connection)} · {connection.item_count} 个条目
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => void scan(connection.id)}
-                        className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2.5 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                      >
-                        <RefreshCw size={13} />
-                        扫描
-                      </button>
-                      <button
-                        onClick={() => void remove(connection.id)}
-                        className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
-                      >
-                        <Trash2 size={13} />
-                        移除
-                      </button>
-                    </li>
-                  ))}
+                            {connectionConnectionDetailLabel(connection)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => void scan(connection.id)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2.5 py-1.5 text-xs hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                        >
+                          <RefreshCw size={13} className={busy ? 'animate-spin' : undefined} />
+                          {busy ? '扫描中…' : '扫描'}
+                        </button>
+                        <button
+                          onClick={() => void remove(connection.id)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
+                        >
+                          <Trash2 size={13} />
+                          移除
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -295,14 +320,49 @@ function connectorActionLabel(definition: ConnectorDefinition): string {
   return '启用';
 }
 
+function connectorStatsLabel(definition: ConnectorDefinition, connections: ConnectorConnection[]): string | null {
+  if (!connections.length) return null;
+  const indexed = connections.reduce((sum, item) => sum + item.item_count, 0);
+  if (definition.id === 'local-ai-sessions') {
+    const total = connections.reduce((sum, item) => sum + numericConfig(item, 'total_count'), 0);
+    const limit = Math.max(...connections.map((item) => numericConfig(item, 'limit')).filter((value) => value > 0), 0);
+    return [
+      `${connections.length} 个连接`,
+      `当前索引 ${indexed} 条`,
+      total ? `总发现 ${total} 条` : null,
+      limit ? `窗口上限 ${limit}` : null
+    ].filter(Boolean).join(' · ');
+  }
+  return `${connections.length} 个连接 · ${indexed} 个条目`;
+}
+
+function connectionConnectionDetailLabel(connection: ConnectorConnection): string {
+  if (connection.connector_id !== 'local-ai-sessions') {
+    return `${connectionConfigLabel(connection)} · ${connection.item_count} 个条目`;
+  }
+  const total = numericConfig(connection, 'total_count');
+  const limit = numericConfig(connection, 'limit');
+  return [
+    connectionConfigLabel(connection),
+    `当前索引 ${connection.item_count} 条`,
+    total ? `总发现 ${total} 条` : null,
+    limit ? `窗口上限 ${limit}` : null
+  ].filter(Boolean).join(' · ');
+}
+
 function connectionConfigLabel(connection: ConnectorConnection): string {
   const rootPath = connection.config['root_path'];
   if (typeof rootPath === 'string' && rootPath) return rootPath;
   if (connection.config['scanner'] === 'orbit.external-ai-sessions') {
     const count = connection.config['root_count'];
-    return typeof count === 'number' ? `Orbit 内置本地会话索引 · ${count} 个来源` : 'Orbit 内置本地会话索引';
+    return typeof count === 'number' ? `Orbit 内置外部 AI 会话索引 · ${count} 个来源` : 'Orbit 内置外部 AI 会话索引';
   }
   const bridgeRoot = connection.config['bridge_root'];
   if (typeof bridgeRoot === 'string' && bridgeRoot) return bridgeRoot;
   return connection.connector_id;
+}
+
+function numericConfig(connection: ConnectorConnection, key: string): number {
+  const value = connection.config[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }

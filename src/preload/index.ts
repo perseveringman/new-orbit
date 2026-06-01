@@ -81,9 +81,14 @@ import type { BuildContextPacketInput, BuildWorkContextInput } from '@shared/con
 import type { ChatAppendTurnInput, ChatCreateConversationInput } from '@shared/ipc';
 import type {
   AgentSkillDeleteInput,
+  AgentSkillConfigUpdateInput,
   AgentSkillRegistrySnapshot,
   AgentSkillSaveInput,
   AgentSkillView,
+  SkillStoreDetail,
+  SkillStoreInstallInput,
+  SkillStoreSearchInput,
+  SkillStoreSearchResult,
   AgentToolRegistrySnapshot
 } from '@shared/agent-tools';
 import type {
@@ -226,7 +231,13 @@ import type {
 } from '@shared/external-gateway';
 import type { ResourceChangeEvent } from '@shared/resource';
 import type { SearchQuery, SemanticIndexStatus } from '@shared/semantic';
-import type { EvidenceSelector, EvidenceSourceFilter, ExternalAISessionSettings } from '@shared/evidence';
+import type {
+  EvidenceNavigationTarget,
+  EvidenceOpenResult,
+  EvidenceSelector,
+  EvidenceSourceFilter,
+  ExternalAISessionSettings
+} from '@shared/evidence';
 import type {
   CreateMemoryInput,
   MemoryBackendId,
@@ -460,7 +471,15 @@ const api: OrbitApi = {
     save: (input: AgentSkillSaveInput): Promise<AgentSkillView> =>
       ipcRenderer.invoke(IPC.skills.save, input),
     delete: (input: AgentSkillDeleteInput): Promise<void> =>
-      ipcRenderer.invoke(IPC.skills.delete, input)
+      ipcRenderer.invoke(IPC.skills.delete, input),
+    configUpdate: (input: AgentSkillConfigUpdateInput): Promise<AgentSkillView> =>
+      ipcRenderer.invoke(IPC.skills.configUpdate, input),
+    storeSearch: (input?: SkillStoreSearchInput): Promise<SkillStoreSearchResult> =>
+      ipcRenderer.invoke(IPC.skills.storeSearch, input),
+    storeDetail: (slug: string): Promise<SkillStoreDetail> =>
+      ipcRenderer.invoke(IPC.skills.storeDetail, slug),
+    storeInstall: (input: SkillStoreInstallInput): Promise<AgentSkillView> =>
+      ipcRenderer.invoke(IPC.skills.storeInstall, input)
   },
   dashboard: {
     summary: (): Promise<DashboardSummary> => ipcRenderer.invoke(IPC.dashboard.summary),
@@ -1036,6 +1055,10 @@ const api: OrbitApi = {
     list: (filter?: EvidenceSourceFilter) => ipcRenderer.invoke(IPC.evidence.list, filter),
     get: (sourceId: string) => ipcRenderer.invoke(IPC.evidence.get, sourceId),
     read: (selector: EvidenceSelector) => ipcRenderer.invoke(IPC.evidence.read, selector),
+    resolveNavigation: (selector: EvidenceSelector): Promise<EvidenceNavigationTarget> =>
+      ipcRenderer.invoke(IPC.evidence.resolveNavigation, selector),
+    open: (selector: EvidenceSelector): Promise<EvidenceOpenResult> =>
+      ipcRenderer.invoke(IPC.evidence.open, selector),
     sync: (options?: { includeExternalAISessions?: boolean; externalAISessionLimit?: number }) =>
       ipcRenderer.invoke(IPC.evidence.sync, options),
     externalSessionSettings: () => ipcRenderer.invoke(IPC.evidence.externalSessionSettings),

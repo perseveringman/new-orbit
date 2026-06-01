@@ -95,8 +95,9 @@ describe('Library spatial reader parity', () => {
 
     expect(source).toContain("const [scrollMode, setScrollMode] = useState<'paginated' | 'scrolled'>('scrolled')");
     expect(source).toContain('const [pdfZoom, setPdfZoom] = useState(1)');
-    expect(source).toContain('const renderedPageWidth = Math.round(pageWidth * pdfZoom)');
-    expect(source).toContain('width={renderedPageWidth}');
+    expect(source).toContain('const renderedPageHeight = Math.round(fittedPageHeight * pdfZoom)');
+    expect(source).toContain('const renderedPageWidth = getRenderedPdfPageWidth(pageNumber, pageSizes, renderedPageHeight)');
+    expect(source).toContain('height={renderedPageHeight}');
     expect(source).toContain('updatePdfZoom(pdfZoom - 0.1)');
     expect(source).toContain('updatePdfZoom(pdfZoom + 0.1)');
     expect(source).toContain('const scrollRootRef = useRef<HTMLDivElement>(null)');

@@ -3,18 +3,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildAskAnywhereContext, contextPacketToStageArtifact, renderPMILContextPacket } from '../src/main/ask-anywhere/orchestrator';
+import { createConnectorStore } from '../src/main/connectors/store';
 import { createEvidenceChunkIndexStore } from '../src/main/evidence';
+import { updateExternalAISessionSettings } from '../src/main/evidence/external-ai-session-settings';
 import { createNoteStore } from '../src/main/note/store';
 import type { ContextPacket } from '../src/shared/context';
 
 let vaultPath: string;
+let aiSessionRoot: string;
 
 beforeEach(async () => {
   vaultPath = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-ask-pmil-'));
+  aiSessionRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-ask-ai-sessions-'));
 });
 
 afterEach(async () => {
   await fs.rm(vaultPath, { recursive: true, force: true });
+  await fs.rm(aiSessionRoot, { recursive: true, force: true });
 });
 
 describe('Ask Anywhere PMIL context', () => {
@@ -48,11 +53,54 @@ describe('Ask Anywhere PMIL context', () => {
     );
 
     expect(context).toContain('<current_orbit_context>');
+    expect(context).toContain('<connector_context>');
+    expect(context).toContain('外部 AI 会话');
+    expect(context).toContain('local-ai-sessions');
     expect(context).toContain('<pmil_context_packet');
     expect(context).toContain('Relevant Evidence');
     expect(context).toContain('Ask Anywhere');
   });
+
+  it('injects live external AI session month counts when the connector is active', async () => {
+    await writeSessionFile('may-a.jsonl', '2026-05-09T08:00:00.000Z');
+    await writeSessionFile('may-b.jsonl', '2026-05-20T08:00:00.000Z');
+    await writeSessionFile('june.jsonl', '2026-06-01T08:00:00.000Z');
+    await updateExternalAISessionSettings(vaultPath, {
+      roots: [{ agent: 'claude', source: 'test-claude', dir: aiSessionRoot }],
+      limit: 10,
+      includeToolOutputs: false
+    });
+    await createConnectorStore(vaultPath).connect({
+      connector_id: 'local-ai-sessions',
+      config: {}
+    });
+
+    const context = await buildAskAnywhereContext(
+      vaultPath,
+      { kind: 'global' },
+      '外部 AI 会话 5月份有多少条会话？'
+    );
+
+    expect(context).toContain('Live 外部 AI 会话 inventory');
+    expect(context).toContain('2026-05: 2');
+    expect(context).toContain('2026-06: 1');
+    expect(context).toContain('connector registry item_count');
+  });
 });
+
+async function writeSessionFile(name: string, isoTime: string): Promise<void> {
+  const file = path.join(aiSessionRoot, name);
+  await fs.writeFile(
+    file,
+    [
+      '{"role":"user","content":"Count external AI sessions for Ask Anywhere context injection."}',
+      '{"role":"assistant","content":"This synthetic session is long enough to pass the session scanner size threshold."}'
+    ].join('\n'),
+    'utf8'
+  );
+  const date = new Date(isoTime);
+  await fs.utimes(file, date, date);
+}
 
 function samplePacket(): ContextPacket {
   return {

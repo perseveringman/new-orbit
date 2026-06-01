@@ -9,6 +9,7 @@ import { hybridSearch } from '../src/main/semantic/hybrid-search';
 import { createSemanticIndexStore, type IndexedSemanticDocument } from '../src/main/semantic/index-store';
 import { searchAndAnswer } from '../src/main/semantic/search-answer';
 import { searchWithContext } from '../src/main/semantic/search-context';
+import { searchAnswerPrompt } from '../src/main/synthesis/prompts/search.answer.v1';
 import { evidenceSourceId } from '../src/shared/evidence';
 import type { SemanticDocument } from '../src/shared/semantic';
 
@@ -103,6 +104,18 @@ describe('Semantic Search', () => {
     expect(response.answer?.sources.some((source) => source.title?.startsWith('Context Packet'))).toBe(true);
     expect(response.context_packet?.sections.length).toBeGreaterThan(0);
     expect(response.answer?.provenance.prompt_version).toBe('search.answer.v1');
+  });
+
+  it('instructs search answers to stay user-facing instead of exposing retrieval internals', () => {
+    const rendered = searchAnswerPrompt.render({
+      scope_key: 'search.answer:test',
+      sources: [{ ref: 'note:1', title: 'Answer source', excerpt: 'Plain evidence.' }]
+    });
+
+    expect(rendered.system).toContain('Give the user a useful answer first');
+    expect(rendered.system).toContain('Do not expose internal implementation terms');
+    expect(rendered.system).toContain('If the provided documents are insufficient');
+    expect(rendered.user).toContain('Return JSON');
   });
 
   it('attaches a PMIL context packet with Personal QA to search responses', async () => {

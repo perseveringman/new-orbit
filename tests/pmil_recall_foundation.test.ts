@@ -44,9 +44,14 @@ describe('PMIL recall foundation', () => {
     const results = await store.search({ query: 'GraphRAG Context Packet', limit: 5 });
 
     expect(Object.keys(index.chunks).length).toBeGreaterThan(0);
+    expect(Object.keys(index.chunk_embeddings ?? {}).length).toBe(Object.keys(index.chunks).length);
+    expect(index.embedding_model).toBeTruthy();
     expect(results[0].chunk.source_id).toBe(evidenceSourceId('note', note.frontmatter.id));
     expect(results[0].chunk.selector.kind).toBe('semantic_chunk');
     expect(results[0].chunk.entities).toEqual(expect.arrayContaining(['GraphRAG', 'Context Packet']));
+    expect(results[0].match_type).toMatch(/keyword|semantic|hybrid/u);
+    expect(results[0].fts_score ?? 0).toBeGreaterThan(0);
+    expect(results[0].vector_score ?? 0).toBeGreaterThan(0);
   });
 
   it('projects chunks into a deterministic graph for entity navigation', async () => {
@@ -99,11 +104,35 @@ describe('PMIL recall foundation', () => {
 
     expect(packet.scope).toEqual({ kind: 'resource', ref: 'pmil' });
     expect(packet.sections.map((section) => section.kind)).toEqual(
-      expect.arrayContaining(['scope_summary', 'relevant_evidence', 'graph_neighbors'])
+      expect.arrayContaining(['scope_summary', 'answer_guidance', 'relevant_evidence', 'graph_neighbors'])
     );
+    expect(packet.retrieval?.intent).toBe('multi_hop');
+    expect(packet.retrieval?.routes).toEqual(expect.arrayContaining(['evidence_chunks', 'graph_neighbors']));
+    expect(packet.retrieval?.sufficiency.status).toMatch(/enough|thin/u);
+    const guidance = packet.sections.find((section) => section.kind === 'answer_guidance')?.content ?? '';
+    expect(guidance).toContain('先用用户的语言直接回答问题');
+    expect(guidance).not.toContain('FTS');
+    expect(guidance).not.toContain('hybrid search');
     expect(packet.evidence.length).toBeGreaterThan(0);
     expect(packet.sections.find((section) => section.kind === 'relevant_evidence')?.content).toContain('GraphRAG');
     expect(packet.sections.find((section) => section.kind === 'graph_neighbors')?.content).toContain('GraphRAG');
+  });
+
+  it('guides weak evidence answers to be honest instead of overconfident', async () => {
+    await createEvidenceChunkIndexStore(vaultPath).rebuild({ includeActivities: false });
+    const packet = await buildContextPacket(vaultPath, {
+      purpose: 'ask',
+      scope: { kind: 'global' },
+      query: '外部 AI 会话 2026年5月有多少条？',
+      max_tokens: 900,
+      synthesis_mode: 'off'
+    });
+    const guidance = packet.sections.find((section) => section.kind === 'answer_guidance')?.content ?? '';
+
+    expect(packet.retrieval?.intent).toBe('external_session');
+    expect(packet.retrieval?.sufficiency.status).toBe('missing');
+    expect(guidance).toContain('不要猜数');
+    expect(guidance).toContain('没有足够证据');
   });
 
   it('generates query-shaped Personal QA artifacts and injects them into context packets', async () => {

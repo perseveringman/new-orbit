@@ -92,7 +92,7 @@ const WORKSPACE_DETAILS: Record<
   memory: '管理被唤回的偏好、经验、兴趣和模式。',
   review: '生成每周和每月健康检查，并转化为行动。',
   feeds: '管理订阅并处理进入的信息流条目。',
-  connectors: '连接 Obsidian、本地 AI 会话等外部知识源，让 AI 在 Orbit 内按需引用。',
+  connectors: '连接 Obsidian、外部 AI 会话等外部知识源，让 AI 在 Orbit 内按需引用。',
   resources: '从重复出现的笔记、链接、人物和项目中培育主题资源工作站。',
   resource: '在单个资源空间中处理任务、材料、产出、聊天和时间线。',
   knowledgeBase: '导入已有档案，并将片段激活为笔记。',

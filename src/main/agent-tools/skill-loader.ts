@@ -24,13 +24,20 @@ import type { ConversationScope } from '@shared/conversation';
 import { ORBIT_DIR } from '@shared/constants';
 import type {
   LoadedSkill,
+  SkillDiagnostics,
   SkillFrontmatter,
   SkillParam,
   SkillRequires,
+  SkillRuntimeStatus,
   SkillSettingsResolver,
   SkillSource
 } from '@shared/agent-tools';
 import { getSpace } from '../space/context';
+import {
+  readSkillRuntimeConfigs,
+  resolveSkillEnvValue,
+  type SkillRuntimeConfigEntry
+} from './skill-config-store';
 
 /** 用于解析 ConversationScope 到 space 路径。 */
 async function resolveSpaceDir(
@@ -112,6 +119,7 @@ export class SkillLoader {
     } catch {
       return [];
     }
+    const runtimeConfigs = await readSkillRuntimeConfigs(dir);
     const out: LoadedSkill[] = [];
     for (const entry of entries) {
       if (!entry.endsWith('.md')) continue;
@@ -121,17 +129,27 @@ export class SkillLoader {
         const parsed = frontmatter.read(raw);
         const fm = normaliseFrontmatter(parsed.data, entry);
         const requires = fm.requires ?? {};
-        const disabledReason = await this.evaluateRequires(requires);
+        const body = parsed.body.trim();
+        const requiredEnv = uniqueStrings([...(requires.env ?? []), ...inferSkillEnvNames(body)]);
+        const runtimeConfig = runtimeConfigs[fm.name] ?? {};
+        const runtimeStatus = buildRuntimeStatus(runtimeConfig, requiredEnv);
+        const diagnostics = await this.evaluateDiagnostics(filePath, body);
+        const disabledReason = await this.evaluateRequires(requires, runtimeStatus);
         const skill: LoadedSkill = {
           name: fm.name,
           description: fm.description ?? '',
           scopes: fm.scopes ?? [],
           tools: fm.tools ?? [],
           params: fm.params ?? [],
-          requires,
-          body: parsed.body.trim(),
+          requires: {
+            ...requires,
+            ...(requiredEnv.length ? { env: requiredEnv } : {})
+          },
+          body,
           source,
           path: filePath,
+          runtimeStatus,
+          diagnostics,
           ...(fm.model ? { model: fm.model } : {}),
           ...(disabledReason ? { disabledReason } : {})
         };
@@ -143,7 +161,10 @@ export class SkillLoader {
     return out;
   }
 
-  private async evaluateRequires(requires: SkillRequires): Promise<string | undefined> {
+  private async evaluateRequires(
+    requires: SkillRequires,
+    runtimeStatus: SkillRuntimeStatus
+  ): Promise<string | undefined> {
     const vault = this.deps.vaultPath;
     // requires.files：vault 内相对路径必须存在；vault 缺失时跳过检测（视为通过）
     if (requires.files && requires.files.length > 0) {
@@ -172,7 +193,26 @@ export class SkillLoader {
         }
       }
     }
+    if (runtimeStatus.enabled === false) {
+      return 'skill disabled in Orbit skill config';
+    }
+    if (runtimeStatus.missingEnv.length > 0) {
+      return `missing skill env: ${runtimeStatus.missingEnv.join(', ')}`;
+    }
     return undefined;
+  }
+
+  private async evaluateDiagnostics(filePath: string, body: string): Promise<SkillDiagnostics> {
+    const missingReferences: string[] = [];
+    const dir = path.dirname(filePath);
+    for (const rel of extractReferencedFiles(body)) {
+      try {
+        await fs.access(path.join(dir, rel));
+      } catch {
+        missingReferences.push(rel);
+      }
+    }
+    return { missingReferences };
   }
 }
 
@@ -231,7 +271,74 @@ function normaliseFrontmatter(
     if (Array.isArray(req['config'])) {
       requires.config = req['config'].filter((v): v is string => typeof v === 'string');
     }
-    if (requires.files || requires.config) fm.requires = requires;
+    if (Array.isArray(req['env'])) {
+      requires.env = req['env'].filter((v): v is string => typeof v === 'string');
+    }
+    if (requires.files || requires.config || requires.env) fm.requires = requires;
   }
   return fm;
+}
+
+export function inferSkillEnvNames(body: string): string[] {
+  const out = new Set<string>();
+  const patterns = [
+    /\$([A-Z][A-Z0-9_]{2,79})\b/g,
+    /`([A-Z][A-Z0-9_]{2,79})`/g,
+    /\b([A-Z][A-Z0-9_]*(?:API_KEY|CLIENT_ID|ACCESS_TOKEN|AUTH_TOKEN|TOKEN|SECRET))\b/g
+  ];
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(body))) {
+      const name = match[1];
+      if (name && isLikelySecretEnvName(name)) out.add(name);
+    }
+  }
+  return [...out].sort((a, b) => a.localeCompare(b));
+}
+
+function buildRuntimeStatus(
+  config: SkillRuntimeConfigEntry,
+  requiredEnv: string[]
+): SkillRuntimeStatus {
+  const configuredEnv = Object.keys(config.env ?? {}).sort((a, b) => a.localeCompare(b));
+  const missingEnv = requiredEnv.filter((name) => !resolveSkillEnvValue(name, config, requiredEnv));
+  return {
+    enabled: config.enabled !== false,
+    apiKeySet: Boolean(config.apiKey?.trim()),
+    requiredEnv,
+    configuredEnv,
+    missingEnv,
+    configKeys: Object.keys(config.config ?? {}).sort((a, b) => a.localeCompare(b))
+  };
+}
+
+function extractReferencedFiles(body: string): string[] {
+  const out = new Set<string>();
+  const linkPattern = /\[[^\]]*]\(([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = linkPattern.exec(body))) {
+    const raw = decodeURIComponent((match[1] ?? '').trim().split('#')[0] ?? '');
+    if (isRelativeReference(raw)) out.add(raw);
+  }
+  const barePattern = /\breferences\/[A-Za-z0-9._/-]+\b/g;
+  while ((match = barePattern.exec(body))) {
+    const raw = match[0];
+    if (isRelativeReference(raw)) out.add(raw);
+  }
+  return [...out].sort((a, b) => a.localeCompare(b));
+}
+
+function isRelativeReference(value: string): boolean {
+  if (!value || value.startsWith('/') || value.includes('://')) return false;
+  return value.startsWith('references/') || value.startsWith('./references/');
+}
+
+function isLikelySecretEnvName(name: string): boolean {
+  return /(^|_)(API_KEY|CLIENT_ID|ACCESS_TOKEN|AUTH_TOKEN|TOKEN|SECRET)$/i.test(name);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
 }

@@ -33,7 +33,13 @@ export const searchAnswerPrompt: SynthesisPromptTemplate<SearchAnswerPayload> = 
       .join('\n\n');
     return {
       system:
-        'You answer questions over Orbit search results. Cite only the provided documents. Do not write to Layer 1 Truth.',
+        [
+          'You answer questions over Orbit search results.',
+          'Give the user a useful answer first, in the same language as the user.',
+          'Do not expose internal implementation terms such as ContextPacket, retrieval plan, FTS, vector score, hybrid search, or sufficiency labels unless the user asks about architecture.',
+          'If the provided documents are insufficient, say what can and cannot be confirmed instead of guessing.',
+          'Cite only the provided documents. Do not write to Layer 1 Truth.'
+        ].join(' '),
       user: `Search scope: ${typed.scope_key}\n\nDocuments:\n${docs}\n\nReturn JSON: {"answer": string, "citations": [{"doc_id": string, "title": string}], "confidence": number between 0 and 1}.`
     };
   },

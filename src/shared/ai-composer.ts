@@ -143,12 +143,25 @@ export function normalizeRuntimeSelection(
   selection?: RuntimeSelection | null
 ): RuntimeSelection {
   if (!selection) return {};
+  const runtimeId = selection.runtimeId?.trim();
+  const inferredEndpoint = endpointFromSdkRuntimeId(runtimeId);
+  const endpointId = selection.endpointId?.trim() || inferredEndpoint;
+  const track =
+    (selection.track === 'cli' && endpointId) || (!selection.track && endpointId)
+      ? 'sdk_agent'
+      : selection.track;
   return {
-    ...(selection.runtimeId ? { runtimeId: selection.runtimeId } : {}),
-    ...(selection.endpointId ? { endpointId: selection.endpointId } : {}),
+    ...(runtimeId ? { runtimeId } : {}),
+    ...(endpointId ? { endpointId } : {}),
     ...(selection.model ? { model: selection.model } : {}),
     ...(selection.modelTier ? { modelTier: selection.modelTier } : {}),
-    ...(selection.track ? { track: selection.track } : {}),
+    ...(track ? { track } : {}),
     ...(selection.agentProfileId ? { agentProfileId: selection.agentProfileId } : {})
   };
+}
+
+function endpointFromSdkRuntimeId(runtimeId?: string): string | undefined {
+  if (!runtimeId) return undefined;
+  const match = runtimeId.match(/^sdk(?:_agent|-agent)?:(.+)$/);
+  return match?.[1] || undefined;
 }

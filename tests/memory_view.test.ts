@@ -21,7 +21,7 @@ describe('MemoryContent', () => {
     expect(html).toContain('管理来源');
     expect(html).toContain('测试召回');
     expect(html).toContain('为什么会记住');
-    expect(html).toContain('查看证据');
+    expect(html).toContain('打开来源');
     expect(html).toContain('不准确');
     expect(html).toContain('变成资源');
     expect(html).toContain('语义');

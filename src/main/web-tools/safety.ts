@@ -54,7 +54,9 @@ export async function assertPublicNetworkTarget(url: URL): Promise<void> {
 export async function fetchTextWithLimit(
   url: URL,
   options: {
+    method?: string;
     headers?: Record<string, string>;
+    body?: string;
     maxBytes: number;
     timeoutMs: number;
   }
@@ -63,12 +65,14 @@ export async function fetchTextWithLimit(
   const timer = setTimeout(() => controller.abort(), options.timeoutMs);
   try {
     const response = await fetch(url, {
+      method: options.method ?? 'GET',
       redirect: 'follow',
       headers: {
         'user-agent': 'Orbit Ask Anywhere/1.0',
         accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5',
         ...(options.headers ?? {})
       },
+      ...(options.body !== undefined ? { body: options.body } : {}),
       signal: controller.signal
     });
     const contentType = response.headers.get('content-type') ?? '';

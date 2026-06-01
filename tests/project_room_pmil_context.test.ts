@@ -22,7 +22,7 @@ describe('Project Room PMIL context panel', () => {
     expect(html).toContain('活跃线索');
     expect(html).toContain('开放回路');
     expect(html).toContain('决策');
-    expect(html).toContain('查看证据');
+    expect(html).toContain('打开来源');
   });
 });
 

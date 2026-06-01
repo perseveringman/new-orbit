@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { EvidenceReadResult, EvidenceSelector, EvidenceSource, EvidenceSourceKind } from '@shared/evidence';
+import type { EvidenceSelector, EvidenceSource, EvidenceSourceKind } from '@shared/evidence';
 import { evidenceSourceId, wholeSourceSelector } from '@shared/evidence';
 import type { MemoryBackendId, MemoryDigestResult, MemoryGraph, MemoryKind, MemoryLayer, MemoryNode, MemoryRelationKind, MemorySourceSyncResult, MemoryStability } from '@shared/memory';
 import { MEMORY_KINDS, MEMORY_LAYERS } from '@shared/memory';
 import type { EntityProfilePayload, ExternalSessionDistillPayload, SynthesisArtifact, SynthesisSource } from '@shared/synthesis';
+import { EvidenceReference, evidenceSelectorKey } from '../components/evidence/EvidenceReference';
 
 type LoadState = 'loading' | 'success' | 'empty' | 'error';
 type MemoryPageTab = 'memories' | 'sources' | 'recall' | 'advanced';
@@ -849,7 +850,7 @@ function AgentSessionCard(props: {
           <p className="mt-1 text-xs text-neutral-500">{props.source.canonical_ref}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <MemoryEvidenceButton selector={selector} />
+          <EvidenceReference selector={selector} tone="sky" />
           <button
             type="button"
             onClick={props.onDistill}
@@ -1102,7 +1103,7 @@ function MemoryCard(props: {
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {selectors.slice(0, 5).map((selector) => (
-              <MemoryEvidenceButton key={memoryEvidenceSelectorKey(selector)} selector={selector} />
+              <EvidenceReference key={memoryEvidenceSelectorKey(selector)} selector={selector} tone="emerald" />
             ))}
           </div>
         </section>
@@ -1129,45 +1130,6 @@ function MemoryCard(props: {
         <button onClick={() => props.onArchive(props.node.id)} className="rounded-lg border border-red-300 px-3 py-1.5 text-xs text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-300">忘记</button>
       </div>
     </article>
-  );
-}
-
-function MemoryEvidenceButton({ selector }: { selector: EvidenceSelector }): JSX.Element {
-  const [result, setResult] = useState<EvidenceReadResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function readEvidence(): Promise<void> {
-    setLoading(true);
-    setError(null);
-    try {
-      setResult(await window.orbit.evidence.read(selector));
-    } catch (err) {
-      setResult(null);
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <span className="inline-flex max-w-full flex-col gap-1">
-      <button
-        type="button"
-        onClick={() => void readEvidence()}
-        disabled={loading}
-        className="rounded-md border border-emerald-300 bg-white px-2 py-0.5 text-[11px] text-emerald-700 disabled:opacity-60 dark:border-emerald-900 dark:bg-neutral-950 dark:text-emerald-300"
-      >
-        {loading ? '读取中' : `查看证据 ${shortEvidenceLabel(selector)}`}
-      </button>
-      {error ? <span className="text-[11px] text-red-600 dark:text-red-300">{error}</span> : null}
-      {result ? (
-        <span className="rounded-md border border-emerald-200 bg-white p-2 text-[11px] leading-5 text-neutral-600 dark:border-emerald-900 dark:bg-neutral-950 dark:text-neutral-300">
-          <span className="block font-medium text-neutral-800 dark:text-neutral-100">{result.source.title}</span>
-          {result.excerpts[0]?.text.slice(0, 520) ?? '没有可用摘录。'}
-        </span>
-      ) : null}
-    </span>
   );
 }
 
@@ -1248,12 +1210,7 @@ function dedupeMemorySelectors(selectors: EvidenceSelector[]): EvidenceSelector[
 }
 
 function memoryEvidenceSelectorKey(selector: EvidenceSelector): string {
-  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
-}
-
-function shortEvidenceLabel(selector: EvidenceSelector): string {
-  const id = selector.source_id.split(':').slice(-2).join(':') || selector.source_id;
-  return id.length > 22 ? `${id.slice(0, 22)}...` : id;
+  return evidenceSelectorKey(selector);
 }
 
 type SessionAction = 'distill' | 'note' | 'conversation';

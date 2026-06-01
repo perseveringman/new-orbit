@@ -72,6 +72,8 @@ import {
   spawnSubagentTool,
   stopSubagentTool
 } from '../tools/subagent';
+import { runGatewayCall } from '../tools/gateway';
+import { readSkillResourceTool, readSkillTool } from '../tools/skill';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -478,6 +480,13 @@ export function registerCoreCliHandlers(registry: CliHandlerRegistry): void {
     });
   });
 
+  registry.register('gateway.call', async (params) => {
+    const session = openSession();
+    return runGatewayCall(params, { vaultPath: session.vault });
+  });
+
+  registry.register('skill.read', (params) => readSkillTool(params));
+  registry.register('skill.resource.read', (params) => readSkillResourceTool(params));
   registry.register('shell.run', (params) => runShellTool(params));
   registry.register('browser.open', (params) => openBrowserTool(params));
   registry.register('browser.snapshot', (params) => snapshotBrowserTool(params));

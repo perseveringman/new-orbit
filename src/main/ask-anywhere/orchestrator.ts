@@ -48,6 +48,13 @@ import { createStageStore, extractArtifactFences } from './stage-store';
 import { assertInsideVault, toPosix, vaultRel } from '../pathGuard';
 import { buildSpaceContext } from '../space/context';
 import { buildContextPacket } from '../context';
+import { createConnectorStore } from '../connectors/store';
+import {
+  LOCAL_AI_SESSIONS_CONNECTOR_ALIASES,
+  LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME
+} from '../connectors/local-ai-sessions';
+import { summarizeExternalAISessionSources } from '../evidence/external-ai-sessions';
+import { resolveExternalAISessionScanOptions } from '../evidence/external-ai-session-settings';
 
 export interface AskAnywhereDeps {
   conversations: ConversationOrchestrator;
@@ -93,6 +100,15 @@ export const ASK_ANYWHERE_SYSTEM_PROMPT = `You are Orbit's universal agent surfa
 ## Your role
 You help the user think through projects, tasks, ideas, and external information. You have direct, structured access to the user's Orbit vault and to selected outside-world capabilities through the tools listed in the \`tools\` parameter.
 
+## Orbit host boundary
+- You are running inside **Orbit Ask Anywhere**. You are not running inside Claude Desktop, Codex, OpenClaw, ChatGPT, or any third-party host.
+- Never tell the user to edit Claude Desktop, Codex, OpenClaw, MCP, or other host configuration when the task is to configure an Orbit skill. Orbit skill credentials belong in Orbit's skill configuration UI / local Orbit skill config.
+- If a skill document mentions another host's config path or MCP setup, adapt the instruction to Orbit instead of copying it. If Orbit lacks the needed capability, say exactly which Orbit capability is missing.
+- For skill credential setup, refer to Orbit skills by name and required env names. Do not ask the user to paste secrets into chat unless they explicitly choose to.
+- Skill reference files are part of the skill package. If a referenced file is missing, report that package problem instead of inventing the missing API details.
+- For slash commands or natural-language routes declared by a skill, first call \`orbit_skill_read\` for the matching skill, then follow the skill. If the skill asks you to read a referenced file, call \`orbit_skill_resource_read\` for that exact skill-relative path.
+- If \`orbit_skill_read\` shows the skill is disabled only because env is missing, answer with Orbit skill configuration guidance based on that tool result. Do not try to call that skill's external API until the missing env is configured.
+
 ## How to act with tools
 - Call tools by their **exact names** as listed in the \`tools\` parameter (e.g. \`orbit_search\`, \`orbit_task_list\`, \`orbit_task_propose\`). Tool names start with the prefix \`orbit_\`.
 - **Never** output \`\`\`bash / \`\`\`shell / \`\`\`sh code fences as a substitute for action. Those are just text to the user — nothing will execute. If you have a specific \`orbit_*\` tool for the job, use it.
@@ -100,6 +116,7 @@ You help the user think through projects, tasks, ideas, and external information
 - When a tool returns \`is_error: true\`, read the error message carefully, correct the parameter names / values, and call the tool again. Do not give up after one failure.
 - If the user explicitly provides an absolute local path outside the vault, you may call \`orbit_read\` on that exact path. Orbit will block and ask the user for approval in chat and Inbox before reading. Never use this to explore broad external locations the user did not name.
 - For current news, live facts, public documentation, pricing, regulations, or anything likely outside the vault, use \`orbit_web_search\` first. Use \`orbit_web_fetch\` on promising results when you need source details, exact dates, or verification.
+- For an active skill that calls an external HTTPS API with configured credentials, use \`orbit_gateway_call\`. Map secret headers through \`env_headers\`; never ask tools or the user to reveal secret values.
 - For local diagnostics, typechecks, tests, or git status/diff, use \`orbit_shell_run\` with an argv array. Do not use shell chaining, redirects, or broad filesystem exploration. If Agent Authority blocks the command, explain what grant or approval is needed.
 - For JavaScript-rendered public pages, use \`orbit_browser_open\`, then \`orbit_browser_snapshot\`, then \`orbit_browser_close\`.
 - For parallel read-only investigation, use \`orbit_subagent_spawn\` with the \`researcher\` or \`reviewer\` profile, then monitor with \`orbit_subagent_list\`.
@@ -111,6 +128,9 @@ You help the user think through projects, tasks, ideas, and external information
 - Search vault content: call \`orbit_search\` with \`{"query":"<keywords>"}\`.
 - Search the web: call \`orbit_web_search\` with \`{"query":"<current topic>","count":8}\`.
 - Fetch a web page: call \`orbit_web_fetch\` with \`{"url":"https://example.com/article"}\`.
+- Read a skill before using it: call \`orbit_skill_read\` with \`{"skill":"Get"}\`.
+- Read a skill reference file: call \`orbit_skill_resource_read\` with \`{"skill":"Get","path":"references/oauth.md"}\`.
+- Call a skill API: call \`orbit_gateway_call\` with \`{"skill":"Get","url":"https://openapi.biji.com/open/api/v1/resource/note/list","method":"GET","env_headers":{"Authorization":"GETNOTE_API_KEY","X-Client-ID":"GETNOTE_CLIENT_ID"}}\`.
 - Run a local check: call \`orbit_shell_run\` with \`{"command":["npm","run","typecheck"],"intent":"verify current implementation"}\`.
 - Read a specific file: call \`orbit_read\` with \`{"target":"<vault-relative-path>"}\`.
 - Propose a new task (requires user approval via Inbox afterwards): call \`orbit_task_propose\` with \`{"title":"<short title>","project_uid":"<uid>","description":"<why & what>"}\`. You need either \`project_uid\` or \`area_uid\`, not both.
@@ -119,6 +139,10 @@ You help the user think through projects, tasks, ideas, and external information
 - When the user asks for data that lives in the vault or on the live web, first call the relevant tool, then summarise its result in natural language — do not paraphrase without calling the tool.
 - Use Chinese or English following the user's language. Keep tool names (\`orbit_*\`) in English verbatim.
 - Keep responses concise and actionable. Do not explain your tool choices unless asked.
+- Answer the user's actual question first. Prefer a concrete number, decision, summary, or next action over internal process narration.
+- Treat \`pmil_context_packet\`, ContextPacket metadata, retrieval guidance, scores, FTS/vector/hybrid details, and evidence sufficiency labels as internal context. Use them to improve the answer, but do not repeat those implementation terms to the user unless they explicitly ask about Orbit architecture.
+- If evidence is thin or missing, be honest in plain language: say what you can confirm, what you cannot confirm, and the smallest useful next step. Do not invent counts, dates, causes, or citations.
+- For count/date questions, state the exact date range and counting basis. Distinguish "总发现" from "当前索引" when external AI sessions or connectors are involved.
 `;
 
 export class AskAnywhereOrchestrator {
@@ -135,8 +159,7 @@ export class AskAnywhereOrchestrator {
     };
     return this.deps.conversations.createConversation({
       title: opts.title ?? 'Ask Anywhere',
-      anchor,
-      runtimeHint: 'claude'
+      anchor
     });
   }
 
@@ -171,8 +194,7 @@ export class AskAnywhereOrchestrator {
           kind: 'channel_thread',
           refId,
           addedAt: new Date().toISOString()
-        },
-        runtimeHint: 'claude'
+        }
       });
       conversationId = created.id;
     }
@@ -223,26 +245,38 @@ export class AskAnywhereOrchestrator {
       throw new Error('no_vault');
     }
 
+    const selectedSkillRefs = normalizeSkillRefs(draft.skillRefs);
+
     const runtimeCommand = await this.handleRuntimeCommand(conversationId, conv, trimmed, draft);
     if (runtimeCommand.handled) return { runId: runtimeCommand.runId };
 
-    // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
+    // 先取历史构造 prompt（不含本条 user message），再立即持久化本条消息。
+    // 上下文召回 / 路由如果变慢，用户消息仍然可见且可恢复。
     const history = renderHistory(conv.turns);
+    await this.deps.conversations.appendTurn({
+      conversationId,
+      role: 'user',
+      content: trimmed,
+      input: draft
+    });
     const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
     const scope = conv.scope ?? { kind: 'global' };
-    const contextBundle = await buildAskAnywhereContextBundle(
+    const shouldUseLightweightContext = await isSkillRouteMessage(
       vault,
       scope,
+      selectedSkillRefs,
       trimmed
     );
+    const contextBundle = shouldUseLightweightContext
+      ? { text: '', packet: null }
+      : await buildAskAnywhereContextBundle(vault, scope, trimmed);
     const scopedContext = contextBundle.text;
     if (contextBundle.packet) {
       await addContextPacketArtifact(vault, conversationId, contextBundle.packet).catch((error) =>
         console.warn('[ask-anywhere] failed to add PMIL context packet artifact', error)
       );
     }
-    const selectedSkillRefs = normalizeSkillRefs(draft.skillRefs);
-    const skillsSection = await loadSkillsSectionForPrompt(vault, scope, selectedSkillRefs);
+    const skillsSection = await loadSkillsSectionForPrompt(vault, scope, selectedSkillRefs, trimmed);
     const prompt = buildPrompt({
       systemPrompt,
       scopedContext,
@@ -269,14 +303,6 @@ export class AskAnywhereOrchestrator {
           modelTier: selection.modelTier
         })
       : { track: 'cli' as const, runtime: 'claude-cli', reason: 'SDK router unavailable' };
-
-    // append user turn（必须在 spawn 前，让 UI 即便 reload 也能看到）
-    await this.deps.conversations.appendTurn({
-      conversationId,
-      role: 'user',
-      content: trimmed,
-      input: draft
-    });
 
     if (router && agentTools && decision.track === 'sdk_agent') {
       const runId = `sdk-agent-${randomUUID()}`;
@@ -614,13 +640,19 @@ export class AskAnywhereOrchestrator {
     });
     const allSkills = await skillLoader.load();
     const activeSkills = filterActiveSkills(allSkills, input.scope, input.skillRefs);
+    const promptSkills = filterPromptSkills(
+      allSkills,
+      input.scope,
+      input.skillRefs,
+      input.userText
+    );
 
     // 工具按 scope 过滤后，再按激活 skill 的 tools 子集做"显式声明的并集"
     // 规则：若没有任何 active skill 显式声明 tools → 用全集（scope-filtered）
     //       若至少一个 skill 显式声明 tools → 全集 ∩ (∪ skill.tools) ∪ (没声明 tools 的 skill 默认全集)
     const scopedTools = input.toolRegistry.listForScope(input.scope);
     const skillsWithTools = activeSkills.filter((s) => s.tools.length > 0);
-    const exposedTools =
+    const filteredTools =
       skillsWithTools.length === 0
         ? scopedTools
         : (() => {
@@ -632,6 +664,7 @@ export class AskAnywhereOrchestrator {
             const hasUnrestricted = activeSkills.some((s) => s.tools.length === 0);
             return scopedTools.filter((t) => hasUnrestricted || allowed.has(t.name));
           })();
+    const exposedTools = includeAlwaysExposedSkillTools(scopedTools, filteredTools);
 
     const tools = exposedTools.map<SDKToolDef>((t) => ({
       name: t.name,
@@ -640,7 +673,7 @@ export class AskAnywhereOrchestrator {
     }));
 
     const visionSection = await readVisionForSystemPrompt(vaultPath);
-    const skillsSection = renderSkillsSection(activeSkills);
+    const skillsSection = renderSkillsSection(promptSkills);
     const system = [
       visionSection,
       input.systemPrompt.trim(),
@@ -751,7 +784,8 @@ export class AskAnywhereOrchestrator {
       const skillsSection = await loadSkillsSectionForPrompt(
         this.deps.getVaultPath(),
         input.scope,
-        input.skillRefs
+        input.skillRefs,
+        input.userText
       );
       const result = await input.router.stream(
         {
@@ -979,11 +1013,74 @@ export async function buildAskAnywhereContextBundle(
   userText: string
 ): Promise<{ text: string; packet?: ContextPacket }> {
   const baseContext = await buildConversationContext(vaultPath, scope);
+  const connectorContext = await buildConnectorContext(vaultPath);
   const pmilContext = await buildAskPMILContext(vaultPath, scope, userText);
   return {
-    text: [baseContext, pmilContext.text].filter(Boolean).join('\n\n'),
+    text: [baseContext, connectorContext, pmilContext.text].filter(Boolean).join('\n\n'),
     ...(pmilContext.packet ? { packet: pmilContext.packet } : {})
   };
+}
+
+async function buildConnectorContext(vaultPath: string): Promise<string> {
+  try {
+    const store = createConnectorStore(vaultPath);
+    const definitions = store.definitions();
+    const connections = await store.list();
+    if (!definitions.length && !connections.length) return '';
+
+    const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
+    const activeConnections = connections.filter((connection) => connection.enabled);
+    const hasExternalAIConnection = activeConnections.some((connection) => connection.connector_id === 'local-ai-sessions');
+    const externalAIInventory = hasExternalAIConnection ? await buildExternalAISessionInventoryContext(vaultPath) : '';
+    const definitionLines = definitions.map((definition) => {
+      const related = connections.filter((connection) => connection.connector_id === definition.id);
+      const connected = related.filter((connection) => connection.status === 'connected');
+      const status = connected.length ? `connected=${connected.length}` : related.length ? 'configured_not_connected' : 'available';
+      return `- ${definition.display_name} (connector_id=${definition.id}, evidence_kind=${definition.evidence_kind ?? 'external_file'}, ${status}): ${definition.description}`;
+    });
+    const connectionLines = activeConnections.map((connection) => {
+      const definition = definitionsById.get(connection.connector_id);
+      const label = definition?.display_name ?? connection.display_name;
+      return `- ${label} (connector_id=${connection.connector_id}, connection_id=${connection.id}, status=${connection.status}, items=${connection.item_count})`;
+    });
+    return [
+      '<connector_context>',
+      'Orbit connectors are user-configured knowledge sources that Ask Anywhere may search and cite through the normal Orbit evidence / memory context.',
+      `If the user says "这个连接器" with words like "本地会话", "AI 会话", "Runtime 会话库", "Agent 会话", "Claude", "Codex", or "Amp", assume they likely mean ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME} unless another connector is clearly active.`,
+      `Connector aliases for ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME}: ${LOCAL_AI_SESSIONS_CONNECTOR_ALIASES.join(', ')}.`,
+      externalAIInventory,
+      '',
+      'Available connector definitions:',
+      definitionLines.join('\n'),
+      activeConnections.length ? '\nActive connector connections:' : '',
+      activeConnections.length ? connectionLines.join('\n') : '',
+      '</connector_context>'
+    ].filter(Boolean).join('\n');
+  } catch (error) {
+    return `<connector_context status="unavailable">\nConnector inventory lookup failed: ${(error as Error).message}\n</connector_context>`;
+  }
+}
+
+async function buildExternalAISessionInventoryContext(vaultPath: string): Promise<string> {
+  const scanOptions = await resolveExternalAISessionScanOptions(vaultPath);
+  const inventory = await summarizeExternalAISessionSources(scanOptions);
+  const monthLines = inventory.by_month
+    .slice(0, 18)
+    .map((bucket) => `${bucket.key}: ${bucket.count} (${formatAgentCounts(bucket.agents)})`);
+  return [
+    `Live ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME} inventory: total=${inventory.matched_count}, roots=${inventory.roots.length}, scanned_at=${inventory.scanned_at}.`,
+    inventory.date_range ? `Live date range by source updated_at: ${inventory.date_range.from} to ${inventory.date_range.to}.` : 'Live date range by source updated_at: empty.',
+    monthLines.length ? `Live monthly counts by updated_at:\n${monthLines.join('\n')}` : 'Live monthly counts by updated_at: none.',
+    `Live agent counts: ${formatAgentCounts(inventory.by_agent) || 'none'}.`,
+    `For count/date-range questions about ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME}, use this live inventory first; connector registry item_count and indexed evidence can be stale or intentionally limited.`
+  ].join('\n');
+}
+
+function formatAgentCounts(counts: Record<string, number>): string {
+  return Object.entries(counts)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([agent, count]) => `${agent}=${count}`)
+    .join(', ');
 }
 
 async function buildAskPMILContext(
@@ -1170,27 +1267,162 @@ async function loadAskAnywhereSystemPrompt(vaultPath: string): Promise<string> {
 }
 
 /**
- * Phase C：把激活的 skill 渲染成 system prompt 段落。
- * 仅 body 非空的 skill 才出现在段落里；description 作为可选小标题前缀。
+ * Progressive disclosure：只把 skill catalog 渲染进 system prompt。
+ * 完整 SKILL.md 必须通过 orbit_skill_read 按需读取，避免把所有技能正文常驻上下文。
  */
 function renderSkillsSection(skills: LoadedSkill[]): string {
   const usable = skills.filter((s) => s.body.length > 0);
   if (usable.length === 0) return '';
   const blocks = usable.map((s) => {
-    const header = `### Skill: ${s.name}${s.description ? ` — ${s.description}` : ''}`;
-    return `${header}\n\n${s.body}`;
+    const commands = extractSlashCommands(s.body);
+    const resources = extractSkillResourcePaths(s.body);
+    const fields = [
+      `description=${s.description || 'none'}`,
+      `source=${s.source}`,
+      `status=${s.disabledReason ? `disabled:${s.disabledReason}` : 'active'}`,
+      `required_env=${s.runtimeStatus.requiredEnv.length ? s.runtimeStatus.requiredEnv.join(',') : 'none'}`,
+      `missing_env=${s.runtimeStatus.missingEnv.length ? s.runtimeStatus.missingEnv.join(',') : 'none'}`,
+      `commands=${commands.length ? commands.join(', ') : 'none'}`,
+      `resources=${resources.length ? resources.join(', ') : 'none'}`
+    ];
+    if (s.diagnostics.missingReferences.length > 0) {
+      fields.push(`missing_references=${s.diagnostics.missingReferences.join(',')}`);
+    }
+    return `- ${s.name}: ${fields.join('; ')}`;
   });
-  return ['## Active Skills', ...blocks].join('\n\n');
+  return [
+    '## Skill Catalog',
+    'Only this compact catalog is preloaded. Before using or explaining any skill command, call `orbit_skill_read` for the matching skill. Read referenced files with `orbit_skill_resource_read` only when the loaded skill asks for them.',
+    ...blocks
+  ].join('\n');
+}
+
+const ALWAYS_EXPOSED_SKILL_TOOL_NAMES = new Set(['orbit_skill_read', 'orbit_skill_resource_read']);
+
+function includeAlwaysExposedSkillTools<T extends { name: string }>(
+  scopedTools: T[],
+  filteredTools: T[]
+): T[] {
+  const byName = new Map(filteredTools.map((tool) => [tool.name, tool]));
+  for (const tool of scopedTools) {
+    if (ALWAYS_EXPOSED_SKILL_TOOL_NAMES.has(tool.name)) byName.set(tool.name, tool);
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function filterPromptSkills(
+  skills: LoadedSkill[],
+  scope: ConversationScope,
+  skillRefs?: string[],
+  userText?: string
+): LoadedSkill[] {
+  const selected = skillRefs && skillRefs.length > 0 ? new Set(skillRefs) : null;
+  const out = new Map<string, LoadedSkill>();
+  for (const skill of filterActiveSkills(skills, scope, skillRefs)) {
+    out.set(skill.name, skill);
+  }
+  for (const skill of skills) {
+    if (!skillAllowedInScope(skill, scope)) continue;
+    if (selected?.has(skill.name) || skillMatchesUserText(skill, userText)) {
+      out.set(skill.name, skill);
+    }
+  }
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function skillMatchesUserText(skill: LoadedSkill, userText?: string): boolean {
+  const slash = parseLeadingSlashCommand(userText);
+  if (!slash) return false;
+  const primary = slash.primary.toLowerCase();
+  if (skill.name.toLowerCase() === primary) return true;
+  return skillBodyHasSlashCommand(skill.body, slash.primary, slash.subcommand);
+}
+
+function parseLeadingSlashCommand(
+  userText?: string
+): { primary: string; subcommand?: string } | null {
+  const match = userText?.trim().match(/^\/([A-Za-z0-9._-]+)(?:\s+([A-Za-z0-9._-]+))?/);
+  if (!match?.[1]) return null;
+  return {
+    primary: match[1],
+    ...(match[2] ? { subcommand: match[2] } : {})
+  };
+}
+
+function skillBodyHasSlashCommand(
+  body: string,
+  commandName: string,
+  subcommand?: string
+): boolean {
+  const command = escapeRegExp(commandName);
+  if (subcommand) {
+    const exact = new RegExp(`/${command}\\s+${escapeRegExp(subcommand)}(?:\\s+|$|[\\u4e00-\\u9fff])`, 'i');
+    if (exact.test(body)) return true;
+  }
+  return new RegExp(`/${command}(?:\\s+|$|[\\u4e00-\\u9fff])`, 'i').test(body);
+}
+
+function extractSlashCommands(body: string): string[] {
+  const out = new Set<string>();
+  const pattern = /\/([A-Za-z0-9._-]+)(?:\s+([A-Za-z0-9._-]+))?/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(body))) {
+    const primary = match[1];
+    if (!primary) continue;
+    const second = match[2];
+    out.add(second ? `/${primary} ${second}` : `/${primary}`);
+  }
+  return [...out].sort((a, b) => a.localeCompare(b));
+}
+
+function extractSkillResourcePaths(body: string): string[] {
+  const out = new Set<string>();
+  const linkPattern = /\[[^\]]*]\(([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = linkPattern.exec(body))) {
+    const raw = decodeURIComponent((match[1] ?? '').trim().split('#')[0] ?? '');
+    if (isSkillResourceReference(raw)) out.add(raw.replace(/^\.\//, ''));
+  }
+  const barePattern = /\b(?:references|assets|templates|examples|docs)\/[A-Za-z0-9._/-]+\b/g;
+  while ((match = barePattern.exec(body))) {
+    const raw = match[0];
+    if (isSkillResourceReference(raw)) out.add(raw.replace(/^\.\//, ''));
+  }
+  return [...out].sort((a, b) => a.localeCompare(b));
+}
+
+function isSkillResourceReference(value: string): boolean {
+  if (!value || value.startsWith('/') || value.includes('://')) return false;
+  return /^(?:\.\/)?(?:references|assets|templates|examples|docs)\//.test(value);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function loadSkillsSectionForPrompt(
   vaultPath: string | null,
   scope: ConversationScope,
-  skillRefs?: string[]
+  skillRefs?: string[],
+  userText?: string
 ): Promise<string> {
   const skillLoader = new SkillLoader({ vaultPath, scope });
   const allSkills = await skillLoader.load();
-  return renderSkillsSection(filterActiveSkills(allSkills, scope, skillRefs));
+  return renderSkillsSection(filterPromptSkills(allSkills, scope, skillRefs, userText));
+}
+
+async function isSkillRouteMessage(
+  vaultPath: string | null,
+  scope: ConversationScope,
+  skillRefs: string[] | undefined,
+  userText: string
+): Promise<boolean> {
+  if (!parseLeadingSlashCommand(userText)) return false;
+  const skillLoader = new SkillLoader({ vaultPath, scope });
+  const allSkills = await skillLoader.load();
+  return filterPromptSkills(allSkills, scope, skillRefs, userText).some((skill) =>
+    skillMatchesUserText(skill, userText)
+  );
 }
 
 function filterActiveSkills(
@@ -1202,9 +1434,13 @@ function filterActiveSkills(
   return skills.filter(
     (skill) =>
       !skill.disabledReason &&
-      (skill.scopes.length === 0 || skill.scopes.includes(scope.kind)) &&
+      skillAllowedInScope(skill, scope) &&
       (!selected || selected.has(skill.name))
   );
+}
+
+function skillAllowedInScope(skill: LoadedSkill, scope: ConversationScope): boolean {
+  return skill.scopes.length === 0 || skill.scopes.includes(scope.kind);
 }
 
 function normalizeSkillRefs(skillRefs: unknown): string[] | undefined {

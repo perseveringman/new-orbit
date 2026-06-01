@@ -3,6 +3,7 @@ import { IPC } from '@shared/ipc';
 import type { EvidenceSelector, EvidenceSourceFilter } from '@shared/evidence';
 import type { ExternalAISessionSettings } from '@shared/evidence';
 import { readExternalAISessionSettings, updateExternalAISessionSettings } from './external-ai-session-settings';
+import { openEvidenceNavigation, resolveEvidenceNavigation } from './navigation';
 import { createEvidenceStore } from './store';
 import { createOrbitEvidenceProvider, syncOrbitEvidenceSources } from './providers';
 
@@ -27,6 +28,14 @@ export function registerEvidenceIpc(getVaultPath: () => string | null): void {
 
   ipcMain.handle(IPC.evidence.read, async (_event, selector: EvidenceSelector) =>
     runtime().provider.read(selector)
+  );
+
+  ipcMain.handle(IPC.evidence.resolveNavigation, async (_event, selector: EvidenceSelector) =>
+    resolveEvidenceNavigation(runtime().vaultPath, selector)
+  );
+
+  ipcMain.handle(IPC.evidence.open, async (_event, selector: EvidenceSelector) =>
+    openEvidenceNavigation(runtime().vaultPath, selector)
   );
 
   ipcMain.handle(

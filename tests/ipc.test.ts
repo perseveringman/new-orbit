@@ -50,6 +50,7 @@ describe('IPC contract', () => {
         'runtimeSessions',
         'scheduledTasks',
         'settings',
+        'skills',
         'space',
         'stage',
         'semantic',
@@ -414,7 +415,9 @@ describe('IPC contract', () => {
       'externalSessionSettings',
       'get',
       'list',
+      'open',
       'read',
+      'resolveNavigation',
       'sync',
       'updateExternalSessionSettings'
     ].sort());

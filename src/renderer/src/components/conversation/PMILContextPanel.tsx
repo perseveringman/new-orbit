@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import type { ContextPacket, ContextSection } from '@shared/context';
-import type { EvidenceReadResult, EvidenceSelector } from '@shared/evidence';
 import type { Artifact, ConversationStage } from '@shared/stage';
+import { EvidenceReference, evidenceSelectorKey } from '../evidence/EvidenceReference';
 
 export const PMIL_CONTEXT_ARTIFACT_KIND = 'pmil.context_packet';
 
@@ -78,50 +77,11 @@ function PMILContextSection({ section }: { section: ContextSection }): JSX.Eleme
       {section.citations.length ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {section.citations.slice(0, 3).map((selector) => (
-            <EvidencePeekButton key={evidenceSelectorKey(selector)} selector={selector} />
+            <EvidenceReference key={evidenceSelectorKey(selector)} selector={selector} tone="violet" />
           ))}
         </div>
       ) : null}
     </div>
-  );
-}
-
-function EvidencePeekButton({ selector }: { selector: EvidenceSelector }): JSX.Element {
-  const [result, setResult] = useState<EvidenceReadResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function readEvidence(): Promise<void> {
-    setLoading(true);
-    setError(null);
-    try {
-      setResult(await window.orbit.evidence.read(selector));
-    } catch (err) {
-      setResult(null);
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <span className="inline-flex max-w-full flex-col gap-1">
-      <button
-        type="button"
-        onClick={() => void readEvidence()}
-        disabled={loading}
-        className="rounded-md border border-violet-300 px-2 py-0.5 text-[11px] text-violet-700 disabled:opacity-60 dark:border-violet-800 dark:text-violet-200"
-      >
-        {loading ? '读取中' : `查看证据 ${shortEvidenceLabel(selector)}`}
-      </button>
-      {error ? <span className="text-[11px] text-red-600 dark:text-red-300">{error}</span> : null}
-      {result ? (
-        <span className="rounded-md border border-violet-200 bg-white p-2 text-[11px] leading-5 text-neutral-600 dark:border-violet-900 dark:bg-neutral-950 dark:text-neutral-300">
-          <span className="block font-medium text-neutral-800 dark:text-neutral-100">{result.source.title}</span>
-          {result.excerpts[0]?.text.slice(0, 520) ?? '没有可用摘录。'}
-        </span>
-      ) : null}
-    </span>
   );
 }
 
@@ -139,13 +99,4 @@ function contextPacketFromArtifact(artifact: Artifact): ContextPacket | null {
     return null;
   }
   return packet as ContextPacket;
-}
-
-function evidenceSelectorKey(selector: EvidenceSelector): string {
-  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
-}
-
-function shortEvidenceLabel(selector: EvidenceSelector): string {
-  const id = selector.source_id.split(':').slice(-2).join(':') || selector.source_id;
-  return id.length > 22 ? `${id.slice(0, 22)}...` : id;
 }

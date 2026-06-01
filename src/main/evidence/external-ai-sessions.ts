@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import type {
   EvidenceContentView,
   EvidencePrivacy,
+  EvidenceSelector,
   EvidenceScopeRef,
   ExternalAISessionRootConfig,
   EvidenceSource
@@ -29,6 +30,22 @@ export interface ExternalAISessionScanOptions {
   includeToolOutputs?: boolean;
 }
 
+export interface ExternalAISessionInventoryBucket {
+  key: string;
+  count: number;
+  agents: Record<string, number>;
+}
+
+export interface ExternalAISessionInventorySummary {
+  scanned_at: string;
+  total_candidates: number;
+  matched_count: number;
+  roots: Array<{ agent: string; source: string; dir: string; enabled: boolean }>;
+  date_range?: { from: string; to: string };
+  by_month: ExternalAISessionInventoryBucket[];
+  by_agent: Record<string, number>;
+}
+
 interface SessionFileCandidate {
   agent: string;
   source: string;
@@ -45,6 +62,13 @@ interface SessionPreview {
   firstAt?: string;
   lastAt?: string;
   projectName?: string;
+}
+
+export interface ExternalAISessionMessage {
+  index: number;
+  role: string;
+  text: string;
+  timestamp?: string;
 }
 
 export async function listExternalAISessionSources(
@@ -101,9 +125,45 @@ export async function listExternalAISessionSources(
   });
 }
 
+export async function summarizeExternalAISessionSources(
+  options: ExternalAISessionScanOptions = {}
+): Promise<ExternalAISessionInventorySummary> {
+  const roots = (options.roots ?? defaultExternalAISessionRoots()).filter((root) => root.enabled !== false);
+  const candidates = await listSessionFiles(roots);
+  const matched = candidates.filter((candidate) => candidateMatchesOptions(candidate, options));
+  const byMonth = new Map<string, ExternalAISessionInventoryBucket>();
+  const byAgent: Record<string, number> = {};
+  const sortedTimes = matched.map((candidate) => candidate.mtime).sort();
+
+  for (const candidate of matched) {
+    const month = candidate.mtime.slice(0, 7);
+    const bucket = byMonth.get(month) ?? { key: month, count: 0, agents: {} };
+    bucket.count += 1;
+    bucket.agents[candidate.agent] = (bucket.agents[candidate.agent] ?? 0) + 1;
+    byMonth.set(month, bucket);
+    byAgent[candidate.agent] = (byAgent[candidate.agent] ?? 0) + 1;
+  }
+
+  return {
+    scanned_at: new Date().toISOString(),
+    total_candidates: candidates.length,
+    matched_count: matched.length,
+    roots: roots.map((root) => ({
+      agent: root.agent,
+      source: root.source ?? root.agent,
+      dir: root.dir,
+      enabled: root.enabled !== false
+    })),
+    ...(sortedTimes.length ? { date_range: { from: sortedTimes[0], to: sortedTimes.at(-1) ?? sortedTimes[0] } } : {}),
+    by_month: Array.from(byMonth.values()).sort((a, b) => b.key.localeCompare(a.key)),
+    by_agent: Object.fromEntries(Object.entries(byAgent).sort(([left], [right]) => left.localeCompare(right)))
+  };
+}
+
 export async function readExternalAISessionSourceText(
   source: EvidenceSource,
-  contentView: EvidenceContentView
+  contentView: EvidenceContentView,
+  selector?: EvidenceSelector
 ): Promise<string> {
   if (contentView === 'metadata') {
     return [source.title, source.summary, source.canonical_ref].filter(Boolean).join('\n');
@@ -113,7 +173,42 @@ export async function readExternalAISessionSourceText(
   const raw = await fs.readFile(file, 'utf8').catch(() => '');
   if (!raw.trim()) return '';
   if (contentView === 'full') return raw;
+  if (selector?.kind === 'message_range') {
+    const messages = await readExternalAISessionMessages(source, contentView);
+    const from = numericRangeValue(selector.range?.from, 0);
+    const to = numericRangeValue(selector.range?.to, messages.at(-1)?.index ?? from);
+    const roleFilter = new Set(selector.role_filter ?? []);
+    return messages
+      .filter((message) => message.index >= from && message.index <= to)
+      .filter((message) => !roleFilter.size || roleFilter.has(message.role as 'user' | 'assistant' | 'system' | 'tool'))
+      .map(formatSessionMessage)
+      .join('\n\n')
+      .trim();
+  }
   return sessionFileToText(raw, file, { includeTools: source.privacy.allow_tool_outputs });
+}
+
+export async function readExternalAISessionMessages(
+  source: EvidenceSource,
+  _contentView: EvidenceContentView = 'safe_projection'
+): Promise<ExternalAISessionMessage[]> {
+  const file = source.metadata?.['path'];
+  if (typeof file !== 'string') return [];
+  const raw = await fs.readFile(file, 'utf8').catch(() => '');
+  if (!raw.trim()) return [];
+  const includeTools = source.privacy.allow_tool_outputs;
+  if (isMarkdownFile(file)) {
+    const text = markdownSessionToText(raw, { includeTools });
+    return text ? [{ index: 0, role: 'message', text }] : [];
+  }
+  const wholeJson = safeJsonParse(raw);
+  const records = wholeJson
+    ? collectSessionRecords(wholeJson, 2000)
+    : raw
+      .split(/\r?\n/u)
+      .map((line) => safeJsonParse(line))
+      .filter(Boolean);
+  return recordsToMessages(records, { includeTools });
 }
 
 export function defaultExternalAISessionRoots(): ExternalAISessionRoot[] {
@@ -197,7 +292,7 @@ async function previewSession(candidate: SessionFileCandidate): Promise<SessionP
   const rendered = records
     .map((record) => recordToText(record, { includeTools: false }))
     .filter(Boolean);
-  const title = rendered.find((line) => line.startsWith('user:'))?.replace(/^user:\s*/u, '').slice(0, 120)
+  const title = rendered.find((line) => line.startsWith('user'))?.replace(/^user(?:\s+\[[^\]]+\])?:\s*/u, '').slice(0, 120)
     || rendered[0]?.slice(0, 120)
     || '';
   const timestamps = records
@@ -240,9 +335,8 @@ function sessionFileToText(raw: string, filePath: string, options: { includeTool
 }
 
 function recordsToText(records: unknown[], options: { includeTools: boolean }): string {
-  return records
-    .map((record) => recordToText(record, options))
-    .filter(Boolean)
+  return recordsToMessages(records, options)
+    .map(formatSessionMessage)
     .join('\n\n')
     .replace(/\s{3,}/gu, ' ')
     .trim();
@@ -266,11 +360,22 @@ async function readSessionRecordsHead(filePath: string, maxRecords: number): Pro
 }
 
 function recordToText(record: unknown, options: { includeTools: boolean }): string {
-  if (!record || typeof record !== 'object') return '';
+  const message = recordToMessage(record, 0, options);
+  return message ? formatSessionMessage(message) : '';
+}
+
+function recordsToMessages(records: unknown[], options: { includeTools: boolean }): ExternalAISessionMessage[] {
+  return records
+    .map((record, index) => recordToMessage(record, index, options))
+    .filter((message): message is ExternalAISessionMessage => Boolean(message));
+}
+
+function recordToMessage(record: unknown, index: number, options: { includeTools: boolean }): ExternalAISessionMessage | null {
+  if (!record || typeof record !== 'object') return null;
   const value = record as Record<string, unknown>;
   const role = roleFromRecord(value);
   const type = typeof value['type'] === 'string' ? value['type'] : '';
-  if (!options.includeTools && (role === 'tool' || role === 'system' || isToolLikeType(type))) return '';
+  if (!options.includeTools && (role === 'tool' || role === 'system' || isToolLikeType(type))) return null;
   const data = recordFromUnknown(value['data']);
   const payload = recordFromUnknown(value['payload']);
   const message = recordFromUnknown(value['message']);
@@ -292,7 +397,38 @@ function recordToText(record: unknown, options: { includeTools: boolean }): stri
     || textFromUnknown(payload?.['text_elements'], options)
     || textFromUnknown(payload?.['reasoningText'], options)
     || textFromUnknown(payload?.['reasoning'], options);
-  return nestedText ? `${role || type || 'message'}: ${nestedText}` : '';
+  const timestamp = timestampFromRecord(record);
+  return nestedText
+    ? {
+        index,
+        role: normalizeMessageRole(role || type || 'message'),
+        text: nestedText,
+        ...(timestamp ? { timestamp } : {})
+      }
+    : null;
+}
+
+function normalizeMessageRole(role: string): ExternalAISessionMessage['role'] {
+  if (role === 'user' || role === 'assistant' || role === 'system' || role === 'tool') return role;
+  if (/user/iu.test(role)) return 'user';
+  if (/assistant|agent|reasoning/iu.test(role)) return 'assistant';
+  if (/tool|function/iu.test(role)) return 'tool';
+  if (/system|session|meta/iu.test(role)) return 'system';
+  return 'message';
+}
+
+function formatSessionMessage(message: ExternalAISessionMessage): string {
+  const time = message.timestamp ? ` [${message.timestamp}]` : '';
+  return `${message.role}${time}: ${message.text}`;
+}
+
+function numericRangeValue(value: string | number | undefined, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
 }
 
 function roleFromRecord(value: Record<string, unknown>): string {

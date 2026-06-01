@@ -3,6 +3,59 @@ import type { OpenLoopPayload, WorkContextPayload } from '../synthesis/payloads'
 
 export type ContextPacketPurpose = 'ask' | 'task' | 'review' | 'project' | 'area' | 'resource';
 
+export type ContextRetrievalIntent =
+  | 'direct'
+  | 'specific_lookup'
+  | 'temporal_count'
+  | 'multi_hop'
+  | 'global_sensemaking'
+  | 'external_session';
+
+export type ContextRetrievalComplexity = 'low' | 'medium' | 'high';
+
+export type ContextRetrievalRoute =
+  | 'evidence_chunks'
+  | 'semantic_index'
+  | 'graph_neighbors'
+  | 'memories'
+  | 'synthesis'
+  | 'external_ai_sessions';
+
+export type ContextRetrievalStepKind =
+  | 'route'
+  | 'hybrid_search'
+  | 'query_rewrite'
+  | 'evidence_grade'
+  | 'graph_expand'
+  | 'source_read';
+
+export interface ContextRetrievalStep {
+  id: string;
+  kind: ContextRetrievalStepKind;
+  status: 'planned' | 'executed' | 'skipped';
+  reason: string;
+  query?: string;
+  target?: string;
+  result_count?: number;
+  notes?: string;
+}
+
+export interface ContextRetrievalSufficiency {
+  status: 'enough' | 'thin' | 'missing';
+  score: number;
+  reasons: string[];
+}
+
+export interface ContextRetrievalTrace {
+  intent: ContextRetrievalIntent;
+  complexity: ContextRetrievalComplexity;
+  needs_retrieval: boolean;
+  routes: ContextRetrievalRoute[];
+  queries: string[];
+  steps: ContextRetrievalStep[];
+  sufficiency: ContextRetrievalSufficiency;
+}
+
 export interface ContextPacketScope {
   kind: 'global' | EvidenceScopeRef['kind'];
   ref?: string;
@@ -20,6 +73,8 @@ export interface ContextFreshness {
 
 export type ContextSectionKind =
   | 'scope_summary'
+  | 'answer_guidance'
+  | 'retrieval_trace'
   | 'recent_work'
   | 'relevant_evidence'
   | 'graph_neighbors'
@@ -45,6 +100,7 @@ export interface ContextPacket {
   freshness: ContextFreshness;
   budget: ContextBudget;
   sections: ContextSection[];
+  retrieval?: ContextRetrievalTrace;
   evidence: EvidenceSelector[];
   synthesis_refs: string[];
   memory_refs: string[];
@@ -59,6 +115,7 @@ export interface BuildContextPacketInput {
   evidence_limit?: number;
   graph_limit?: number;
   synthesis_mode?: 'lookup' | 'ensure' | 'off';
+  agentic_retrieval?: boolean;
 }
 
 export interface BuildWorkContextInput {

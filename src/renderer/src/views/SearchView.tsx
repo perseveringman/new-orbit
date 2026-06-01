@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ContextPacket, ContextSection } from '@shared/context';
-import type { EvidenceReadResult, EvidenceSelector } from '@shared/evidence';
+import type { EvidenceSelector } from '@shared/evidence';
 import type { MemoryNode, MemoryRecallMatch, RecallResult } from '@shared/memory';
 import type { IndexableEntityKind, SearchAnswerResponse, SearchMatchMode, SearchQuery, SearchResponse, SearchResult, SemanticIndexStatus } from '@shared/semantic';
 import { INDEXABLE_ENTITY_KINDS } from '@shared/semantic';
+import { EvidenceReference, evidenceSelectorKey } from '../components/evidence/EvidenceReference';
 import { usePara } from '../store/para';
 
 type SearchState = 'idle' | 'loading' | 'success' | 'empty' | 'error';
@@ -236,6 +237,14 @@ export function SearchContent(props: {
               </span>
             </div>
             <p className="mt-3 text-sm leading-6">{String((props.answer.payload as { answer?: string })?.answer ?? '尚未生成答案。')}</p>
+            {answerEvidenceSelectors(props.answer, props.results, props.contextPacket).length ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-sky-700 dark:text-sky-300">引用</span>
+                {answerEvidenceSelectors(props.answer, props.results, props.contextPacket).slice(0, 6).map((selector) => (
+                  <EvidenceReference key={evidenceSelectorKey(selector)} selector={selector} tone="sky" />
+                ))}
+              </div>
+            ) : null}
             <p className="mt-3 text-xs text-neutral-500">来源：{props.answer.provenance.runtime} / {props.answer.provenance.prompt_version}</p>
           </section>
         )}
@@ -409,6 +418,7 @@ function StateCard(props: { title: string; body: string; actionLabel: string; on
 }
 
 function ResultCard({ result }: { result: SearchResult }): JSX.Element {
+  const selectors = result.doc.evidence_selectors ?? [];
   return (
     <article className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center gap-2">
@@ -422,6 +432,13 @@ function ResultCard({ result }: { result: SearchResult }): JSX.Element {
       <h3 className="mt-3 text-lg font-semibold">{result.doc.title}</h3>
       <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-300">{result.snippets?.[0] ?? result.doc.content.slice(0, 220)}</p>
       <p className="mt-3 text-xs text-neutral-500">{result.why} · 更新于 {result.doc.updated_at.slice(0, 10)}</p>
+      {selectors.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {selectors.slice(0, 2).map((selector) => (
+            <EvidenceReference key={evidenceSelectorKey(selector)} selector={selector} tone="neutral" />
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -452,24 +469,6 @@ function SearchMemoryCard(props: {
 }
 
 function SearchContextSection({ section }: { section: ContextSection }): JSX.Element {
-  const [readResult, setReadResult] = useState<EvidenceReadResult | null>(null);
-  const [loadingSelector, setLoadingSelector] = useState<string | null>(null);
-  const [readError, setReadError] = useState<string | null>(null);
-
-  async function openEvidence(selector: EvidenceSelector): Promise<void> {
-    const key = evidenceSelectorKey(selector);
-    setLoadingSelector(key);
-    setReadError(null);
-    try {
-      setReadResult(await window.orbit.evidence.read(selector));
-    } catch (error) {
-      setReadResult(null);
-      setReadError((error as Error).message);
-    } finally {
-      setLoadingSelector(null);
-    }
-  }
-
   return (
     <article className="py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2">
@@ -480,48 +479,55 @@ function SearchContextSection({ section }: { section: ContextSection }): JSX.Ele
       <p className="mt-2 whitespace-pre-line text-sm leading-6 text-neutral-600 dark:text-neutral-300">{section.content.slice(0, 520)}</p>
       {section.citations.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {section.citations.slice(0, 4).map((selector) => {
-            const key = evidenceSelectorKey(selector);
-            return (
-              <button
-                key={key}
-                onClick={() => void openEvidence(selector)}
-                disabled={loadingSelector === key}
-                className="rounded-lg border border-violet-300 bg-white px-2 py-1 text-xs text-violet-700 disabled:opacity-50 dark:border-violet-800 dark:bg-neutral-900 dark:text-violet-300"
-              >
-                {loadingSelector === key ? '读取中' : `查看证据 ${shortEvidenceLabel(selector)}`}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-      {readError ? <p className="mt-3 text-xs text-red-600 dark:text-red-300">证据读取失败：{readError}</p> : null}
-      {readResult ? (
-        <div className="mt-3 rounded-xl border border-violet-200 bg-white p-3 text-sm dark:border-violet-900 dark:bg-neutral-950">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-medium">{readResult.source.title}</p>
-            <span className="text-xs text-neutral-500">{readResult.availability}</span>
-          </div>
-          <div className="mt-2 space-y-2">
-            {readResult.excerpts.slice(0, 2).map((excerpt, index) => (
-              <p key={`${excerpt.selector.source_id}:${index}`} className="whitespace-pre-line text-xs leading-5 text-neutral-600 dark:text-neutral-300">
-                {excerpt.text.slice(0, 900)}
-              </p>
-            ))}
-          </div>
+          {section.citations.slice(0, 4).map((selector) => (
+            <EvidenceReference key={evidenceSelectorKey(selector)} selector={selector} tone="violet" />
+          ))}
         </div>
       ) : null}
     </article>
   );
 }
 
-function evidenceSelectorKey(selector: EvidenceSelector): string {
-  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
+function answerEvidenceSelectors(
+  answer: SearchAnswerResponse['answer'],
+  results: SearchResult[],
+  packet: SearchResponse['context_packet'] | null
+): EvidenceSelector[] {
+  const citations = answerPayloadCitations(answer);
+  const byDoc = new Map(results.map((result) => [result.doc.id, result]));
+  const selectors: EvidenceSelector[] = [];
+  for (const citation of citations) {
+    const result = byDoc.get(citation.doc_id);
+    selectors.push(...(result?.doc.evidence_selectors ?? []));
+    for (const section of packet?.sections ?? []) {
+      if (citation.doc_id.includes(`${packet?.id}:${section.kind}`) || citation.title.includes(section.title)) {
+        selectors.push(...section.citations);
+      }
+    }
+  }
+  if (!selectors.length) selectors.push(...(packet?.evidence ?? []));
+  return dedupeEvidenceSelectors(selectors);
 }
 
-function shortEvidenceLabel(selector: EvidenceSelector): string {
-  const id = selector.source_id.split(':').slice(-2).join(':') || selector.source_id;
-  return id.length > 24 ? `${id.slice(0, 24)}...` : id;
+function answerPayloadCitations(answer: SearchAnswerResponse['answer']): Array<{ doc_id: string; title: string }> {
+  const value = answer?.payload as { citations?: unknown } | undefined;
+  return Array.isArray(value?.citations)
+    ? value.citations.filter((item): item is { doc_id: string; title: string } =>
+        Boolean(item && typeof item === 'object' && typeof (item as { doc_id?: unknown }).doc_id === 'string' && typeof (item as { title?: unknown }).title === 'string')
+      )
+    : [];
+}
+
+function dedupeEvidenceSelectors(selectors: EvidenceSelector[]): EvidenceSelector[] {
+  const seen = new Set<string>();
+  const out: EvidenceSelector[] = [];
+  for (const selector of selectors) {
+    const key = evidenceSelectorKey(selector);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(selector);
+  }
+  return out;
 }
 
 function formatResultForPrompt(result: SearchResult): string {

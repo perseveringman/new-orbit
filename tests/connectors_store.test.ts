@@ -8,6 +8,8 @@ import { updateExternalAISessionSettings } from '../src/main/evidence/external-a
 import { syncMemoryFromTruthLayer } from '../src/main/memory/source-sync';
 import { createMemoryStore } from '../src/main/memory/store';
 import { projectConnectorDocuments } from '../src/main/semantic/document-projectors';
+import { ORBIT_DIR } from '../src/shared/constants';
+import { defaultConnectorPrivacy, type ConnectorConnection } from '../src/shared/connectors';
 import { evidenceSourceId, wholeSourceSelector } from '../src/shared/evidence';
 
 let vaultPath: string;
@@ -100,6 +102,7 @@ describe('ConnectorStore', () => {
     });
 
     expect(connection.status).toBe('connected');
+    expect(connection.display_name).toBe('外部 AI 会话');
     expect(connection.item_count).toBe(1);
 
     const hits = await store.search('connector evidence', 5);
@@ -129,4 +132,90 @@ describe('ConnectorStore', () => {
       content_view: 'safe_projection'
     });
   });
+
+  it('keeps external AI sessions as a single reusable connection', async () => {
+    const sessionFile = path.join(aiSessionRoot, 'claude-session.jsonl');
+    await fs.writeFile(
+      sessionFile,
+      [
+        '{"role":"user","content":"Reusable external AI session connector"}',
+        '{"role":"assistant","content":"The connector should be a singleton."}'
+      ].join('\n'),
+      'utf8'
+    );
+    await updateExternalAISessionSettings(vaultPath, {
+      roots: [{ agent: 'claude', source: 'test-claude', dir: aiSessionRoot }],
+      limit: 10
+    });
+
+    const store = createConnectorStore(vaultPath);
+    const first = await store.connect({ connector_id: 'local-ai-sessions', config: {} });
+    const second = await store.connect({ connector_id: 'local-ai-sessions', config: {} });
+    const third = await store.connect({ connector_id: 'local-ai-sessions', config: {} });
+
+    expect(second.id).toBe(first.id);
+    expect(third.id).toBe(first.id);
+    const connections = (await store.list()).filter((connection) => connection.connector_id === 'local-ai-sessions');
+    expect(connections).toHaveLength(1);
+    expect(connections[0]?.item_count).toBe(1);
+    expect(connections[0]?.config['total_count']).toBe(1);
+    expect(connections[0]?.config['limit']).toBe(10);
+  });
+
+  it('collapses legacy duplicate external AI session connections when reading the registry', async () => {
+    const registryPath = path.join(vaultPath, ORBIT_DIR, 'connectors', 'registry.json');
+    await fs.mkdir(path.dirname(registryPath), { recursive: true });
+    const older = makeConnectorConnection('conn-older', {
+      display_name: '本地 AI 会话',
+      status: 'error',
+      item_count: 0,
+      updated_at: '2026-06-01T10:00:00.000Z'
+    });
+    const newer = makeConnectorConnection('conn-newer', {
+      display_name: '外部 AI 会话',
+      status: 'connected',
+      item_count: 300,
+      updated_at: '2026-06-01T11:00:00.000Z',
+      last_scanned_at: '2026-06-01T11:00:00.000Z'
+    });
+    await fs.writeFile(
+      registryPath,
+      `${JSON.stringify({ version: 1, connections: [older, newer] }, null, 2)}\n`,
+      'utf8'
+    );
+
+    const connections = (await createConnectorStore(vaultPath).list()).filter((connection) => connection.connector_id === 'local-ai-sessions');
+
+    expect(connections).toHaveLength(1);
+    expect(connections[0]).toMatchObject({
+      id: 'conn-older',
+      display_name: '外部 AI 会话',
+      status: 'connected',
+      item_count: 300
+    });
+    const persisted = JSON.parse(await fs.readFile(registryPath, 'utf8')) as { connections: ConnectorConnection[] };
+    expect(persisted.connections).toHaveLength(1);
+  });
 });
+
+function makeConnectorConnection(
+  id: string,
+  patch: Partial<ConnectorConnection> = {}
+): ConnectorConnection {
+  return {
+    id,
+    connector_id: 'local-ai-sessions',
+    display_name: '外部 AI 会话',
+    enabled: true,
+    status: 'connected',
+    connected_at: '2026-06-01T09:00:00.000Z',
+    updated_at: '2026-06-01T09:00:00.000Z',
+    item_count: 0,
+    config: {
+      scanner: 'orbit.external-ai-sessions',
+      root_count: 9
+    },
+    privacy: defaultConnectorPrivacy(),
+    ...patch
+  };
+}

@@ -152,7 +152,7 @@ describe('随处问 UX revamp components', () => {
 
     expect(html).toContain('PMIL 上下文');
     expect(html).toContain('Personal QA');
-    expect(html).toContain('查看证据');
+    expect(html).toContain('打开来源');
     expect(html).toContain('PMIL should use cited evidence');
   });
 

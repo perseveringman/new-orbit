@@ -49,9 +49,14 @@ import type { ChatAction, RuntimeEvent as ChatRuntimeEvent } from './chat-protoc
 import type { ComposerDraft, RuntimeSelection } from './ai-composer';
 import type {
   AgentSkillDeleteInput,
+  AgentSkillConfigUpdateInput,
   AgentSkillRegistrySnapshot,
   AgentSkillSaveInput,
   AgentSkillView,
+  SkillStoreDetail,
+  SkillStoreInstallInput,
+  SkillStoreSearchInput,
+  SkillStoreSearchResult,
   AgentToolRegistrySnapshot
 } from './agent-tools';
 import type {
@@ -360,6 +365,8 @@ import type {
   SemanticIndexStatus
 } from './semantic';
 import type {
+  EvidenceNavigationTarget,
+  EvidenceOpenResult,
   EvidenceReadResult,
   EvidenceSelector,
   EvidenceSource,
@@ -520,7 +527,11 @@ export const IPC = {
   skills: {
     list: 'skills:list',
     save: 'skills:save',
-    delete: 'skills:delete'
+    delete: 'skills:delete',
+    configUpdate: 'skills:config:update',
+    storeSearch: 'skills:store:search',
+    storeDetail: 'skills:store:detail',
+    storeInstall: 'skills:store:install'
   },
   dashboard: {
     summary: 'dashboard:summary',
@@ -850,6 +861,8 @@ export const IPC = {
     list: 'evidence:list',
     get: 'evidence:get',
     read: 'evidence:read',
+    resolveNavigation: 'evidence:resolveNavigation',
+    open: 'evidence:open',
     sync: 'evidence:sync',
     externalSessionSettings: 'evidence:externalSessionSettings',
     updateExternalSessionSettings: 'evidence:updateExternalSessionSettings'
@@ -1628,6 +1641,10 @@ export interface OrbitApi {
     list(scope?: ChatConversationScope): Promise<AgentSkillRegistrySnapshot>;
     save(input: AgentSkillSaveInput): Promise<AgentSkillView>;
     delete(input: AgentSkillDeleteInput): Promise<void>;
+    configUpdate(input: AgentSkillConfigUpdateInput): Promise<AgentSkillView>;
+    storeSearch(input?: SkillStoreSearchInput): Promise<SkillStoreSearchResult>;
+    storeDetail(slug: string): Promise<SkillStoreDetail>;
+    storeInstall(input: SkillStoreInstallInput): Promise<AgentSkillView>;
   };
   dashboard: {
     summary(): Promise<DashboardSummary>;
@@ -2015,6 +2032,8 @@ export interface OrbitApi {
     list(filter?: EvidenceSourceFilter): Promise<EvidenceSource[]>;
     get(sourceId: string): Promise<EvidenceSource | null>;
     read(selector: EvidenceSelector): Promise<EvidenceReadResult>;
+    resolveNavigation(selector: EvidenceSelector): Promise<EvidenceNavigationTarget>;
+    open(selector: EvidenceSelector): Promise<EvidenceOpenResult>;
     sync(options?: { includeExternalAISessions?: boolean; externalAISessionLimit?: number }): Promise<EvidenceSource[]>;
     externalSessionSettings(): Promise<ExternalAISessionSettings>;
     updateExternalSessionSettings(patch: Partial<ExternalAISessionSettings>): Promise<ExternalAISessionSettings>;

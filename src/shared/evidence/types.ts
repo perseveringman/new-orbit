@@ -128,6 +128,38 @@ export interface EvidenceReadResult {
   availability: EvidenceAvailability;
 }
 
+export type EvidenceNavigationTargetKind =
+  | 'vault_file'
+  | 'workspace_view'
+  | 'external_file'
+  | 'external_url'
+  | 'connector_doc'
+  | 'unavailable';
+
+export interface EvidenceNavigationTarget {
+  kind: EvidenceNavigationTargetKind;
+  source_id: string;
+  source_kind?: EvidenceSourceKind;
+  title?: string;
+  label: string;
+  selector?: EvidenceSelector;
+  available: boolean;
+  path?: string;
+  rel_path?: string;
+  url?: string;
+  connection_id?: string;
+  doc_ref?: string;
+  view?: { kind: string; [key: string]: unknown };
+  range?: EvidenceSelector['range'];
+  reason?: string;
+}
+
+export interface EvidenceOpenResult {
+  target: EvidenceNavigationTarget;
+  opened: boolean;
+  message?: string;
+}
+
 export interface EvidenceChunk {
   id: string;
   source_id: string;
@@ -148,6 +180,10 @@ export interface EvidenceChunkSearchResult {
   source?: EvidenceSource;
   score: number;
   why: string;
+  match_type?: 'keyword' | 'semantic' | 'hybrid';
+  keyword_score?: number;
+  vector_score?: number;
+  fts_score?: number;
 }
 
 export interface EvidenceChunkFilter {
@@ -162,7 +198,19 @@ export interface EvidenceChunkIndexFile {
   version: 1;
   chunks: Record<string, EvidenceChunk>;
   source_fingerprints: Record<string, string>;
+  chunk_embeddings?: Record<string, EvidenceChunkEmbedding>;
+  embedding_model?: string;
+  embedding_dimensions?: number;
   updated_at?: string;
+}
+
+export interface EvidenceChunkEmbedding {
+  chunk_id: string;
+  model: string;
+  dimensions: number;
+  content_hash: string;
+  vector: number[];
+  embedded_at: string;
 }
 
 export interface SourceListInput {
