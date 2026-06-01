@@ -7,6 +7,7 @@ export type WorkspaceView =
   | { kind: 'vision' }
   | { kind: 'agents' }
   | { kind: 'tools' }
+  | { kind: 'skills' }
   | { kind: 'github' }
   | { kind: 'developerConsole' }
   | { kind: 'inbox' }

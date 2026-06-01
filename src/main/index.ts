@@ -55,12 +55,15 @@ import { autoStartExternalGatewayIfNeeded, registerExternalGatewayIpc } from './
 import { stopExternalGatewayRuntime } from './external-orchestrator/runtime';
 import { registerResourceIpc } from './resource/ipc';
 import { registerSDKRuntimeIpc } from './runtime/sdk/ipc';
+import { registerAIConfigIpc } from './ai-config/ipc';
+import { shutdownEmbeddingProxy } from './ai-config/embedding-proxy';
 import { registerRuntimeSessionIpc } from './runtime-sessions/ipc';
 import { registerSynthesisIpc } from './synthesis/ipc';
 import { getSemanticRuntime, registerSemanticIpc } from './semantic/ipc';
 import { registerContextIpc } from './context/ipc';
 import { registerEvidenceIpc } from './evidence/ipc';
 import { registerMemoryIpc } from './memory/ipc';
+import { shutdownMemoryBackends } from './memory/backend-registry';
 import { registerReviewSystemIpc } from './review/ipc';
 import { registerVisionSystemIpc } from './vision/ipc';
 import { registerAssetsIpc } from './assets/ipc';
@@ -328,6 +331,8 @@ function registerIpc(): void {
     await closeFsSession();
     if (closingVaultPath) await stopGatewayRuntime(closingVaultPath);
     if (closingVaultPath) await stopExternalGatewayRuntime(closingVaultPath);
+    await shutdownMemoryBackends();
+    await shutdownEmbeddingProxy();
     await setLastVaultPath(null);
   });
   ipcMain.handle(IPC.workspace.crashLogPath, () =>
@@ -403,7 +408,7 @@ function registerIpc(): void {
   registerConversationIpc();
   registerAskAnywhereChatIpc();
   registerStageIpc(() => currentVault?.path ?? null);
-  registerAgentToolsIpc();
+  registerAgentToolsIpc(() => currentVault?.path ?? null);
   registerGitIpc();
   registerGitHubIpc();
   registerEnvIpc();
@@ -430,6 +435,7 @@ function registerIpc(): void {
   registerExternalGatewayIpc(() => currentVault?.path ?? null);
   registerResourceIpc(() => currentVault?.path ?? null);
   registerSDKRuntimeIpc(() => currentVault?.path ?? null);
+  registerAIConfigIpc(() => currentVault?.path ?? null);
   registerRuntimeSessionIpc();
   registerSynthesisIpc(() => currentVault?.path ?? null);
   registerSemanticIpc(() => currentVault?.path ?? null);

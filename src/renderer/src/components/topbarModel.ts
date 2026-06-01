@@ -13,6 +13,7 @@ export const WORKSPACE_DESTINATIONS: WorkspaceDestination[] = [
   { label: '愿景', view: { kind: 'vision' }, icon: '✦' },
   { label: 'AI 控制台', view: { kind: 'runtimes' }, icon: '◫' },
   { label: '工具', view: { kind: 'tools' }, icon: '⌘' },
+  { label: '技能', view: { kind: 'skills' }, icon: '✧' },
   { label: '角色模板', view: { kind: 'agents' }, icon: '◌' },
   { label: '开发者控制台', view: { kind: 'developerConsole' }, icon: '⌁' },
   { label: 'GitHub', view: { kind: 'github' }, icon: '⌘' },
@@ -52,6 +53,7 @@ const WORKSPACE_DETAILS: Record<
     | 'vision'
     | 'askAnywhere'
    | 'tools'
+   | 'skills'
    | 'agents'
   | 'developerConsole'
    | 'github'
@@ -78,6 +80,7 @@ const WORKSPACE_DETAILS: Record<
   dashboard: '查看愿景、PARA 健康度和项目动态。',
   askAnywhere: '围绕 vault 上下文持续进行 AI 对话。',
   tools: '检查已注册的随处问工具、权限级别和 OpenClaw 对齐进度。',
+  skills: '注册、编辑并选择随处问可注入的 Markdown 技能。',
   vision: '追踪目标与领域、项目、资源、里程碑之间的关系。',
   agents: '查看可复用角色模板、版本和跨项目执行覆盖。',
   developerConsole: '回放可追踪的 agent、收件箱、活动和 IPC 事件。',
@@ -182,6 +185,7 @@ export function deriveTopBarContext({
   const detail =
      view.kind === 'dashboard' ||
      view.kind === 'askAnywhere' ||
+     view.kind === 'skills' ||
      view.kind === 'agents' ||
     view.kind === 'github' ||
     view.kind === 'developerConsole' ||

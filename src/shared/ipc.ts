@@ -47,7 +47,13 @@ import type {
 import type { TraceableEvent, TraceableEventFilter, TraceableEventQueryResult } from './events';
 import type { ChatAction, RuntimeEvent as ChatRuntimeEvent } from './chat-protocol';
 import type { ComposerDraft, RuntimeSelection } from './ai-composer';
-import type { AgentToolRegistrySnapshot } from './agent-tools';
+import type {
+  AgentSkillDeleteInput,
+  AgentSkillRegistrySnapshot,
+  AgentSkillSaveInput,
+  AgentSkillView,
+  AgentToolRegistrySnapshot
+} from './agent-tools';
 import type {
   Conversation as ChatConversation,
   ConversationAnchor as ChatConversationAnchor,
@@ -320,6 +326,14 @@ import type {
   SDKEndpointView
 } from './runtime';
 import type {
+  AIConfigDefaults,
+  AIConfigSnapshot,
+  AIEmbeddingCredentialInput,
+  AIEmbeddingProviderInput,
+  AIEmbeddingProviderView,
+  AIEmbeddingTestResult
+} from './ai-config';
+import type {
   ApplyUserEditInput,
   EnsureSynthesisInput,
   SynthesisArtifact,
@@ -354,16 +368,22 @@ import type {
 } from './evidence';
 import type {
   CreateMemoryInput,
+  MemoryBackendDescriptor,
+  MemoryBackendId,
+  MemoryBackendStatus,
   MemoryCluster,
   MemoryDigestResult,
   MemoryFilter,
   MemoryGraph,
   MemoryNode,
+  MemorySourceSyncOptions,
+  MemorySourceSyncResult,
   PromoteMemoryToProjectResult,
   PromoteMemoryToResourceResult,
   RecallOptions,
   RecallResult,
   RecallStats,
+  UpdateMemoryBackendConfigInput,
   UpdateMemoryInput
 } from './memory';
 import type {
@@ -480,6 +500,14 @@ export const IPC = {
       decide: 'runtime:sdk:decide'
     }
   },
+  aiConfig: {
+    snapshot: 'aiConfig:snapshot',
+    upsertEmbeddingProvider: 'aiConfig:upsertEmbeddingProvider',
+    setEmbeddingSecret: 'aiConfig:setEmbeddingSecret',
+    deleteEmbeddingSecret: 'aiConfig:deleteEmbeddingSecret',
+    setDefaults: 'aiConfig:setDefaults',
+    testEmbedding: 'aiConfig:testEmbedding'
+  },
   runtimeSessions: {
     status: 'runtimeSessions:status',
     list: 'runtimeSessions:list',
@@ -488,6 +516,11 @@ export const IPC = {
   },
   tools: {
     snapshot: 'tools:snapshot'
+  },
+  skills: {
+    list: 'skills:list',
+    save: 'skills:save',
+    delete: 'skills:delete'
   },
   dashboard: {
     summary: 'dashboard:summary',
@@ -822,6 +855,9 @@ export const IPC = {
     updateExternalSessionSettings: 'evidence:updateExternalSessionSettings'
   },
   memory: {
+    backendStatus: 'memory:backendStatus',
+    updateBackendConfig: 'memory:updateBackendConfig',
+    testBackend: 'memory:testBackend',
     list: 'memory:list',
     get: 'memory:get',
     create: 'memory:create',
@@ -835,6 +871,7 @@ export const IPC = {
     clusters: 'memory:clusters',
     graph: 'memory:graph',
     feedback: 'memory:feedback',
+    syncTruthLayer: 'memory:syncTruthLayer',
     generateDigest: 'memory:generateDigest',
     event: 'memory:event'
   },
@@ -1566,6 +1603,14 @@ export interface OrbitApi {
       decide(input: RuntimeRouteInput): Promise<RuntimeRouteDecision>;
     };
   };
+  aiConfig: {
+    snapshot(): Promise<AIConfigSnapshot>;
+    upsertEmbeddingProvider(input: AIEmbeddingProviderInput): Promise<AIEmbeddingProviderView>;
+    setEmbeddingSecret(providerId: string, input: AIEmbeddingCredentialInput): Promise<AIEmbeddingProviderView>;
+    deleteEmbeddingSecret(providerId: string): Promise<AIEmbeddingProviderView>;
+    setDefaults(defaults: Partial<AIConfigDefaults>): Promise<AIConfigDefaults>;
+    testEmbedding(providerId: string, text?: string): Promise<AIEmbeddingTestResult>;
+  };
   runtimeSessions: {
     status(): Promise<RuntimeSessionBridgeStatus>;
     list(refresh?: boolean): Promise<RuntimeSessionGroups>;
@@ -1578,6 +1623,11 @@ export interface OrbitApi {
   };
   tools: {
     snapshot(): Promise<AgentToolRegistrySnapshot>;
+  };
+  skills: {
+    list(scope?: ChatConversationScope): Promise<AgentSkillRegistrySnapshot>;
+    save(input: AgentSkillSaveInput): Promise<AgentSkillView>;
+    delete(input: AgentSkillDeleteInput): Promise<void>;
   };
   dashboard: {
     summary(): Promise<DashboardSummary>;
@@ -1970,6 +2020,9 @@ export interface OrbitApi {
     updateExternalSessionSettings(patch: Partial<ExternalAISessionSettings>): Promise<ExternalAISessionSettings>;
   };
   memory: {
+    backendStatus(): Promise<MemoryBackendStatus>;
+    updateBackendConfig(input: UpdateMemoryBackendConfigInput): Promise<MemoryBackendStatus>;
+    testBackend(id?: MemoryBackendId): Promise<MemoryBackendDescriptor>;
     list(filter?: MemoryFilter): Promise<MemoryNode[]>;
     get(id: string): Promise<MemoryNode | null>;
     create(input: CreateMemoryInput): Promise<MemoryNode>;
@@ -1983,6 +2036,7 @@ export interface OrbitApi {
     clusters(): Promise<MemoryCluster[]>;
     graph(filter?: MemoryFilter): Promise<MemoryGraph>;
     feedback(id: string, helpful: boolean): Promise<MemoryNode>;
+    syncTruthLayer(options?: MemorySourceSyncOptions): Promise<MemorySourceSyncResult>;
     generateDigest(): Promise<MemoryDigestResult>;
     onEvent(cb: (event: { type: string; count?: number }) => void): () => void;
   };

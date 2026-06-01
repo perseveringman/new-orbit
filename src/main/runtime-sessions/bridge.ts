@@ -1,161 +1,229 @@
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import type {
   RuntimeSessionBridgeStatus,
   RuntimeSessionDetail,
   RuntimeSessionDisplaySettings,
   RuntimeSessionGroups,
   RuntimeSessionListItem,
-  RuntimeSessionMarkdownResult
+  RuntimeSessionMarkdownResult,
+  RuntimeSessionMessage
 } from '@shared/runtime-sessions';
+import type { EvidenceSource } from '@shared/evidence';
+import {
+  defaultExternalAISessionRoots,
+  listExternalAISessionSources,
+  readExternalAISessionSourceText
+} from '../evidence/external-ai-sessions';
 
-const DEFAULT_ROOT = path.join(os.homedir(), 'Developer', 'ai-session-to-md');
 const AGENT_KEYS = ['claude', 'claude-internal', 'amp', 'copilot', 'codebuddy', 'box', 'codex'] as const;
 const CACHE_LIMIT_PER_AGENT = 200;
+const DETAIL_SCAN_LIMIT_PER_AGENT = 5000;
+const BUILT_IN_SCANNER_ID = 'orbit://external-ai-sessions';
 
 type AgentKey = (typeof AGENT_KEYS)[number];
 
-interface AISessionToMdModule {
-  getCachedSessions(agent: string): unknown[] | null;
-  setCachedSessions(agent: string, data: unknown[]): void;
-  invalidateCache(agent?: string): void;
-  listClaudeSessions(): Promise<unknown[]>;
-  listClaudeInternalSessions(): Promise<unknown[]>;
-  listAmpSessions(): Promise<unknown[]>;
-  listCopilotSessions(): Promise<unknown[]>;
-  listCodebuddySessions(): Promise<unknown[]>;
-  listBoxSessions(): Promise<unknown[]>;
-  listCodexSessions(): Promise<unknown[]>;
-  getSession(agent: string, id: string): Promise<RuntimeSessionDetail | null>;
-  sessionToMarkdown(session: RuntimeSessionDetail, options?: Partial<RuntimeSessionDisplaySettings>): string;
-}
-
-let modulePromise: Promise<AISessionToMdModule> | null = null;
+let groupsCache: RuntimeSessionGroups | null = null;
 
 export async function runtimeSessionBridgeStatus(): Promise<RuntimeSessionBridgeStatus> {
-  const root = resolveBridgeRoot();
-  const modulePath = bridgeModulePath(root);
-  try {
-    await fs.access(modulePath);
-    return { available: true, root, modulePath };
-  } catch {
-    return {
-      available: false,
-      root,
-      modulePath,
-      message: `找不到 ai-session-to-md：${modulePath}`
-    };
-  }
+  const roots = defaultExternalAISessionRoots();
+  const rootChecks = await Promise.all(roots.map(async (root) => {
+    const stat = await fs.stat(root.dir).catch(() => null);
+    return stat ? root : null;
+  }));
+  const existingRoots = rootChecks.filter((root): root is (typeof roots)[number] => Boolean(root));
+  return {
+    available: true,
+    root: (existingRoots.length ? existingRoots : roots)
+      .map((root) => `${root.agent}:${root.dir}`)
+      .join(', '),
+    modulePath: BUILT_IN_SCANNER_ID,
+    ...(!existingRoots.length ? { message: '未发现默认本地 AI 会话目录，扫描结果为空。' } : {})
+  };
 }
 
 export async function listRuntimeSessions(refresh = false): Promise<RuntimeSessionGroups> {
-  const mod = await loadAISessionToMdModule();
-  if (refresh) mod.invalidateCache();
+  if (!refresh && groupsCache) return groupsCache;
 
   const entries = await Promise.all(
     AGENT_KEYS.map(async (agent) => {
-      let sessions = mod.getCachedSessions(agent);
-      if (!sessions) {
-        sessions = await listForAgent(mod, agent);
-        mod.setCachedSessions(agent, sessions);
-      }
-      return [agent, sessions.slice(0, CACHE_LIMIT_PER_AGENT).map(normalizeListItem)] as const;
+      const sources = await listSourcesForAgent(agent, CACHE_LIMIT_PER_AGENT);
+      return [agent, sources.map((source) => sourceToListItem(agent, source))] as const;
     })
   );
 
   const groups = Object.fromEntries(entries) as Omit<RuntimeSessionGroups, 'total'>;
-  return {
+  groupsCache = {
     ...groups,
     total: entries.reduce((sum, [, sessions]) => sum + sessions.length, 0)
   };
+  return groupsCache;
 }
 
 export async function getRuntimeSession(agent: string, id: string): Promise<RuntimeSessionDetail | null> {
-  const mod = await loadAISessionToMdModule();
-  return mod.getSession(normalizeAgentKey(agent), id);
+  const normalizedAgent = normalizeAgentKey(agent);
+  const source = await findSource(normalizedAgent, id);
+  if (!source) return null;
+  const text = await readSessionText(source, true);
+  const messages = textToMessages(text, source);
+  return {
+    id,
+    agent: normalizedAgent,
+    source: metadataString(source, 'source') ?? normalizedAgent,
+    title: source.title,
+    projectName: projectNameForSource(source),
+    summary: source.summary,
+    timestamp: source.time_range?.from ?? source.updated_at,
+    messages
+  };
 }
 
 export async function getRuntimeSessionMarkdown(
   agent: string,
   id: string,
-  settings?: Partial<RuntimeSessionDisplaySettings>
+  settings: Partial<RuntimeSessionDisplaySettings> = {}
 ): Promise<RuntimeSessionMarkdownResult> {
-  const mod = await loadAISessionToMdModule();
-  const session = await mod.getSession(normalizeAgentKey(agent), id);
-  if (!session) throw new Error(`Session not found: ${agent}/${id}`);
+  const normalizedAgent = normalizeAgentKey(agent);
+  const source = await findSource(normalizedAgent, id);
+  if (!source) throw new Error(`Session not found: ${agent}/${id}`);
+  const includeTools = settings.showToolResults !== false;
+  const text = await readSessionText(source, includeTools);
+  const messages = textToMessages(text, source).filter((message) => messageVisible(message, settings));
   return {
-    text: mod.sessionToMarkdown(session, settings),
-    filename: `${session.id.replace(/\//g, '_')}.md`
+    text: sessionToMarkdown(source, messages),
+    filename: `${sanitizeFilename(source.title || id)}.md`
   };
 }
 
-async function loadAISessionToMdModule(): Promise<AISessionToMdModule> {
-  if (!modulePromise) {
-    modulePromise = (async () => {
-      const status = await runtimeSessionBridgeStatus();
-      if (!status.available) throw new Error(status.message ?? 'ai-session-to-md unavailable');
-      return import(pathToFileURL(status.modulePath).href) as Promise<AISessionToMdModule>;
-    })();
-  }
-  return modulePromise;
+async function listSourcesForAgent(agent: AgentKey, limit: number): Promise<EvidenceSource[]> {
+  return listExternalAISessionSources({
+    includeAgents: [agent],
+    limit
+  });
 }
 
-function resolveBridgeRoot(): string {
-  return process.env['AI_SESSION_TO_MD_ROOT'] || DEFAULT_ROOT;
+async function findSource(agent: AgentKey, id: string): Promise<EvidenceSource | null> {
+  const sources = await listSourcesForAgent(agent, DETAIL_SCAN_LIMIT_PER_AGENT);
+  return sources.find((source) => {
+    const relPath = metadataString(source, 'rel_path') ?? source.canonical_ref;
+    return relPath === id || source.canonical_ref === id || source.id === id;
+  }) ?? null;
 }
 
-function bridgeModulePath(root: string): string {
-  return path.join(root, 'lib', 'sessions.js');
-}
-
-function listForAgent(mod: AISessionToMdModule, agent: AgentKey): Promise<unknown[]> {
-  switch (agent) {
-    case 'claude':
-      return mod.listClaudeSessions();
-    case 'claude-internal':
-      return mod.listClaudeInternalSessions();
-    case 'amp':
-      return mod.listAmpSessions();
-    case 'copilot':
-      return mod.listCopilotSessions();
-    case 'codebuddy':
-      return mod.listCodebuddySessions();
-    case 'box':
-      return mod.listBoxSessions();
-    case 'codex':
-      return mod.listCodexSessions();
-  }
-}
-
-function normalizeListItem(value: unknown): RuntimeSessionListItem {
-  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+function sourceToListItem(agent: AgentKey, source: EvidenceSource): RuntimeSessionListItem {
+  const relPath = metadataString(source, 'rel_path') ?? source.canonical_ref;
   return {
-    id: stringValue(record['id']) || 'unknown',
-    agent: stringValue(record['agent']) || 'unknown',
-    title: stringValue(record['title']),
-    summary: stringValue(record['summary']),
-    timestamp: stringValue(record['timestamp']),
-    sortTimestamp: stringValue(record['sortTimestamp']) || undefined,
-    projectName: stringValue(record['projectName']) || undefined,
-    source: stringValue(record['source']) || undefined,
-    path: stringValue(record['path']) || undefined,
-    size: numberValue(record['size']),
-    model: stringValue(record['model']) || undefined
+    id: relPath,
+    agent,
+    title: source.title,
+    summary: source.summary ?? '',
+    timestamp: source.time_range?.from ?? source.updated_at,
+    sortTimestamp: source.time_range?.to ?? source.updated_at,
+    projectName: projectNameForSource(source),
+    source: metadataString(source, 'source') ?? agent,
+    path: metadataString(source, 'path') ?? source.canonical_ref,
+    size: source.fingerprint.size_bytes
   };
+}
+
+async function readSessionText(source: EvidenceSource, includeTools: boolean): Promise<string> {
+  return readExternalAISessionSourceText({
+    ...source,
+    privacy: {
+      ...source.privacy,
+      allow_tool_outputs: includeTools
+    }
+  }, 'safe_projection');
+}
+
+function textToMessages(text: string, source: EvidenceSource): RuntimeSessionMessage[] {
+  const blocks = text
+    .split(/\n{2,}/u)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (!blocks.length && source.summary) {
+    return [{
+      role: 'assistant',
+      content: source.summary,
+      timestamp: source.updated_at
+    }];
+  }
+  return blocks.map((block, index) => {
+    const parsed = block.match(/^([a-z][\w.-]*):\s*([\s\S]*)$/iu);
+    const role = normalizeMessageRole(parsed?.[1]);
+    return {
+      role,
+      content: parsed?.[2]?.trim() || block,
+      timestamp: index === 0
+        ? source.time_range?.from ?? source.updated_at
+        : index === blocks.length - 1
+          ? source.time_range?.to ?? source.updated_at
+          : undefined
+    };
+  });
+}
+
+function sessionToMarkdown(source: EvidenceSource, messages: RuntimeSessionMessage[]): string {
+  const header = [
+    `# ${source.title}`,
+    source.summary ? `> ${source.summary}` : '',
+    '',
+    `- Agent: ${metadataString(source, 'agent') ?? 'unknown'}`,
+    projectNameForSource(source) ? `- Project: ${projectNameForSource(source)}` : '',
+    `- Source: ${source.canonical_ref}`,
+    ''
+  ].filter((line) => line !== '').join('\n');
+  const body = messages.map((message) => [
+    `## ${roleLabel(message.role)}`,
+    message.timestamp ? `_${message.timestamp}_` : '',
+    '',
+    message.content ?? ''
+  ].filter((line) => line !== '').join('\n')).join('\n\n');
+  return `${header}\n${body}`.trim();
+}
+
+function messageVisible(message: RuntimeSessionMessage, settings: Partial<RuntimeSessionDisplaySettings>): boolean {
+  if (message.role === 'user') return settings.showUser !== false;
+  if (message.role === 'assistant') return settings.showAssistant !== false;
+  if (message.role === 'tool') return settings.showToolResults !== false;
+  return true;
+}
+
+function normalizeMessageRole(role: string | undefined): RuntimeSessionMessage['role'] {
+  const normalized = role?.toLowerCase();
+  if (normalized === 'user' || normalized === 'assistant' || normalized === 'tool' || normalized === 'system') {
+    return normalized;
+  }
+  if (normalized?.includes('tool')) return 'tool';
+  if (normalized?.includes('system')) return 'system';
+  return 'assistant';
+}
+
+function roleLabel(role: string): string {
+  if (role === 'user') return 'User';
+  if (role === 'assistant') return 'Assistant';
+  if (role === 'tool') return 'Tool';
+  if (role === 'system') return 'System';
+  return role;
+}
+
+function projectNameForSource(source: EvidenceSource): string | undefined {
+  const project = metadataString(source, 'project_name');
+  if (project) return project;
+  return source.scope_refs?.find((scope) => scope.kind === 'project')?.ref;
+}
+
+function metadataString(source: EvidenceSource, key: string): string | undefined {
+  const value = source.metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function sanitizeFilename(value: string): string {
+  const name = value.replace(/[\\/:*?"<>|]+/gu, '-').replace(/\s+/gu, ' ').trim();
+  return (name || 'runtime-session').slice(0, 120);
 }
 
 function normalizeAgentKey(agent: string): AgentKey {
   if (agent === 'claude-code') return 'claude';
   if ((AGENT_KEYS as readonly string[]).includes(agent)) return agent as AgentKey;
   throw new Error(`Unknown runtime session agent: ${agent}`);
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
-function numberValue(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

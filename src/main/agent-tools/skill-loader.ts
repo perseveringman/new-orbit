@@ -64,32 +64,45 @@ export interface SkillLoaderDeps {
   appSkillsDir?: string;
 }
 
+export async function resolveSkillDirs(
+  deps: SkillLoaderDeps
+): Promise<Array<{ dir: string; source: SkillSource }>> {
+  const dirs: Array<{ dir: string; source: SkillSource }> = [];
+  const appDir = deps.appSkillsDir ?? path.join(os.homedir(), '.orbit', 'skills');
+  dirs.push({ dir: appDir, source: 'app' });
+  if (deps.vaultPath) {
+    dirs.push({
+      dir: path.join(deps.vaultPath, ORBIT_DIR, 'skills'),
+      source: 'vault'
+    });
+    const spaceDir = await resolveSpaceDir(deps.vaultPath, deps.scope);
+    if (spaceDir) {
+      dirs.push({ dir: path.join(spaceDir, ORBIT_DIR, 'skills'), source: 'space' });
+    }
+  }
+  return dirs;
+}
+
 export class SkillLoader {
   constructor(private readonly deps: SkillLoaderDeps) {}
 
   async load(): Promise<LoadedSkill[]> {
-    const dirs: Array<{ dir: string; source: SkillSource }> = [];
-    const appDir = this.deps.appSkillsDir ?? path.join(os.homedir(), '.orbit', 'skills');
-    dirs.push({ dir: appDir, source: 'app' });
-    if (this.deps.vaultPath) {
-      dirs.push({
-        dir: path.join(this.deps.vaultPath, ORBIT_DIR, 'skills'),
-        source: 'vault'
-      });
-      const spaceDir = await resolveSpaceDir(this.deps.vaultPath, this.deps.scope);
-      if (spaceDir) {
-        dirs.push({ dir: path.join(spaceDir, ORBIT_DIR, 'skills'), source: 'space' });
-      }
-    }
-
     const merged = new Map<string, LoadedSkill>();
-    for (const { dir, source } of dirs) {
-      for (const skill of await this.scanDir(dir, source)) {
-        merged.set(skill.name, skill);
-      }
+    for (const skill of await this.loadAll()) {
+      merged.set(skill.name, skill);
     }
 
     return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async loadAll(): Promise<LoadedSkill[]> {
+    const out: LoadedSkill[] = [];
+    for (const { dir, source } of await resolveSkillDirs(this.deps)) {
+      out.push(...(await this.scanDir(dir, source)));
+    }
+    return out.sort(
+      (a, b) => sourceOrder(a.source) - sourceOrder(b.source) || a.name.localeCompare(b.name)
+    );
   }
 
   private async scanDir(dir: string, source: SkillSource): Promise<LoadedSkill[]> {
@@ -161,6 +174,12 @@ export class SkillLoader {
     }
     return undefined;
   }
+}
+
+function sourceOrder(source: SkillSource): number {
+  if (source === 'app') return 0;
+  if (source === 'vault') return 1;
+  return 2;
 }
 
 // =================================================================================

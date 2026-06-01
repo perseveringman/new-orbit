@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { extractMemoryCandidates } from '../src/main/memory/extractor';
+import { getMemoryBackendStatus, updateActiveMemoryBackendConfig } from '../src/main/memory/backend-registry';
 import { generateMemoryDigest } from '../src/main/memory/digest-synthesis';
+import { HyMemoryBackend } from '../src/main/memory/hy-memory-backend';
 import { recallContext } from '../src/main/memory/recall-service';
 import { createMemoryStore } from '../src/main/memory/store';
 import { deriveMemoryLayer, deriveMemoryStability } from '../src/shared/memory';
@@ -120,5 +122,103 @@ describe('Memory Layer', () => {
     expect(digest.artifact.provenance.prompt_version).toBe('memory.digest.v1');
     expect(digest.artifact.payload.layer_counts.procedural.total).toBe(1);
     expect(digest.clusters[0].theme).toBe('pattern');
+  });
+
+  it('switches the active memory backend through vault-level config', async () => {
+    const pluginPath = path.join(vaultPath, 'hy-plugin');
+    await fs.mkdir(pluginPath, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginPath, 'openclaw.plugin.json'),
+      JSON.stringify({ id: 'openclaw-hy-memory', name: 'HY Memory', version: '0.1.0', kind: 'memory' }),
+      'utf8'
+    );
+
+    const initial = await getMemoryBackendStatus(vaultPath);
+    expect(initial.active).toBe('orbit');
+    expect(initial.backends.find((backend) => backend.id === 'orbit')?.configured).toBe(true);
+
+    const updated = await updateActiveMemoryBackendConfig(vaultPath, {
+      active: 'hy-memory',
+      hyMemory: {
+        pluginPath,
+        serverUrl: 'http://127.0.0.1:1',
+        userId: 'orbit-test',
+        agentId: 'orbit',
+        sessionId: 'test-session'
+      }
+    });
+
+    expect(updated.active).toBe('hy-memory');
+    const hy = updated.backends.find((backend) => backend.id === 'hy-memory');
+    expect(hy?.active).toBe(true);
+    expect(hy?.configured).toBe(true);
+    expect(hy?.plugin?.id).toBe('openclaw-hy-memory');
+  });
+
+  it('falls back to synced HY memories for broad recall probes', async () => {
+    await fs.mkdir(path.join(vaultPath, '.orbit', 'memory'), { recursive: true });
+    await fs.writeFile(
+      path.join(vaultPath, '.orbit', 'memory', 'source-sync.json'),
+      JSON.stringify({
+        version: 1,
+        records: {
+          'hy-memory:evidence:external_ai_session:session-1': {
+            backend: 'hy-memory',
+            source_id: 'evidence:external_ai_session:session-1',
+            source_kind: 'external_ai_session',
+            source_title: 'HY Memory 接入',
+            fingerprint: 'sha256:test',
+            memory_ids: ['hy:mem-1'],
+            updated_at: '2026-06-01T00:00:00.000Z'
+          }
+        }
+      }),
+      'utf8'
+    );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/healthz')) return Response.json({ status: 'ok' });
+      if (url.endsWith('/api/v1/search')) return Response.json({ memories: { profile: [], proactive: [], normal: [] } });
+      if (url.endsWith('/api/v1/memories/mem-1')) {
+        return Response.json({
+          memory_id: 'mem-1',
+          content: '本地 AI 会话：Orbit 记忆架构\n最近在推进 HY Memory 接入、召回测试和来源同步。',
+          confidence: 0.92,
+          gmt_created: 1780305530
+        });
+      }
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }) as typeof fetch;
+
+    try {
+      const backend = new HyMemoryBackend(vaultPath, {
+        pluginPath: vaultPath,
+        serverUrl: 'http://hy.test',
+        userId: 'orbit-test',
+        agentId: 'orbit',
+        sessionId: 'test-session',
+        topK: 5,
+        searchThreshold: 0.3,
+        autoStartServer: false,
+        autoInstallRuntime: false,
+        pythonPath: 'python3',
+        serverPort: 1,
+        installDirectory: path.join(vaultPath, 'venv'),
+        sdkPackage: 'hy-mem-internal',
+        pipIndexUrl: 'https://example.test/simple',
+        embeddingProxyPort: 2,
+        logLevel: 'INFO'
+      });
+      const result = await backend.recall('我最近在推进什么？', { max_memories: 3, min_confidence: 0.01 });
+
+      expect(result.memories).toHaveLength(1);
+      expect(result.memories[0].summary).toContain('HY Memory 接入');
+      expect(result.matches[0].score).toBeGreaterThan(0);
+      expect(result.explanation).toContain('source-backed fallback');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

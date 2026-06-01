@@ -1,4 +1,5 @@
 import type { Resource } from '../resource';
+import type { EvidenceSourceKind } from '../evidence';
 import type { SynthesisArtifact, SynthesisSource } from '../synthesis';
 
 export const MEMORY_KINDS = ['interest', 'preference', 'pattern', 'lesson', 'entity_memory', 'goal'] as const;
@@ -183,6 +184,91 @@ export interface MemoryDigestResult {
   artifact: SynthesisArtifact<MemoryDigestPayload>;
   memories: MemoryNode[];
   clusters: MemoryCluster[];
+}
+
+export interface MemorySourceSyncOptions {
+  sourceKinds?: EvidenceSourceKind[];
+  limit?: number;
+  includeExternalAISessions?: boolean;
+  maxMemoriesPerSource?: number;
+  force?: boolean;
+  archiveMissingSources?: boolean;
+}
+
+export interface MemorySourceSyncError {
+  source_id: string;
+  title: string;
+  error: string;
+}
+
+export interface MemorySourceSyncResult {
+  backend: MemoryBackendId;
+  source_count: number;
+  processed_count: number;
+  skipped_count: number;
+  created_count: number;
+  updated_count: number;
+  archived_count: number;
+  memory_count: number;
+  by_kind: Partial<Record<EvidenceSourceKind, number>>;
+  errors: MemorySourceSyncError[];
+  synced_at: string;
+}
+
+export const MEMORY_BACKEND_IDS = ['orbit', 'hy-memory'] as const;
+export type MemoryBackendId = (typeof MEMORY_BACKEND_IDS)[number];
+
+export interface HyMemoryBackendConfig {
+  pluginPath: string;
+  serverUrl: string;
+  userId: string;
+  agentId: string;
+  sessionId: string;
+  topK: number;
+  searchThreshold: number;
+  autoStartServer: boolean;
+  autoInstallRuntime: boolean;
+  pythonPath: string;
+  serverPort: number;
+  installDirectory: string;
+  sdkPackage: string;
+  pipIndexUrl: string;
+  embeddingProxyPort: number;
+  logLevel: string;
+}
+
+export interface MemoryBackendConfig {
+  active: MemoryBackendId;
+  hyMemory: HyMemoryBackendConfig;
+}
+
+export interface MemoryBackendDescriptor {
+  id: MemoryBackendId;
+  label: string;
+  description: string;
+  capabilities: string[];
+  active: boolean;
+  configured: boolean;
+  health: 'ready' | 'unavailable' | 'unknown';
+  details?: string;
+  plugin?: {
+    id: string;
+    name: string;
+    version?: string;
+    kind?: string;
+    path: string;
+  };
+}
+
+export interface MemoryBackendStatus {
+  active: MemoryBackendId;
+  config: MemoryBackendConfig;
+  backends: MemoryBackendDescriptor[];
+}
+
+export interface UpdateMemoryBackendConfigInput {
+  active?: MemoryBackendId;
+  hyMemory?: Partial<HyMemoryBackendConfig>;
 }
 
 export function isMemoryKind(value: string): value is MemoryKind {

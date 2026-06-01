@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {
   Bot,
+  Check,
   Cpu,
   FilePlus2,
   Globe2,
@@ -16,6 +17,7 @@ import {
   Loader2,
   Mic,
   SendHorizontal,
+  Sparkles,
   Telescope,
   X
 } from 'lucide-react';
@@ -53,6 +55,7 @@ const FALLBACK_OPTIONS: ComposerOptions = {
   runtimes: [],
   models: [],
   profiles: [{ id: 'default-agent', label: '默认 Agent' }],
+  skills: [],
   defaultSelection: { agentProfileId: 'default-agent' }
 };
 
@@ -81,6 +84,7 @@ export function AIComposer({
   const [localSelection, setLocalSelection] = useState<RuntimeSelection>(() =>
     normalizeRuntimeSelection(selection ?? options.defaultSelection)
   );
+  const [selectedSkillRefs, setSelectedSkillRefs] = useState<string[]>([]);
   const currentSelection = normalizeRuntimeSelection(selection ?? localSelection);
   const mergedCapabilities: ComposerCapabilities = {
     canSend: true,
@@ -96,10 +100,17 @@ export function AIComposer({
     currentSelection.agentProfileId ?? options.defaultSelection.agentProfileId ?? options.profiles[0]?.id ?? '';
   const availableModels = modelsForSelection(options, currentSelection);
   const modelValue = selectedModelValue(availableModels, currentSelection);
+  const skillOptions = options.skills ?? [];
 
   useEffect(() => {
     if (selection) setLocalSelection(normalizeRuntimeSelection(selection));
   }, [selection]);
+
+  useEffect(() => {
+    setSelectedSkillRefs((current) =>
+      current.filter((name) => skillOptions.some((skill) => skill.id === name && !skill.disabled))
+    );
+  }, [skillOptions]);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -186,6 +197,7 @@ export function AIComposer({
       text: trimmed,
       attachments: attachments.map(stripAttachmentPreview),
       selection: currentSelection,
+      ...(selectedSkillRefs.length > 0 ? { skillRefs: selectedSkillRefs } : {}),
       voice: voice.status === 'idle' ? undefined : voice,
       clientMeta: {
         sourceSurface,
@@ -233,7 +245,7 @@ export function AIComposer({
   return (
     <form onSubmit={handleSubmit} className={rootClassName}>
       <div className={compact ? 'space-y-2' : 'space-y-3'}>
-        <div className="flex min-w-0 items-center gap-2 px-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 px-1">
           <SelectPill
             icon={<Cpu size={14} />}
             label="切换模型"
@@ -268,6 +280,12 @@ export function AIComposer({
               disabled: runtime.disabled
             }))}
             fallbackLabel="Runtime"
+          />
+          <SkillPicker
+            options={skillOptions}
+            selected={selectedSkillRefs}
+            disabled={disabled || skillOptions.length === 0}
+            onChange={setSelectedSkillRefs}
           />
         </div>
 
@@ -398,6 +416,99 @@ function SelectPill({
         ))}
       </select>
     </label>
+  );
+}
+
+function SkillPicker({
+  options,
+  selected,
+  disabled,
+  onChange
+}: {
+  options: ComposerOptions['skills'];
+  selected: string[];
+  disabled?: boolean;
+  onChange: (next: string[]) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const selectedSet = new Set(selected);
+  const activeOptions = options ?? [];
+  const label = selected.length > 0 ? `技能 ${selected.length}` : '技能 自动';
+
+  function toggle(id: string): void {
+    onChange(selectedSet.has(id) ? selected.filter((item) => item !== id) : [...selected, id]);
+  }
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-label="选择技能"
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex h-9 max-w-52 items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-900 outline-none transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+      >
+        <Sparkles size={14} className="text-neutral-500 dark:text-neutral-400" />
+        <span className="truncate">{label}</span>
+      </button>
+      {open && !disabled ? (
+        <div className="absolute left-0 top-10 z-30 w-80 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-950">
+          <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
+            <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">选择技能</span>
+            <button
+              type="button"
+              onClick={() => {
+                onChange([]);
+                setOpen(false);
+              }}
+              className="text-xs text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+            >
+              自动匹配
+            </button>
+          </div>
+          <div className="max-h-72 overflow-y-auto p-2">
+            {activeOptions.map((skill) => {
+              const checked = selectedSet.has(skill.id);
+              return (
+                <button
+                  key={skill.id}
+                  type="button"
+                  disabled={skill.disabled}
+                  onClick={() => toggle(skill.id)}
+                  className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-neutral-900"
+                >
+                  <span
+                    className={[
+                      'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                      checked
+                        ? 'border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950'
+                        : 'border-neutral-300 text-transparent dark:border-neutral-700'
+                    ].join(' ')}
+                  >
+                    <Check size={11} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate font-mono text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                        {skill.label}
+                      </span>
+                      {skill.source ? (
+                        <span className="shrink-0 rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                          {skill.source}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-0.5 block line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">
+                      {skill.disabledReason || skill.description || '未填写描述'}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Orbit 插件体系设计方案 — orbit.app/1</title>
+<style>
+  :root{
+    --bg:#0c0f17;--panel:#131825;--panel2:#1a2030;--line:#262d3f;
+    --fg:#e8ecf5;--mut:#9aa6bd;--dim:#6c7794;
+    --acc:#6aa6ff;--acc2:#8b7dff;--ok:#43c59e;--warn:#f5b945;--danger:#f0666f;
+    --code:#0a0d14;--radius:14px;
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:linear-gradient(180deg,#0b0e15,#0c0f17 240px);color:var(--fg);
+    font:15px/1.7 -apple-system,'PingFang SC','Segoe UI',Roboto,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 28px 120px}
+  header.hero{padding:44px 40px;border:1px solid var(--line);border-radius:22px;
+    background:radial-gradient(900px 300px at 12% -10%,rgba(106,166,255,.18),transparent),
+               radial-gradient(700px 280px at 95% 0,rgba(139,125,255,.16),transparent),var(--panel);
+    margin-bottom:40px}
+  .badge{display:inline-block;font:600 12px/1 var(--mono);letter-spacing:.6px;
+    color:var(--acc);background:rgba(106,166,255,.12);border:1px solid rgba(106,166,255,.3);
+    padding:7px 12px;border-radius:999px;margin-bottom:18px}
+  h1{font-size:34px;margin:0 0 12px;letter-spacing:-.4px}
+  .sub{color:var(--mut);font-size:16px;max-width:760px}
+  h2{font-size:24px;margin:54px 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  h2 .n{color:var(--acc);font:700 16px/1 var(--mono);margin-right:10px}
+  h3{font-size:18px;margin:30px 0 12px;color:#dbe3f4}
+  h4{font-size:15px;margin:18px 0 8px;color:var(--acc2)}
+  p{margin:10px 0;color:#d4dbec}
+  code{font-family:var(--mono);font-size:.88em;background:rgba(255,255,255,.06);
+    padding:2px 6px;border-radius:5px;color:#cfe0ff}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;overflow:auto;margin:14px 0;font-family:var(--mono);font-size:13px;line-height:1.6}
+  pre code{background:none;padding:0;color:#d6e2f5}
+  .mut{color:var(--mut)}
+  .grid{display:grid;gap:16px}
+  .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:820px){.g2,.g3{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px}
+  .card.acc{border-color:rgba(106,166,255,.4);background:linear-gradient(180deg,rgba(106,166,255,.07),var(--panel))}
+  .card h4{margin-top:0}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--acc);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.4px}
+  td code{white-space:nowrap}
+  .tag{display:inline-block;font:600 11px/1 var(--mono);padding:4px 8px;border-radius:6px;margin:2px 4px 2px 0}
+  .t-read{background:rgba(67,197,158,.15);color:var(--ok)}
+  .t-write{background:rgba(245,185,69,.15);color:var(--warn)}
+  .t-danger{background:rgba(240,102,111,.15);color:var(--danger)}
+  .t-core{background:rgba(106,166,255,.15);color:var(--acc)}
+  ul,ol{margin:10px 0;padding-left:22px}li{margin:6px 0;color:#d4dbec}
+  .callout{border-left:3px solid var(--acc);background:rgba(106,166,255,.06);
+    padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0}
+  .callout.warn{border-color:var(--warn);background:rgba(245,185,69,.07)}
+  .callout.ok{border-color:var(--ok);background:rgba(67,197,158,.07)}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0}
+  .step{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px}
+  .arrow{color:var(--dim);font-weight:700}
+  .toc{columns:2;column-gap:32px}
+  @media(max-width:820px){.toc{columns:1}}
+  .toc a{color:var(--mut);text-decoration:none;display:block;padding:5px 0;border-bottom:1px dashed transparent}
+  .toc a:hover{color:var(--acc)}
+  .kicker{font:600 12px/1 var(--mono);color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+  footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--line);color:var(--dim);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <span class="badge">ORBIT PLUGIN SYSTEM · 协议代号 orbit.app/1</span>
+  <h1>Orbit 插件体系设计方案</h1>
+  <p class="sub">让用户在 Orbit 里搭出一个「一等公民」式的扩展：拥有自己的页面布局、文件优先的数据结构、以及暴露给 Agent 的 tools，并与 Orbit 的 Vault / Inbox / Activity / Approval 等核心能力无缝运转起来。本方案基于对 Orbit 现有 Electron 三进程架构与 Shadow <code>shadow.app/1</code> 协议的对照分析得出。</p>
+</header>
+
+<div class="card">
+  <span class="kicker">目录</span>
+  <div class="toc" style="margin-top:12px">
+    <a href="#s1">1. 设计目标与 Shadow 对照</a>
+    <a href="#s2">2. Orbit 现有架构的 5 个挂载点</a>
+    <a href="#s3">3. 插件形态选型（关键决策）</a>
+    <a href="#s4">4. 插件包结构与 Manifest</a>
+    <a href="#s5">5. 文件优先的数据结构</a>
+    <a href="#s6">6. 页面布局：注册一等 View</a>
+    <a href="#s7">7. 暴露 Tools 给 Orbit Agent</a>
+    <a href="#s8">8. 能力网关：插件如何用 Orbit 能力</a>
+    <a href="#s9">9. 安全 / 权限 / 审批</a>
+    <a href="#s10">10. 生命周期与运行时</a>
+    <a href="#s11">11. 落地路线图（分阶段）</a>
+    <a href="#s12">12. 需要你确认的边界问题</a>
+  </div>
+</div>
+
+<h2 id="s1"><span class="n">01</span>设计目标与 Shadow 对照</h2>
+<p>你要的能力可以拆成四条硬指标，每条都需要对接 Orbit 的一个既有子系统：</p>
+<table>
+  <tr><th>诉求</th><th>含义</th><th>对接 Orbit 子系统</th></tr>
+  <tr><td>能用 Orbit 的能力</td><td>插件可读写 vault、提任务、发 Inbox、查搜索/语义索引</td><td><code>CliHandlerRegistry</code> + 新增 <code>OrbitCapabilityGateway</code></td></tr>
+  <tr><td>有自己的页面布局</td><td>像 Kanban/Feed 一样在主工作区有独立 View + 右侧栏 profile</td><td><code>VaultViewKind</code> + <code>SURFACE_PROFILES</code> + 新增 <code>PluginViewHost</code></td></tr>
+  <tr><td>文件优先的数据结构</td><td>插件数据是 Markdown/JSON 落在 vault 里，Git 可追踪</td><td>Vault <code>.orbit/</code> 布局 + <code>RefmapStore</code> 约定</td></tr>
+  <tr><td>暴露 tools 给 Orbit</td><td>插件命令自动注册进 <code>OrbitToolRegistry</code>，Agent 可调</td><td><code>AgentToolDef</code> + <code>OrbitToolExecutor</code></td></tr>
+</table>
+
+<div class="callout">
+  <strong>与 Shadow 的本质差异：</strong>Shadow 的 <code>shadow.app/1</code> 插件是<em>跨进程的独立 HTTP 服务</em>（manifest URL + OAuth 内省 + iframe）。Orbit 是单机 Electron 本地优先应用，没有多租户服务端，因此<strong>不应照搬 HTTP/OAuth 那套</strong>。Orbit 插件应是<em>进程内沙箱模块 + 文件契约</em>。但 Shadow 的三个抽象值得继承：<b>(1) Manifest 声明能力</b>、<b>(2) Command = JSON Schema 化的 RPC</b>、<b>(3) iframe + Bridge 做 UI 隔离</b>。</p>
+</div>
+
+<h3>从 Shadow 借鉴 → 映射到 Orbit</h3>
+<table>
+  <tr><th>Shadow shadow.app/1</th><th>Orbit orbit.app/1 对应物</th></tr>
+  <tr><td><code>/.well-known/shadow-app.json</code> Manifest</td><td><code>plugin.json</code>（本地包内 manifest，无需 URL）</td></tr>
+  <tr><td>OAuth2 Bearer + Token Introspection</td><td>主进程内 <code>CapabilityGrant</code>（能力授予表，无网络）</td></tr>
+  <tr><td>commands[] + inputSchema</td><td>commands[] → 直接生成 <code>AgentToolDef</code>（已有 JSON Schema 机制）</td></tr>
+  <tr><td>iframe.entry + allowedOrigins + postMessage Bridge</td><td><code>&lt;webview&gt;</code> / iframe + <code>OrbitBridge</code> postMessage</td></tr>
+  <tr><td>shadow.outbox.inboxTasks（回写 Buddy Inbox）</td><td>插件命令返回 <code>orbit.outbox</code> → 写 Orbit Inbox / Approval</td></tr>
+  <tr><td>access.defaultPermissions / approvalMode</td><td>复用 Orbit 既有 <code>AuthorityPermission / AuthorityRiskLevel</code></td></tr>
+</table>
+<h2 id="s2"><span class="n">02</span>Orbit 现有架构的 5 个挂载点</h2>
+<p>插件体系不需要新造轮子——Orbit 已经把所有扩展点都铺好了，插件系统本质是把这 5 个点「编织」起来：</p>
+<div class="grid g2">
+  <div class="card"><h4>① IPC 契约 (<code>src/shared/ipc.ts</code>)</h4><p>main/preload/renderer 单一契约。新增 <code>plugin</code> namespace：<code>plugin:list / install / activate / invoke / viewState</code>。preload 经 <code>contextBridge</code> 暴露 <code>window.orbit.plugin.*</code>。</p></div>
+  <div class="card"><h4>② Agent Tool 注册表 (<code>main/agent-tools/registry.ts</code>)</h4><p><code>OrbitToolRegistry.register(AgentToolDef)</code> 已支持运行时注册 + <code>listForScope</code> 过滤。插件命令直接转成 <code>AgentToolDef</code> 注册进去，Agent 立刻可见。</p></div>
+  <div class="card"><h4>③ CLI Handler 注册表 (<code>main/cli_server/registry.ts</code>)</h4><p><code>CliHandlerRegistry.register(method, handler)</code> 是 tool 的真正执行体（<code>AgentToolDef.cliMethod</code> 指向它）。插件命令注册成 <code>plugin.&lt;key&gt;.&lt;cmd&gt;</code> 形式的 handler。</p></div>
+  <div class="card"><h4>④ View 导航 (<code>vaultRightSidebarModel.ts</code>)</h4><p><code>VaultViewKind</code> 枚举 + <code>SURFACE_PROFILES</code> 决定主工作区渲染什么 + 右侧栏布局。插件 View 动态扩展这两张表。</p></div>
+  <div class="card"><h4>⑤ 文件优先存储 (<code>main/*/store.ts</code> 范式)</h4><p>如 <code>ResourceStore</code>：构造接 <code>vaultPath</code>，所有数据是 vault 下的 Markdown + frontmatter + 一个 <code>_index.json</code>，Watcher 增量刷新。插件数据沿用同一范式。</p></div>
+  <div class="card acc"><h4>⊕ 新增：Plugin Host (粘合层)</h4><p>唯一需要新写的核心模块。负责扫描插件包 → 校验 manifest → 注册 tools/handlers/views → 创建能力网关 → 管理生命周期。是上述 5 点的编排者。</p></div>
+</div>
+
+<div class="callout ok">
+  <strong>关键发现：</strong>Orbit 的 tool 执行链已经是「<code>AgentToolDef.cliMethod</code> → <code>CliHandlerRegistry.handle()</code> → 返回 JSON」的解耦设计（见 <code>executor.ts</code>）。这意味着<b>插件命令天然可以复用整条执行、超时、Activity 留痕、journal 管线</b>，无需改动 executor。这是把插件做成「一等 tool」最大的红利。
+</div>
+
+<h2 id="s3"><span class="n">03</span>插件形态选型（关键决策）</h2>
+<p>有三种可选形态，建议<strong>分层采用 B（默认）+ C（高级）</strong>：</p>
+<table>
+  <tr><th>形态</th><th>说明</th><th>隔离/安全</th><th>建议</th></tr>
+  <tr><td><b>A. 进程内 JS 模块</b></td><td>插件是一个被 main 动态 <code>import()</code> 的 TS/JS 包，直接拿到能力网关对象</td><td>弱（同进程，能力靠网关收口）</td><td><span class="tag t-write">官方/可信插件</span></td></tr>
+  <tr><td><b>B. UI=iframe + 逻辑=声明式 manifest</b></td><td>页面跑在沙箱 <code>&lt;iframe sandbox&gt;</code>，命令是「声明 cliMethod 映射 + JSON Schema」，不跑任意 JS 后端</td><td>强（UI 沙箱 + 无后端代码）</td><td><span class="tag t-core">默认形态 ✓</span></td></tr>
+  <tr><td><b>C. utilityProcess 沙箱</b></td><td>插件后端逻辑跑在 Electron <code>utilityProcess</code> 子进程，经 MessagePort 与 main 通信（类似 Shadow 跨进程）</td><td>最强（独立进程，可限权）</td><td><span class="tag t-danger">需要自定义后端逻辑时</span></td></tr>
+</table>
+<p class="mut">形态 B 覆盖你描述的 80% 场景（"用户自己在 orbit 里做一个页面，这个页面能和 orbit 运转起来"）：页面是 iframe，数据是 vault 文件，命令是把已有 Orbit 能力组合 / 编排。形态 C 留给需要跑爬虫、解析、长任务等自定义后端的高级插件。</p>
+
+<div class="flow">
+  <span class="step">iframe View</span><span class="arrow">⇄ postMessage</span>
+  <span class="step">OrbitBridge</span><span class="arrow">→</span>
+  <span class="step">Plugin Host</span><span class="arrow">→</span>
+  <span class="step">CapabilityGateway</span><span class="arrow">→</span>
+  <span class="step">CliHandlerRegistry / Stores</span>
+</div>
+<h2 id="s4"><span class="n">04</span>插件包结构与 Manifest</h2>
+<p>插件以「包目录」分发，可放在 vault 内（用户私有、Git 同步）或全局插件目录（跨 vault 共享）：</p>
+<pre><code>&lt;vault&gt;/.orbit/plugins/&lt;plugin-key&gt;/      # 或 ~/Library/Application Support/Orbit/plugins/
+├── plugin.json                # ① Manifest（声明能力，下文详述）
+├── ui/                        # ② 前端构建产物（iframe 入口）
+│   ├── index.html
+│   └── assets/app.js
+├── commands/                  # ③ (形态C才有) 后端命令实现
+│   └── index.ts
+├── schema/                    # ④ 命令 inputSchema（也可内联进 manifest）
+└── icon.svg</code></pre>
+
+<h3>plugin.json — 借鉴 shadow-app.json 但本地化</h3>
+<pre><code>{
+  "schemaVersion": "orbit.app/1",
+  "key": "habit-tracker",
+  "name": "Habit Tracker",
+  "version": "1.0.0",
+  "kind": "iframe",                          // iframe | utilityProcess | module
+  "icon": "icon.svg",
+
+  "view": {                                   // ⇒ 注册成一等 VaultViewKind
+    "entry": "ui/index.html",
+    "title": "习惯",
+    "navGroup": "capture",                    // 决定它出现在侧边导航哪一组
+    "sidebar": {                              // ⇒ 注入 SURFACE_PROFILES
+      "intents": [{ "id": "overview", "panels": ["inspector"] }]
+    }
+  },
+
+  "data": {                                   // ⇒ 文件优先数据契约
+    "root": "05_Plugins/habit-tracker",       // vault 相对根目录
+    "indexFile": "_index.json",
+    "entryType": "habit"                      // frontmatter type 命名空间
+  },
+
+  "capabilities": [                           // ⇒ 申请的 Orbit 能力（审批据此）
+    "vault.read", "vault.writeOwnData",
+    "task.propose", "inbox.emit", "search.query"
+  ],
+
+  "commands": [                               // ⇒ 每条自动注册成 AgentToolDef
+    {
+      "name": "habit_log",                    // Agent 看到的 tool 名
+      "title": "记录一次习惯打卡",
+      "description": "When the user completes a habit, log today's check-in.",
+      "handler": "habit.log",                 // 形态B: 映射到内置编排; 形态C: 插件后端方法
+      "risk": "L1_reversible",
+      "permissions": ["write_vault_direct"],
+      "inputSchema": {
+        "type": "object", "required": ["habitId"],
+        "properties": {
+          "habitId": { "type": "string" },
+          "note": { "type": "string" }
+        }, "additionalProperties": false
+      },
+      "outbox": { "inbox": false, "activity": "plugin.habit_logged" }
+    }
+  ],
+
+  "events": ["habit.updated"]                 // 插件可广播的事件（renderer 订阅）
+}</code></pre>
+<p class="mut">注意：<code>commands[].inputSchema</code> 与 <code>risk/permissions</code> 与 Orbit 现有 <code>AgentToolDef</code> 字段<b>一一对应</b>，Plugin Host 几乎是直译。这正是复用 <code>OPENCLAW</code> / Authority 体系的好处。</p>
+
+<h2 id="s5"><span class="n">05</span>文件优先的数据结构</h2>
+<p>遵循 Orbit 既有的 <code>ResourceStore / SpaceLayout</code> 范式，插件数据 = vault 下的目录，<b>Markdown + frontmatter 为真相、<code>_index.json</code> 为加速缓存</b>，由 Watcher 增量维护、Git 追踪。新增一个 PARA 同级目录 <code>05_Plugins/</code>：</p>
+<pre><code>&lt;vault&gt;/05_Plugins/habit-tracker/
+├── _index.json                # { version, entries:[{uid,relPath,hash}], updatedAt }
+├── _config.md                 # 插件用户配置（frontmatter）
+├── morning-run.md             # 一条数据 = 一个 Markdown
+│   #   ---
+│   #   uid: habit-3f2a            ← 接入 RefmapStore（不可变）
+│   #   type: habit                ← manifest.data.entryType
+│   #   plugin: habit-tracker      ← 归属插件（隔离/查询用）
+│   #   created: 2026-06-01T...
+│   #   ---
+│   #   # 晨跑
+└── _outputs/                   # 复用 SPACE_OUTPUTS_DIR 语义（持久产物）</code></pre>
+
+<div class="grid g3">
+  <div class="card"><h4>真相在文件</h4><p>每条记录是独立 <code>.md</code>，<code>uid/type/created</code> 不可变（沿用 Orbit 迁移规则），用户可用任何编辑器改、Git diff 可读。</p></div>
+  <div class="card"><h4>索引可重建</h4><p><code>_index.json</code> 只是缓存。删了能从 Markdown 全量重扫恢复。接入 <code>VaultWatcher</code> 的 <code>fs:event</code> 增量更新。</p></div>
+  <div class="card"><h4>RefmapStore 接入</h4><p>插件数据的 <code>uid → relPath</code> 写入全局 refmap，于是 <code>[[wikilink]]</code>、反向链接、搜索、语义索引<b>自动覆盖插件数据</b>。</p></div>
+</div>
+<div class="callout">
+  Plugin Host 提供一个泛型 <code>PluginDataStore(vaultPath, manifest.data)</code>，封装 <code>list / get / create / update / archive</code>，直接抄 <code>ResourceStore</code> 的 frontmatter 读写 + index 维护逻辑。插件作者不用碰 fs，只声明 <code>entryType</code> 和 schema。
+</div>
+<h2 id="s6"><span class="n">06</span>页面布局：把插件注册成一等 View</h2>
+<p>Orbit 的 View 系统是<em>静态枚举 + profile 表</em>（<code>VaultViewKind</code> 联合类型 + <code>SURFACE_PROFILES</code> 字典）。要让插件页面成为一等公民，需要把这两处从「编译期静态」改为「运行期可扩展」。改动范围很小：</p>
+
+<h3>① 扩展 VaultViewKind / SidebarSurfaceId</h3>
+<p>新增一个通配成员 <code>'plugin'</code>，并让 view 携带 <code>pluginKey</code>（类比现有 <code>project</code> view 携带 <code>projectUid</code>）：</p>
+<pre><code>// vaultRightSidebarModel.ts
+export type VaultViewKind = /* ...既有... */ | 'plugin';
+
+export function resolveSidebarSurface(view, projectMode) {
+  if (view.kind === 'plugin') return `plugin.${view.pluginKey}`;   // 动态 surface
+  /* ...既有逻辑... */
+}
+
+// SURFACE_PROFILES 从 const 字典 → 可写 Map，Plugin Host 在 activate 时注入：
+pluginHost.on('activate', (m) =>
+  registerSurfaceProfile(`plugin.${m.key}`, m.view.sidebar ?? DEFAULT_PLUGIN_PROFILE));</code></pre>
+
+<h3>② 渲染层：PluginViewHost 组件</h3>
+<p>在 <code>VaultView</code> 的 view 分发 switch 里加一个分支：当 <code>view.kind === 'plugin'</code> 时渲染 <code>&lt;PluginViewHost pluginKey&gt;</code>，它内部就是一个受控 iframe + Bridge：</p>
+<pre><code>function PluginViewHost({ pluginKey }) {
+  const src = useOrbit().plugin.viewUrl(pluginKey);   // orbit-plugin://&lt;key&gt;/ui/index.html
+  return &lt;iframe
+    sandbox="allow-scripts"                            // 关键：禁 same-origin / 禁 top-navigation
+    src={src}
+    onLoad={() =&gt; bridge.attach(pluginKey)} /&gt;;
+}</code></pre>
+<div class="callout warn">
+  iframe 用自定义 protocol <code>orbit-plugin://</code>（在 main 用 <code>protocol.registerFileProtocol</code> 注册，作用域锁死到该插件 <code>ui/</code> 目录），配合 <code>sandbox="allow-scripts"</code>，让插件 UI <b>拿不到 Node、拿不到 <code>window.orbit</code>、跨域隔离</b>。一切能力只能经 Bridge 的 postMessage 走。等价于 Shadow 的 iframe + allowedOrigins。
+</div>
+
+<h3>③ 导航入口</h3>
+<p>Sidebar 的导航组（<code>navGroup</code>）渲染时合并「内置 view 列表 + 已激活插件列表」。用户点插件项 → <code>workspace.openView({ kind:'plugin', pluginKey })</code>。整套右侧栏 inspector / ask-anywhere 因为走 surface profile，<b>自动对插件页面生效</b>。</p>
+
+<h2 id="s7"><span class="n">07</span>暴露 Tools 给 Orbit Agent</h2>
+<p>这是「插件能和 Orbit 运转起来」的核心。Plugin Host 在激活插件时，把每条 <code>manifest.commands[]</code> 翻译成 <code>AgentToolDef</code> 注册进 <code>OrbitToolRegistry</code>，并把执行体注册进 <code>CliHandlerRegistry</code>：</p>
+<pre><code>// Plugin Host 激活流程（伪代码）
+for (const cmd of manifest.commands) {
+  const cliMethod = `plugin.${manifest.key}.${cmd.name}`;
+
+  // 1) 注册执行体到 CLI 注册表（tool/cli 共用一条执行链）
+  cliRegistry.register(cliMethod, async (params) =&gt;
+    pluginRuntime.invoke(manifest.key, cmd.handler, params, capabilityGateway));
+
+  // 2) 翻译成 AgentToolDef → Agent 立刻可见、可调
+  toolRegistry.register({
+    name: cmd.name,                       // 如 habit_log
+    description: cmd.description,
+    inputSchema: cmd.inputSchema,
+    cliMethod,                            // ← 指向上面的 handler
+    destructive: cmd.risk !== 'L0_observe',
+    family: 'plugin',
+    risk: cmd.risk,
+    permissions: cmd.permissions,
+    source: 'orbit',
+    activity: { successAction: cmd.outbox?.activity ?? 'plugin.tool_invoked' },
+    scopes: cmd.scopes                    // 可限定只在某些会话 scope 暴露
+  });
+}</code></pre>
+<div class="callout ok">
+  <strong>零改动复用：</strong>因为走的是既有 <code>OrbitToolExecutor</code> 链路，插件 tool <b>自动获得</b>：30s 超时保护、结果截断、<code>runtime.tool_result</code> 事件、destructive 工具的 journal + Activity Log 留痕、scope 过滤。Agent 在对话里说"帮我记录晨跑打卡"就能调到 <code>habit_log</code>。
+</div>
+<p>同时，这些 tool 也自动出现在 <code>orbit</code> CLI（agent-facing 入口）和 <code>ToolRegistryView</code> 工具注册页面里——和 Orbit 内置工具完全平权。</p>
+<h2 id="s8"><span class="n">08</span>能力网关：插件如何反过来用 Orbit 的能力</h2>
+<p>插件不仅要暴露 tool，还要<em>消费</em> Orbit 能力（写 vault、提任务、发 Inbox、查搜索）。这通过 <code>CapabilityGateway</code> 收口——它是 Shadow 「OAuth scope」在本地的等价物，但是一张内存授权表，无网络。</p>
+<pre><code>class CapabilityGateway {
+  constructor(private pluginKey, private granted: Set&lt;Capability&gt;,
+              private cli: CliHandlerRegistry, private dataStore) {}
+
+  // 每个方法先查 granted，未授权直接抛 capability_denied
+  async vaultRead(relPath)  { this.assert('vault.read');
+    return this.cli.handle({ method:'cat', params:{ target: this.scope(relPath) }}); }
+
+  async writeOwnData(entry) { this.assert('vault.writeOwnData');
+    return this.dataStore.create(entry); }            // 只能写自己的 data.root
+
+  async proposeTask(input)  { this.assert('task.propose');
+    return this.cli.handle({ method:'task.propose', params: input }); }  // → 进 Inbox 审批
+
+  async emitInbox(item)     { this.assert('inbox.emit');  /* → Inbox hub */ }
+  async search(q)           { this.assert('search.query'); /* MiniSearch */ }
+  async semantic(q)         { this.assert('semantic.query'); /* 向量检索 */ }
+}</code></pre>
+
+<h3>能力清单（映射到 Orbit 子系统）</h3>
+<table>
+  <tr><th>Capability</th><th>底层</th><th>风险</th></tr>
+  <tr><td><code>vault.read</code></td><td>CLI <code>cat/search</code>（限插件 data.root + 显式授权外部路径走 ExternalPathApproval）</td><td><span class="tag t-read">读</span></td></tr>
+  <tr><td><code>vault.writeOwnData</code></td><td>PluginDataStore（<b>仅</b>限 <code>05_Plugins/&lt;key&gt;/</code>）</td><td><span class="tag t-write">受限写</span></td></tr>
+  <tr><td><code>task.propose</code></td><td><code>task.propose</code> → Approval → Inbox（agent 不能直接建 task，符合 propose-approve）</td><td><span class="tag t-write">提议</span></td></tr>
+  <tr><td><code>inbox.emit</code></td><td>Inbox hub 写入 item（capture 类）</td><td><span class="tag t-write">写</span></td></tr>
+  <tr><td><code>search.query / semantic.query</code></td><td>SearchIndex / 向量库（只读）</td><td><span class="tag t-read">读</span></td></tr>
+  <tr><td><code>vault.writeAny</code></td><td>跨目录写——<b>默认禁用</b>，需 every_time 审批</td><td><span class="tag t-danger">高危</span></td></tr>
+</table>
+<div class="callout">
+  <strong>Outbox 回写（借鉴 Shadow）：</strong>插件命令可在返回值里挂 <code>orbit.outbox</code>，由 Plugin Host 统一消费 → 写 Inbox / 提 Proposal / 发 Activity。这样插件「在 Orbit 里运转起来」——例如 Habit 连续断卡时自动往 Inbox 推一张提醒卡。
+</div>
+
+<h2 id="s9"><span class="n">09</span>安全 / 权限 / 审批</h2>
+<div class="grid g2">
+  <div class="card"><h4>UI 隔离</h4><ul><li><code>sandbox</code> iframe + 自定义 protocol，无 Node、无 <code>window.orbit</code></li><li>所有调用经 Bridge postMessage，带 <code>pluginKey</code> 与 <code>requestId</code>（抄 ShadowBridge 的 launch-token 防伪）</li></ul></div>
+  <div class="card"><h4>能力授予</h4><ul><li>安装时弹「权限清单」确认（manifest.capabilities）</li><li>未授予能力 → 网关抛 <code>capability_denied</code></li><li>data 写入硬锁 <code>05_Plugins/&lt;key&gt;/</code> 前缀</li></ul></div>
+  <div class="card"><h4>审批接入</h4><ul><li>复用 <code>AuthorityRiskLevel</code> + propose-approve</li><li>destructive tool → journal + Activity Log（既有 executor 自动做）</li><li>高危能力 → 每次走 Inbox 审批卡</li></ul></div>
+  <div class="card"><h4>安装前扫描</h4><ul><li>形态 C 后端代码 → 过 <code>skill-safety-review</code> 子代理静态扫描</li><li>校验 manifest schema、目录穿越、外部网络声明</li></ul></div>
+</div>
+
+<h2 id="s10"><span class="n">10</span>生命周期与运行时</h2>
+<div class="flow">
+  <span class="step">discover 扫描插件目录</span><span class="arrow">→</span>
+  <span class="step">validate manifest+schema</span><span class="arrow">→</span>
+  <span class="step">grant 权限确认</span><span class="arrow">→</span>
+  <span class="step">activate 注册 tools/handlers/view</span><span class="arrow">→</span>
+  <span class="step">run iframe+Bridge+Gateway</span><span class="arrow">→</span>
+  <span class="step">deactivate 反注册</span>
+</div>
+<p>挂在 vault 生命周期上（<code>openFsSession</code> 时 <code>pluginHost.attach(vaultPath)</code>，关闭时 <code>detach</code>），与 CLI server / Auto-runner / Watcher 同级。<code>plugin</code> IPC namespace 暴露给 renderer 做安装/启停/列表 UI。</p>
+<h2 id="s11"><span class="n">11</span>落地路线图（分阶段，对齐 Orbit 既有 Phase 习惯）</h2>
+<table>
+  <tr><th>阶段</th><th>目标</th><th>新增/改动</th><th>产出验证</th></tr>
+  <tr><td><b>P0 数据契约</b></td><td>文件优先数据 + 泛型 Store</td><td>新 <code>main/plugin/data-store.ts</code>（抄 ResourceStore）；新 PARA 目录 <code>05_Plugins/</code>；接 Refmap/Watcher</td><td>建/读/索引重建单测（仿 <code>resource_store.test.ts</code>）</td></tr>
+  <tr><td><b>P1 Tool 暴露</b></td><td>manifest.commands → AgentToolDef + CLI handler</td><td>新 <code>main/plugin/host.ts</code> 的 register 逻辑；<code>shared/plugin.ts</code> 契约类型</td><td>Agent 对话能调到插件 tool；出现在 ToolRegistryView</td></tr>
+  <tr><td><b>P2 页面布局</b></td><td>插件 View 成一等公民</td><td><code>VaultViewKind += 'plugin'</code>；<code>SURFACE_PROFILES</code> 改可写 Map；<code>PluginViewHost</code> 组件 + <code>orbit-plugin://</code> protocol + <code>OrbitBridge</code></td><td>用户能打开插件页面 + 右侧栏/ask 生效</td></tr>
+  <tr><td><b>P3 能力网关</b></td><td>插件消费 Orbit 能力 + Outbox</td><td><code>CapabilityGateway</code>；权限确认 UI；Outbox → Inbox/Approval 消费</td><td>插件能提任务/发 Inbox；越权被拒</td></tr>
+  <tr><td><b>P4 沙箱 & 分发</b></td><td>utilityProcess 形态 C + 安装器 + 安全扫描</td><td><code>utilityProcess</code> runtime；安装/卸载 IPC；safety-review 接入</td><td>第三方插件可安装、隔离、可观测</td></tr>
+</table>
+<p class="mut">P0–P2 即可交付你描述的 MVP：「用户做一个有页面、有文件数据、能暴露 tool 给 Agent 的插件」。P3–P4 是把它打磨成可分发的生态。</p>
+
+<h2 id="s12"><span class="n">12</span>需要你确认的边界问题</h2>
+<div class="grid g2">
+  <div class="card acc"><h4>Q1 默认形态</h4><p>是否同意以 <b>形态 B（iframe UI + 声明式命令）</b> 为默认，形态 C（子进程后端）作为高级选项？还是你的目标插件大多需要自定义后端逻辑（那应优先 C）？</p></div>
+  <div class="card acc"><h4>Q2 数据落点</h4><p>插件数据放 <b>vault 内 <code>05_Plugins/</code></b>（随 Git 同步、跨设备）还是 <code>.orbit/plugins/</code>（不入 Git）？前者更"文件优先"，后者更像缓存。</p></div>
+  <div class="card acc"><h4>Q3 命令执行</h4><p>形态 B 的命令是否只允许「组合已有 Orbit 能力」（无任意代码），把任意逻辑全推给形态 C？这决定安全模型的严格度。</p></div>
+  <div class="card acc"><h4>Q4 分发</h4><p>插件来源：仅本地手动安装，还是要做一个插件市场/索引（类似 cloud-skill）？影响 P4 的设计。</p></div>
+</div>
+
+<div class="callout ok" style="margin-top:28px">
+  <strong>一句话总结：</strong>Orbit 已经具备插件体系所需的全部底座（IPC 契约、Tool/CLI 双注册表、文件优先 Store 范式、surface profile 导航）。本方案只需新增一个 <code>Plugin Host</code> 粘合层 + 一份 <code>orbit.app/1</code> manifest 契约，把这些底座按「Manifest 声明 → 翻译成一等 Tool/View/Store → 经 CapabilityGateway 收口」编织起来，即可让用户造的页面像 Kanban / Feed 一样在 Orbit 里真正运转。
+</div>
+
+<footer>
+  Orbit Plugin System Design · 协议 orbit.app/1 · 基于对 <code>orbit-app/orbit</code> 源码与 Shadow <code>shadow.app/1</code> 的对照分析<br/>
+  关键源参考：<code>shared/ipc.ts</code> · <code>main/agent-tools/{registry,executor,catalog}.ts</code> · <code>main/cli_server/registry.ts</code> · <code>main/resource/store.ts</code> · <code>renderer/src/views/vaultRightSidebarModel.ts</code> · <code>docs/architecture.md</code>
+</footer>
+</div>
+</body>
+</html>

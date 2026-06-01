@@ -8,6 +8,7 @@ describe('IPC contract', () => {
       [
         'activity',
         'agent',
+        'aiConfig',
         'annotation',
         'approval',
         'area',
@@ -369,6 +370,7 @@ describe('IPC contract', () => {
     expect(keys).toEqual(
       [
         'archive',
+        'backendStatus',
         'clusters',
         'create',
         'event',
@@ -382,10 +384,28 @@ describe('IPC contract', () => {
         'promoteToResource',
         'recall',
         'recallStats',
+        'syncTruthLayer',
+        'testBackend',
+        'updateBackendConfig',
         'update'
       ].sort()
     );
     for (const v of Object.values(IPC.memory)) expect(v.startsWith('memory:')).toBe(true);
+  });
+
+  it('aiConfig namespace declares unified AI configuration channels', () => {
+    const keys = Object.keys(IPC.aiConfig).sort();
+    expect(keys).toEqual(
+      [
+        'deleteEmbeddingSecret',
+        'setDefaults',
+        'setEmbeddingSecret',
+        'snapshot',
+        'testEmbedding',
+        'upsertEmbeddingProvider'
+      ].sort()
+    );
+    for (const v of Object.values(IPC.aiConfig)) expect(v.startsWith('aiConfig:')).toBe(true);
   });
 
   it('evidence namespace declares PMIL evidence drill-down channels', () => {

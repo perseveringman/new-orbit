@@ -9,7 +9,11 @@ interface ScoredDoc {
   keyword: number;
 }
 
-export async function hybridSearch(indexedDocs: IndexedSemanticDocument[], query: SearchQuery): Promise<SearchResult[]> {
+export async function hybridSearch(
+  indexedDocs: IndexedSemanticDocument[],
+  query: SearchQuery,
+  embedQuery: (text: string) => Promise<{ vector: Float32Array }> = embedText
+): Promise<SearchResult[]> {
   const normalized = normalizeSearchQuery(query);
   const filtered = indexedDocs.filter((item) => matchesFilters(item.doc, normalized));
   const queryTokens = tokenize(normalized.text);
@@ -20,7 +24,7 @@ export async function hybridSearch(indexedDocs: IndexedSemanticDocument[], query
       .map((indexed) => toResult({ indexed, semantic: 0, keyword: 0 }, 'keyword', 0));
   }
 
-  const queryVector = normalized.match_mode === 'keyword' ? null : (await embedText(normalized.text)).vector;
+  const queryVector = normalized.match_mode === 'keyword' ? null : (await embedQuery(normalized.text)).vector;
   const scored = filtered
     .map<ScoredDoc>((indexed) => ({
       indexed,

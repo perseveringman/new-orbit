@@ -52,6 +52,7 @@ export interface SkillFrontmatter {
 }
 
 export type SkillSource = 'app' | 'vault' | 'space';
+export type EditableSkillSource = 'app' | 'vault';
 
 /** SkillLoader 加载后的 skill。 */
 export interface LoadedSkill {
@@ -76,6 +77,41 @@ export interface LoadedSkill {
    *   - 字符串：失败原因，skill 不会被注入到本次 send（UI 可显示 disabled）
    */
   disabledReason?: string;
+}
+
+export interface AgentSkillView extends LoadedSkill {
+  /** 当前名称在合并优先级后是否真正生效。 */
+  effective: boolean;
+  /** 当前 UI 是否允许直接编辑这个来源。 */
+  editable: boolean;
+}
+
+export interface AgentSkillRegistrySnapshot {
+  generatedAt: number;
+  skills: AgentSkillView[];
+  sources: {
+    appDir: string;
+    vaultDir?: string;
+  };
+}
+
+export interface AgentSkillSaveInput {
+  source: EditableSkillSource;
+  /** 重命名时用于删除旧文件；缺省表示新增或覆盖同名 skill。 */
+  originalName?: string;
+  name: string;
+  description?: string;
+  scopes?: ConversationScope['kind'][];
+  tools?: string[];
+  params?: SkillParam[];
+  requires?: SkillRequires;
+  model?: string;
+  body: string;
+}
+
+export interface AgentSkillDeleteInput {
+  source: EditableSkillSource;
+  name: string;
 }
 
 /** 给 SkillLoader 注入的最小 settings 接口（避免循环依赖）。 */

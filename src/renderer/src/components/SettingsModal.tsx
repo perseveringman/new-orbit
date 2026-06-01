@@ -6,11 +6,21 @@ import type { Theme } from '@shared/types';
 import type { DetectResult } from '@shared/agent';
 import type { ExternalAISessionSettings } from '@shared/evidence';
 import type {
+  MemoryBackendConfig,
+  MemoryBackendId,
+  MemoryBackendStatus
+} from '@shared/memory';
+import type {
   SDKEndpointDefaults,
   SDKEndpointInput,
   SDKEndpointProvider,
   SDKEndpointRegistrySnapshot
 } from '@shared/runtime';
+import type {
+  AIConfigDefaults,
+  AIConfigSnapshot,
+  AIEmbeddingCredentialInput
+} from '@shared/ai-config';
 import type {
   ExternalGatewayConfig,
   ExternalGatewayRequestLogEntry,
@@ -131,6 +141,12 @@ export function SettingsModal(): JSX.Element | null {
   const [endpointKeyInputs, setEndpointKeyInputs] = useState<Record<string, string>>({});
   const [endpointStatus, setEndpointStatus] = useState<Record<string, string>>({});
   const [endpointDefaults, setEndpointDefaults] = useState<SDKEndpointDefaults>({});
+  const [aiConfigSnapshot, setAiConfigSnapshot] = useState<AIConfigSnapshot | null>(null);
+  const [aiDefaults, setAiDefaults] = useState<AIConfigDefaults>({ llm: {} });
+  const [embeddingCredentialInputs, setEmbeddingCredentialInputs] = useState<
+    Record<string, AIEmbeddingCredentialInput>
+  >({});
+  const [embeddingStatus, setEmbeddingStatus] = useState<Record<string, string>>({});
   const [chatEndpointId, setChatEndpointId] = useState<string>('');
   const [chatModel, setChatModel] = useState<string>('');
   const [chatPrompt, setChatPrompt] = useState<string>('你好，请用一句话简短回复。');
@@ -148,6 +164,9 @@ export function SettingsModal(): JSX.Element | null {
   const [externalSessionSettings, setExternalSessionSettings] =
     useState<ExternalAISessionSettings | null>(null);
   const [externalSessionMessage, setExternalSessionMessage] = useState<string>('');
+  const [memoryBackendStatus, setMemoryBackendStatus] = useState<MemoryBackendStatus | null>(null);
+  const [memoryBackendDraft, setMemoryBackendDraft] = useState<MemoryBackendConfig | null>(null);
+  const [memoryBackendMessage, setMemoryBackendMessage] = useState<string>('');
   const endpointFormRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -165,6 +184,7 @@ export function SettingsModal(): JSX.Element | null {
     setResetMsg(null);
     void loadEndpoints();
     void loadExternalGateway();
+    void loadMemoryBackendStatus();
     void loadExternalSessionSettings();
   }, [open, budget, workspaceSettings]);
 
@@ -181,12 +201,19 @@ export function SettingsModal(): JSX.Element | null {
     if (!vault) {
       setEndpointSnapshot(null);
       setEndpointDefaults({});
+      setAiConfigSnapshot(null);
+      setAiDefaults({ llm: {} });
       return;
     }
     try {
-      const snapshot = await window.orbit.runtime.sdk.snapshot();
+      const [snapshot, aiSnapshot] = await Promise.all([
+        window.orbit.runtime.sdk.snapshot(),
+        window.orbit.aiConfig.snapshot()
+      ]);
       setEndpointSnapshot(snapshot);
       setEndpointDefaults(snapshot.defaults);
+      setAiConfigSnapshot(aiSnapshot);
+      setAiDefaults(aiSnapshot.defaults);
       setChatEndpointId((current) => {
         if (current && snapshot.endpoints.some((e) => e.id === current)) return current;
         const firstReady = snapshot.endpoints.find((e) => e.enabled && e.keyConfigured);
@@ -224,6 +251,22 @@ export function SettingsModal(): JSX.Element | null {
       );
     } catch (error) {
       setExternalMessage(`加载 External Gateway 失败：${(error as Error).message}`);
+    }
+  }
+
+  async function loadMemoryBackendStatus(): Promise<void> {
+    if (!vault) {
+      setMemoryBackendStatus(null);
+      setMemoryBackendDraft(null);
+      return;
+    }
+    try {
+      const status = await window.orbit.memory.backendStatus();
+      setMemoryBackendStatus(status);
+      setMemoryBackendDraft(status.config);
+      setMemoryBackendMessage('');
+    } catch (error) {
+      setMemoryBackendMessage(`加载记忆后端失败：${(error as Error).message}`);
     }
   }
 
@@ -429,12 +472,72 @@ export function SettingsModal(): JSX.Element | null {
   async function onSaveEndpointDefaults(): Promise<void> {
     setEndpointStatus((s) => ({ ...s, defaults: '保存默认中…' }));
     try {
-      const defaults = await window.orbit.runtime.sdk.setDefaults(endpointDefaults);
-      setEndpointDefaults(defaults);
+      const defaults = await window.orbit.aiConfig.setDefaults({
+        ...aiDefaults,
+        llm: endpointDefaults
+      });
+      setAiDefaults(defaults);
+      setEndpointDefaults(defaults.llm);
       setEndpointStatus((s) => ({ ...s, defaults: '默认已保存。' }));
       await loadEndpoints();
     } catch (error) {
       setEndpointStatus((s) => ({ ...s, defaults: `保存默认失败：${(error as Error).message}` }));
+    }
+  }
+
+  async function onSetEmbeddingSecret(providerId: string): Promise<void> {
+    const input = embeddingCredentialInputs[providerId] ?? {};
+    if (!input.apiKey?.trim()) {
+      setEmbeddingStatus((s) => ({ ...s, [providerId]: '请先填入 API Key。' }));
+      return;
+    }
+    setEmbeddingStatus((s) => ({ ...s, [providerId]: '保存 API Key…' }));
+    try {
+      await window.orbit.aiConfig.setEmbeddingSecret(providerId, input);
+      setEmbeddingCredentialInputs((s) => ({ ...s, [providerId]: {} }));
+      setEmbeddingStatus((s) => ({ ...s, [providerId]: 'API Key 已保存。' }));
+      await loadEndpoints();
+    } catch (error) {
+      setEmbeddingStatus((s) => ({ ...s, [providerId]: `保存失败：${(error as Error).message}` }));
+    }
+  }
+
+  async function onTestEmbedding(providerId: string): Promise<void> {
+    setEmbeddingStatus((s) => ({ ...s, [providerId]: '测试向量化…' }));
+    try {
+      const result = await window.orbit.aiConfig.testEmbedding(providerId, 'Orbit 记忆系统测试');
+      setEmbeddingStatus((s) => ({
+        ...s,
+        [providerId]: result.ok
+          ? `成功 · ${result.dimensions ?? '?'} 维 · ${result.latencyMs ?? 0}ms`
+          : `失败：${result.error ?? '未知错误'}`
+      }));
+    } catch (error) {
+      setEmbeddingStatus((s) => ({ ...s, [providerId]: `失败：${(error as Error).message}` }));
+    }
+  }
+
+  async function onToggleEmbeddingProvider(
+    provider: AIConfigSnapshot['embeddings'][number]
+  ): Promise<void> {
+    setEmbeddingStatus((s) => ({ ...s, [provider.id]: provider.enabled ? '禁用中…' : '启用中…' }));
+    try {
+      await window.orbit.aiConfig.upsertEmbeddingProvider({
+        id: provider.id,
+        label: provider.label,
+        provider: provider.provider,
+        protocol: provider.protocol,
+        baseURL: provider.baseURL,
+        model: provider.model,
+        dimensions: provider.dimensions,
+        extraHeaders: provider.extraHeaders,
+        extraBody: provider.extraBody,
+        enabled: !provider.enabled
+      });
+      setEmbeddingStatus((s) => ({ ...s, [provider.id]: provider.enabled ? '已禁用。' : '已启用。' }));
+      await loadEndpoints();
+    } catch (error) {
+      setEmbeddingStatus((s) => ({ ...s, [provider.id]: `操作失败：${(error as Error).message}` }));
     }
   }
 
@@ -488,6 +591,34 @@ export function SettingsModal(): JSX.Element | null {
     await loadExternalGateway();
   }
 
+  async function onSaveMemoryBackend(): Promise<void> {
+    if (!memoryBackendDraft) return;
+    setMemoryBackendMessage('保存记忆后端设置…');
+    try {
+      const status = await window.orbit.memory.updateBackendConfig(memoryBackendDraft);
+      setMemoryBackendStatus(status);
+      setMemoryBackendDraft(status.config);
+      setMemoryBackendMessage('记忆后端设置已保存。');
+    } catch (error) {
+      setMemoryBackendMessage(`保存失败：${(error as Error).message}`);
+    }
+  }
+
+  async function onTestMemoryBackend(id?: MemoryBackendId): Promise<void> {
+    setMemoryBackendMessage('测试记忆后端连接…');
+    try {
+      const descriptor = await window.orbit.memory.testBackend(id);
+      await loadMemoryBackendStatus();
+      setMemoryBackendMessage(
+        descriptor.health === 'ready'
+          ? `${descriptor.label} 已连接。`
+          : `${descriptor.label} 不可用：${descriptor.details ?? '请检查配置'}`
+      );
+    } catch (error) {
+      setMemoryBackendMessage(`测试失败：${(error as Error).message}`);
+    }
+  }
+
   async function onSaveExternalSessionSettings(): Promise<void> {
     if (!externalSessionSettings) return;
     setExternalSessionMessage('保存 Runtime 会话库设置…');
@@ -508,7 +639,7 @@ export function SettingsModal(): JSX.Element | null {
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: 'general', label: '通用' },
     { id: 'api', label: 'API / CLI' },
-    { id: 'endpoints', label: 'AI 端点' },
+    { id: 'endpoints', label: 'AI 配置' },
     { id: 'externalGateway', label: '外部网关' },
     { id: 'memorySources', label: '记忆源' },
     { id: 'budget', label: '预算' },
@@ -674,7 +805,7 @@ export function SettingsModal(): JSX.Element | null {
               <div className="space-y-5">
                 {!vault && (
                   <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                    请先打开工作库才能管理 SDK 端点。
+                    请先打开工作库才能管理 AI 配置。
                   </p>
                 )}
                 {endpointStatus.global && (
@@ -912,7 +1043,7 @@ export function SettingsModal(): JSX.Element | null {
                   </div>
                 </section>
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-                  <h3 className="text-sm font-semibold">默认端点</h3>
+                  <h3 className="text-sm font-semibold">统一默认能力</h3>
                   {(['ask', 'synthesis', 'background'] as const).map((mode) => (
                     <label key={mode} className="flex items-center gap-3 text-xs">
                       <span className="w-32 text-neutral-500">{modeLabels[mode]}</span>
@@ -935,6 +1066,64 @@ export function SettingsModal(): JSX.Element | null {
                       </select>
                     </label>
                   ))}
+                  <label className="flex items-center gap-3 text-xs">
+                    <span className="w-32 text-neutral-500">记忆 LLM</span>
+                    <select
+                      value={aiDefaults.memoryLlm ?? ''}
+                      onChange={(e) =>
+                        setAiDefaults((d) => ({
+                          ...d,
+                          memoryLlm: e.target.value || undefined
+                        }))
+                      }
+                      className={INPUT}
+                    >
+                      <option value="">沿用 Ask 默认端点</option>
+                      {(endpointSnapshot?.endpoints ?? []).map((endpoint) => (
+                        <option key={endpoint.id} value={endpoint.id}>
+                          {endpoint.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs">
+                    <span className="w-32 text-neutral-500">默认向量化</span>
+                    <select
+                      value={aiDefaults.embedding ?? ''}
+                      onChange={(e) =>
+                        setAiDefaults((d) => ({
+                          ...d,
+                          embedding: e.target.value || undefined
+                        }))
+                      }
+                      className={INPUT}
+                    >
+                      {(aiConfigSnapshot?.embeddings ?? []).map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-3 text-xs">
+                    <span className="w-32 text-neutral-500">记忆向量化</span>
+                    <select
+                      value={aiDefaults.memoryEmbedding ?? aiDefaults.embedding ?? ''}
+                      onChange={(e) =>
+                        setAiDefaults((d) => ({
+                          ...d,
+                          memoryEmbedding: e.target.value || undefined
+                        }))
+                      }
+                      className={INPUT}
+                    >
+                      {(aiConfigSnapshot?.embeddings ?? []).map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -946,6 +1135,104 @@ export function SettingsModal(): JSX.Element | null {
                     {endpointStatus.defaults && (
                       <span className="text-xs text-neutral-500">{endpointStatus.defaults}</span>
                     )}
+                  </div>
+                </section>
+                <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                  <div>
+                    <h3 className="text-sm font-semibold">Embedding Provider</h3>
+                    <p className="text-xs text-neutral-500">
+                      记忆、语义检索和后续 AI 能力统一从这里读取向量化配置。HY Memory 会通过 Orbit 本地代理调用这里选中的 provider。
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {(aiConfigSnapshot?.embeddings ?? []).map((provider) => (
+                      <div
+                        key={provider.id}
+                        className="rounded border border-neutral-200 p-3 dark:border-neutral-800"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">{provider.label}</div>
+                            <div className="text-xs text-neutral-500">
+                              {provider.provider} · {provider.model} · {provider.dimensions} 维 ·{' '}
+                              {provider.enabled ? '已启用' : '已禁用'} ·{' '}
+                              {provider.keyConfigured ? '凭据已配置' : '未配置凭据'}
+                            </div>
+                            {provider.baseURL && (
+                              <div className="mt-1 break-all text-[11px] text-neutral-500">
+                                {provider.baseURL}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className={BTN}
+                              onClick={() => void onTestEmbedding(provider.id)}
+                              disabled={provider.provider !== 'local' && !provider.keyConfigured}
+                            >
+                              测试
+                            </button>
+                            <button
+                              type="button"
+                              className={BTN}
+                              onClick={() => void onToggleEmbeddingProvider(provider)}
+                            >
+                              {provider.enabled ? '禁用' : '启用'}
+                            </button>
+                          </div>
+                        </div>
+                        {provider.provider !== 'local' && (
+                          <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                            <input
+                              type="password"
+                              value={embeddingCredentialInputs[provider.id]?.apiKey ?? ''}
+                              onChange={(e) =>
+                                setEmbeddingCredentialInputs((s) => ({
+                                  ...s,
+                                  [provider.id]: {
+                                    ...(s[provider.id] ?? {}),
+                                    apiKey: e.target.value
+                                  }
+                                }))
+                              }
+                              placeholder={
+                                provider.keyConfigured
+                                  ? `API Key（${provider.keyMasked ?? '已脱敏'}）`
+                                  : 'API Key'
+                              }
+                              autoComplete="off"
+                              className={INPUT}
+                            />
+                            <button
+                              type="button"
+                              className={BTN}
+                              onClick={() => void onSetEmbeddingSecret(provider.id)}
+                            >
+                              保存 API Key
+                            </button>
+                            <button
+                              type="button"
+                              className={BTN}
+                              onClick={() => {
+                                if (!confirm(`清除 ${provider.label} 的 API Key？`)) return;
+                                void window.orbit.aiConfig
+                                  .deleteEmbeddingSecret(provider.id)
+                                  .then(loadEndpoints);
+                              }}
+                              disabled={!provider.keyConfigured}
+                            >
+                              清除
+                            </button>
+                          </div>
+                        )}
+                        {embeddingStatus[provider.id] && (
+                          <p className="mt-2 text-xs text-neutral-500">
+                            {embeddingStatus[provider.id]}
+                          </p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </section>
                 <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
@@ -1044,6 +1331,343 @@ export function SettingsModal(): JSX.Element | null {
                   <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
                     请先打开工作库。
                   </p>
+                )}
+                {memoryBackendDraft && (
+                  <section className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold">记忆后端</h3>
+                        <p className="text-xs text-neutral-500">
+                          在 Orbit 自研 MemoryNode 和 HY Memory 之间切换；HY runtime 由 Orbit 自动安装和启动，LLM / Embedding 统一走「AI 配置」。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void onTestMemoryBackend(memoryBackendDraft.active)}
+                        className={BTN}
+                      >
+                        测试连接
+                      </button>
+                    </div>
+                    <label className="text-xs text-neutral-500">
+                      当前后端
+                      <select
+                        value={memoryBackendDraft.active}
+                        onChange={(event) =>
+                          setMemoryBackendDraft({
+                            ...memoryBackendDraft,
+                            active: event.target.value as MemoryBackendId
+                          })
+                        }
+                        className={`${INPUT} mt-1`}
+                      >
+                        <option value="orbit">Orbit 自研记忆</option>
+                        <option value="hy-memory">HY Memory（OpenClaw 插件）</option>
+                      </select>
+                    </label>
+                    <div className="grid gap-2 text-xs md:grid-cols-2">
+                      {(memoryBackendStatus?.backends ?? []).map((backend) => (
+                        <div key={backend.id} className="rounded bg-neutral-50 p-2 dark:bg-neutral-950">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{backend.label}</span>
+                            <span className={backend.health === 'ready' ? 'text-emerald-600' : 'text-amber-600'}>
+                              {backend.active ? '使用中' : backend.health === 'ready' ? '可用' : '未连接'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-neutral-500">{backend.details}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="text-xs text-neutral-500 md:col-span-2">
+                        HY 插件路径
+                        <input
+                          value={memoryBackendDraft.hyMemory.pluginPath}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                pluginPath: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1 font-mono text-[11px]`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        HY 服务地址
+                        <input
+                          value={memoryBackendDraft.hyMemory.serverUrl}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                serverUrl: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1 font-mono text-[11px]`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        用户 ID
+                        <input
+                          value={memoryBackendDraft.hyMemory.userId}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                userId: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        Agent ID
+                        <input
+                          value={memoryBackendDraft.hyMemory.agentId}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                agentId: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        会话 ID
+                        <input
+                          value={memoryBackendDraft.hyMemory.sessionId}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                sessionId: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        召回数量
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={memoryBackendDraft.hyMemory.topK}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                topK: Math.max(1, Number(event.target.value) || 1)
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        最低分数
+                        <input
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={memoryBackendDraft.hyMemory.searchThreshold}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                searchThreshold: Math.min(1, Math.max(0, Number(event.target.value) || 0))
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        Python 路径
+                        <input
+                          value={memoryBackendDraft.hyMemory.pythonPath}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                pythonPath: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1 font-mono text-[11px]`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        自动安装目录
+                        <input
+                          value={memoryBackendDraft.hyMemory.installDirectory}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                installDirectory: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1 font-mono text-[11px]`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        服务端口
+                        <input
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={memoryBackendDraft.hyMemory.serverPort}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                serverPort: Math.max(1, Number(event.target.value) || 19527)
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        Embedding 代理端口
+                        <input
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={memoryBackendDraft.hyMemory.embeddingProxyPort}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                embeddingProxyPort: Math.max(1, Number(event.target.value) || 19528)
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        HY SDK 包
+                        <input
+                          value={memoryBackendDraft.hyMemory.sdkPackage}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                sdkPackage: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1 font-mono text-[11px]`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        Pip 镜像
+                        <input
+                          value={memoryBackendDraft.hyMemory.pipIndexUrl}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                pipIndexUrl: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1 font-mono text-[11px]`}
+                        />
+                      </label>
+                      <label className="text-xs text-neutral-500">
+                        日志级别
+                        <select
+                          value={memoryBackendDraft.hyMemory.logLevel}
+                          onChange={(event) =>
+                            setMemoryBackendDraft({
+                              ...memoryBackendDraft,
+                              hyMemory: {
+                                ...memoryBackendDraft.hyMemory,
+                                logLevel: event.target.value
+                              }
+                            })
+                          }
+                          className={`${INPUT} mt-1`}
+                        >
+                          <option value="DEBUG">DEBUG</option>
+                          <option value="INFO">INFO</option>
+                          <option value="WARNING">WARNING</option>
+                          <option value="ERROR">ERROR</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={memoryBackendDraft.hyMemory.autoInstallRuntime}
+                        onChange={(event) =>
+                          setMemoryBackendDraft({
+                            ...memoryBackendDraft,
+                            hyMemory: {
+                              ...memoryBackendDraft.hyMemory,
+                              autoInstallRuntime: event.target.checked
+                            }
+                          })
+                        }
+                        className={FOCUS}
+                      />
+                      <span>HY runtime 缺失时由 Orbit 自动创建虚拟环境并安装</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={memoryBackendDraft.hyMemory.autoStartServer}
+                        onChange={(event) =>
+                          setMemoryBackendDraft({
+                            ...memoryBackendDraft,
+                            hyMemory: {
+                              ...memoryBackendDraft.hyMemory,
+                              autoStartServer: event.target.checked
+                            }
+                          })
+                        }
+                        className={FOCUS}
+                      />
+                      <span>HY 不可用时尝试启动本地 Python server</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => void onSaveMemoryBackend()} className={BTN_PRIMARY}>
+                        保存记忆后端
+                      </button>
+                      {memoryBackendMessage && (
+                        <span className="text-xs text-neutral-500">{memoryBackendMessage}</span>
+                      )}
+                    </div>
+                  </section>
+                )}
+                {!memoryBackendDraft && memoryBackendMessage && (
+                  <p className="text-xs text-red-500">{memoryBackendMessage}</p>
                 )}
                 {externalSessionSettings && (
                   <>

@@ -2,6 +2,7 @@ import type { MemoryDigestPayload, MemoryDigestResult, MemoryLayer, MemoryNode }
 import type { SynthesisProvenance } from '@shared/synthesis';
 import { createSynthesisStore } from '../synthesis/store';
 import { createMemoryStore, type MemoryStore } from './store';
+import type { MemoryBackend } from './backend-types';
 
 export async function generateMemoryDigest(vaultPath: string, period = currentMonthPeriod()): Promise<MemoryDigestResult> {
   const store = createMemoryStore(vaultPath);
@@ -15,6 +16,25 @@ export async function generateMemoryDigestWithStore(
 ): Promise<MemoryDigestResult> {
   const memories = await store.list({ include_archived: false });
   const clusters = await store.listClusters();
+  return writeMemoryDigest(vaultPath, memories, clusters, period);
+}
+
+export async function generateMemoryDigestWithBackend(
+  vaultPath: string,
+  backend: MemoryBackend,
+  period = currentMonthPeriod()
+): Promise<MemoryDigestResult> {
+  const memories = await backend.list({ include_archived: false });
+  const clusters = await backend.clusters();
+  return writeMemoryDigest(vaultPath, memories, clusters, period);
+}
+
+async function writeMemoryDigest(
+  vaultPath: string,
+  memories: MemoryNode[],
+  clusters: MemoryDigestResult['clusters'],
+  period: { from: string; to: string }
+): Promise<MemoryDigestResult> {
   const payload: MemoryDigestPayload = {
     period,
     new_memories: memories.filter((memory) => memory.created_at >= period.from && memory.created_at <= period.to),

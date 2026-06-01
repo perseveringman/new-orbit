@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { ConnectConnectorInput, ConnectorChangeEvent, ConnectorReadInput, UpdateConnectorInput } from '@shared/connectors';
 import { syncOrbitEvidenceSources } from '../evidence/providers';
+import { syncMemoryFromTruthLayer } from '../memory/source-sync';
 import { getSemanticRuntime } from '../semantic/ipc';
 import { createConnectorStore } from './store';
 
@@ -74,6 +75,13 @@ async function refreshConnectorIndexes(vaultPath: string, reason: string): Promi
   });
   await getSemanticRuntime(vaultPath).store.markAllStale(reason).catch((error) => {
     console.warn('[connectors] semantic stale mark failed', error);
+  });
+  await syncMemoryFromTruthLayer(vaultPath, {
+    sourceKinds: ['external_file', 'external_ai_session'],
+    includeExternalAISessions: false,
+    archiveMissingSources: reason === 'connector.removed'
+  }).catch((error) => {
+    console.warn('[connectors] memory source sync failed', error);
   });
 }
 

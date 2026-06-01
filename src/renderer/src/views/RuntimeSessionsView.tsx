@@ -665,7 +665,7 @@ function RuntimeSessionBridgeError({ status }: { status: RuntimeSessionBridgeSta
     <div className="runtime-session-empty">
       <h2>会话查看器不可用</h2>
       <p className="runtime-session-empty-hint">
-        Orbit 当前通过 ai-session-to-md 读取 runtime 会话。请确认路径存在：{status.modulePath}
+        Orbit 内置会话扫描器暂时无法读取本地 AI 会话。已检查：{status.root || status.modulePath}
       </p>
     </div>
   );

@@ -2,6 +2,7 @@ export type VaultViewKind =
   | 'editor'
   | 'agents'
   | 'tools'
+  | 'skills'
   | 'developerConsole'
   | 'github'
   | 'inbox'
@@ -36,6 +37,7 @@ export type SidebarSurfaceId =
   | 'editor'
   | 'agents'
   | 'tools'
+  | 'skills'
   | 'developerConsole'
   | 'github'
   | 'inbox'
@@ -309,6 +311,9 @@ const SURFACE_PROFILES: Record<SidebarSurfaceId, SidebarSurfaceProfile> = {
       { id: 'overview', title: '概览', panels: ['inspector'] },
       { id: 'execution', title: '执行', panels: ['runlog', 'review'] }
     ]
+  },
+  skills: {
+    intents: [{ id: 'overview', title: '概览', panels: ['inspector'] }]
   },
   developerConsole: {
     intents: [{ id: 'execution', title: '执行', panels: ['runlog', 'inspector'] }]

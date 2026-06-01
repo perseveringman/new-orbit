@@ -1,13 +1,28 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
-import type { CreateMemoryInput, MemoryFilter, RecallOptions, UpdateMemoryInput } from '@shared/memory';
+import type {
+  CreateMemoryInput,
+  MemoryBackendId,
+  MemoryFilter,
+  MemorySourceSyncOptions,
+  RecallOptions,
+  UpdateMemoryBackendConfigInput,
+  UpdateMemoryInput
+} from '@shared/memory';
 import type { TraceableEvent } from '@shared/events';
 import { eventReplayBus } from '../events/bus';
 import { ConversationStore } from '../conversation/store';
 import { extractFromConversation, extractMemoryCandidates } from './extractor';
-import { generateMemoryDigest } from './digest-synthesis';
-import { recallContext } from './recall-service';
+import { generateMemoryDigestWithBackend } from './digest-synthesis';
 import { createMemoryStore, type MemoryStore } from './store';
+import {
+  createActiveMemory,
+  getActiveMemoryBackend,
+  getMemoryBackendStatus,
+  testMemoryBackend,
+  updateActiveMemoryBackendConfig
+} from './backend-registry';
+import { syncMemoryFromTruthLayer } from './source-sync';
 
 let current: { vaultPath: string; store: MemoryStore } | null = null;
 let autoExtractorRegistered = false;
@@ -28,20 +43,31 @@ export function registerMemoryIpc(getVaultPath: () => string | null): void {
 
   registerAutomaticMemoryExtraction(getVaultPath);
 
-  ipcMain.handle(IPC.memory.list, (_event, filter?: MemoryFilter) => runtime().store.list(filter));
-  ipcMain.handle(IPC.memory.get, (_event, id: string) => runtime().store.get(id));
-  ipcMain.handle(IPC.memory.create, (_event, input: CreateMemoryInput) => runtime().store.create(input));
-  ipcMain.handle(IPC.memory.update, (_event, id: string, patch: UpdateMemoryInput) => runtime().store.update(id, patch));
-  ipcMain.handle(IPC.memory.archive, (_event, id: string) => runtime().store.archive(id));
-  ipcMain.handle(IPC.memory.merge, (_event, fromId: string, toId: string) => runtime().store.merge(fromId, toId));
-  ipcMain.handle(IPC.memory.promoteToResource, (_event, id: string) => runtime().store.promoteToResource(id));
-  ipcMain.handle(IPC.memory.promoteToProject, (_event, id: string) => runtime().store.promoteToProject(id));
-  ipcMain.handle(IPC.memory.recall, (_event, query: string, options?: RecallOptions) => recallContext(runtime().vaultPath, query, options));
-  ipcMain.handle(IPC.memory.recallStats, (_event, id: string) => runtime().store.getRecallStats(id));
-  ipcMain.handle(IPC.memory.clusters, () => runtime().store.listClusters());
-  ipcMain.handle(IPC.memory.graph, (_event, filter?: MemoryFilter) => runtime().store.graph(filter));
-  ipcMain.handle(IPC.memory.feedback, (_event, id: string, helpful: boolean) => runtime().store.recordFeedback(id, helpful));
-  ipcMain.handle(IPC.memory.generateDigest, () => generateMemoryDigest(runtime().vaultPath));
+  ipcMain.handle(IPC.memory.backendStatus, () => getMemoryBackendStatus(runtime().vaultPath));
+  ipcMain.handle(IPC.memory.updateBackendConfig, (_event, input: UpdateMemoryBackendConfigInput) => updateActiveMemoryBackendConfig(runtime().vaultPath, input));
+  ipcMain.handle(IPC.memory.testBackend, (_event, id?: MemoryBackendId) => testMemoryBackend(runtime().vaultPath, id));
+  ipcMain.handle(IPC.memory.list, async (_event, filter?: MemoryFilter) => (await getActiveMemoryBackend(runtime().vaultPath)).list(filter));
+  ipcMain.handle(IPC.memory.get, async (_event, id: string) => (await getActiveMemoryBackend(runtime().vaultPath)).get(id));
+  ipcMain.handle(IPC.memory.create, async (_event, input: CreateMemoryInput) => (await getActiveMemoryBackend(runtime().vaultPath)).create(input));
+  ipcMain.handle(IPC.memory.update, async (_event, id: string, patch: UpdateMemoryInput) => (await getActiveMemoryBackend(runtime().vaultPath)).update(id, patch));
+  ipcMain.handle(IPC.memory.archive, async (_event, id: string) => (await getActiveMemoryBackend(runtime().vaultPath)).archive(id));
+  ipcMain.handle(IPC.memory.merge, async (_event, fromId: string, toId: string) => (await getActiveMemoryBackend(runtime().vaultPath)).merge(fromId, toId));
+  ipcMain.handle(IPC.memory.promoteToResource, async (_event, id: string) => (await getActiveMemoryBackend(runtime().vaultPath)).promoteToResource(id));
+  ipcMain.handle(IPC.memory.promoteToProject, async (_event, id: string) => (await getActiveMemoryBackend(runtime().vaultPath)).promoteToProject(id));
+  ipcMain.handle(IPC.memory.recall, async (_event, query: string, options?: RecallOptions) => (await getActiveMemoryBackend(runtime().vaultPath)).recall(query, options));
+  ipcMain.handle(IPC.memory.recallStats, async (_event, id: string) => (await getActiveMemoryBackend(runtime().vaultPath)).recallStats(id));
+  ipcMain.handle(IPC.memory.clusters, async () => (await getActiveMemoryBackend(runtime().vaultPath)).clusters());
+  ipcMain.handle(IPC.memory.graph, async (_event, filter?: MemoryFilter) => (await getActiveMemoryBackend(runtime().vaultPath)).graph(filter));
+  ipcMain.handle(IPC.memory.feedback, async (_event, id: string, helpful: boolean) => (await getActiveMemoryBackend(runtime().vaultPath)).feedback(id, helpful));
+  ipcMain.handle(IPC.memory.syncTruthLayer, async (_event, options?: MemorySourceSyncOptions) => {
+    const result = await syncMemoryFromTruthLayer(runtime().vaultPath, options);
+    broadcastMemory({ type: 'memory.truth_layer_synced', count: result.created_count + result.updated_count });
+    return result;
+  });
+  ipcMain.handle(IPC.memory.generateDigest, async () => {
+    const { vaultPath } = runtime();
+    return generateMemoryDigestWithBackend(vaultPath, await getActiveMemoryBackend(vaultPath));
+  });
 }
 
 function registerAutomaticMemoryExtraction(getVaultPath: () => string | null): void {
@@ -65,9 +91,8 @@ function registerAutomaticMemoryExtraction(getVaultPath: () => string | null): v
 async function extractConversation(vaultPath: string, conversationId: string): Promise<void> {
   const conversation = await new ConversationStore(vaultPath).get(conversationId);
   if (!conversation || conversation.turns.length < 2) return;
-  const store = getMemoryRuntime(vaultPath).store;
   const candidates = extractMemoryCandidates(extractFromConversation(conversation));
-  for (const candidate of candidates) await store.create(candidate);
+  for (const candidate of candidates) await createActiveMemory(vaultPath, candidate);
   if (candidates.length) broadcastMemory({ type: 'memory.extracted', count: candidates.length });
 }
 

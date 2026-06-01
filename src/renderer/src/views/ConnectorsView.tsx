@@ -298,6 +298,10 @@ function connectorActionLabel(definition: ConnectorDefinition): string {
 function connectionConfigLabel(connection: ConnectorConnection): string {
   const rootPath = connection.config['root_path'];
   if (typeof rootPath === 'string' && rootPath) return rootPath;
+  if (connection.config['scanner'] === 'orbit.external-ai-sessions') {
+    const count = connection.config['root_count'];
+    return typeof count === 'number' ? `Orbit 内置本地会话索引 · ${count} 个来源` : 'Orbit 内置本地会话索引';
+  }
   const bridgeRoot = connection.config['bridge_root'];
   if (typeof bridgeRoot === 'string' && bridgeRoot) return bridgeRoot;
   return connection.connector_id;

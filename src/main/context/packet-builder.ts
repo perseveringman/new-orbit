@@ -17,7 +17,7 @@ import { createEvidenceGraphStore } from '../evidence/graph-store';
 import { listEntityProfilesForResults } from './entity-profile';
 import { listExternalSessionDistillationsForResults } from './external-session-synthesis';
 import { ensurePersonalQA, listPersonalQAHits, type PersonalQAHitsResult } from './personal-qa';
-import { recallContext } from '../memory/recall-service';
+import { recallActiveMemoryContext } from '../memory/backend-registry';
 
 const DEFAULT_MAX_TOKENS = 2400;
 const DEFAULT_EVIDENCE_LIMIT = 8;
@@ -212,7 +212,7 @@ async function buildMemoryRecall(
     return { memories: [], matches: [], explanation: 'No memory query provided.' };
   }
   try {
-    return await recallContext(vaultPath, input.query, {
+    return await recallActiveMemoryContext(vaultPath, input.query, {
       max_memories: 4,
       min_confidence: 0.4,
       triggered_by: { kind: contextPurposeToRecallTrigger(input.purpose), ref: input.scope?.ref },

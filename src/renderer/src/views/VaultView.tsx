@@ -74,6 +74,7 @@ import { JournalHistoryView } from './JournalHistoryView';
 import { RuntimesWorkspaceView } from './RuntimesWorkspaceView';
 import { RuntimeSessionsView } from './RuntimeSessionsView';
 import { ToolRegistryView } from './ToolRegistryView';
+import { SkillRegistryView } from './SkillRegistryView';
 import { DeveloperConsoleView } from './DeveloperConsoleView';
 import { NewProjectModal } from '../components/Modals/NewProjectModal';
 import { NewAreaModal } from '../components/Modals/NewAreaModal';
@@ -577,6 +578,8 @@ export function VaultView(): JSX.Element {
           <RuntimeSessionsView />
         ) : view.kind === 'tools' ? (
           <ToolRegistryView />
+        ) : view.kind === 'skills' ? (
+          <SkillRegistryView />
         ) : view.kind === 'developerConsole' ? (
           <DeveloperConsoleView />
         ) : view.kind === 'agents' ? (
@@ -766,5 +769,10 @@ export function VaultView(): JSX.Element {
 }
 
 export function shouldShowRightSidebar(view: WorkspaceView): boolean {
-  return view.kind !== 'askAnywhere' && view.kind !== 'runtimeSessions' && view.kind !== 'library';
+  return (
+    view.kind !== 'askAnywhere' &&
+    view.kind !== 'runtimeSessions' &&
+    view.kind !== 'library' &&
+    view.kind !== 'skills'
+  );
 }

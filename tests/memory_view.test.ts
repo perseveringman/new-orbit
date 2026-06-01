@@ -8,25 +8,22 @@ describe('MemoryContent', () => {
   it('renders empty guidance', () => {
     const html = renderToStaticMarkup(baseElement({ nodes: [], state: 'empty' }));
 
-    expect(html).toContain('暂无记忆');
-    expect(html).toContain('开始一次随处问对话');
+    expect(html).toContain('还没有可用记忆');
+    expect(html).toContain('先从来源更新记忆');
   });
 
   it('renders memory stats and actions', () => {
     const html = renderToStaticMarkup(baseElement({ nodes: [sampleMemory()], state: 'success' }));
 
-    expect(html).toContain('透明的长期记忆');
+    expect(html).toContain('Orbit 现在知道什么');
     expect(html).toContain('Read source first');
-    expect(html).toContain('记忆图谱');
-    expect(html).toContain('Runtime 会话库');
-    expect(html).toContain('不限于 Orbit 内使用过的会话');
-    expect(html).toContain('保存为笔记');
-    expect(html).toContain('转为 Orbit 会话');
-    expect(html).toContain('实体画像');
-    expect(html).toContain('来源证据');
+    expect(html).toContain('会进入上下文的记忆');
+    expect(html).toContain('管理来源');
+    expect(html).toContain('测试召回');
+    expect(html).toContain('为什么会记住');
     expect(html).toContain('查看证据');
-    expect(html).toContain('不相关');
-    expect(html).toContain('提升为 Resource');
+    expect(html).toContain('不准确');
+    expect(html).toContain('变成资源');
     expect(html).toContain('语义');
     expect(html).toContain('稳定');
   });
@@ -47,6 +44,9 @@ function baseElement(
     state: 'success',
     error: null,
     digest: null,
+    sourceSync: null,
+    sourceSyncError: null,
+    syncingSources: false,
     onKindChange: vi.fn(),
     onLayerChange: vi.fn(),
     onReload: vi.fn(),
@@ -54,6 +54,7 @@ function baseElement(
     onArchive: vi.fn(),
     onConfirm: vi.fn(),
     onDigest: vi.fn(),
+    onSyncTruthLayer: vi.fn(),
     onFeedback: vi.fn(),
     onPromote: vi.fn(),
     ...overrides

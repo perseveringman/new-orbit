@@ -57,6 +57,8 @@ export interface ComposerDraft {
   text: string;
   attachments?: ComposerAttachmentRef[];
   selection?: RuntimeSelection;
+  /** 明确选择的随处问 skill；缺省表示按当前 scope 自动加载全部可用 skill。 */
+  skillRefs?: string[];
   intent?: ComposerIntent;
   voice?: ComposerVoiceInput;
   clientMeta?: {
@@ -104,10 +106,20 @@ export interface ComposerProfileOption {
   description?: string;
 }
 
+export interface ComposerSkillOption {
+  id: string;
+  label: string;
+  description?: string;
+  source?: 'app' | 'vault' | 'space';
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
 export interface ComposerOptions {
   runtimes: ComposerRuntimeOption[];
   models: ComposerModelOption[];
   profiles: ComposerProfileOption[];
+  skills?: ComposerSkillOption[];
   defaultSelection: RuntimeSelection;
 }
 

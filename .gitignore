@@ -24,3 +24,9 @@ test-results
 e2e-tmp
 coverage
 .worktrees
+
+# Evaluation datasets and generated reports
+eval/data
+eval/runs
+eval/.tmp
+eval/web/public/results

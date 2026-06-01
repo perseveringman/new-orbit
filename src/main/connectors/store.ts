@@ -25,7 +25,7 @@ interface ConnectorRegistryFile {
 export class ConnectorStore {
   constructor(
     private readonly vaultPath: string,
-    private readonly plugins: ConnectorPluginRegistry = createDefaultConnectorPluginRegistry()
+    private readonly plugins: ConnectorPluginRegistry = createDefaultConnectorPluginRegistry(vaultPath)
   ) {}
 
   definitions(): ConnectorDefinition[] {

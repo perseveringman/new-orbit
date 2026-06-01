@@ -1,3 +1,5 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +12,8 @@ import { SDKEndpointRegistry } from '../src/main/runtime/sdk/endpoint-registry';
 import type { SDKKeyVault } from '../src/main/runtime/sdk/key-vault';
 import { mapAnthropicStreamEvent } from '../src/main/runtime/sdk/anthropic-sdk-adapter';
 import { RuntimeRouter } from '../src/main/runtime/router';
+import { AIConfigService } from '../src/main/ai-config/service';
+import { ensureEmbeddingProxy, shutdownEmbeddingProxy } from '../src/main/ai-config/embedding-proxy';
 
 class MemoryKeyVault implements SDKKeyVault {
   private secrets = new Map<string, string>();
@@ -182,4 +186,79 @@ describe('Runtime B SDK foundation', () => {
     expect(maskSecret('sk-ant-1234567890')).toBe('sk-a••••7890');
     expect(maskSecret('')).toBeUndefined();
   });
+
+  it('exposes unified AI config with built-in embedding providers', async () => {
+    const service = new AIConfigService(registry, keyVault, vault);
+    const snapshot = await service.snapshot();
+    expect(snapshot.llm.endpoints.map((endpoint) => endpoint.id)).toContain('anthropic');
+    expect(snapshot.embeddings.map((provider) => provider.id)).toContain('orbit-local');
+    expect(snapshot.embeddings.map((provider) => provider.id)).toContain('volcengine-doubao-vision');
+    expect(snapshot.defaults.embedding).toBe('orbit-local');
+  });
+
+  it('stores embedding credentials separately and masks them', async () => {
+    const service = new AIConfigService(registry, keyVault, vault);
+    await service.setEmbeddingSecret('volcengine-doubao-vision', {
+      apiKey: 'volc-api-key-1234567890'
+    });
+    const snapshot = await service.snapshot();
+    const provider = snapshot.embeddings.find((item) => item.id === 'volcengine-doubao-vision');
+    expect(provider?.keyConfigured).toBe(true);
+    expect(provider?.secret.apiKeyMasked).toBe('volc••••7890');
+    expect(JSON.stringify(provider)).not.toContain('volc-api-key-1234567890');
+  });
+
+  it('persists unified memory LLM defaults while preserving SDK defaults', async () => {
+    const endpoint = await registry.upsert({
+      id: 'memory-llm',
+      label: 'Memory LLM',
+      provider: 'custom',
+      baseURL: 'https://sdk.example.test',
+      defaultModel: 'memory-model',
+      enabled: true,
+      apiKey: 'sk-memory'
+    });
+    const service = new AIConfigService(registry, keyVault, vault);
+    const defaults = await service.setDefaults({
+      llm: { ask: endpoint.id },
+      memoryLlm: endpoint.id,
+      embedding: 'orbit-local',
+      memoryEmbedding: 'orbit-local'
+    });
+    expect(defaults.llm.ask).toBe(endpoint.id);
+    expect(defaults.memoryLlm).toBe(endpoint.id);
+    const resolved = await service.resolveLLM('memory');
+    expect(resolved?.model).toBe('memory-model');
+  });
+
+  it('falls back to the next embedding proxy port when the preferred port is busy', async () => {
+    const blocker = http.createServer((_req, res) => res.end('busy'));
+    await listen(blocker, 0);
+    const busyPort = (blocker.address() as AddressInfo).port;
+    try {
+      const result = await ensureEmbeddingProxy({
+        vaultPath: vault,
+        port: busyPort,
+        service: new AIConfigService(registry, keyVault, vault)
+      });
+      expect(result.baseURL).not.toBe(`http://127.0.0.1:${busyPort}/v1`);
+    } finally {
+      await shutdownEmbeddingProxy();
+      await closeServer(blocker);
+    }
+  });
 });
+
+function listen(server: http.Server, port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+}
+
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise((resolve) => server.close(() => resolve()));
+}

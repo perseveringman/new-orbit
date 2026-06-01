@@ -1,7 +1,13 @@
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '@shared/chat-protocol';
 import type { Conversation } from '@shared/conversation';
-import type { ComposerSourceSurface, RuntimeSelection } from '@shared/ai-composer';
+import { conversationScopeKey } from '@shared/conversation';
+import type {
+  ComposerOptions,
+  ComposerSkillOption,
+  ComposerSourceSurface,
+  RuntimeSelection
+} from '@shared/ai-composer';
 import type { RecallResult } from '@shared/memory';
 import type { ConversationStage } from '@shared/stage';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -52,6 +58,7 @@ export function ConversationShell({
   const showStage = variant === 'full';
   const runtimeCatalog = useRuntimeCatalog();
   const [pendingSelection, setPendingSelection] = useState<RuntimeSelection | null>(null);
+  const [skillOptions, setSkillOptions] = useState<ComposerSkillOption[]>([]);
   const capabilities = {
     ...DEFAULT_CHAT_HOST_CAPABILITIES,
     canApproveTool: true
@@ -61,6 +68,15 @@ export function ConversationShell({
       pendingSelection ??
       selectionFromConversation(activeConversation, runtimeCatalog.options.defaultSelection),
     [activeConversation, pendingSelection, runtimeCatalog.options.defaultSelection]
+  );
+  const skillScope = useMemo(
+    () => activeConversation?.scope ?? { kind: 'global' as const },
+    [activeConversation?.scope]
+  );
+  const skillScopeKey = conversationScopeKey(skillScope);
+  const composerOptions = useMemo<ComposerOptions>(
+    () => ({ ...runtimeCatalog.options, skills: skillOptions }),
+    [runtimeCatalog.options, skillOptions]
   );
   const handleComposerSelectionChange = useCallback(
     (selection: RuntimeSelection) => {
@@ -77,6 +93,37 @@ export function ConversationShell({
   useEffect(() => {
     setPendingSelection(null);
   }, [activeId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.orbit.skills
+      .list(skillScope)
+      .then((snapshot) => {
+        if (cancelled) return;
+        setSkillOptions(
+          snapshot.skills
+            .filter(
+              (skill) =>
+                skill.effective &&
+                (skill.scopes.length === 0 || skill.scopes.includes(skillScope.kind))
+            )
+            .map((skill): ComposerSkillOption => ({
+              id: skill.name,
+              label: skill.name,
+              description: skill.description,
+              source: skill.source,
+              disabled: Boolean(skill.disabledReason),
+              ...(skill.disabledReason ? { disabledReason: skill.disabledReason } : {})
+            }))
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setSkillOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [skillScope, skillScopeKey]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -105,7 +152,7 @@ export function ConversationShell({
             isLoading={isLoading}
             onAction={onAction}
             welcomeMessage={welcomeMessage}
-            composerOptions={runtimeCatalog.options}
+            composerOptions={composerOptions}
             composerSelection={composerSelection}
             composerSourceSurface={composerSourceSurface}
             onComposerSelectionChange={handleComposerSelectionChange}

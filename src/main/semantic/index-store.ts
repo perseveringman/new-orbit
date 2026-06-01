@@ -4,9 +4,10 @@ import { ORBIT_DIR } from '@shared/constants';
 import type { EmbeddingRecord, SemanticDocument, SemanticIndexFile, SemanticIndexStatus } from '@shared/semantic';
 import { normalizeSearchQuery, type SearchQuery, type SearchResult } from '@shared/semantic';
 import { publishTraceableEvent } from '../events/bus';
-import { bufferToVector, contentHash, embedText, LOCAL_EMBEDDING_DIMENSIONS, LOCAL_EMBEDDING_MODEL, vectorToBuffer } from './embedder';
+import { bufferToVector, contentHash, embedText as embedTextLocal, LOCAL_EMBEDDING_DIMENSIONS, LOCAL_EMBEDDING_MODEL, vectorToBuffer } from './embedder';
 import { collectSemanticDocuments } from './document-projectors';
 import { hybridSearch } from './hybrid-search';
+import { getAIConfigRuntime } from '../ai-config/runtime';
 
 export interface IndexedSemanticDocument {
   doc: SemanticDocument;
@@ -22,11 +23,12 @@ export class SemanticIndexStore {
     await fs.mkdir(this.docsDir(), { recursive: true });
     await fs.mkdir(this.vectorsDir(), { recursive: true });
     const current = await this.readIndex();
+    const embeddingProvider = await this.embeddingProviderInfo();
     const next: SemanticIndexFile = {
       version: 1,
       docs: {},
-      embedding_model: LOCAL_EMBEDDING_MODEL,
-      embedding_dimensions: LOCAL_EMBEDDING_DIMENSIONS,
+      embedding_model: embeddingProvider.model,
+      embedding_dimensions: embeddingProvider.dimensions,
       last_indexed_at: new Date().toISOString()
     };
 
@@ -36,10 +38,13 @@ export class SemanticIndexStore {
         const hash = contentHash(documentText(doc));
         const existing = current.docs[doc.id];
         const vectorPath = this.vectorPath(doc.id);
-        const needsEmbedding = !existing || existing.content_hash !== hash || existing.stale || !(await exists(vectorPath));
+        const providerChanged =
+          current.embedding_model !== embeddingProvider.model ||
+          current.embedding_dimensions !== embeddingProvider.dimensions;
+        const needsEmbedding = !existing || existing.content_hash !== hash || existing.stale || providerChanged || !(await exists(vectorPath));
         let embeddedAt = existing?.embedded_at;
         if (needsEmbedding) {
-          const embedding = await embedText(documentText(doc));
+          const embedding = await this.embedText(documentText(doc));
           await fs.writeFile(vectorPath, vectorToBuffer(embedding.vector));
           embeddedAt = new Date().toISOString();
         }
@@ -101,7 +106,7 @@ export class SemanticIndexStore {
     const status = await this.status();
     if (status.total_docs === 0 || status.stale_docs > 0) await this.rebuildIndex();
     const docs = await this.loadIndexedDocuments();
-    const results = await hybridSearch(docs, normalized);
+    const results = await hybridSearch(docs, normalized, (text) => this.embedText(text));
     publishTraceableEvent({
       source: 'synthesis',
       type: 'semantic.search.executed',
@@ -154,6 +159,33 @@ export class SemanticIndexStore {
 
   private indexPath(): string {
     return path.join(this.semanticDir(), 'index.json');
+  }
+
+  private async embeddingProviderInfo(): Promise<{ model: string; dimensions: number }> {
+    try {
+      const resolved = await getAIConfigRuntime(this.vaultPath).service.resolveEmbedding('default');
+      if (resolved) return { model: resolved.provider.model, dimensions: resolved.provider.dimensions };
+    } catch {
+      /* keep local deterministic fallback */
+    }
+    return { model: LOCAL_EMBEDDING_MODEL, dimensions: LOCAL_EMBEDDING_DIMENSIONS };
+  }
+
+  private async embedText(text: string) {
+    try {
+      const resolved = await getAIConfigRuntime(this.vaultPath).service.resolveEmbedding('default');
+      if (resolved) {
+        const [vector] = await getAIConfigRuntime(this.vaultPath).service.embedTexts([text], { providerId: resolved.provider.id });
+        return {
+          vector: new Float32Array(vector),
+          model: resolved.provider.model,
+          dimensions: resolved.provider.dimensions
+        };
+      }
+    } catch {
+      /* keep local deterministic fallback */
+    }
+    return embedTextLocal(text);
   }
 
   private docPath(docId: string): string {

@@ -79,7 +79,13 @@ import type {
 } from '@shared/conversation';
 import type { BuildContextPacketInput, BuildWorkContextInput } from '@shared/context';
 import type { ChatAppendTurnInput, ChatCreateConversationInput } from '@shared/ipc';
-import type { AgentToolRegistrySnapshot } from '@shared/agent-tools';
+import type {
+  AgentSkillDeleteInput,
+  AgentSkillRegistrySnapshot,
+  AgentSkillSaveInput,
+  AgentSkillView,
+  AgentToolRegistrySnapshot
+} from '@shared/agent-tools';
 import type {
   Proposal,
   ProposalListFilter,
@@ -221,7 +227,20 @@ import type {
 import type { ResourceChangeEvent } from '@shared/resource';
 import type { SearchQuery, SemanticIndexStatus } from '@shared/semantic';
 import type { EvidenceSelector, EvidenceSourceFilter, ExternalAISessionSettings } from '@shared/evidence';
-import type { CreateMemoryInput, MemoryFilter, RecallOptions, UpdateMemoryInput } from '@shared/memory';
+import type {
+  CreateMemoryInput,
+  MemoryBackendId,
+  MemoryFilter,
+  MemorySourceSyncOptions,
+  RecallOptions,
+  UpdateMemoryBackendConfigInput,
+  UpdateMemoryInput
+} from '@shared/memory';
+import type {
+  AIConfigDefaults,
+  AIEmbeddingCredentialInput,
+  AIEmbeddingProviderInput
+} from '@shared/ai-config';
 import type { ReviewFilter, ReviewKind } from '@shared/review';
 import type { CreateGoalInput, UpdateGoalInput, VisionHorizon } from '@shared/vision';
 import type {
@@ -412,6 +431,19 @@ const api: OrbitApi = {
       decide: (input) => ipcRenderer.invoke(IPC.runtime.sdk.decide, input)
     }
   },
+  aiConfig: {
+    snapshot: () => ipcRenderer.invoke(IPC.aiConfig.snapshot),
+    upsertEmbeddingProvider: (input: AIEmbeddingProviderInput) =>
+      ipcRenderer.invoke(IPC.aiConfig.upsertEmbeddingProvider, input),
+    setEmbeddingSecret: (providerId: string, input: AIEmbeddingCredentialInput) =>
+      ipcRenderer.invoke(IPC.aiConfig.setEmbeddingSecret, providerId, input),
+    deleteEmbeddingSecret: (providerId: string) =>
+      ipcRenderer.invoke(IPC.aiConfig.deleteEmbeddingSecret, providerId),
+    setDefaults: (defaults: Partial<AIConfigDefaults>) =>
+      ipcRenderer.invoke(IPC.aiConfig.setDefaults, defaults),
+    testEmbedding: (providerId: string, text?: string) =>
+      ipcRenderer.invoke(IPC.aiConfig.testEmbedding, providerId, text)
+  },
   runtimeSessions: {
     status: () => ipcRenderer.invoke(IPC.runtimeSessions.status),
     list: (refresh?: boolean) => ipcRenderer.invoke(IPC.runtimeSessions.list, refresh),
@@ -421,6 +453,14 @@ const api: OrbitApi = {
   },
   tools: {
     snapshot: (): Promise<AgentToolRegistrySnapshot> => ipcRenderer.invoke(IPC.tools.snapshot)
+  },
+  skills: {
+    list: (scope): Promise<AgentSkillRegistrySnapshot> =>
+      ipcRenderer.invoke(IPC.skills.list, scope),
+    save: (input: AgentSkillSaveInput): Promise<AgentSkillView> =>
+      ipcRenderer.invoke(IPC.skills.save, input),
+    delete: (input: AgentSkillDeleteInput): Promise<void> =>
+      ipcRenderer.invoke(IPC.skills.delete, input)
   },
   dashboard: {
     summary: (): Promise<DashboardSummary> => ipcRenderer.invoke(IPC.dashboard.summary),
@@ -1003,6 +1043,10 @@ const api: OrbitApi = {
       ipcRenderer.invoke(IPC.evidence.updateExternalSessionSettings, patch)
   },
   memory: {
+    backendStatus: () => ipcRenderer.invoke(IPC.memory.backendStatus),
+    updateBackendConfig: (input: UpdateMemoryBackendConfigInput) =>
+      ipcRenderer.invoke(IPC.memory.updateBackendConfig, input),
+    testBackend: (id?: MemoryBackendId) => ipcRenderer.invoke(IPC.memory.testBackend, id),
     list: (filter?: MemoryFilter) => ipcRenderer.invoke(IPC.memory.list, filter),
     get: (id: string) => ipcRenderer.invoke(IPC.memory.get, id),
     create: (input: CreateMemoryInput) => ipcRenderer.invoke(IPC.memory.create, input),
@@ -1016,6 +1060,7 @@ const api: OrbitApi = {
     clusters: () => ipcRenderer.invoke(IPC.memory.clusters),
     graph: (filter?: MemoryFilter) => ipcRenderer.invoke(IPC.memory.graph, filter),
     feedback: (id: string, helpful: boolean) => ipcRenderer.invoke(IPC.memory.feedback, id, helpful),
+    syncTruthLayer: (options?: MemorySourceSyncOptions) => ipcRenderer.invoke(IPC.memory.syncTruthLayer, options),
     generateDigest: () => ipcRenderer.invoke(IPC.memory.generateDigest),
     onEvent: (cb: (event: { type: string; count?: number }) => void) => {
       const listener = (_: unknown, event: { type: string; count?: number }): void => cb(event);

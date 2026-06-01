@@ -229,9 +229,10 @@ export class AskAnywhereOrchestrator {
     // 先取历史构造 prompt（不含本条 user message），随后再 append user turn —— 避免重复
     const history = renderHistory(conv.turns);
     const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
+    const scope = conv.scope ?? { kind: 'global' };
     const contextBundle = await buildAskAnywhereContextBundle(
       vault,
-      conv.scope ?? { kind: 'global' },
+      scope,
       trimmed
     );
     const scopedContext = contextBundle.text;
@@ -240,7 +241,15 @@ export class AskAnywhereOrchestrator {
         console.warn('[ask-anywhere] failed to add PMIL context packet artifact', error)
       );
     }
-    const prompt = buildPrompt({ systemPrompt, scopedContext, history, userText: trimmed });
+    const selectedSkillRefs = normalizeSkillRefs(draft.skillRefs);
+    const skillsSection = await loadSkillsSectionForPrompt(vault, scope, selectedSkillRefs);
+    const prompt = buildPrompt({
+      systemPrompt,
+      scopedContext,
+      skillsSection,
+      history,
+      userText: trimmed
+    });
     const router = this.deps.getRuntimeRouter?.() ?? null;
     const agentTools = this.deps.getAgentTools?.() ?? null;
     const agentReady = Boolean(router && agentTools && !forceCli);
@@ -291,9 +300,10 @@ export class AskAnywhereOrchestrator {
         runId,
         systemPrompt,
         scopedContext,
-        scope: conv.scope ?? { kind: 'global' },
+        scope,
         turns: conv.turns,
         userText: trimmed,
+        skillRefs: selectedSkillRefs,
         endpointId: decision.endpointId,
         model: decision.model
       });
@@ -330,8 +340,10 @@ export class AskAnywhereOrchestrator {
         runId,
         systemPrompt,
         scopedContext,
+        scope,
         turns: conv.turns,
         userText: trimmed,
+        skillRefs: selectedSkillRefs,
         endpointId: decision.endpointId,
         model: decision.model
       });
@@ -588,6 +600,7 @@ export class AskAnywhereOrchestrator {
     scope: ConversationScope;
     turns: Conversation['turns'];
     userText: string;
+    skillRefs?: string[];
     endpointId?: string;
     model?: string;
   }): Promise<void> {
@@ -600,11 +613,7 @@ export class AskAnywhereOrchestrator {
       scope: input.scope
     });
     const allSkills = await skillLoader.load();
-    const activeSkills = allSkills.filter(
-      (skill) =>
-        !skill.disabledReason &&
-        (skill.scopes.length === 0 || skill.scopes.includes(input.scope.kind))
-    );
+    const activeSkills = filterActiveSkills(allSkills, input.scope, input.skillRefs);
 
     // 工具按 scope 过滤后，再按激活 skill 的 tools 子集做"显式声明的并集"
     // 规则：若没有任何 active skill 显式声明 tools → 用全集（scope-filtered）
@@ -731,12 +740,19 @@ export class AskAnywhereOrchestrator {
     runId: string;
     systemPrompt: string;
     scopedContext: string;
+    scope: ConversationScope;
     turns: Conversation['turns'];
     userText: string;
+    skillRefs?: string[];
     endpointId?: string;
     model?: string;
   }): Promise<void> {
     try {
+      const skillsSection = await loadSkillsSectionForPrompt(
+        this.deps.getVaultPath(),
+        input.scope,
+        input.skillRefs
+      );
       const result = await input.router.stream(
         {
           endpointId: input.endpointId,
@@ -744,6 +760,7 @@ export class AskAnywhereOrchestrator {
           system: [
             input.systemPrompt.trim(),
             input.scopedContext,
+            skillsSection,
             'Runtime note: this SDK route cannot use local tools. Ask for confirmation before any action that would require modifying Orbit data.'
           ]
             .filter(Boolean)
@@ -895,16 +912,19 @@ function renderHistory(turns: Conversation['turns']): string {
 function buildPrompt({
   systemPrompt,
   scopedContext,
+  skillsSection,
   history,
   userText
 }: {
   systemPrompt: string;
   scopedContext: string;
+  skillsSection?: string;
   history: string;
   userText: string;
 }): string {
   const parts = [systemPrompt.trim()];
   if (scopedContext) parts.push(scopedContext);
+  if (skillsSection) parts.push(skillsSection);
   if (history) parts.push(`<conversation_history>\n${history}\n</conversation_history>`);
   parts.push(`User: ${userText}`);
   parts.push('Assistant:');
@@ -1161,6 +1181,39 @@ function renderSkillsSection(skills: LoadedSkill[]): string {
     return `${header}\n\n${s.body}`;
   });
   return ['## Active Skills', ...blocks].join('\n\n');
+}
+
+async function loadSkillsSectionForPrompt(
+  vaultPath: string | null,
+  scope: ConversationScope,
+  skillRefs?: string[]
+): Promise<string> {
+  const skillLoader = new SkillLoader({ vaultPath, scope });
+  const allSkills = await skillLoader.load();
+  return renderSkillsSection(filterActiveSkills(allSkills, scope, skillRefs));
+}
+
+function filterActiveSkills(
+  skills: LoadedSkill[],
+  scope: ConversationScope,
+  skillRefs?: string[]
+): LoadedSkill[] {
+  const selected = skillRefs && skillRefs.length > 0 ? new Set(skillRefs) : null;
+  return skills.filter(
+    (skill) =>
+      !skill.disabledReason &&
+      (skill.scopes.length === 0 || skill.scopes.includes(scope.kind)) &&
+      (!selected || selected.has(skill.name))
+  );
+}
+
+function normalizeSkillRefs(skillRefs: unknown): string[] | undefined {
+  if (!Array.isArray(skillRefs)) return undefined;
+  const out = new Set<string>();
+  for (const item of skillRefs) {
+    if (typeof item === 'string' && item.trim()) out.add(item.trim());
+  }
+  return out.size > 0 ? [...out] : undefined;
 }
 
 function runtimeHintLabel(runtime: string, model?: string): string {

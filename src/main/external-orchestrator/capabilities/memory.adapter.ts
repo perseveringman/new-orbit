@@ -1,4 +1,4 @@
-import { recallContext } from '../../memory/recall-service';
+import { recallActiveMemoryContext } from '../../memory/backend-registry';
 import type { ExternalCapabilityContext } from '../capability-registry';
 import { requestText, throwIfAborted, type MessageSubmitRequest } from './helpers';
 import type { ExternalGatewayOutboundEvent } from '@shared/external-gateway-protocol';
@@ -12,7 +12,7 @@ export async function* handleMemoryRecall(
 ): AsyncGenerator<ExternalGatewayOutboundEvent> {
   const query = requestText(request, decision.params, 'query');
   throwIfAborted(signal);
-  const result = await recallContext(context.vaultPath, query, {
+  const result = await recallActiveMemoryContext(context.vaultPath, query, {
     max_memories: 5,
     triggered_by: { kind: 'ask', ref: request.requestId },
     used_in: 'question_answer'
