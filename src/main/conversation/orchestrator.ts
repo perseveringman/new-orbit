@@ -144,6 +144,20 @@ export class ConversationOrchestrator {
     }
   ): Promise<void> {
     await this.store.updateRuntime(conversationId, patch);
+    publishTraceableEvent({
+      source: 'conversation',
+      kind: 'conversation.updated',
+      conversationId,
+      payload: {
+        conversationId,
+        currentRunId: patch.currentRunId,
+        runtimeHint: patch.runtimeHint,
+        runtimeEndpointHint: patch.runtimeEndpointHint,
+        runtimeModelHint: patch.runtimeModelHint,
+        runtimeSelection: patch.runtimeSelection,
+        vendorSessionId: patch.vendorSessionId
+      }
+    });
   }
 
   async endConversation(conversationId: string): Promise<void> {

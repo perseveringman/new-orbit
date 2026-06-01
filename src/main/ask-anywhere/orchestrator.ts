@@ -148,6 +148,8 @@ You help the user think through projects, tasks, ideas, and external information
 export class AskAnywhereOrchestrator {
   /** Phase D：每个进行中的 agent run 对应一个 AbortController，stop() 用它真中断 LLM stream。 */
   private readonly agentRunAborts = new Map<string, AbortController>();
+  /** 普通 SDK stream 同样是 in-process run，重启后不会自动恢复。 */
+  private readonly sdkRunAborts = new Map<string, AbortController>();
 
   constructor(private readonly deps: AskAnywhereDeps) {}
 
@@ -223,8 +225,14 @@ export class AskAnywhereOrchestrator {
     if (conv.anchors.every((a) => a.kind !== 'ask_anywhere_session')) {
       throw new Error('not_ask_anywhere_session');
     }
-    if (conv.currentRunId) {
-      // 并发哨兵：已有 run 在跑，拒绝
+    if (conv.currentRunId && this.isStaleInProcessRun(conv.currentRunId)) {
+      await this.deps.conversations.bindRuntime(conversationId, { currentRunId: null });
+    } else if (conv.currentRunId) {
+      this.emitSyntheticError(
+        conversationId,
+        'already_running',
+        `当前对话已有运行尚未结束：${conv.currentRunId}`
+      );
       throw new Error('already_running');
     }
     const selection = normalizeRuntimeSelection(draft.selection ?? conv.runtimeSelection);
@@ -446,17 +454,27 @@ export class AskAnywhereOrchestrator {
       const ctrl = this.agentRunAborts.get(conv.currentRunId);
       if (ctrl) ctrl.abort();
       this.emitRuntimeInterrupt(conversationId, conv.currentRunId, 'user_stop');
+      if (!ctrl) {
+        await this.deps.conversations.bindRuntime(conversationId, { currentRunId: null });
+      }
       return;
     }
     if (conv.currentRunId.startsWith('sdk-')) {
-      this.emitSyntheticError(
-        conversationId,
-        'sdk_stop_not_supported',
-        'SDK streaming cancellation is not available yet.'
-      );
+      const ctrl = this.sdkRunAborts.get(conv.currentRunId);
+      if (ctrl) ctrl.abort();
+      this.emitRuntimeInterrupt(conversationId, conv.currentRunId, 'user_stop');
+      if (!ctrl) {
+        await this.deps.conversations.bindRuntime(conversationId, { currentRunId: null });
+      }
       return;
     }
     await this.deps.pool.kill(conv.currentRunId, 'user_stop');
+  }
+
+  private isStaleInProcessRun(runId: string): boolean {
+    if (runId.startsWith('sdk-agent-')) return !this.agentRunAborts.has(runId);
+    if (runId.startsWith('sdk-')) return !this.sdkRunAborts.has(runId);
+    return false;
   }
 
   private async handleRuntimeCommand(
@@ -631,70 +649,69 @@ export class AskAnywhereOrchestrator {
     model?: string;
   }): Promise<void> {
     const maxIterations = Math.max(1, Math.min(50, this.deps.getAgentMaxIterations?.() ?? 25));
-
-    // Phase C：加载 skill（应用级 / vault / space 三级合并 + requires detection）
-    const vaultPath = this.deps.getVaultPath();
-    const skillLoader = new SkillLoader({
-      vaultPath,
-      scope: input.scope
-    });
-    const allSkills = await skillLoader.load();
-    const activeSkills = filterActiveSkills(allSkills, input.scope, input.skillRefs);
-    const promptSkills = filterPromptSkills(
-      allSkills,
-      input.scope,
-      input.skillRefs,
-      input.userText
-    );
-
-    // 工具按 scope 过滤后，再按激活 skill 的 tools 子集做"显式声明的并集"
-    // 规则：若没有任何 active skill 显式声明 tools → 用全集（scope-filtered）
-    //       若至少一个 skill 显式声明 tools → 全集 ∩ (∪ skill.tools) ∪ (没声明 tools 的 skill 默认全集)
-    const scopedTools = input.toolRegistry.listForScope(input.scope);
-    const skillsWithTools = activeSkills.filter((s) => s.tools.length > 0);
-    const filteredTools =
-      skillsWithTools.length === 0
-        ? scopedTools
-        : (() => {
-            const allowed = new Set<string>();
-            for (const skill of skillsWithTools) {
-              for (const t of skill.tools) allowed.add(t);
-            }
-            // 没声明 tools 的 skill 视为不限制（保留全集）
-            const hasUnrestricted = activeSkills.some((s) => s.tools.length === 0);
-            return scopedTools.filter((t) => hasUnrestricted || allowed.has(t.name));
-          })();
-    const exposedTools = includeAlwaysExposedSkillTools(scopedTools, filteredTools);
-
-    const tools = exposedTools.map<SDKToolDef>((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: t.inputSchema
-    }));
-
-    const visionSection = await readVisionForSystemPrompt(vaultPath);
-    const skillsSection = renderSkillsSection(promptSkills);
-    const system = [
-      visionSection,
-      input.systemPrompt.trim(),
-      input.scopedContext,
-      skillsSection,
-      'Tools execute sequentially; prefer to call one tool, observe the result, then decide the next step.'
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-
-    // Phase B：跨 send() 完整回放 assistant.toolTrace 为 Anthropic tool_use/tool_result blocks
-    const messages: SDKInvocationMessage[] = rebuildMessages(input.turns, {
-      appendUserText: input.userText
-    });
-
-    // Phase D：AbortController + token budget
     const abortController = new AbortController();
     this.agentRunAborts.set(input.runId, abortController);
     const inputTokenBudget = this.deps.getAgentInputTokenBudget?.() ?? 150_000;
 
     try {
+      // Phase C：加载 skill（应用级 / vault / space 三级合并 + requires detection）
+      const vaultPath = this.deps.getVaultPath();
+      const skillLoader = new SkillLoader({
+        vaultPath,
+        scope: input.scope
+      });
+      const allSkills = await skillLoader.load();
+      const activeSkills = filterActiveSkills(allSkills, input.scope, input.skillRefs);
+      const promptSkills = filterPromptSkills(
+        allSkills,
+        input.scope,
+        input.skillRefs,
+        input.userText
+      );
+
+      // 工具按 scope 过滤后，再按激活 skill 的 tools 子集做"显式声明的并集"
+      // 规则：若没有任何 active skill 显式声明 tools → 用全集（scope-filtered）
+      //       若至少一个 skill 显式声明 tools → 全集 ∩ (∪ skill.tools) ∪ (没声明 tools 的 skill 默认全集)
+      const scopedTools = input.toolRegistry.listForScope(input.scope);
+      const skillsWithTools = activeSkills.filter((s) => s.tools.length > 0);
+      const filteredTools =
+        skillsWithTools.length === 0
+          ? scopedTools
+          : (() => {
+              const allowed = new Set<string>();
+              for (const skill of skillsWithTools) {
+                for (const t of skill.tools) allowed.add(t);
+              }
+              // 没声明 tools 的 skill 视为不限制（保留全集）
+              const hasUnrestricted = activeSkills.some((s) => s.tools.length === 0);
+              return scopedTools.filter((t) => hasUnrestricted || allowed.has(t.name));
+            })();
+      const exposedTools = includeAlwaysExposedSkillTools(scopedTools, filteredTools);
+
+      const tools = exposedTools.map<SDKToolDef>((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema
+      }));
+
+      const visionSection = await readVisionForSystemPrompt(vaultPath);
+      const skillsSection = renderSkillsSection(promptSkills);
+      const system = [
+        visionSection,
+        input.systemPrompt.trim(),
+        input.scopedContext,
+        skillsSection,
+        'Tools execute sequentially; prefer to call one tool, observe the result, then decide the next step.'
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      // Phase B：跨 send() 完整回放 assistant.toolTrace 为 Anthropic tool_use/tool_result blocks
+      const messages: SDKInvocationMessage[] = rebuildMessages(input.turns, {
+        appendUserText: input.userText
+      });
+
+      if (abortController.signal.aborted) return;
       const result = await input.router.runAgentLoop(
         {
           system,
@@ -752,6 +769,7 @@ export class AskAnywhereOrchestrator {
         );
       }
     } catch (error) {
+      if (abortController.signal.aborted) return;
       this.emitSyntheticError(
         input.conversationId,
         error instanceof Error
@@ -780,6 +798,8 @@ export class AskAnywhereOrchestrator {
     endpointId?: string;
     model?: string;
   }): Promise<void> {
+    const abortController = new AbortController();
+    this.sdkRunAborts.set(input.runId, abortController);
     try {
       const skillsSection = await loadSkillsSectionForPrompt(
         this.deps.getVaultPath(),
@@ -787,6 +807,7 @@ export class AskAnywhereOrchestrator {
         input.skillRefs,
         input.userText
       );
+      if (abortController.signal.aborted) return;
       const result = await input.router.stream(
         {
           endpointId: input.endpointId,
@@ -804,7 +825,8 @@ export class AskAnywhereOrchestrator {
           }),
           traceId: input.runId,
           conversationId: input.conversationId,
-          mode: 'ask'
+          mode: 'ask',
+          signal: abortController.signal
         },
         () => BrowserWindow.getAllWindows()
       );
@@ -829,12 +851,14 @@ export class AskAnywhereOrchestrator {
         );
       }
     } catch (error) {
+      if (abortController.signal.aborted) return;
       this.emitSyntheticError(
         input.conversationId,
         error instanceof Error ? error.message.split(':')[0] || 'sdk_failed' : 'sdk_failed',
         error instanceof Error ? error.message : String(error)
       );
     } finally {
+      this.sdkRunAborts.delete(input.runId);
       await this.deps.conversations
         .bindRuntime(input.conversationId, { currentRunId: null })
         .catch(() => undefined);
