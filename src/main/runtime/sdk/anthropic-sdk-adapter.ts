@@ -39,6 +39,10 @@ interface StreamUsage {
   cacheWriteTokens: number;
 }
 
+const SDK_STREAM_FIRST_EVENT_TIMEOUT_MS = 30_000;
+const SDK_STREAM_IDLE_TIMEOUT_MS = 60_000;
+const SDK_STREAM_TOTAL_TIMEOUT_MS = 180_000;
+
 /**
  * Anthropic SDK adapter（Phase A：单实现承担两件事）。
  *
@@ -108,6 +112,19 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
     });
 
     let stopReason: AgentTurnStopReason = 'end_turn';
+    const streamAbort = createLinkedAbortController(signal);
+    let streamTimeoutError: Error | null = null;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    let totalTimer: ReturnType<typeof setTimeout> | undefined;
+    const abortStream = (code: string, ms: number): void => {
+      if (streamAbort.controller.signal.aborted) return;
+      streamTimeoutError = new Error(`${code}:${ms}`);
+      streamAbort.controller.abort(streamTimeoutError);
+    };
+    const armIdleTimer = (code: string, ms: number): void => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => abortStream(code, ms), ms);
+    };
 
     try {
       const requestBody: Anthropic.Messages.MessageCreateParamsStreaming = {
@@ -120,9 +137,15 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
         ...(input.toolChoice ? { tool_choice: toAnthropicToolChoice(input.toolChoice) } : {}),
         stream: true
       };
-      const stream = await client.messages.create(requestBody, signal ? { signal } : undefined);
+      totalTimer = setTimeout(
+        () => abortStream('sdk_stream_turn_timeout', SDK_STREAM_TOTAL_TIMEOUT_MS),
+        SDK_STREAM_TOTAL_TIMEOUT_MS
+      );
+      armIdleTimer('sdk_stream_first_event_timeout', SDK_STREAM_FIRST_EVENT_TIMEOUT_MS);
+      const stream = await client.messages.create(requestBody, { signal: streamAbort.controller.signal });
 
       for await (const vendorEvent of stream as AsyncIterable<unknown>) {
+        armIdleTimer('sdk_stream_idle_timeout', SDK_STREAM_IDLE_TIMEOUT_MS);
         // 1) text delta + tool_use input_json_delta：按 index 路由
         const blockUpdate = mapAgentStreamEvent(vendorEvent);
         if (blockUpdate) {
@@ -275,14 +298,19 @@ export class AnthropicSDKAdapter implements AgentLLMClient {
         ...(estimate.totalUsd !== undefined ? { totalUsd: estimate.totalUsd } : {})
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const actualError = streamTimeoutError ?? error;
+      const message = actualError instanceof Error ? actualError.message : String(actualError);
       const event = runtimeEvent('runtime.error', conversationId, runId, {
-        code: 'sdk_stream_failed',
+        code: streamTimeoutError ? message.split(':')[0] || 'sdk_stream_timeout' : 'sdk_stream_failed',
         message
       });
       eventIds.push(event.id);
       await emit(event);
-      throw error;
+      throw actualError;
+    } finally {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (totalTimer) clearTimeout(totalTimer);
+      streamAbort.cleanup();
     }
   }
 
@@ -516,6 +544,26 @@ function toAnthropicToolChoice(
   if (choice === 'auto') return { type: 'auto' };
   if (choice === 'any') return { type: 'any' };
   return { type: 'tool', name: choice.name };
+}
+
+function createLinkedAbortController(upstream?: AbortSignal): {
+  controller: AbortController;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  if (!upstream) return { controller, cleanup: () => undefined };
+  const forwardAbort = (): void => {
+    if (!controller.signal.aborted) controller.abort(upstream.reason);
+  };
+  if (upstream.aborted) {
+    forwardAbort();
+    return { controller, cleanup: () => undefined };
+  }
+  upstream.addEventListener('abort', forwardAbort, { once: true });
+  return {
+    controller,
+    cleanup: () => upstream.removeEventListener('abort', forwardAbort)
+  };
 }
 
 function extractUsage(value: unknown): StreamUsage | null {

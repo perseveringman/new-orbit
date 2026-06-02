@@ -89,6 +89,7 @@ interface ScriptedTurn {
 class FakeLLMClient implements AgentLLMClient {
   public turnCount = 0;
   public observedMessages: SDKInvocationInput['messages'][] = [];
+  public observedTools: Array<SDKInvocationInput['tools']> = [];
   public observedSignals: Array<AbortSignal | undefined> = [];
   constructor(private readonly script: ScriptedTurn[]) {}
   async streamAgentTurn(
@@ -98,6 +99,7 @@ class FakeLLMClient implements AgentLLMClient {
     signal?: AbortSignal
   ): Promise<AgentTurnResult> {
     this.observedMessages.push(input.messages);
+    this.observedTools.push(input.tools);
     this.observedSignals.push(signal);
     if (signal?.aborted) {
       const err = new Error('aborted');
@@ -299,6 +301,35 @@ describe('runAgentLoop', () => {
       tool_use_id: 'toolu_x',
       is_error: true
     });
+  });
+
+  it('retries a text-only final turn when the model ends with no assistant text', async () => {
+    const llm = new FakeLLMClient([
+      { toolUses: [{ id: 'toolu_a', name: 'orbit_search', input: { query: 'streaming' } }] },
+      { thinkingBlocks: [{ thinking: '只产生了思考，没有最终文本。', signature: 'sig-empty' }] },
+      { text: '流式输出现在有最终回复。' }
+    ]);
+    const executor = buildExecutor((req) => ({ id: req.id, ok: true, data: { ok: true } }));
+    const result = await runAgentLoop(
+      llm,
+      executor,
+      {
+        invocation: FAKE_RESOLVED,
+        system: 'sys',
+        messages: [{ role: 'user', content: 'stream?' }],
+        tools: FAKE_TOOL_DEFS,
+        conversationId: 'conv',
+        runId: 'run',
+        maxIterations: 5
+      },
+      sink
+    );
+
+    expect(result.text).toBe('流式输出现在有最终回复。');
+    expect(result.iterations).toBe(3);
+    expect(llm.observedTools[2]).toEqual([]);
+    const thirdMessages = llm.observedMessages[2] ?? [];
+    expect(thirdMessages.at(-1)?.content).toContain('直接给用户最终回答');
   });
 
   it('stops at maxIterations when LLM keeps requesting tool_use', async () => {

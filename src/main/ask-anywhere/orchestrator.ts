@@ -56,6 +56,9 @@ import {
 import { summarizeExternalAISessionSources } from '../evidence/external-ai-sessions';
 import { resolveExternalAISessionScanOptions } from '../evidence/external-ai-session-settings';
 
+const ASK_PMIL_CONTEXT_TIMEOUT_MS = 12_000;
+const ASK_EXTERNAL_AI_INVENTORY_TIMEOUT_MS = 4_000;
+
 export interface AskAnywhereDeps {
   conversations: ConversationOrchestrator;
   pool: RunnerPool;
@@ -1038,16 +1041,18 @@ export async function buildAskAnywhereContextBundle(
   scope: ConversationScope,
   userText: string
 ): Promise<{ text: string; packet?: ContextPacket }> {
-  const baseContext = await buildConversationContext(vaultPath, scope);
-  const connectorContext = await buildConnectorContext(vaultPath);
-  const pmilContext = await buildAskPMILContext(vaultPath, scope, userText);
+  const [baseContext, connectorContext, pmilContext] = await Promise.all([
+    buildConversationContext(vaultPath, scope),
+    buildConnectorContext(vaultPath, userText),
+    buildAskPMILContext(vaultPath, scope, userText)
+  ]);
   return {
     text: [baseContext, connectorContext, pmilContext.text].filter(Boolean).join('\n\n'),
     ...(pmilContext.packet ? { packet: pmilContext.packet } : {})
   };
 }
 
-async function buildConnectorContext(vaultPath: string): Promise<string> {
+async function buildConnectorContext(vaultPath: string, userText: string): Promise<string> {
   try {
     const store = createConnectorStore(vaultPath);
     const definitions = store.definitions();
@@ -1057,7 +1062,12 @@ async function buildConnectorContext(vaultPath: string): Promise<string> {
     const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
     const activeConnections = connections.filter((connection) => connection.enabled);
     const hasExternalAIConnection = activeConnections.some((connection) => connection.connector_id === 'local-ai-sessions');
-    const externalAIInventory = hasExternalAIConnection ? await buildExternalAISessionInventoryContext(vaultPath) : '';
+    const shouldIncludeExternalAIInventory = hasExternalAIConnection && isExternalAIInventoryQuery(userText);
+    const externalAIInventory = shouldIncludeExternalAIInventory
+      ? await buildExternalAISessionInventoryContext(vaultPath).catch((error) =>
+          `Live ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME} inventory unavailable: ${(error as Error).message}.`
+        )
+      : '';
     const definitionLines = definitions.map((definition) => {
       const related = connections.filter((connection) => connection.connector_id === definition.id);
       const connected = related.filter((connection) => connection.status === 'connected');
@@ -1088,8 +1098,14 @@ async function buildConnectorContext(vaultPath: string): Promise<string> {
 }
 
 async function buildExternalAISessionInventoryContext(vaultPath: string): Promise<string> {
-  const scanOptions = await resolveExternalAISessionScanOptions(vaultPath);
-  const inventory = await summarizeExternalAISessionSources(scanOptions);
+  const inventory = await withAskContextTimeout(
+    (async () => {
+      const scanOptions = await resolveExternalAISessionScanOptions(vaultPath);
+      return summarizeExternalAISessionSources(scanOptions);
+    })(),
+    ASK_EXTERNAL_AI_INVENTORY_TIMEOUT_MS,
+    'external_ai_inventory_timeout'
+  );
   const monthLines = inventory.by_month
     .slice(0, 18)
     .map((bucket) => `${bucket.key}: ${bucket.count} (${formatAgentCounts(bucket.agents)})`);
@@ -1115,21 +1131,58 @@ async function buildAskPMILContext(
   userText: string
 ): Promise<{ text: string; packet?: ContextPacket }> {
   try {
-    const packet = await buildContextPacket(vaultPath, {
-      purpose: 'ask',
-      scope: conversationScopeToContextPacketScope(scope),
-      query: userText,
-      max_tokens: 2200,
-      evidence_limit: 8,
-      graph_limit: 12,
-      synthesis_mode: 'ensure'
-    });
+    const packet = await withAskContextTimeout(
+      buildContextPacket(vaultPath, {
+        purpose: 'ask',
+        scope: conversationScopeToContextPacketScope(scope),
+        query: userText,
+        max_tokens: 2200,
+        evidence_limit: 8,
+        graph_limit: 12,
+        synthesis_mode: 'ensure'
+      }),
+      ASK_PMIL_CONTEXT_TIMEOUT_MS,
+      'pmil_context_timeout'
+    );
     return { text: renderPMILContextPacket(packet), packet };
   } catch (error) {
     return {
       text: `<pmil_context_packet status="unavailable">\nContext packet lookup failed: ${(error as Error).message}\n</pmil_context_packet>`
     };
   }
+}
+
+function isExternalAIInventoryQuery(userText: string): boolean {
+  const text = userText.toLowerCase();
+  const mentionsExternalAISessions = [
+    '外部 ai 会话',
+    '外部ai会话',
+    '本地 ai 会话',
+    '本地ai会话',
+    'ai 会话',
+    'ai会话',
+    'agent 会话',
+    'runtime 会话',
+    '本地会话',
+    '会话库',
+    'local-ai-sessions',
+    'session library',
+    '这个连接器'
+  ].some((keyword) => text.includes(keyword))
+    || /(claude|codex|amp|codebuddy).{0,16}(会话|session)/iu.test(text)
+    || /(会话|session).{0,16}(claude|codex|amp|codebuddy)/iu.test(text);
+  if (!mentionsExternalAISessions) return false;
+  return /多少|几条|几个|数量|统计|盘点|月份|月度|最近|最新|新建|创建|date|range|count|how many|inventory|month|recent|latest|created/iu.test(text);
+}
+
+function withAskContextTimeout<T>(promise: Promise<T>, ms: number, code: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timer = new Promise<T>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error(`${code}:${ms}`)), ms);
+  });
+  return Promise.race([promise, timer]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
 }
 
 async function addContextPacketArtifact(

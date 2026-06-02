@@ -88,6 +88,30 @@ describe('Ask Anywhere PMIL context', () => {
     expect(context).toContain('2026-06: 1');
     expect(context).toContain('connector registry item_count');
   });
+
+  it('skips live external AI session inventory for unrelated asks', async () => {
+    await writeSessionFile('june.jsonl', '2026-06-01T08:00:00.000Z');
+    await updateExternalAISessionSettings(vaultPath, {
+      roots: [{ agent: 'claude', source: 'test-claude', dir: aiSessionRoot }],
+      limit: 10,
+      includeToolOutputs: false
+    });
+    await createConnectorStore(vaultPath).connect({
+      connector_id: 'local-ai-sessions',
+      config: {}
+    });
+
+    const context = await buildAskAnywhereContext(
+      vaultPath,
+      { kind: 'global' },
+      '请用一句话回答：现在是测试吗？'
+    );
+
+    expect(context).toContain('<connector_context>');
+    expect(context).toContain('外部 AI 会话');
+    expect(context).not.toContain('Live 外部 AI 会话 inventory');
+    expect(context).not.toContain('2026-06: 1');
+  });
 });
 
 async function writeSessionFile(name: string, isoTime: string): Promise<void> {

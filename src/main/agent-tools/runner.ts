@@ -102,6 +102,8 @@ export async function runAgentLoop(
   const replayMessages: SDKInvocationMessage[] = [];
   const budget = input.inputTokenBudget ?? 150_000;
   let totalInputTokens = 0;
+  let retriedEmptyFinalText = false;
+  let forceFinalTextOnly = false;
 
   let turnsRun = 0;
   let iter = 0;
@@ -120,7 +122,7 @@ export async function runAgentLoop(
           model: input.invocation.model,
           system: input.system,
           messages,
-          tools: input.tools,
+          tools: forceFinalTextOnly ? [] : input.tools,
           traceId: input.runId,
           conversationId: input.conversationId,
           ...(input.mode ? { mode: input.mode } : {})
@@ -148,8 +150,21 @@ export async function runAgentLoop(
       assistantContentBlocks.length > 0
         ? { role: 'assistant', content: assistantContentBlocks }
         : null;
+    const hasFinalText = turn.text.trim().length > 0;
 
     if (turn.stopReason !== 'tool_use' || turn.toolUses.length === 0) {
+      if (!hasFinalText && !retriedEmptyFinalText && iter + 1 < maxIter) {
+        retriedEmptyFinalText = true;
+        forceFinalTextOnly = true;
+        messages.push({
+          role: 'user',
+          content: '请基于以上上下文直接给用户最终回答。不要继续调用工具；如果没有足够信息，请说明限制。'
+        });
+        continue;
+      }
+      if (!hasFinalText) {
+        lastText = '我已完成处理，但模型没有返回最终文本。请再试一次，或切换到非 Agent 模式。';
+      }
       if (assistantMessage) replayMessages.push(assistantMessage);
       stopReason = turn.stopReason === 'end_turn' ? 'end_turn' : 'tool_use_finalized';
       break;
