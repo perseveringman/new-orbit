@@ -57,7 +57,9 @@ export function ChatView(props: ChatProps): JSX.Element {
     composerCapabilities,
     onComposerSelectionChange,
     headerSlot,
-    beforeEventsSlot
+    beforeEventsSlot,
+    renderMarkdownReferenceToken,
+    renderMarkdownLink
   } = props;
 
   const actions = useChatActions({ conversationId, onAction });
@@ -128,8 +130,23 @@ export function ChatView(props: ChatProps): JSX.Element {
   }, [scrollToBottom]);
 
   const items = useMemo(
-    () => buildRenderItems(events, capabilities, actions.approveTool, actions.rejectTool),
-    [events, capabilities, actions.approveTool, actions.rejectTool]
+    () =>
+      buildRenderItems(
+        events,
+        capabilities,
+        actions.approveTool,
+        actions.rejectTool,
+        renderMarkdownReferenceToken,
+        renderMarkdownLink
+      ),
+    [
+      events,
+      capabilities,
+      actions.approveTool,
+      actions.rejectTool,
+      renderMarkdownReferenceToken,
+      renderMarkdownLink
+    ]
   );
 
   return (
@@ -228,7 +245,9 @@ function buildRenderItems(
   events: RuntimeEvent[],
   capabilities: { supportsThinking: boolean; canApproveTool: boolean },
   onApproveTool?: (spanId: string) => void,
-  onRejectTool?: (spanId: string) => void
+  onRejectTool?: (spanId: string) => void,
+  renderMarkdownReferenceToken?: NonNullable<ChatProps['renderMarkdownReferenceToken']>,
+  renderMarkdownLink?: NonNullable<ChatProps['renderMarkdownLink']>
 ): RenderItem[] {
   // 把 tool_use 与对应 tool_result 配对，其余事件按序渲染
   const items: RenderItem[] = [];
@@ -241,7 +260,24 @@ function buildRenderItems(
       case 'runtime.message': {
         const m = ev as RuntimeEvent<'runtime.message'>;
         if (!m.payload.text.trim()) break;
-        items.push({ key: ev.id, node: <MessageBubble event={m} /> });
+        items.push({
+          key: ev.id,
+          node: (
+            <MessageBubble
+              event={m}
+              renderMarkdownReferenceToken={
+                renderMarkdownReferenceToken
+                  ? (token, key) => renderMarkdownReferenceToken(token, key, m)
+                  : undefined
+              }
+              renderMarkdownLink={
+                renderMarkdownLink
+                  ? (token, key) => renderMarkdownLink(token, key, m)
+                  : undefined
+              }
+            />
+          )
+        });
         break;
       }
       case 'runtime.thinking': {

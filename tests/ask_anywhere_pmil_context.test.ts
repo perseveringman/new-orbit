@@ -30,6 +30,8 @@ describe('Ask Anywhere PMIL context', () => {
 
     expect(rendered).toContain('<pmil_context_packet');
     expect(rendered).toContain('Evidence selectors: 1');
+    expect(rendered).toContain('Citation handles for user-visible answers');
+    expect(rendered).toContain('[[E1]] evidence:note:pmil#semantic_chunk');
     expect(rendered).toContain('Synthesis refs: synth-qa-1');
     expect(rendered).toContain('PMIL should use cited evidence.');
     expect(rendered).toContain('evidence:note:pmil#semantic_chunk');

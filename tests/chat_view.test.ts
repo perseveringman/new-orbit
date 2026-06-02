@@ -30,14 +30,19 @@ function ev<K extends RuntimeEventKind>(
   } as RuntimeEvent;
 }
 
-function render(events: RuntimeEvent[], capabilities = DEFAULT_CHAT_HOST_CAPABILITIES): string {
+function render(
+  events: RuntimeEvent[],
+  capabilities = DEFAULT_CHAT_HOST_CAPABILITIES,
+  extraProps: Record<string, unknown> = {}
+): string {
   return renderToStaticMarkup(
     createElement(ChatView, {
       conversationId: 'c1',
       capabilities,
       events,
       isLoading: false,
-      onAction: () => {}
+      onAction: () => {},
+      ...extraProps
     })
   );
 }
@@ -102,6 +107,34 @@ describe('ChatView', () => {
     expect(html).toContain('<td');
     expect(html).toContain('古王国→中王国→新王国');
     expect(html).not.toContain('|---|---|');
+  });
+
+  it('lets hosts render semantic citation handles inside assistant markdown', () => {
+    const html = render(
+      [
+        ev(
+          'runtime.message',
+          {
+            text: '这个结论有来源 [[E1]]，也可以用链接形式 [原文](orbit-evidence://E1)。',
+            role: 'assistant'
+          },
+          { id: 'cite1' }
+        )
+      ],
+      DEFAULT_CHAT_HOST_CAPABILITIES,
+      {
+        renderMarkdownReferenceToken: (token: { handle: string }) =>
+          createElement('button', { type: 'button', 'data-handle': token.handle }, token.handle),
+        renderMarkdownLink: (token: { href: string; label: string }) =>
+          token.href.startsWith('orbit-evidence:')
+            ? createElement('button', { type: 'button', 'data-href': token.href }, token.label)
+            : null
+      }
+    );
+
+    expect(html).toContain('data-handle="E1"');
+    expect(html).toContain('data-href="orbit-evidence://E1"');
+    expect(html).toContain('原文');
   });
 
   it('merges one streaming assistant response into one bubble', () => {

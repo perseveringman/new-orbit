@@ -9,11 +9,13 @@ type EvidenceReferenceTone = 'violet' | 'emerald' | 'sky' | 'neutral';
 export function EvidenceReference({
   selector,
   label,
-  tone = 'sky'
+  tone = 'sky',
+  variant = 'button'
 }: {
   selector: EvidenceSelector;
   label?: string;
   tone?: EvidenceReferenceTone;
+  variant?: 'button' | 'inline';
 }): JSX.Element {
   const [target, setTarget] = useState<EvidenceNavigationTarget | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,6 +77,21 @@ export function EvidenceReference({
     ? ExternalLink
     : FileText;
 
+  if (variant === 'inline') {
+    return (
+      <button
+        type="button"
+        onClick={() => void openReference()}
+        disabled={loading}
+        title={referenceTitle(target, selector)}
+        className={`mx-0.5 inline-flex max-w-[18rem] items-center gap-1 align-baseline text-[0.95em] font-medium transition disabled:opacity-60 ${inlineToneClass(tone)}`}
+      >
+        <Icon size={13} className="shrink-0" />
+        <span className="truncate">{loading ? '打开中' : displayLabel}</span>
+      </button>
+    );
+  }
+
   return (
     <span className="inline-flex max-w-full flex-col gap-1">
       <button
@@ -119,5 +136,19 @@ function toneClass(tone: EvidenceReferenceTone): string {
     case 'sky':
     default:
       return 'border-sky-300 bg-white text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:bg-neutral-950 dark:text-sky-300 dark:hover:bg-sky-950/30';
+  }
+}
+
+function inlineToneClass(tone: EvidenceReferenceTone): string {
+  switch (tone) {
+    case 'emerald':
+      return 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100';
+    case 'violet':
+      return 'text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100';
+    case 'neutral':
+      return 'text-neutral-700 hover:text-neutral-950 dark:text-neutral-200 dark:hover:text-white';
+    case 'sky':
+    default:
+      return 'text-sky-600 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-100';
   }
 }

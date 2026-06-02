@@ -1,17 +1,41 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+export interface MarkdownReferenceToken {
+  raw: string;
+  handle: string;
+}
+
+export interface MarkdownLinkToken {
+  href: string;
+  label: string;
+}
+
+export type MarkdownReferenceTokenRenderer = (
+  token: MarkdownReferenceToken,
+  key: string
+) => ReactNode | null;
+
+export type MarkdownLinkRenderer = (
+  token: MarkdownLinkToken,
+  key: string
+) => ReactNode | null;
+
 interface StreamingMarkdownProps {
   content: string;
   animate?: boolean;
   chunkSize?: number;
   intervalMs?: number;
+  renderReferenceToken?: MarkdownReferenceTokenRenderer;
+  renderLink?: MarkdownLinkRenderer;
 }
 
 export function StreamingMarkdown({
   content,
   animate = false,
   chunkSize = 3,
-  intervalMs = 16
+  intervalMs = 16,
+  renderReferenceToken,
+  renderLink
 }: StreamingMarkdownProps): JSX.Element {
   const shouldAnimate = animate && typeof window !== 'undefined';
   const [visibleLength, setVisibleLength] = useState(shouldAnimate ? 0 : content.length);
@@ -39,10 +63,17 @@ export function StreamingMarkdown({
   return (
     <div className="space-y-2 text-[13px] leading-6">
       {blocks.map((block, index) => (
-        <Fragment key={`${block.kind}:${index}`}>{renderMarkdownBlock(block)}</Fragment>
+        <Fragment key={`${block.kind}:${index}`}>
+          {renderMarkdownBlock(block, { renderReferenceToken, renderLink })}
+        </Fragment>
       ))}
     </div>
   );
+}
+
+interface MarkdownRenderOptions {
+  renderReferenceToken?: MarkdownReferenceTokenRenderer;
+  renderLink?: MarkdownLinkRenderer;
 }
 
 type MarkdownBlock =
@@ -256,7 +287,7 @@ function normalizeTableRow<T>(row: T[], length: number, fill: T | '' = ''): T[] 
   return [...row, ...Array.from({ length: length - row.length }, () => fill as T)];
 }
 
-function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
+function renderMarkdownBlock(block: MarkdownBlock, options: MarkdownRenderOptions): JSX.Element {
   switch (block.kind) {
     case 'heading': {
       const className =
@@ -266,13 +297,13 @@ function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
             ? 'text-[15px] font-semibold'
             : 'text-sm font-semibold';
       const Tag = block.level === 1 ? 'h1' : block.level === 2 ? 'h2' : 'h3';
-      return <Tag className={className}>{renderInline(block.text)}</Tag>;
+      return <Tag className={className}>{renderInline(block.text, 'inline', options)}</Tag>;
     }
     case 'unordered-list':
       return (
         <ul className="list-disc space-y-1 pl-5">
           {block.items.map((item, index) => (
-            <li key={`${item}:${index}`}>{renderInline(item)}</li>
+            <li key={`${item}:${index}`}>{renderInline(item, 'inline', options)}</li>
           ))}
         </ul>
       );
@@ -280,7 +311,7 @@ function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
       return (
         <ol className="list-decimal space-y-1 pl-5">
           {block.items.map((item, index) => (
-            <li key={`${item}:${index}`}>{renderInline(item)}</li>
+            <li key={`${item}:${index}`}>{renderInline(item, 'inline', options)}</li>
           ))}
         </ol>
       );
@@ -290,13 +321,13 @@ function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
           {block.lines.map((line, index) => (
             <Fragment key={`${line}:${index}`}>
               {index > 0 ? <br /> : null}
-              {renderInline(line)}
+              {renderInline(line, 'inline', options)}
             </Fragment>
           ))}
         </blockquote>
       );
     case 'table':
-      return <MarkdownTable block={block} />;
+      return <MarkdownTable block={block} options={options} />;
     case 'code':
       return (
         <div className="overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-950 text-neutral-100 dark:border-neutral-800">
@@ -311,14 +342,16 @@ function renderMarkdownBlock(block: MarkdownBlock): JSX.Element {
         </div>
       );
     case 'paragraph':
-      return <p className="break-words">{renderInlineWithLineBreaks(block.text)}</p>;
+      return <p className="break-words">{renderInlineWithLineBreaks(block.text, options)}</p>;
   }
 }
 
 function MarkdownTable({
-  block
+  block,
+  options
 }: {
   block: Extract<MarkdownBlock, { kind: 'table' }>;
+  options: MarkdownRenderOptions;
 }): JSX.Element {
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950/40">
@@ -330,7 +363,7 @@ function MarkdownTable({
                 key={`${header}:${index}`}
                 className={`border-b border-neutral-200 px-3 py-2 font-semibold dark:border-neutral-800 ${alignmentClass(block.alignments[index])}`}
               >
-                {renderInline(header, `table-head-${index}`)}
+                {renderInline(header, `table-head-${index}`, options)}
               </th>
             ))}
           </tr>
@@ -343,7 +376,7 @@ function MarkdownTable({
                   key={`cell-${rowIndex}-${cellIndex}`}
                   className={`max-w-[18rem] break-words px-3 py-2 text-neutral-700 dark:text-neutral-200 ${alignmentClass(block.alignments[cellIndex])}`}
                 >
-                  {renderInline(row[cellIndex] ?? '', `table-${rowIndex}-${cellIndex}`)}
+                  {renderInline(row[cellIndex] ?? '', `table-${rowIndex}-${cellIndex}`, options)}
                 </td>
               ))}
             </tr>
@@ -365,17 +398,28 @@ function alignmentClass(alignment: TableAlignment | undefined): string {
   }
 }
 
-function renderInlineWithLineBreaks(value: string): ReactNode[] {
+function renderInlineWithLineBreaks(value: string, options: MarkdownRenderOptions): ReactNode[] {
   return value.split('\n').flatMap((line, index, lines) => [
-    ...renderInline(line, `line-${index}`),
+    ...renderInline(line, `line-${index}`, options),
     ...(index < lines.length - 1 ? [<br key={`br-${index}`} />] : [])
   ]);
 }
 
-function renderInline(value: string, keyPrefix = 'inline'): ReactNode[] {
-  const parts = value.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\((?:[^)\s]+)(?:\s+"[^"]*")?\))/g).filter(Boolean);
+function renderInline(
+  value: string,
+  keyPrefix = 'inline',
+  options: MarkdownRenderOptions = {}
+): ReactNode[] {
+  const parts = value
+    .split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\((?:[^)\s]+)(?:\s+"[^"]*")?\)|\[\[[A-Za-z]\d+\]\]|【[A-Za-z]\d+】|\[[A-Za-z]\d+\](?!\())/g)
+    .filter(Boolean);
   return parts.map((part, index) => {
     const key = `${keyPrefix}:${index}:${part}`;
+    const referenceToken = parseReferenceToken(part);
+    if (referenceToken && options.renderReferenceToken) {
+      const rendered = options.renderReferenceToken(referenceToken, key);
+      if (rendered) return <Fragment key={key}>{rendered}</Fragment>;
+    }
     if (part.startsWith('`') && part.endsWith('`')) {
       return (
         <code
@@ -387,25 +431,40 @@ function renderInline(value: string, keyPrefix = 'inline'): ReactNode[] {
       );
     }
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={key}>{renderInline(part.slice(2, -2), `${key}-strong`)}</strong>;
+      return <strong key={key}>{renderInline(part.slice(2, -2), `${key}-strong`, options)}</strong>;
     }
     if (part.startsWith('*') && part.endsWith('*')) {
-      return <em key={key}>{renderInline(part.slice(1, -1), `${key}-em`)}</em>;
+      return <em key={key}>{renderInline(part.slice(1, -1), `${key}-em`, options)}</em>;
     }
     const link = /^\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)$/.exec(part);
     if (link) {
+      const label = link[1] ?? '';
+      const href = link[2] ?? '';
+      const custom = options.renderLink?.({ href, label }, key);
+      if (custom) return <Fragment key={key}>{custom}</Fragment>;
       return (
         <a
           key={key}
-          href={link[2]}
+          href={href}
           target="_blank"
           rel="noreferrer"
           className="text-sky-600 underline underline-offset-2 dark:text-sky-400"
         >
-          {renderInline(link[1] ?? '', `${key}-link`)}
+          {renderInline(label, `${key}-link`, options)}
         </a>
       );
     }
     return <span key={key}>{part}</span>;
   });
+}
+
+function parseReferenceToken(value: string): MarkdownReferenceToken | null {
+  const trimmed = value.trim();
+  const doubleBracket = /^\[\[([A-Za-z]\d+)\]\]$/.exec(trimmed);
+  if (doubleBracket?.[1]) return { raw: value, handle: doubleBracket[1].toUpperCase() };
+  const cjkBracket = /^【([A-Za-z]\d+)】$/.exec(trimmed);
+  if (cjkBracket?.[1]) return { raw: value, handle: cjkBracket[1].toUpperCase() };
+  const squareBracket = /^\[([A-Za-z]\d+)\]$/.exec(trimmed);
+  if (squareBracket?.[1]) return { raw: value, handle: squareBracket[1].toUpperCase() };
+  return null;
 }

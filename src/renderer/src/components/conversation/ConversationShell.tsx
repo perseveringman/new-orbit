@@ -2,6 +2,7 @@ import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import { DEFAULT_CHAT_HOST_CAPABILITIES } from '@shared/chat-protocol';
 import type { Conversation } from '@shared/conversation';
 import { conversationScopeKey } from '@shared/conversation';
+import type { EvidenceSelector } from '@shared/evidence';
 import type {
   ComposerOptions,
   ComposerSkillOption,
@@ -20,7 +21,9 @@ import { ConversationHeader } from './ConversationHeader';
 import { RuntimeStatusBar } from './RuntimeStatusBar';
 import { MessageTimeline } from './MessageTimeline';
 import { ArtifactStage } from './ArtifactStage';
-import { PMILContextChips } from './PMILContextPanel';
+import { PMILContextChips, contextPacketFromArtifact } from './PMILContextPanel';
+import { EvidenceReference, evidenceSelectorKey } from '../evidence/EvidenceReference';
+import type { ContextPacket } from '@shared/context';
 
 export function ConversationShell({
   conversations,
@@ -77,6 +80,56 @@ export function ConversationShell({
   const composerOptions = useMemo<ComposerOptions>(
     () => ({ ...runtimeCatalog.options, skills: skillOptions }),
     [runtimeCatalog.options, skillOptions]
+  );
+  const citationPackets = useMemo(() => {
+    return (stage?.artifacts ?? [])
+      .map((artifact) => {
+        const packet = contextPacketFromArtifact(artifact);
+        return packet ? { packet, createdAt: artifact.created_at } : null;
+      })
+      .filter((item): item is { packet: ContextPacket; createdAt: string } => item !== null)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }, [stage?.artifacts]);
+  const renderMarkdownReferenceToken = useCallback(
+    (
+      token: { handle: string },
+      key: string,
+      event: RuntimeEvent<'runtime.message'>
+    ) => {
+      const selector = selectorForCitationHandle(token.handle, packetForEvent(citationPackets, event));
+      if (!selector) return null;
+      return (
+        <EvidenceReference
+          key={`${key}:${evidenceSelectorKey(selector)}`}
+          selector={selector}
+          tone="sky"
+          variant="inline"
+        />
+      );
+    },
+    [citationPackets]
+  );
+  const renderMarkdownLink = useCallback(
+    (
+      token: { href: string; label: string },
+      key: string,
+      event: RuntimeEvent<'runtime.message'>
+    ) => {
+      const handle = evidenceHandleFromHref(token.href);
+      if (!handle) return null;
+      const selector = selectorForCitationHandle(handle, packetForEvent(citationPackets, event));
+      if (!selector) return null;
+      return (
+        <EvidenceReference
+          key={`${key}:${evidenceSelectorKey(selector)}`}
+          label={token.label}
+          selector={selector}
+          tone="sky"
+          variant="inline"
+        />
+      );
+    },
+    [citationPackets]
   );
   const handleComposerSelectionChange = useCallback(
     (selection: RuntimeSelection) => {
@@ -156,6 +209,8 @@ export function ConversationShell({
             composerSelection={composerSelection}
             composerSourceSurface={composerSourceSurface}
             onComposerSelectionChange={handleComposerSelectionChange}
+            renderMarkdownReferenceToken={renderMarkdownReferenceToken}
+            renderMarkdownLink={renderMarkdownLink}
           />
           {showStage ? <ArtifactStage stage={stage} onAction={onArtifactAction} /> : null}
         </div>
@@ -173,6 +228,36 @@ export function ConversationShell({
       )}
     </div>
   );
+}
+
+function packetForEvent(
+  packets: Array<{ packet: ContextPacket; createdAt: string }>,
+  event: RuntimeEvent<'runtime.message'>
+): ContextPacket | null {
+  if (!packets.length) return null;
+  const eventTime = Date.parse(event.at);
+  if (Number.isNaN(eventTime)) return packets.at(-1)?.packet ?? null;
+  let selected: ContextPacket | null = null;
+  for (const item of packets) {
+    const createdAt = Date.parse(item.createdAt);
+    if (!Number.isNaN(createdAt) && createdAt <= eventTime) selected = item.packet;
+  }
+  return selected ?? packets.at(-1)?.packet ?? null;
+}
+
+function selectorForCitationHandle(handle: string, packet: ContextPacket | null): EvidenceSelector | null {
+  const match = /^E(\d+)$/i.exec(handle.trim());
+  if (!match?.[1] || !packet) return null;
+  const index = Number(match[1]) - 1;
+  return packet.evidence[index] ?? null;
+}
+
+function evidenceHandleFromHref(href: string): string | null {
+  const match = /^orbit-evidence:(?:\/\/)?(.+)$/i.exec(href.trim());
+  if (!match?.[1]) return null;
+  const body = decodeURIComponent(match[1].replace(/^\/+/, ''));
+  const handle = /([A-Za-z]\d+)/.exec(body)?.[1];
+  return handle ? handle.toUpperCase() : null;
 }
 
 function MemoryRecallChips({ conversation }: { conversation: Conversation }): JSX.Element | null {

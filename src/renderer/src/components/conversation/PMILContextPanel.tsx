@@ -85,14 +85,14 @@ function PMILContextSection({ section }: { section: ContextSection }): JSX.Eleme
   );
 }
 
-function latestContextPacket(stage: ConversationStage | null): ContextPacket | null {
+export function latestContextPacket(stage: ConversationStage | null): ContextPacket | null {
   const artifact = [...(stage?.artifacts ?? [])]
     .reverse()
     .find((item) => item.kind === PMIL_CONTEXT_ARTIFACT_KIND);
   return artifact ? contextPacketFromArtifact(artifact) : null;
 }
 
-function contextPacketFromArtifact(artifact: Artifact): ContextPacket | null {
+export function contextPacketFromArtifact(artifact: Artifact): ContextPacket | null {
   if (artifact.kind !== PMIL_CONTEXT_ARTIFACT_KIND) return null;
   const packet = artifact.payload as Partial<ContextPacket> | null;
   if (!packet || typeof packet !== 'object' || !packet.id || !Array.isArray(packet.sections)) {

@@ -18,6 +18,10 @@ import type {
   ComposerSourceSurface,
   RuntimeSelection
 } from '@shared/ai-composer';
+import type {
+  MarkdownLinkRenderer,
+  MarkdownReferenceTokenRenderer
+} from '../Timeline/StreamingMarkdown';
 
 export interface ChatProps {
   conversationId: string;
@@ -41,6 +45,18 @@ export interface ChatProps {
   headerSlot?: import('react').ReactNode;
   /** Host 自定义事件流上方的内容（M5/P2.3 visual parity）。 */
   beforeEventsSlot?: import('react').ReactNode;
+  /** Host 可把消息内的轻量引用 token 渲染成可点击对象。 */
+  renderMarkdownReferenceToken?: (
+    token: Parameters<MarkdownReferenceTokenRenderer>[0],
+    key: string,
+    event: RuntimeEvent<'runtime.message'>
+  ) => import('react').ReactNode | null;
+  /** Host 可接管特定链接协议，例如 orbit-evidence://E1。 */
+  renderMarkdownLink?: (
+    token: Parameters<MarkdownLinkRenderer>[0],
+    key: string,
+    event: RuntimeEvent<'runtime.message'>
+  ) => import('react').ReactNode | null;
 
   theme?: 'light' | 'dark' | 'system';
 }

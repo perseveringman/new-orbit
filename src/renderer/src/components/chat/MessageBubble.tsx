@@ -1,11 +1,21 @@
 import type { RuntimeEvent } from '@shared/chat-protocol';
-import { StreamingMarkdown } from '../Timeline/StreamingMarkdown';
+import {
+  StreamingMarkdown,
+  type MarkdownLinkRenderer,
+  type MarkdownReferenceTokenRenderer
+} from '../Timeline/StreamingMarkdown';
 
 interface MessageBubbleProps {
   event: RuntimeEvent<'runtime.message'>;
+  renderMarkdownReferenceToken?: MarkdownReferenceTokenRenderer;
+  renderMarkdownLink?: MarkdownLinkRenderer;
 }
 
-export function MessageBubble({ event }: MessageBubbleProps): JSX.Element {
+export function MessageBubble({
+  event,
+  renderMarkdownReferenceToken,
+  renderMarkdownLink
+}: MessageBubbleProps): JSX.Element {
   const { text, isStreaming, role = 'assistant' } = event.payload;
   const parts = parseArtifactFences(text);
   const isUser = role === 'user';
@@ -32,7 +42,11 @@ export function MessageBubble({ event }: MessageBubbleProps): JSX.Element {
               </div>
             ) : (
               <div key={index}>
-                <StreamingMarkdown content={part.text} />
+                <StreamingMarkdown
+                  content={part.text}
+                  renderReferenceToken={renderMarkdownReferenceToken}
+                  renderLink={renderMarkdownLink}
+                />
               </div>
             )
           )}

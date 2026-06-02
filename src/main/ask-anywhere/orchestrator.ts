@@ -141,6 +141,8 @@ You help the user think through projects, tasks, ideas, and external information
 - Keep responses concise and actionable. Do not explain your tool choices unless asked.
 - Answer the user's actual question first. Prefer a concrete number, decision, summary, or next action over internal process narration.
 - Treat \`pmil_context_packet\`, ContextPacket metadata, retrieval guidance, scores, FTS/vector/hybrid details, and evidence sufficiency labels as internal context. Use them to improve the answer, but do not repeat those implementation terms to the user unless they explicitly ask about Orbit architecture.
+- When you rely on a source from \`pmil_context_packet\`, cite it inline with the provided handle, for example \`这条结论来自 5 月的外部 AI 会话。[[E2]]\`. Put citations next to the claim they support, not in a raw dump at the end.
+- Never show raw evidence selector strings such as \`evidence:note:...\` to the user. Use only the provided \`[[E1]]\` citation handles, and only when that handle exists in the current context.
 - If evidence is thin or missing, be honest in plain language: say what you can confirm, what you cannot confirm, and the smallest useful next step. Do not invent counts, dates, causes, or citations.
 - For count/date questions, state the exact date range and counting basis. Distinguish "总发现" from "当前索引" when external AI sessions or connectors are involved.
 `;
@@ -1162,9 +1164,10 @@ async function broadcastStage(vaultPath: string, conversationId: string): Promis
 }
 
 export function renderPMILContextPacket(packet: ContextPacket): string {
-  const sections = packet.sections.map(renderPMILContextSection).filter(Boolean);
+  const sections = packet.sections.map((section) => renderPMILContextSection(section, packet.evidence)).filter(Boolean);
   if (sections.length === 0) return '';
   const scopeLabel = packet.scope.kind === 'global' ? 'global' : `${packet.scope.kind}:${packet.scope.ref ?? ''}`;
+  const handles = renderCitationHandles(packet.evidence);
   const lines = [
     `<pmil_context_packet id="${packet.id}" purpose="${packet.purpose}" scope="${scopeLabel}">`,
     packet.query ? `Query: ${packet.query}` : '',
@@ -1175,6 +1178,7 @@ export function renderPMILContextPacket(packet: ContextPacket): string {
     packet.freshness.stale_sources?.length
       ? `Stale or missing evidence: ${packet.freshness.stale_sources.join(', ')}`
       : '',
+    handles ? `Citation handles for user-visible answers:\n${handles}` : '',
     '',
     ...sections,
     '</pmil_context_packet>'
@@ -1182,10 +1186,10 @@ export function renderPMILContextPacket(packet: ContextPacket): string {
   return lines.join('\n');
 }
 
-function renderPMILContextSection(section: ContextSection): string {
+function renderPMILContextSection(section: ContextSection, packetEvidence: EvidenceSelector[]): string {
   const citations = section.citations
     .slice(0, 6)
-    .map(formatEvidenceSelector)
+    .map((selector) => formatEvidenceSelectorForPrompt(selector, packetEvidence))
     .join(', ');
   return [
     `## ${section.title} (${section.kind})`,
@@ -1196,11 +1200,31 @@ function renderPMILContextSection(section: ContextSection): string {
     .join('\n');
 }
 
+function renderCitationHandles(selectors: EvidenceSelector[]): string {
+  return selectors
+    .slice(0, 12)
+    .map((selector, index) => `- [[E${index + 1}]] ${formatEvidenceSelector(selector)}`)
+    .join('\n');
+}
+
+function formatEvidenceSelectorForPrompt(
+  selector: EvidenceSelector,
+  packetEvidence: EvidenceSelector[]
+): string {
+  const index = packetEvidence.findIndex((candidate) => evidenceSelectorKey(candidate) === evidenceSelectorKey(selector));
+  const handle = index >= 0 ? `[[E${index + 1}]] ` : '';
+  return `${handle}${formatEvidenceSelector(selector)}`;
+}
+
 function formatEvidenceSelector(selector: EvidenceSelector): string {
   const range = selector.range
     ? `:${selector.range.from ?? ''}${selector.range.to !== undefined ? `-${selector.range.to}` : ''}`
     : '';
   return `${selector.source_id}#${selector.kind}${range}`;
+}
+
+function evidenceSelectorKey(selector: EvidenceSelector): string {
+  return `${selector.source_id}:${selector.kind}:${selector.range?.from ?? ''}:${selector.range?.to ?? ''}:${selector.content_view}`;
 }
 
 function conversationScopeToContextPacketScope(scope: ConversationScope): ContextPacketScope {
