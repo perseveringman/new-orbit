@@ -129,20 +129,23 @@ export function createOrbitEvidenceProvider(vaultPath: string): SourceProvider {
     kind: 'note',
     kinds: EVIDENCE_SOURCE_KINDS,
     async list(input: SourceListInput = {}) {
-      const sources = await collectOrbitEvidenceSources(vaultPath, {
-        includeActivities: true,
-        activityLimit: input.limit ?? 500
+      const sources = await createEvidenceStore(vaultPath).list({
+        include_unavailable: input.include_unavailable,
+        limit: input.limit ?? 500
       });
       return sources.filter((source) => sourceMatchesListInput(source, input)).slice(0, Math.max(1, input.limit ?? 500));
     },
     async get(sourceId: string) {
-      const sources = await collectOrbitEvidenceSources(vaultPath, { includeActivities: true });
-      return sources.find((source) => source.id === sourceId) ?? createEvidenceStore(vaultPath).get(sourceId);
+      return createEvidenceStore(vaultPath).get(sourceId);
     },
     async read(selector: EvidenceSelector): Promise<EvidenceReadResult> {
-      const sources = await collectOrbitEvidenceSources(vaultPath, { includeActivities: true });
-      const source = sources.find((candidate) => candidate.id === selector.source_id)
-        ?? await createEvidenceStore(vaultPath).get(selector.source_id);
+      const store = createEvidenceStore(vaultPath);
+      let source = await store.get(selector.source_id);
+      if (!source) {
+        const collected = await collectOrbitEvidenceSources(vaultPath, { includeActivities: true });
+        source = collected.find((candidate) => candidate.id === selector.source_id) ?? null;
+        if (source) await store.upsert(source);
+      }
       if (!source) throw new Error(`evidence_source_not_found:${selector.source_id}`);
       const text = await readOrbitSourceText(vaultPath, source, selector.content_view, selector);
       const excerpt: EvidenceExcerpt = {

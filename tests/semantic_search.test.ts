@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createNoteStore } from '../src/main/note/store';
+import { createEvidenceChunkIndexStore } from '../src/main/evidence';
 import { projectNote } from '../src/main/semantic/document-projectors';
 import { embedText, LOCAL_EMBEDDING_DIMENSIONS } from '../src/main/semantic/embedder';
 import { hybridSearch } from '../src/main/semantic/hybrid-search';
@@ -126,6 +127,7 @@ describe('Semantic Search', () => {
       resource_refs: ['pmil']
     });
     await createSemanticIndexStore(vaultPath).rebuildIndex();
+    await createEvidenceChunkIndexStore(vaultPath).rebuild({ includeActivities: false });
 
     const response = await searchWithContext(
       vaultPath,
@@ -157,6 +159,20 @@ describe('Semantic Search', () => {
 
     expect(response.results).toEqual([]);
     expect(response.total).toBe(0);
+  });
+
+  it('does not rebuild stale semantic indexes on the search path', async () => {
+    const notes = createNoteStore(vaultPath);
+    const note = await notes.create({ type: 'thought', title: 'Stale index note', body: 'old searchable body' });
+    const store = createSemanticIndexStore(vaultPath);
+    await store.rebuildIndex();
+
+    await notes.update(note.frontmatter.id, { body: 'plasma nebula should require explicit indexing' });
+    await store.markAllStale('test');
+    const response = await store.search({ text: 'plasma nebula explicit indexing', match_mode: 'keyword', top_k: 5 });
+
+    expect(response.results[0]?.doc.content).toContain('old searchable body');
+    expect(response.results[0]?.doc.content).not.toContain('plasma nebula');
   });
 });
 

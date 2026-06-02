@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAskAnywhereSession } from '../components/ask-anywhere/AskAnywhereHost';
 import { ConversationShell } from '../components/conversation';
+import { ContextBar } from './ask-anywhere/ContextBar';
 import { StageDrawer } from './ask-anywhere/StageDrawer';
 
 interface AskAnywhereViewProps {
@@ -49,6 +50,9 @@ export function AskAnywhereView({ initialActiveId = null }: AskAnywhereViewProps
         onArtifactAction={(artifactId, actionId) => void handleArtifactAction(artifactId, actionId)}
         composerSourceSurface="ask_full"
         welcomeMessage="可以直接提问，也可以交给智能体执行。每个会话都会保留。"
+        messageMaxWidthClass="max-w-[70%]"
+        eventMaxWidthClass="max-w-[70%]"
+        contextSlot={<ContextBar conversation={activeConversation} events={events} />}
         actions={
           artifactCount > 0 ? (
             <button

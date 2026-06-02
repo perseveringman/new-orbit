@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RuntimeEvent } from '@shared/chat-protocol';
+import { askContextLaneLabel, askIntentRouteLabel } from '@shared/ask-runtime';
 import { ArrowDown } from 'lucide-react';
 import { AIComposer } from '../ai-composer';
 import { ActionBar } from './ActionBar';
@@ -24,6 +25,7 @@ import type { ChatProps } from './types';
 interface RenderItem {
   key: string;
   node: JSX.Element;
+  constrainWidth?: boolean;
 }
 
 export const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
@@ -58,6 +60,8 @@ export function ChatView(props: ChatProps): JSX.Element {
     onComposerSelectionChange,
     headerSlot,
     beforeEventsSlot,
+    messageMaxWidthClass,
+    eventMaxWidthClass,
     renderMarkdownReferenceToken,
     renderMarkdownLink
   } = props;
@@ -66,15 +70,40 @@ export function ChatView(props: ChatProps): JSX.Element {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const autoFollowRef = useRef(true);
+  const scrollFrameRef = useRef<number | null>(null);
+  const autoFollowFrameRef = useRef<number | null>(null);
   const [autoFollowing, setAutoFollowing] = useState(true);
   const [hasBufferedUpdates, setHasBufferedUpdates] = useState(false);
 
-  const scrollToBottom = useCallback(() => {
+  const cancelScrollFrame = useCallback(() => {
+    if (
+      scrollFrameRef.current !== null &&
+      typeof window !== 'undefined' &&
+      typeof window.cancelAnimationFrame === 'function'
+    ) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+    }
+    scrollFrameRef.current = null;
+  }, []);
+
+  const scrollToBottomNow = useCallback(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
 
-  const updateAutoFollow = useCallback(() => {
+  const scrollToBottom = useCallback(() => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      scrollToBottomNow();
+      return;
+    }
+    if (scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      scrollToBottomNow();
+    });
+  }, [scrollToBottomNow]);
+
+  const updateAutoFollowNow = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
     const next = isChatScrollerNearBottom({
@@ -83,9 +112,21 @@ export function ChatView(props: ChatProps): JSX.Element {
       clientHeight: el.clientHeight
     });
     autoFollowRef.current = next;
-    setAutoFollowing(next);
-    if (next) setHasBufferedUpdates(false);
+    setAutoFollowing((current) => (current === next ? current : next));
+    if (next) setHasBufferedUpdates((current) => (current ? false : current));
   }, []);
+
+  const updateAutoFollow = useCallback(() => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      updateAutoFollowNow();
+      return;
+    }
+    if (autoFollowFrameRef.current !== null) return;
+    autoFollowFrameRef.current = window.requestAnimationFrame(() => {
+      autoFollowFrameRef.current = null;
+      updateAutoFollowNow();
+    });
+  }, [updateAutoFollowNow]);
 
   const jumpToLatest = useCallback(() => {
     autoFollowRef.current = true;
@@ -94,13 +135,12 @@ export function ChatView(props: ChatProps): JSX.Element {
     scrollToBottom();
   }, [scrollToBottom]);
 
-  const eventScrollSignature = useMemo(
-    () =>
-      events
-        .map((event) => `${event.id}:${event.kind}:${event.at}:${getScrollablePayloadLength(event)}`)
-        .join('|'),
-    [events]
-  );
+  const latestEventScrollSignature = useMemo(() => {
+    const event = events.at(-1);
+    return event
+      ? `${events.length}:${event.id}:${event.kind}:${event.at}:${getScrollablePayloadLength(event)}`
+      : 'empty';
+  }, [events]);
 
   useEffect(() => {
     autoFollowRef.current = true;
@@ -115,8 +155,8 @@ export function ChatView(props: ChatProps): JSX.Element {
       setHasBufferedUpdates(false);
       return;
     }
-    setHasBufferedUpdates(true);
-  }, [eventScrollSignature, isLoading, scrollToBottom]);
+    setHasBufferedUpdates((current) => (current ? current : true));
+  }, [latestEventScrollSignature, isLoading, scrollToBottom]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') return;
@@ -129,6 +169,20 @@ export function ChatView(props: ChatProps): JSX.Element {
     return () => observer.disconnect();
   }, [scrollToBottom]);
 
+  useEffect(() => {
+    return () => {
+      cancelScrollFrame();
+      if (
+        autoFollowFrameRef.current !== null &&
+        typeof window !== 'undefined' &&
+        typeof window.cancelAnimationFrame === 'function'
+      ) {
+        window.cancelAnimationFrame(autoFollowFrameRef.current);
+      }
+      autoFollowFrameRef.current = null;
+    };
+  }, [cancelScrollFrame]);
+
   const items = useMemo(
     () =>
       buildRenderItems(
@@ -136,6 +190,7 @@ export function ChatView(props: ChatProps): JSX.Element {
         capabilities,
         actions.approveTool,
         actions.rejectTool,
+        messageMaxWidthClass,
         renderMarkdownReferenceToken,
         renderMarkdownLink
       ),
@@ -144,6 +199,7 @@ export function ChatView(props: ChatProps): JSX.Element {
       capabilities,
       actions.approveTool,
       actions.rejectTool,
+      messageMaxWidthClass,
       renderMarkdownReferenceToken,
       renderMarkdownLink
     ]
@@ -164,7 +220,7 @@ export function ChatView(props: ChatProps): JSX.Element {
         <div
           ref={scrollerRef}
           onScroll={updateAutoFollow}
-          className="h-full overflow-auto px-3 py-3"
+          className="h-full overflow-y-auto overscroll-contain px-3 py-3"
         >
           <div ref={contentRef} className="space-y-2">
             {beforeEventsSlot}
@@ -174,7 +230,12 @@ export function ChatView(props: ChatProps): JSX.Element {
               </div>
             ) : null}
             {items.map((item) => (
-              <div key={item.key}>{item.node}</div>
+              <div
+                key={item.key}
+                className="[contain-intrinsic-size:auto_96px] [content-visibility:auto]"
+              >
+                <div className={itemFrameClassName(item, eventMaxWidthClass)}>{item.node}</div>
+              </div>
             ))}
           </div>
         </div>
@@ -215,6 +276,16 @@ export function ChatView(props: ChatProps): JSX.Element {
   );
 }
 
+function itemFrameClassName(item: RenderItem, eventMaxWidthClass?: string): string {
+  const classes = ['min-w-0'];
+  if (item.constrainWidth && eventMaxWidthClass) {
+    classes.push('w-full', eventMaxWidthClass);
+  } else {
+    classes.push('w-full');
+  }
+  return classes.join(' ');
+}
+
 function getScrollablePayloadLength(event: RuntimeEvent): number {
   switch (event.kind) {
     case 'runtime.message':
@@ -229,6 +300,22 @@ function getScrollablePayloadLength(event: RuntimeEvent): number {
     case 'runtime.awaiting_user': {
       const payload = (event as RuntimeEvent<'runtime.awaiting_user'>).payload;
       return [payload.title, payload.hint, payload.status].filter(Boolean).join('|').length;
+    }
+    case 'runtime.phase': {
+      const payload = (event as RuntimeEvent<'runtime.phase'>).payload;
+      return [payload.label, payload.detail, payload.status].filter(Boolean).join('|').length;
+    }
+    case 'runtime.route': {
+      const payload = (event as RuntimeEvent<'runtime.route'>).payload;
+      return [payload.label, payload.reason, payload.source].filter(Boolean).join('|').length;
+    }
+    case 'runtime.context': {
+      const payload = (event as RuntimeEvent<'runtime.context'>).payload;
+      return [payload.label, payload.detail, payload.status].filter(Boolean).join('|').length;
+    }
+    case 'runtime.route_escalation': {
+      const payload = (event as RuntimeEvent<'runtime.route_escalation'>).payload;
+      return [payload.from, payload.to, payload.reason].filter(Boolean).join('|').length;
     }
     case 'runtime.error':
       return (event as RuntimeEvent<'runtime.error'>).payload.message.length;
@@ -246,11 +333,15 @@ function buildRenderItems(
   capabilities: { supportsThinking: boolean; canApproveTool: boolean },
   onApproveTool?: (spanId: string) => void,
   onRejectTool?: (spanId: string) => void,
+  messageMaxWidthClass?: string,
   renderMarkdownReferenceToken?: NonNullable<ChatProps['renderMarkdownReferenceToken']>,
   renderMarkdownLink?: NonNullable<ChatProps['renderMarkdownLink']>
 ): RenderItem[] {
   // 把 tool_use 与对应 tool_result 配对，其余事件按序渲染
   const items: RenderItem[] = [];
+  const pushEventItem = (item: RenderItem): void => {
+    items.push({ ...item, constrainWidth: true });
+  };
   const normalizedEvents = normalizeRuntimeEvents(events);
   const consumed = new Set<string>();
 
@@ -265,15 +356,14 @@ function buildRenderItems(
           node: (
             <MessageBubble
               event={m}
+              maxWidthClass={messageMaxWidthClass}
               renderMarkdownReferenceToken={
                 renderMarkdownReferenceToken
                   ? (token, key) => renderMarkdownReferenceToken(token, key, m)
                   : undefined
               }
               renderMarkdownLink={
-                renderMarkdownLink
-                  ? (token, key) => renderMarkdownLink(token, key, m)
-                  : undefined
+                renderMarkdownLink ? (token, key) => renderMarkdownLink(token, key, m) : undefined
               }
             />
           )
@@ -284,7 +374,7 @@ function buildRenderItems(
         if (!capabilities.supportsThinking) break;
         const t = ev as RuntimeEvent<'runtime.thinking'>;
         if (!t.payload.text.trim()) break;
-        items.push({ key: ev.id, node: <ThinkingBlock event={t} /> });
+        pushEventItem({ key: ev.id, node: <ThinkingBlock event={t} /> });
         break;
       }
       case 'runtime.tool_use': {
@@ -296,7 +386,7 @@ function buildRenderItems(
             resolveToolResultParentSpanId(e as RuntimeEvent<'runtime.tool_result'>) === spanId
         ) as RuntimeEvent<'runtime.tool_result'> | undefined;
         if (result) consumed.add(result.id);
-        items.push({
+        pushEventItem({
           key: tu.id,
           node: (
             <ToolCard
@@ -312,7 +402,7 @@ function buildRenderItems(
       case 'runtime.tool_result': {
         // 没有匹配 tool_use 的结果，孤立显示
         const r = ev as RuntimeEvent<'runtime.tool_result'>;
-        items.push({
+        pushEventItem({
           key: r.id,
           node: (
             <div className="rounded-xl border border-neutral-200 bg-white/70 px-3 py-2 text-xs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-200">
@@ -327,7 +417,7 @@ function buildRenderItems(
       }
       case 'runtime.error': {
         const e = ev as RuntimeEvent<'runtime.error'>;
-        items.push({
+        pushEventItem({
           key: e.id,
           node: (
             <div className="rounded-xl border border-rose-300 bg-rose-50/80 px-3 py-2 text-xs text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
@@ -338,9 +428,41 @@ function buildRenderItems(
         });
         break;
       }
+      case 'runtime.phase': {
+        const p = ev as RuntimeEvent<'runtime.phase'>;
+        pushEventItem({
+          key: p.id,
+          node: <RuntimePhaseCard event={p} />
+        });
+        break;
+      }
+      case 'runtime.route': {
+        const r = ev as RuntimeEvent<'runtime.route'>;
+        pushEventItem({
+          key: r.id,
+          node: <RuntimeRouteCard event={r} />
+        });
+        break;
+      }
+      case 'runtime.context': {
+        const c = ev as RuntimeEvent<'runtime.context'>;
+        pushEventItem({
+          key: c.id,
+          node: <RuntimeContextCard event={c} />
+        });
+        break;
+      }
+      case 'runtime.route_escalation': {
+        const r = ev as RuntimeEvent<'runtime.route_escalation'>;
+        pushEventItem({
+          key: r.id,
+          node: <RuntimeEscalationCard event={r} />
+        });
+        break;
+      }
       case 'runtime.awaiting_user': {
         const a = ev as RuntimeEvent<'runtime.awaiting_user'>;
-        items.push({
+        pushEventItem({
           key: a.id,
           node: (
             <AwaitingUserCard
@@ -355,7 +477,7 @@ function buildRenderItems(
       }
       case 'runtime.interrupt': {
         const i = ev as RuntimeEvent<'runtime.interrupt'>;
-        items.push({
+        pushEventItem({
           key: i.id,
           node: (
             <div className="rounded-xl border border-orange-300 bg-orange-50/80 px-3 py-2 text-xs text-orange-800 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-200">
@@ -374,7 +496,7 @@ function buildRenderItems(
         if (typeof outputTokens === 'number') parts.push(`输出 ${outputTokens}`);
         if (typeof totalUsd === 'number') parts.push(`$${totalUsd.toFixed(4)}`);
         if (parts.length === 0) break;
-        items.push({
+        pushEventItem({
           key: c.id,
           node: (
             <div className="rounded-md bg-neutral-100/70 px-2 py-1 text-[10px] text-neutral-500 dark:bg-neutral-900/50 dark:text-neutral-400">
@@ -388,18 +510,21 @@ function buildRenderItems(
         const d = ev as RuntimeEvent<'runtime.done'>;
         const code = d.payload.exitCode;
         const ok = code === 0 || code === undefined || code === null;
-        items.push({
+        const pendingTools = d.payload.reason === 'sdk_turn_pending_tools';
+        pushEventItem({
           key: d.id,
           node: (
             <div
               className={`rounded-md px-2 py-1 text-[10px] ${
-                ok
-                  ? 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
-                  : 'bg-rose-100/60 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200'
+                pendingTools
+                  ? 'bg-sky-100/60 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
+                  : ok
+                    ? 'bg-emerald-100/60 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                    : 'bg-rose-100/60 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200'
               }`}
             >
-              {ok ? '✓ 已完成' : `✗ 已退出（${code}）`}
-              {d.payload.reason ? ` · ${d.payload.reason}` : ''}
+              {pendingTools ? '↻ 工具结果处理中' : ok ? '✓ 已完成' : `✗ 已退出（${code}）`}
+              {d.payload.reason && !pendingTools ? ` · ${d.payload.reason}` : ''}
             </div>
           )
         });
@@ -411,6 +536,125 @@ function buildRenderItems(
   }
 
   return items;
+}
+
+function RuntimePhaseCard({ event }: { event: RuntimeEvent<'runtime.phase'> }): JSX.Element | null {
+  const payload = event.payload;
+  if (payload.status === 'started' && payload.phase === 'model_stream') return null;
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white/70 px-3 py-2 text-xs text-neutral-600 shadow-sm dark:border-neutral-800 dark:bg-neutral-950/60 dark:text-neutral-300">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={statusDotClassName(payload.status)} />
+        <span className="font-medium text-neutral-800 dark:text-neutral-100">{payload.label}</span>
+        {payload.elapsedMs !== undefined ? (
+          <span className="text-[11px] text-neutral-400">{payload.elapsedMs}ms</span>
+        ) : null}
+      </div>
+      {payload.detail ? (
+        <div className="mt-1 text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+          {payload.detail}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RuntimeRouteCard({ event }: { event: RuntimeEvent<'runtime.route'> }): JSX.Element {
+  const payload = event.payload;
+  const alternatives =
+    payload.alternatives?.filter((item) => item.route !== payload.route).slice(0, 2) ?? [];
+  return (
+    <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs text-sky-950 shadow-sm dark:border-sky-900/50 dark:bg-sky-950/25 dark:text-sky-100">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+        <span className="font-semibold">
+          意图：{payload.label || askIntentRouteLabel(payload.route)}
+        </span>
+        <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950/50 dark:text-sky-200">
+          {Math.round(payload.confidence * 100)}%
+        </span>
+      </div>
+      <div className="mt-1 text-[11px] leading-relaxed opacity-80">{payload.reason}</div>
+      {alternatives.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1 text-[10px] opacity-75">
+          {alternatives.map((item) => (
+            <span
+              key={item.route}
+              className="rounded-full border border-sky-200/80 px-2 py-0.5 dark:border-sky-800"
+            >
+              备选：{askIntentRouteLabel(item.route)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RuntimeContextCard({
+  event
+}: {
+  event: RuntimeEvent<'runtime.context'>;
+}): JSX.Element | null {
+  const payload = event.payload;
+  if (payload.status === 'started') return null;
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50/80 px-3 py-2 text-xs text-neutral-700 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-200">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={statusDotClassName(payload.status)} />
+        <span className="font-medium">{payload.label || askContextLaneLabel(payload.lane)}</span>
+        {payload.elapsedMs !== undefined ? (
+          <span className="text-[11px] text-neutral-400">{payload.elapsedMs}ms</span>
+        ) : null}
+      </div>
+      {payload.detail ? (
+        <div className="mt-1 text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+          {payload.detail}
+        </div>
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+        {payload.evidenceCount !== undefined ? (
+          <span className="rounded-full bg-white px-2 py-0.5 dark:bg-neutral-950">
+            证据 {payload.evidenceCount}
+          </span>
+        ) : null}
+        {payload.sourceCount !== undefined ? (
+          <span className="rounded-full bg-white px-2 py-0.5 dark:bg-neutral-950">
+            来源 {payload.sourceCount}
+          </span>
+        ) : null}
+        {payload.tokenEstimate !== undefined ? (
+          <span className="rounded-full bg-white px-2 py-0.5 dark:bg-neutral-950">
+            约 {payload.tokenEstimate} tokens
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function RuntimeEscalationCard({
+  event
+}: {
+  event: RuntimeEvent<'runtime.route_escalation'>;
+}): JSX.Element {
+  const payload = event.payload;
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
+      <div className="font-semibold">
+        路由升级：{askIntentRouteLabel(payload.from)} → {askIntentRouteLabel(payload.to)}
+      </div>
+      <div className="mt-1 text-[11px] leading-relaxed opacity-80">{payload.reason}</div>
+    </div>
+  );
+}
+
+function statusDotClassName(status: RuntimeEvent<'runtime.phase'>['payload']['status']): string {
+  if (status === 'completed' || status === 'attached')
+    return 'h-1.5 w-1.5 rounded-full bg-emerald-500';
+  if (status === 'failed') return 'h-1.5 w-1.5 rounded-full bg-rose-500';
+  if (status === 'skipped') return 'h-1.5 w-1.5 rounded-full bg-neutral-400';
+  return 'h-1.5 w-1.5 rounded-full bg-sky-500';
 }
 
 function normalizeRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
@@ -432,10 +676,7 @@ function AwaitingUserCard({
   const proposalId = event.payload.proposalId ?? event.spanId;
   const title = event.payload.title ?? '等待用户批准';
   const isExternalPathApproval = event.payload.kind === 'external_path_access';
-  const showActions =
-    status === 'pending' &&
-    canApprove &&
-    (onApprove || onReject);
+  const showActions = status === 'pending' && canApprove && (onApprove || onReject);
   const approveLabel = isExternalPathApproval ? '允许读取' : '批准';
   const rejectLabel = isExternalPathApproval ? '拒绝' : '拒绝';
   return (

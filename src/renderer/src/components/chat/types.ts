@@ -40,6 +40,8 @@ export interface ChatProps {
   composerSourceSurface?: ComposerSourceSurface;
   composerCapabilities?: Partial<ComposerCapabilities>;
   onComposerSelectionChange?: (selection: RuntimeSelection) => void;
+  messageMaxWidthClass?: string;
+  eventMaxWidthClass?: string;
 
   /** Host 自定义顶栏（M5/P2.3 visual parity）：渲染在 ActionBar 之上。 */
   headerSlot?: import('react').ReactNode;

@@ -30,7 +30,12 @@ import { legacyTextToComposerDraft, normalizeRuntimeSelection } from '@shared/ai
 import type { ContextPacket, ContextPacketScope, ContextSection } from '@shared/context';
 import type { EvidenceSelector } from '@shared/evidence';
 import type { SpaceContextBundle } from '@shared/space';
-import type { SDKEndpointRegistrySnapshot, SDKEndpointView, SDKInvocationMessage, SDKToolDef } from '@shared/runtime';
+import type {
+  SDKEndpointRegistrySnapshot,
+  SDKEndpointView,
+  SDKInvocationMessage,
+  SDKToolDef
+} from '@shared/runtime';
 import type { Artifact, ConversationStage } from '@shared/stage';
 import type { ConversationOrchestrator } from '../conversation/orchestrator';
 import type { RunnerPool } from '../agent/pool';
@@ -39,6 +44,20 @@ import type { AgentRunner } from '../agent/runner';
 import type { RuntimeRouter } from '../runtime/router';
 import type { OrbitToolRegistry } from '../agent-tools/registry';
 import type { OrbitToolExecutor } from '../agent-tools/executor';
+import type {
+  AskContextLane,
+  AskIntentDecision,
+  AskIntentRoute,
+  AskRuntimeStatus
+} from '@shared/ask-runtime';
+import { askContextLaneLabel, askIntentRouteLabel } from '@shared/ask-runtime';
+import { emitAskRuntimeEvent } from '../ask-runtime/events';
+import {
+  routeAskIntent,
+  shouldEscalateDirectToVault,
+  type AskIntentConversationContext
+} from '../ask-runtime/intent-router';
+import { routeAskIntentWithFastModel } from '../ask-runtime/llm-router';
 import { rebuildMessages } from '../agent-tools/rebuild-messages';
 import { readVisionForSystemPrompt } from '../agent-tools/vision-reader';
 import { SkillLoader } from '../agent-tools/skill-loader';
@@ -57,6 +76,9 @@ import { summarizeExternalAISessionSources } from '../evidence/external-ai-sessi
 import { resolveExternalAISessionScanOptions } from '../evidence/external-ai-session-settings';
 
 const ASK_PMIL_CONTEXT_TIMEOUT_MS = 12_000;
+const ASK_FAST_CONTEXT_TIMEOUT_MS = 800;
+const ASK_RETRIEVAL_CONTEXT_TIMEOUT_MS = 3_500;
+const ASK_SLOW_CONTEXT_TIMEOUT_MS = 12_000;
 const ASK_EXTERNAL_AI_INVENTORY_TIMEOUT_MS = 4_000;
 
 export interface AskAnywhereDeps {
@@ -151,6 +173,8 @@ You help the user think through projects, tasks, ideas, and external information
 `;
 
 export class AskAnywhereOrchestrator {
+  /** RunController：模型启动前的 routing/context 阶段也必须可停止，不能成为假“流式输出”。 */
+  private readonly prepRunAborts = new Map<string, AbortController>();
   /** Phase D：每个进行中的 agent run 对应一个 AbortController，stop() 用它真中断 LLM stream。 */
   private readonly agentRunAborts = new Map<string, AbortController>();
   /** 普通 SDK stream 同样是 in-process run，重启后不会自动恢复。 */
@@ -258,13 +282,41 @@ export class AskAnywhereOrchestrator {
       throw new Error('no_vault');
     }
 
-    const selectedSkillRefs = normalizeSkillRefs(draft.skillRefs);
+    const selectedSkillRefs = normalizeSkillRefs(draft.skillRefs) ?? [];
 
     const runtimeCommand = await this.handleRuntimeCommand(conversationId, conv, trimmed, draft);
     if (runtimeCommand.handled) return { runId: runtimeCommand.runId };
 
-    // 先取历史构造 prompt（不含本条 user message），再立即持久化本条消息。
-    // 上下文召回 / 路由如果变慢，用户消息仍然可见且可恢复。
+    const runId = `ask-${randomUUID()}`;
+    const prepAbortController = new AbortController();
+    const runStartedAt = Date.now();
+    let runtimeStarted = false;
+    const emitPhase = (input: {
+      phase: RuntimeEvent<'runtime.phase'>['payload']['phase'];
+      status: AskRuntimeStatus;
+      label: string;
+      detail?: string;
+      targetMs?: number;
+      route?: AskIntentRoute;
+      lane?: AskContextLane;
+    }): void => {
+      emitAskRuntimeEvent({
+        kind: 'runtime.phase',
+        conversationId,
+        runId,
+        payload: {
+          ...input,
+          elapsedMs: Date.now() - runStartedAt
+        }
+      });
+    };
+    const assertNotAborted = (): void => {
+      if (prepAbortController.signal.aborted) throw new Error('ask_run_aborted');
+    };
+
+    // 先取历史构造 prompt（不含本条 user message），再立即持久化本条消息并绑定 run。
+    // 后续 routing / context / runtime selection 都通过真实事件披露，避免前端误显示为模型流式输出。
+    const routeContext = buildRouteConversationContext(conv.turns);
     const history = renderHistory(conv.turns);
     await this.deps.conversations.appendTurn({
       conversationId,
@@ -272,213 +324,342 @@ export class AskAnywhereOrchestrator {
       content: trimmed,
       input: draft
     });
-    const systemPrompt = await loadAskAnywhereSystemPrompt(vault);
-    const scope = conv.scope ?? { kind: 'global' };
-    const shouldUseLightweightContext = await isSkillRouteMessage(
-      vault,
-      scope,
-      selectedSkillRefs,
-      trimmed
-    );
-    const contextBundle = shouldUseLightweightContext
-      ? { text: '', packet: null }
-      : await buildAskAnywhereContextBundle(vault, scope, trimmed);
-    const scopedContext = contextBundle.text;
-    if (contextBundle.packet) {
-      await addContextPacketArtifact(vault, conversationId, contextBundle.packet).catch((error) =>
-        console.warn('[ask-anywhere] failed to add PMIL context packet artifact', error)
-      );
-    }
-    const skillsSection = await loadSkillsSectionForPrompt(vault, scope, selectedSkillRefs, trimmed);
-    const prompt = buildPrompt({
-      systemPrompt,
-      scopedContext,
-      skillsSection,
-      history,
-      userText: trimmed
-    });
-    const router = this.deps.getRuntimeRouter?.() ?? null;
-    const agentTools = this.deps.getAgentTools?.() ?? null;
-    const agentReady = Boolean(router && agentTools && !forceCli);
-    const decision = forceCli
-      ? {
-          mode: 'ask' as const,
-          track: 'cli' as const,
-          runtime: selection.runtimeId ?? 'claude-cli',
-          reason: 'conversation selected a CLI runtime'
-        }
-      : router
-      ? await router.decide({
-          mode: 'ask',
-          agentMode: agentReady,
-          endpointHint: selection.endpointId ?? conv.runtimeEndpointHint,
-          modelHint: selection.model ?? conv.runtimeModelHint,
-          modelTier: selection.modelTier
-        })
-      : { track: 'cli' as const, runtime: 'claude-cli', reason: 'SDK router unavailable' };
-
-    if (router && agentTools && decision.track === 'sdk_agent') {
-      const runId = `sdk-agent-${randomUUID()}`;
-      await this.deps.conversations.bindRuntime(conversationId, {
-        currentRunId: runId,
-        runtimeHint: runtimeHintLabel(decision.runtime, decision.model),
-        ...(decision.endpointId ? { runtimeEndpointHint: decision.endpointId } : {}),
-        ...(decision.model ? { runtimeModelHint: decision.model } : {}),
-        runtimeSelection: {
-          ...selection,
-          track: 'sdk_agent',
-          ...(decision.endpointId ? { endpointId: decision.endpointId } : {}),
-          ...(decision.model ? { model: decision.model } : {})
-        }
-      });
-      void this.runSdkAgentLoop({
-        router,
-        toolRegistry: agentTools.registry,
-        toolExecutor: agentTools.executor,
-        conversationId,
-        runId,
-        systemPrompt,
-        scopedContext,
-        scope,
-        turns: conv.turns,
-        userText: trimmed,
-        skillRefs: selectedSkillRefs,
-        endpointId: decision.endpointId,
-        model: decision.model
-      });
-      return { runId };
-    }
-
-    // agent 模式被请求但 SDK 不可用：emit 友好错误并停止（不 fallback CLI，避免上下文割裂）。
-    if (agentReady && decision.runtime === 'sdk-agent-unavailable') {
-      this.emitSyntheticError(
-        conversationId,
-        'sdk_endpoint_missing',
-        'Agent mode requires a configured SDK endpoint with API key. Add one in Settings → AI Endpoints.'
-      );
-      throw new Error('sdk_endpoint_missing');
-    }
-
-    if (router && decision.track === 'sdk') {
-      const runId = `sdk-${randomUUID()}`;
-      await this.deps.conversations.bindRuntime(conversationId, {
-        currentRunId: runId,
-        runtimeHint: runtimeHintLabel(decision.runtime, decision.model),
-        ...(decision.endpointId ? { runtimeEndpointHint: decision.endpointId } : {}),
-        ...(decision.model ? { runtimeModelHint: decision.model } : {}),
-        runtimeSelection: {
-          ...selection,
-          track: 'sdk',
-          ...(decision.endpointId ? { endpointId: decision.endpointId } : {}),
-          ...(decision.model ? { model: decision.model } : {})
-        }
-      });
-      void this.runSdk({
-        router,
-        conversationId,
-        runId,
-        systemPrompt,
-        scopedContext,
-        scope,
-        turns: conv.turns,
-        userText: trimmed,
-        skillRefs: selectedSkillRefs,
-        endpointId: decision.endpointId,
-        model: decision.model
-      });
-      return { runId };
-    }
-
-    const claudePath = await this.deps.resolveClaudePath();
-    if (!claudePath) {
-      this.emitSyntheticError(
-        conversationId,
-        'cli_missing',
-        'Claude Code CLI not found. Configure an SDK endpoint or install Claude Code CLI.'
-      );
-      throw new Error('cli_missing');
-    }
-
-    let hookConfig: Awaited<ReturnType<NonNullable<AskAnywhereDeps['getHookConfig']>>> | undefined;
-    try {
-      hookConfig = await this.deps.getHookConfig?.();
-    } catch {
-      hookConfig = undefined;
-    }
-    const apiKey = await this.deps.getApiKey?.().catch(() => undefined);
-
-    let runner: AgentRunner;
-    try {
-      runner = await this.deps.pool.spawn({
-        claudePath,
-        prompt,
-        cwd: vault,
-        taskId: null,
-        title: 'Ask Anywhere',
-        vaultPath: vault,
-        runtimeProvider: 'claude',
-        conversationId,
-        ...(hookConfig ? { hookConfig } : {}),
-        ...(apiKey ? { apiKey } : {})
-      });
-    } catch (err) {
-      const e = err as Error & { code?: string };
-      this.emitSyntheticError(
-        conversationId,
-        e.code ?? 'spawn_failed',
-        e.message ?? 'failed to spawn runtime'
-      );
-      throw err;
-    }
-
+    this.prepRunAborts.set(runId, prepAbortController);
     await this.deps.conversations.bindRuntime(conversationId, {
-      currentRunId: runner.runId,
-      runtimeHint: 'claude',
-      runtimeSelection: {
-        ...selection,
-        track: 'cli',
-        runtimeId: selection.runtimeId ?? 'claude'
+      currentRunId: runId,
+      runtimeHint: 'Ask Runtime',
+      runtimeSelection: selection
+    });
+    emitPhase({
+      phase: 'accepted',
+      status: 'completed',
+      label: '已接收',
+      detail: '本轮请求已进入 Ask Runtime，接下来会先判定意图，再按预算取上下文。',
+      targetMs: 100
+    });
+
+    try {
+      const scope = conv.scope ?? { kind: 'global' };
+      emitPhase({
+        phase: 'routing',
+        status: 'started',
+        label: '正在判定意图',
+        detail: '使用快速模型识别意图；模型不可用或超时会回到规则路由。',
+        targetMs: 1200
+      });
+      const fallbackIntent = routeAskIntent({
+        text: trimmed,
+        scope,
+        skillRefs: selectedSkillRefs,
+        conversationContext: routeContext
+      });
+      const intent = await routeAskIntentWithFastModel({
+        router: this.deps.getRuntimeRouter?.() ?? null,
+        text: trimmed,
+        scope,
+        skillRefs: selectedSkillRefs,
+        conversationContext: routeContext,
+        fallback: fallbackIntent,
+        conversationId,
+        runId,
+        signal: prepAbortController.signal
+      });
+      emitAskRuntimeEvent({
+        kind: 'runtime.route',
+        conversationId,
+        runId,
+        payload: {
+          route: intent.route,
+          confidence: intent.confidence,
+          source: intent.source,
+          label: askIntentRouteLabel(intent.route),
+          reason: intent.reason,
+          alternatives: intent.alternatives
+        }
+      });
+      emitPhase({
+        phase: 'routing',
+        status: 'completed',
+        label: `已判定：${askIntentRouteLabel(intent.route)}`,
+        route: intent.route
+      });
+      assertNotAborted();
+
+      const [systemPrompt, shouldUseLightweightContext] = await Promise.all([
+        loadAskAnywhereSystemPrompt(vault),
+        isSkillRouteMessage(vault, scope, selectedSkillRefs, trimmed)
+      ]);
+      assertNotAborted();
+      const contextBundle = shouldUseLightweightContext
+        ? { text: '', packet: null, slowLane: null }
+        : await buildAskAnywhereContextBundle(vault, scope, trimmed, {
+            conversationId,
+            runId,
+            intent,
+            signal: prepAbortController.signal
+          });
+      assertNotAborted();
+      const askRuntimeInstruction = buildAskRuntimeInstruction(intent);
+      const scopedContext = [askRuntimeInstruction, contextBundle.text]
+        .filter(Boolean)
+        .join('\n\n');
+      if (contextBundle.packet) {
+        await addContextPacketArtifact(vault, conversationId, contextBundle.packet).catch((error) =>
+          console.warn('[ask-anywhere] failed to add PMIL context packet artifact', error)
+        );
       }
-    });
+      const skillsSection = await loadSkillsSectionForPrompt(
+        vault,
+        scope,
+        selectedSkillRefs,
+        trimmed
+      );
+      const prompt = buildPrompt({
+        systemPrompt,
+        scopedContext,
+        skillsSection,
+        history,
+        userText: trimmed
+      });
+      const router = this.deps.getRuntimeRouter?.() ?? null;
+      const agentTools = this.deps.getAgentTools?.() ?? null;
+      const agentReady = Boolean(router && agentTools && !forceCli);
+      emitPhase({
+        phase: 'runtime_selection',
+        status: 'started',
+        label: '正在选择运行时',
+        detail: forceCli
+          ? '本轮已选择 CLI runtime。'
+          : '优先选择可用的 SDK agent，工具层与模型解耦。'
+      });
+      const decision = forceCli
+        ? {
+            mode: 'ask' as const,
+            track: 'cli' as const,
+            runtime: selection.runtimeId ?? 'claude-cli',
+            reason: 'conversation selected a CLI runtime'
+          }
+        : router
+          ? await router.decide({
+              mode: 'ask',
+              agentMode: agentReady,
+              endpointHint: selection.endpointId ?? conv.runtimeEndpointHint,
+              modelHint: selection.model ?? conv.runtimeModelHint,
+              modelTier: selection.modelTier
+            })
+          : { track: 'cli' as const, runtime: 'claude-cli', reason: 'SDK router unavailable' };
+      const decisionModel = 'model' in decision ? decision.model : undefined;
+      emitPhase({
+        phase: 'runtime_selection',
+        status: 'completed',
+        label: `运行时：${runtimeHintLabel(decision.runtime, decisionModel)}`,
+        detail: decision.reason
+      });
+      if (contextBundle.slowLane) void contextBundle.slowLane();
+      assertNotAborted();
 
-    // 聚合 assistant 文本：直接订阅 runner（同步、早于 broadcastPool）
-    const aggregator = new AssistantAggregator();
-    runner.on('event', (ev: AgentEvent) => aggregator.ingest(ev));
-    runner.once('exit', () => {
-      void this.finalizeRun(conversationId, runner.runId, aggregator);
-    });
+      if (router && agentTools && decision.track === 'sdk_agent') {
+        await this.deps.conversations.bindRuntime(conversationId, {
+          currentRunId: runId,
+          runtimeHint: runtimeHintLabel(decision.runtime, decision.model),
+          ...(decision.endpointId ? { runtimeEndpointHint: decision.endpointId } : {}),
+          ...(decision.model ? { runtimeModelHint: decision.model } : {}),
+          runtimeSelection: {
+            ...selection,
+            track: 'sdk_agent',
+            ...(decision.endpointId ? { endpointId: decision.endpointId } : {}),
+            ...(decision.model ? { model: decision.model } : {})
+          }
+        });
+        runtimeStarted = true;
+        this.prepRunAborts.delete(runId);
+        void this.runSdkAgentLoop({
+          router,
+          toolRegistry: agentTools.registry,
+          toolExecutor: agentTools.executor,
+          conversationId,
+          runId,
+          systemPrompt,
+          scopedContext,
+          scope,
+          turns: conv.turns,
+          userText: trimmed,
+          skillRefs: selectedSkillRefs,
+          endpointId: decision.endpointId,
+          model: decision.model
+        });
+        return { runId };
+      }
 
-    return { runId: runner.runId };
+      // agent 模式被请求但 SDK 不可用：emit 友好错误并停止（不 fallback CLI，避免上下文割裂）。
+      if (agentReady && decision.runtime === 'sdk-agent-unavailable') {
+        this.emitSyntheticError(
+          conversationId,
+          'sdk_endpoint_missing',
+          'Agent mode requires a configured SDK endpoint with API key. Add one in Settings → AI Endpoints.'
+        );
+        throw new Error('sdk_endpoint_missing');
+      }
+
+      if (router && decision.track === 'sdk') {
+        await this.deps.conversations.bindRuntime(conversationId, {
+          currentRunId: runId,
+          runtimeHint: runtimeHintLabel(decision.runtime, decision.model),
+          ...(decision.endpointId ? { runtimeEndpointHint: decision.endpointId } : {}),
+          ...(decision.model ? { runtimeModelHint: decision.model } : {}),
+          runtimeSelection: {
+            ...selection,
+            track: 'sdk',
+            ...(decision.endpointId ? { endpointId: decision.endpointId } : {}),
+            ...(decision.model ? { model: decision.model } : {})
+          }
+        });
+        runtimeStarted = true;
+        this.prepRunAborts.delete(runId);
+        void this.runSdk({
+          router,
+          conversationId,
+          runId,
+          systemPrompt,
+          scopedContext,
+          scope,
+          turns: conv.turns,
+          userText: trimmed,
+          skillRefs: selectedSkillRefs,
+          endpointId: decision.endpointId,
+          model: decision.model
+        });
+        return { runId };
+      }
+
+      const claudePath = await this.deps.resolveClaudePath();
+      if (!claudePath) {
+        this.emitSyntheticError(
+          conversationId,
+          'cli_missing',
+          'Claude Code CLI not found. Configure an SDK endpoint or install Claude Code CLI.'
+        );
+        throw new Error('cli_missing');
+      }
+
+      let hookConfig:
+        | Awaited<ReturnType<NonNullable<AskAnywhereDeps['getHookConfig']>>>
+        | undefined;
+      try {
+        hookConfig = await this.deps.getHookConfig?.();
+      } catch {
+        hookConfig = undefined;
+      }
+      const apiKey = await this.deps.getApiKey?.().catch(() => undefined);
+
+      let runner: AgentRunner;
+      try {
+        runner = await this.deps.pool.spawn({
+          claudePath,
+          prompt,
+          cwd: vault,
+          taskId: null,
+          title: 'Ask Anywhere',
+          vaultPath: vault,
+          runtimeProvider: 'claude',
+          conversationId,
+          ...(hookConfig ? { hookConfig } : {}),
+          ...(apiKey ? { apiKey } : {})
+        });
+      } catch (err) {
+        const e = err as Error & { code?: string };
+        this.emitSyntheticError(
+          conversationId,
+          e.code ?? 'spawn_failed',
+          e.message ?? 'failed to spawn runtime'
+        );
+        throw err;
+      }
+
+      await this.deps.conversations.bindRuntime(conversationId, {
+        currentRunId: runner.runId,
+        runtimeHint: 'claude',
+        runtimeSelection: {
+          ...selection,
+          track: 'cli',
+          runtimeId: selection.runtimeId ?? 'claude'
+        }
+      });
+      runtimeStarted = true;
+      this.prepRunAborts.delete(runId);
+      emitPhase({
+        phase: 'runtime_selection',
+        status: 'completed',
+        label: '已交接到 Claude CLI',
+        detail: `CLI runId: ${runner.runId}`
+      });
+
+      // 聚合 assistant 文本：直接订阅 runner（同步、早于 broadcastPool）
+      const aggregator = new AssistantAggregator();
+      runner.on('event', (ev: AgentEvent) => aggregator.ingest(ev));
+      runner.once('exit', () => {
+        void this.finalizeRun(conversationId, runner.runId, aggregator);
+      });
+
+      return { runId: runner.runId };
+    } catch (error) {
+      const aborted =
+        prepAbortController.signal.aborted ||
+        (error instanceof Error && error.message === 'ask_run_aborted');
+      if (aborted) {
+        this.emitRuntimeInterrupt(conversationId, runId, 'user_stop');
+      } else {
+        this.emitSyntheticError(
+          conversationId,
+          error instanceof Error
+            ? error.message.split(':')[0] || 'ask_runtime_failed'
+            : 'ask_runtime_failed',
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+      throw error;
+    } finally {
+      this.prepRunAborts.delete(runId);
+      if (!runtimeStarted) {
+        await this.deps.conversations
+          .bindRuntime(conversationId, { currentRunId: null })
+          .catch(() => undefined);
+      }
+    }
   }
 
   async stop(conversationId: string): Promise<void> {
     const conv = await this.deps.conversations.getConversation(conversationId);
     if (!conv?.currentRunId) return;
-    if (conv.currentRunId.startsWith('sdk-agent-')) {
-      // Phase D：真中断 LLM stream；已 started 的 tool execute 仍跑完（cli handler 不接 signal）
-      const ctrl = this.agentRunAborts.get(conv.currentRunId);
-      if (ctrl) ctrl.abort();
+    const prepCtrl = this.prepRunAborts.get(conv.currentRunId);
+    if (prepCtrl) {
+      prepCtrl.abort();
       this.emitRuntimeInterrupt(conversationId, conv.currentRunId, 'user_stop');
-      if (!ctrl) {
-        await this.deps.conversations.bindRuntime(conversationId, { currentRunId: null });
-      }
+      await this.deps.conversations.bindRuntime(conversationId, { currentRunId: null });
       return;
     }
-    if (conv.currentRunId.startsWith('sdk-')) {
-      const ctrl = this.sdkRunAborts.get(conv.currentRunId);
-      if (ctrl) ctrl.abort();
+    const agentCtrl = this.agentRunAborts.get(conv.currentRunId);
+    if (agentCtrl) {
+      // Phase D：真中断 LLM stream；已 started 的 tool execute 仍跑完（cli handler 不接 signal）
+      agentCtrl.abort();
       this.emitRuntimeInterrupt(conversationId, conv.currentRunId, 'user_stop');
-      if (!ctrl) {
-        await this.deps.conversations.bindRuntime(conversationId, { currentRunId: null });
-      }
+      return;
+    }
+    const sdkCtrl = this.sdkRunAborts.get(conv.currentRunId);
+    if (sdkCtrl) {
+      sdkCtrl.abort();
+      this.emitRuntimeInterrupt(conversationId, conv.currentRunId, 'user_stop');
       return;
     }
     await this.deps.pool.kill(conv.currentRunId, 'user_stop');
   }
 
   private isStaleInProcessRun(runId: string): boolean {
-    if (runId.startsWith('sdk-agent-')) return !this.agentRunAborts.has(runId);
-    if (runId.startsWith('sdk-')) return !this.sdkRunAborts.has(runId);
+    if (this.prepRunAborts.has(runId)) return false;
+    if (this.agentRunAborts.has(runId)) return false;
+    if (this.sdkRunAborts.has(runId)) return false;
+    if (runId.startsWith('ask-') || runId.startsWith('sdk-agent-') || runId.startsWith('sdk-'))
+      return true;
     return false;
   }
 
@@ -590,7 +771,9 @@ export class AskAnywhereOrchestrator {
     await this.deps.conversations.bindRuntime(conversationId, {
       ...(endpoint ? { runtimeEndpointHint: endpoint.id } : {}),
       runtimeModelHint: modelPart,
-      runtimeHint: endpoint ? `sdk_agent:${endpoint.provider}/${modelPart}` : `sdk_agent:auto/${modelPart}`,
+      runtimeHint: endpoint
+        ? `sdk_agent:${endpoint.provider}/${modelPart}`
+        : `sdk_agent:auto/${modelPart}`,
       runtimeSelection: {
         ...normalizeRuntimeSelection(conv.runtimeSelection),
         ...(endpoint ? { endpointId: endpoint.id } : {}),
@@ -769,8 +952,8 @@ export class AskAnywhereOrchestrator {
             await stage.add(input.conversationId, artifact);
           }
         }
-        void this.maybeAutoTitleConversation(input.conversationId, assistantTurn.id).catch((error) =>
-          console.warn('[ask-anywhere] auto title failed', error)
+        void this.maybeAutoTitleConversation(input.conversationId, assistantTurn.id).catch(
+          (error) => console.warn('[ask-anywhere] auto title failed', error)
         );
       }
     } catch (error) {
@@ -851,8 +1034,8 @@ export class AskAnywhereOrchestrator {
             await stage.add(input.conversationId, artifact);
           }
         }
-        void this.maybeAutoTitleConversation(input.conversationId, assistantTurn.id).catch((error) =>
-          console.warn('[ask-anywhere] auto title failed', error)
+        void this.maybeAutoTitleConversation(input.conversationId, assistantTurn.id).catch(
+          (error) => console.warn('[ask-anywhere] auto title failed', error)
         );
       }
     } catch (error) {
@@ -962,14 +1145,115 @@ class AssistantAggregator {
   }
 }
 
+function buildRouteConversationContext(turns: Conversation['turns']): AskIntentConversationContext {
+  return {
+    recentTurns: turns.slice(-8).map((turn) => ({
+      role: turn.role,
+      content: clipText(turn.content, 700)
+    }))
+  };
+}
+
 function renderHistory(turns: Conversation['turns']): string {
   if (turns.length === 0) return '';
-  return turns
+  const groups = groupConversationTurns(turns);
+  const maxUserTurns = 8;
+  const maxChars = 18_000;
+  let kept = groups.slice(-maxUserTurns);
+  while (kept.length > 1 && renderTurnGroups(kept).length > maxChars) {
+    kept = kept.slice(1);
+  }
+  const omitted = groups.length - kept.length;
+  const parts: string[] = [];
+  if (omitted > 0) {
+    const omittedUserAsks = groups
+      .slice(0, omitted)
+      .flat()
+      .filter((turn) => turn.role === 'user' && turn.content.trim())
+      .slice(-4)
+      .map((turn) => `- ${clipText(turn.content, 180)}`);
+    parts.push(
+      [
+        '<older_conversation_sketch>',
+        `${omitted} older user turn(s) omitted from the live window.`,
+        omittedUserAsks.length ? `Recent omitted user asks:\n${omittedUserAsks.join('\n')}` : '',
+        'Use this only for topic continuity; rely on current context, tools, and evidence for factual claims.',
+        '</older_conversation_sketch>'
+      ]
+        .filter(Boolean)
+        .join('\n')
+    );
+  }
+  parts.push(renderTurnGroups(kept));
+  return parts.filter(Boolean).join('\n\n');
+}
+
+function groupConversationTurns(turns: Conversation['turns']): Array<Conversation['turns']> {
+  const groups: Array<Conversation['turns']> = [];
+  let current: Conversation['turns'] = [];
+  for (const turn of turns) {
+    if (turn.role === 'user' && current.length > 0) {
+      groups.push(current);
+      current = [];
+    }
+    current.push(turn);
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
+}
+
+function renderTurnGroups(groups: Array<Conversation['turns']>): string {
+  return groups
+    .flat()
     .map((t) => {
       const tag = t.role === 'user' ? 'User' : t.role === 'assistant' ? 'Assistant' : 'System';
       return `${tag}: ${t.content}`;
     })
     .join('\n\n');
+}
+
+function clipText(text: string, maxChars: number): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return normalized.length > maxChars ? `${normalized.slice(0, maxChars)}...` : normalized;
+}
+
+function buildAskRuntimeInstruction(intent: AskIntentDecision): string {
+  const common = [
+    '<ask_runtime_instruction>',
+    `Route: ${askIntentRouteLabel(intent.route)}`,
+    `Confidence: ${Math.round(intent.confidence * 100)}%`,
+    'Answer in the user-facing language. Do not expose internal selectors, lane names, runtime ids, or connector implementation details unless the user explicitly asks about those systems.',
+    'If evidence is unavailable, say what is missing and answer with clear uncertainty instead of continuing to search indefinitely.'
+  ];
+  const routeSpecific: Record<AskIntentRoute, string[]> = {
+    direct_answer: [
+      'This is the lightweight path. Prefer a concise direct answer.',
+      'Do not call tools unless the user asks for local/private/current facts or an action.'
+    ],
+    vault_qa: [
+      'Use local evidence first. If the retrieval context is weak, perform at most three targeted local lookups before answering.',
+      'Distinguish confirmed notes from inference.'
+    ],
+    connector_inventory: [
+      'This is a bounded inventory task. Prioritize connector summaries and existing inventory context over broad vault search.',
+      'Use at most five targeted local lookups before summarizing.',
+      'For counts or lists, prefer a compact table plus at most five bullets.',
+      'If live connector details are unavailable, state that limitation and summarize the indexed or cached evidence already available.'
+    ],
+    research_workflow: [
+      'Use external/current sources only when the user asks for web, latest, SOTA, policies, prices, benchmarks, or official documentation.',
+      'Prefer primary sources: official vendor documentation, official engineering posts, standards/protocol docs, and research papers. Avoid relying on random GitHub repositories or aggregator posts unless they are the subject of the question.',
+      'Compare source dates when recency matters and cite sources in the final answer.',
+      'Keep local Orbit actions separate from research findings.'
+    ],
+    agent_action: [
+      'This route may change Orbit data. Propose the action clearly and use approval-gated tools where required.',
+      'For task creation, use the current visible Orbit scope or ask a concise clarification if the project/area is ambiguous. Do not request external path access, root directory reads, or broad filesystem scans just to infer ownership.',
+      'Do at most two targeted local lookups before proposing the task or asking for the missing project/area.',
+      'Do not claim an action is completed until the tool result or approval flow confirms it.'
+    ]
+  };
+  return [...common, ...routeSpecific[intent.route], '</ask_runtime_instruction>'].join('\n');
 }
 
 function buildPrompt({
@@ -1039,17 +1323,229 @@ export async function buildAskAnywhereContext(
 export async function buildAskAnywhereContextBundle(
   vaultPath: string,
   scope: ConversationScope,
-  userText: string
-): Promise<{ text: string; packet?: ContextPacket }> {
-  const [baseContext, connectorContext, pmilContext] = await Promise.all([
-    buildConversationContext(vaultPath, scope),
-    buildConnectorContext(vaultPath, userText),
-    buildAskPMILContext(vaultPath, scope, userText)
-  ]);
+  userText: string,
+  options: {
+    conversationId?: string;
+    runId?: string;
+    intent?: AskIntentDecision;
+    signal?: AbortSignal;
+  } = {}
+): Promise<{ text: string; packet?: ContextPacket; slowLane?: (() => Promise<void>) | null }> {
+  const intent = options.intent ?? routeAskIntent({ text: userText, scope });
+  const legacyMode = !options.conversationId || !options.runId;
+  const emitContext = (input: {
+    lane: AskContextLane;
+    status: AskRuntimeStatus;
+    detail?: string;
+    startedAt?: number;
+    targetMs?: number;
+    tokenEstimate?: number;
+    evidenceCount?: number;
+    sourceCount?: number;
+    artifactId?: string;
+    freshness?: 'fresh' | 'stale' | 'unknown';
+  }): void => {
+    if (!options.conversationId || !options.runId) return;
+    emitAskRuntimeEvent({
+      kind: 'runtime.context',
+      conversationId: options.conversationId,
+      runId: options.runId,
+      payload: {
+        lane: input.lane,
+        status: input.status,
+        label: `${askContextLaneLabel(input.lane)}${statusSuffix(input.status)}`,
+        ...(input.detail ? { detail: input.detail } : {}),
+        ...(input.startedAt ? { elapsedMs: Date.now() - input.startedAt } : {}),
+        ...(input.targetMs ? { targetMs: input.targetMs } : {}),
+        ...(input.tokenEstimate !== undefined ? { tokenEstimate: input.tokenEstimate } : {}),
+        ...(input.evidenceCount !== undefined ? { evidenceCount: input.evidenceCount } : {}),
+        ...(input.sourceCount !== undefined ? { sourceCount: input.sourceCount } : {}),
+        ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+        ...(input.freshness ? { freshness: input.freshness } : {})
+      }
+    });
+  };
+  const assertNotAborted = (): void => {
+    if (options.signal?.aborted) throw new Error('ask_run_aborted');
+  };
+
+  const fastStartedAt = Date.now();
+  emitContext({
+    lane: 'fast',
+    status: 'started',
+    detail: '读取当前会话范围、项目/Area/Resource/Note 等轻量上下文。',
+    targetMs: ASK_FAST_CONTEXT_TIMEOUT_MS
+  });
+  let baseContext = '';
+  try {
+    baseContext = await withAskContextTimeout(
+      buildConversationContext(vaultPath, scope),
+      ASK_FAST_CONTEXT_TIMEOUT_MS,
+      'ask_fast_context_timeout'
+    );
+    emitContext({
+      lane: 'fast',
+      status: 'completed',
+      startedAt: fastStartedAt,
+      detail: '快速上下文已进入本轮提示词。'
+    });
+  } catch (error) {
+    baseContext = fallbackConversationContext(scope, error);
+    emitContext({
+      lane: 'fast',
+      status: 'failed',
+      startedAt: fastStartedAt,
+      detail: `快速上下文超时，已使用范围兜底：${(error as Error).message}`
+    });
+  }
+  assertNotAborted();
+
+  const shouldRunRetrieval = legacyMode || intent.needsRetrieval || intent.confidence < 0.68;
+  let connectorContext = '';
+  let pmilContext: { text: string; packet?: ContextPacket } = { text: '' };
+  if (shouldRunRetrieval) {
+    const retrievalStartedAt = Date.now();
+    emitContext({
+      lane: 'retrieval',
+      status: 'started',
+      targetMs: ASK_RETRIEVAL_CONTEXT_TIMEOUT_MS,
+      detail: intent.needsRetrieval
+        ? retrievalStartedDetail(intent.route)
+        : '路由置信度不高，做一次短预算证据探测。'
+    });
+    [connectorContext, pmilContext] = await Promise.all([
+      buildConnectorContext(vaultPath, userText),
+      buildAskPMILContext(vaultPath, scope, userText, {
+        synthesisMode: 'lookup',
+        timeoutMs: ASK_RETRIEVAL_CONTEXT_TIMEOUT_MS
+      })
+    ]);
+    const evidenceCount = pmilContext.packet?.evidence.length ?? 0;
+    if (
+      shouldEscalateDirectToVault({ decision: intent, evidenceCount, text: userText }) &&
+      options.conversationId &&
+      options.runId
+    ) {
+      emitAskRuntimeEvent({
+        kind: 'runtime.route_escalation',
+        conversationId: options.conversationId,
+        runId: options.runId,
+        payload: {
+          from: 'direct_answer',
+          to: 'vault_qa',
+          trigger: 'retrieval_evidence',
+          reason: '短预算检索找到了本地证据，本轮从轻量直答升级为本地知识问答。'
+        }
+      });
+    }
+    emitContext({
+      lane: 'retrieval',
+      status: 'completed',
+      startedAt: retrievalStartedAt,
+      tokenEstimate: pmilContext.packet?.budget.estimated_tokens,
+      evidenceCount,
+      sourceCount: pmilContext.packet?.sections.length,
+      freshness: pmilContext.packet?.freshness.stale_sources?.length ? 'stale' : 'fresh',
+      detail:
+        evidenceCount > 0
+          ? '检索上下文已进入本轮提示词。'
+          : '没有找到足够强的本地证据，本轮会明确说明依据有限。'
+    });
+  } else {
+    emitContext({
+      lane: 'retrieval',
+      status: 'skipped',
+      detail: '高置信轻量问题，不阻塞在检索链路。'
+    });
+  }
+  assertNotAborted();
+
+  const slowLane =
+    options.conversationId && options.runId && intent.allowsSlowEnrichment
+      ? async (): Promise<void> => {
+          const slowStartedAt = Date.now();
+          emitContext({
+            lane: 'slow',
+            status: 'started',
+            targetMs: ASK_SLOW_CONTEXT_TIMEOUT_MS,
+            detail: '后台刷新 synthesis / entity / 外部会话摘要，不阻塞首 token。'
+          });
+          try {
+            const ensured = await buildAskPMILContext(vaultPath, scope, userText, {
+              synthesisMode: 'ensure',
+              timeoutMs: ASK_SLOW_CONTEXT_TIMEOUT_MS
+            });
+            if (ensured.packet && options.conversationId) {
+              const artifact = contextPacketToStageArtifact(ensured.packet);
+              await addContextPacketArtifact(vaultPath, options.conversationId, ensured.packet);
+              emitContext({
+                lane: 'slow',
+                status: 'attached',
+                startedAt: slowStartedAt,
+                artifactId: artifact.id,
+                tokenEstimate: ensured.packet.budget.estimated_tokens,
+                evidenceCount: ensured.packet.evidence.length,
+                sourceCount: ensured.packet.sections.length,
+                freshness: ensured.packet.freshness.stale_sources?.length ? 'stale' : 'fresh',
+                detail: '后台补充已挂到产物区，不会改写已经开始的回答。'
+              });
+            } else {
+              emitContext({
+                lane: 'slow',
+                status: 'completed',
+                startedAt: slowStartedAt,
+                detail: '后台补充完成，但没有生成新的上下文产物。'
+              });
+            }
+          } catch (error) {
+            emitContext({
+              lane: 'slow',
+              status: 'failed',
+              startedAt: slowStartedAt,
+              detail: `后台补充失败：${(error as Error).message}`
+            });
+          }
+        }
+      : null;
+
   return {
     text: [baseContext, connectorContext, pmilContext.text].filter(Boolean).join('\n\n'),
-    ...(pmilContext.packet ? { packet: pmilContext.packet } : {})
+    ...(pmilContext.packet ? { packet: pmilContext.packet } : {}),
+    slowLane
   };
+}
+
+function statusSuffix(status: AskRuntimeStatus): string {
+  if (status === 'completed') return '已就绪';
+  if (status === 'failed') return '失败';
+  if (status === 'skipped') return '已跳过';
+  if (status === 'attached') return '已挂载';
+  return '中';
+}
+
+function retrievalStartedDetail(route: AskIntentRoute): string {
+  switch (route) {
+    case 'connector_inventory':
+      return '读取连接器清单与缓存摘要，避免阻塞在全量扫描。';
+    case 'research_workflow':
+      return '准备外部调研上下文，并保留本地证据边界。';
+    case 'vault_qa':
+      return '读取本地笔记、项目和任务证据。';
+    case 'agent_action':
+      return '读取动作所需上下文，并保留审批边界。';
+    case 'direct_answer':
+      return '做一次短预算证据探测，必要时再升级路由。';
+  }
+}
+
+function fallbackConversationContext(scope: ConversationScope, error: unknown): string {
+  return [
+    '<current_orbit_context status="fallback">',
+    `Scope: ${conversationScopeKey(scope)}`,
+    `Fast context unavailable: ${(error as Error).message}`,
+    'Continue with the user request, and call Orbit tools if more local detail is required.',
+    '</current_orbit_context>'
+  ].join('\n');
 }
 
 async function buildConnectorContext(vaultPath: string, userText: string): Promise<string> {
@@ -1061,17 +1557,25 @@ async function buildConnectorContext(vaultPath: string, userText: string): Promi
 
     const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
     const activeConnections = connections.filter((connection) => connection.enabled);
-    const hasExternalAIConnection = activeConnections.some((connection) => connection.connector_id === 'local-ai-sessions');
-    const shouldIncludeExternalAIInventory = hasExternalAIConnection && isExternalAIInventoryQuery(userText);
+    const hasExternalAIConnection = activeConnections.some(
+      (connection) => connection.connector_id === 'local-ai-sessions'
+    );
+    const shouldIncludeExternalAIInventory =
+      hasExternalAIConnection && isExternalAIInventoryQuery(userText);
     const externalAIInventory = shouldIncludeExternalAIInventory
-      ? await buildExternalAISessionInventoryContext(vaultPath).catch((error) =>
-          `Live ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME} inventory unavailable: ${(error as Error).message}.`
+      ? await buildExternalAISessionInventoryContext(vaultPath).catch(
+          (error) =>
+            `Live ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME} inventory unavailable: ${(error as Error).message}.`
         )
       : '';
     const definitionLines = definitions.map((definition) => {
       const related = connections.filter((connection) => connection.connector_id === definition.id);
       const connected = related.filter((connection) => connection.status === 'connected');
-      const status = connected.length ? `connected=${connected.length}` : related.length ? 'configured_not_connected' : 'available';
+      const status = connected.length
+        ? `connected=${connected.length}`
+        : related.length
+          ? 'configured_not_connected'
+          : 'available';
       return `- ${definition.display_name} (connector_id=${definition.id}, evidence_kind=${definition.evidence_kind ?? 'external_file'}, ${status}): ${definition.description}`;
     });
     const connectionLines = activeConnections.map((connection) => {
@@ -1091,7 +1595,9 @@ async function buildConnectorContext(vaultPath: string, userText: string): Promi
       activeConnections.length ? '\nActive connector connections:' : '',
       activeConnections.length ? connectionLines.join('\n') : '',
       '</connector_context>'
-    ].filter(Boolean).join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   } catch (error) {
     return `<connector_context status="unavailable">\nConnector inventory lookup failed: ${(error as Error).message}\n</connector_context>`;
   }
@@ -1111,8 +1617,12 @@ async function buildExternalAISessionInventoryContext(vaultPath: string): Promis
     .map((bucket) => `${bucket.key}: ${bucket.count} (${formatAgentCounts(bucket.agents)})`);
   return [
     `Live ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME} inventory: total=${inventory.matched_count}, roots=${inventory.roots.length}, scanned_at=${inventory.scanned_at}.`,
-    inventory.date_range ? `Live date range by source updated_at: ${inventory.date_range.from} to ${inventory.date_range.to}.` : 'Live date range by source updated_at: empty.',
-    monthLines.length ? `Live monthly counts by updated_at:\n${monthLines.join('\n')}` : 'Live monthly counts by updated_at: none.',
+    inventory.date_range
+      ? `Live date range by source updated_at: ${inventory.date_range.from} to ${inventory.date_range.to}.`
+      : 'Live date range by source updated_at: empty.',
+    monthLines.length
+      ? `Live monthly counts by updated_at:\n${monthLines.join('\n')}`
+      : 'Live monthly counts by updated_at: none.',
     `Live agent counts: ${formatAgentCounts(inventory.by_agent) || 'none'}.`,
     `For count/date-range questions about ${LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME}, use this live inventory first; connector registry item_count and indexed evidence can be stale or intentionally limited.`
   ].join('\n');
@@ -1128,7 +1638,11 @@ function formatAgentCounts(counts: Record<string, number>): string {
 async function buildAskPMILContext(
   vaultPath: string,
   scope: ConversationScope,
-  userText: string
+  userText: string,
+  options: {
+    synthesisMode?: 'lookup' | 'ensure' | 'off';
+    timeoutMs?: number;
+  } = {}
 ): Promise<{ text: string; packet?: ContextPacket }> {
   try {
     const packet = await withAskContextTimeout(
@@ -1139,9 +1653,9 @@ async function buildAskPMILContext(
         max_tokens: 2200,
         evidence_limit: 8,
         graph_limit: 12,
-        synthesis_mode: 'ensure'
+        synthesis_mode: options.synthesisMode ?? 'lookup'
       }),
-      ASK_PMIL_CONTEXT_TIMEOUT_MS,
+      options.timeoutMs ?? ASK_PMIL_CONTEXT_TIMEOUT_MS,
       'pmil_context_timeout'
     );
     return { text: renderPMILContextPacket(packet), packet };
@@ -1154,25 +1668,28 @@ async function buildAskPMILContext(
 
 function isExternalAIInventoryQuery(userText: string): boolean {
   const text = userText.toLowerCase();
-  const mentionsExternalAISessions = [
-    '外部 ai 会话',
-    '外部ai会话',
-    '本地 ai 会话',
-    '本地ai会话',
-    'ai 会话',
-    'ai会话',
-    'agent 会话',
-    'runtime 会话',
-    '本地会话',
-    '会话库',
-    'local-ai-sessions',
-    'session library',
-    '这个连接器'
-  ].some((keyword) => text.includes(keyword))
-    || /(claude|codex|amp|codebuddy).{0,16}(会话|session)/iu.test(text)
-    || /(会话|session).{0,16}(claude|codex|amp|codebuddy)/iu.test(text);
+  const mentionsExternalAISessions =
+    [
+      '外部 ai 会话',
+      '外部ai会话',
+      '本地 ai 会话',
+      '本地ai会话',
+      'ai 会话',
+      'ai会话',
+      'agent 会话',
+      'runtime 会话',
+      '本地会话',
+      '会话库',
+      'local-ai-sessions',
+      'session library',
+      '这个连接器'
+    ].some((keyword) => text.includes(keyword)) ||
+    /(claude|codex|amp|codebuddy).{0,16}(会话|session)/iu.test(text) ||
+    /(会话|session).{0,16}(claude|codex|amp|codebuddy)/iu.test(text);
   if (!mentionsExternalAISessions) return false;
-  return /多少|几条|几个|数量|统计|盘点|月份|月度|最近|最新|新建|创建|date|range|count|how many|inventory|month|recent|latest|created/iu.test(text);
+  return /多少|几条|几个|数量|统计|盘点|月份|月度|最近|最新|新建|创建|date|range|count|how many|inventory|month|recent|latest|created/iu.test(
+    text
+  );
 }
 
 function withAskContextTimeout<T>(promise: Promise<T>, ms: number, code: string): Promise<T> {
@@ -1197,7 +1714,8 @@ async function addContextPacketArtifact(
 
 export function contextPacketToStageArtifact(
   packet: ContextPacket
-): Omit<Artifact, 'id' | 'conversation_id' | 'created_at'> & Partial<Pick<Artifact, 'id' | 'created_at'>> {
+): Omit<Artifact, 'id' | 'conversation_id' | 'created_at'> &
+  Partial<Pick<Artifact, 'id' | 'created_at'>> {
   const suffix = `${packet.generated_at}:${packet.query ?? ''}`;
   return {
     id: `pmil-context-${hashText(`${packet.id}:${suffix}`)}`,
@@ -1217,9 +1735,12 @@ async function broadcastStage(vaultPath: string, conversationId: string): Promis
 }
 
 export function renderPMILContextPacket(packet: ContextPacket): string {
-  const sections = packet.sections.map((section) => renderPMILContextSection(section, packet.evidence)).filter(Boolean);
+  const sections = packet.sections
+    .map((section) => renderPMILContextSection(section, packet.evidence))
+    .filter(Boolean);
   if (sections.length === 0) return '';
-  const scopeLabel = packet.scope.kind === 'global' ? 'global' : `${packet.scope.kind}:${packet.scope.ref ?? ''}`;
+  const scopeLabel =
+    packet.scope.kind === 'global' ? 'global' : `${packet.scope.kind}:${packet.scope.ref ?? ''}`;
   const handles = renderCitationHandles(packet.evidence);
   const lines = [
     `<pmil_context_packet id="${packet.id}" purpose="${packet.purpose}" scope="${scopeLabel}">`,
@@ -1239,7 +1760,10 @@ export function renderPMILContextPacket(packet: ContextPacket): string {
   return lines.join('\n');
 }
 
-function renderPMILContextSection(section: ContextSection, packetEvidence: EvidenceSelector[]): string {
+function renderPMILContextSection(
+  section: ContextSection,
+  packetEvidence: EvidenceSelector[]
+): string {
   const citations = section.citations
     .slice(0, 6)
     .map((selector) => formatEvidenceSelectorForPrompt(selector, packetEvidence))
@@ -1264,7 +1788,9 @@ function formatEvidenceSelectorForPrompt(
   selector: EvidenceSelector,
   packetEvidence: EvidenceSelector[]
 ): string {
-  const index = packetEvidence.findIndex((candidate) => evidenceSelectorKey(candidate) === evidenceSelectorKey(selector));
+  const index = packetEvidence.findIndex(
+    (candidate) => evidenceSelectorKey(candidate) === evidenceSelectorKey(selector)
+  );
   const handle = index >= 0 ? `[[E${index + 1}]] ` : '';
   return `${handle}${formatEvidenceSelector(selector)}`;
 }
@@ -1450,14 +1976,13 @@ function parseLeadingSlashCommand(
   };
 }
 
-function skillBodyHasSlashCommand(
-  body: string,
-  commandName: string,
-  subcommand?: string
-): boolean {
+function skillBodyHasSlashCommand(body: string, commandName: string, subcommand?: string): boolean {
   const command = escapeRegExp(commandName);
   if (subcommand) {
-    const exact = new RegExp(`/${command}\\s+${escapeRegExp(subcommand)}(?:\\s+|$|[\\u4e00-\\u9fff])`, 'i');
+    const exact = new RegExp(
+      `/${command}\\s+${escapeRegExp(subcommand)}(?:\\s+|$|[\\u4e00-\\u9fff])`,
+      'i'
+    );
     if (exact.test(body)) return true;
   }
   return new RegExp(`/${command}(?:\\s+|$|[\\u4e00-\\u9fff])`, 'i').test(body);
@@ -1567,7 +2092,10 @@ function runtimeHintFromSelection(selection: RuntimeSelection): string | null {
   return null;
 }
 
-function findEndpoint(snapshot: SDKEndpointRegistrySnapshot, query: string): SDKEndpointView | null {
+function findEndpoint(
+  snapshot: SDKEndpointRegistrySnapshot,
+  query: string
+): SDKEndpointView | null {
   const normalized = query.trim().toLowerCase();
   return (
     snapshot.endpoints.find((endpoint) => endpoint.id.toLowerCase() === normalized) ??

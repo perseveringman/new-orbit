@@ -171,6 +171,7 @@ describe('external AI session evidence source', () => {
       externalAISessionRoots: [{ agent: 'claude', source: 'claude-code', dir: sessionsRoot }]
     });
     const indexStore = createEvidenceChunkIndexStore(vaultPath);
+    await indexStore.syncIncremental({ includeActivities: false });
     const results = await indexStore.search({ query: 'raw evidence context packets selectors', limit: 5 });
 
     expect(results[0].chunk.source_id).toBe(sources[0].id);

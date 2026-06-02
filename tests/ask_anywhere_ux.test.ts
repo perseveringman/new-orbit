@@ -118,6 +118,47 @@ describe('随处问 UX revamp components', () => {
     expect(html).toContain('UX direction summary');
   });
 
+  it('shows Ask Runtime status without pretending context work is model streaming', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConversationShell, {
+        conversations: [conversation],
+        activeId: conversation.id,
+        activeConversation: {
+          ...conversation,
+          currentRunId: 'ask-run-1',
+          runtimeHint: 'Ask Runtime'
+        },
+        events: [
+          {
+            id: 'ctx-1',
+            at: '2026-04-28T01:00:00Z',
+            kind: 'runtime.context',
+            conversationId: conversation.id,
+            runId: 'ask-run-1',
+            spanId: 'ctx-1',
+            payload: {
+              lane: 'retrieval',
+              status: 'completed',
+              label: '检索上下文已就绪',
+              detail: '检索上下文已进入本轮提示词。',
+              evidenceCount: 2
+            }
+          }
+        ],
+        stage,
+        isLoading: true,
+        onSelect: vi.fn(),
+        onNew: vi.fn(),
+        onArchive: vi.fn(),
+        onAction: vi.fn(),
+        onArtifactAction: vi.fn()
+      })
+    );
+
+    expect(html).toContain('检索上下文已就绪');
+    expect(html).not.toContain('流式输出中');
+  });
+
   it('renders PMIL context chips and context packet artifact details', () => {
     const html = renderToStaticMarkup(
       createElement(ConversationShell, {
@@ -192,7 +233,11 @@ describe('随处问 UX revamp components', () => {
       projects: [],
       areas: []
     });
-    expect(feedContext.scope).toEqual({ kind: 'external', platform: 'orbit.feed', user_id: 'local' });
+    expect(feedContext.scope).toEqual({
+      kind: 'external',
+      platform: 'orbit.feed',
+      user_id: 'local'
+    });
     expect(feedContext.title).toBe('提问 · 信息流');
   });
 });

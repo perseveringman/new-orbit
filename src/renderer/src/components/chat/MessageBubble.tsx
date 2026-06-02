@@ -7,12 +7,14 @@ import {
 
 interface MessageBubbleProps {
   event: RuntimeEvent<'runtime.message'>;
+  maxWidthClass?: string;
   renderMarkdownReferenceToken?: MarkdownReferenceTokenRenderer;
   renderMarkdownLink?: MarkdownLinkRenderer;
 }
 
 export function MessageBubble({
   event,
+  maxWidthClass = 'max-w-[85%]',
   renderMarkdownReferenceToken,
   renderMarkdownLink
 }: MessageBubbleProps): JSX.Element {
@@ -24,8 +26,8 @@ export function MessageBubble({
       <div
         className={
           isUser
-            ? 'max-w-[85%] rounded-2xl bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-white shadow-sm dark:bg-neutral-100 dark:text-neutral-900'
-            : 'max-w-[85%] rounded-2xl border border-neutral-200 bg-white/90 px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/80 dark:text-neutral-100'
+            ? `${maxWidthClass} rounded-2xl bg-neutral-900 px-4 py-3 text-sm leading-relaxed text-white shadow-sm dark:bg-neutral-100 dark:text-neutral-900`
+            : `${maxWidthClass} rounded-2xl border border-neutral-200 bg-white/90 px-4 py-3 text-sm leading-relaxed text-neutral-800 shadow-sm dark:border-neutral-800 dark:bg-neutral-900/80 dark:text-neutral-100`
         }
       >
         {!isUser ? <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-sky-500">Agent</div> : null}

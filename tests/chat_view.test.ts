@@ -214,6 +214,77 @@ describe('ChatView', () => {
     expect(html).toContain('输入');
   });
 
+  it('lets hosts constrain message bubbles and runtime event cards', () => {
+    const html = render(
+      [
+        ev('runtime.message', { text: '用户问题', role: 'user' }, { id: 'narrow-user' }),
+        ev('runtime.thinking', { text: '正在整理上下文' }, { id: 'narrow-thinking' })
+      ],
+      DEFAULT_CHAT_HOST_CAPABILITIES,
+      {
+        messageMaxWidthClass: 'max-w-[70%]',
+        eventMaxWidthClass: 'max-w-[70%]'
+      }
+    );
+
+    expect(html.match(/max-w-\[70%\]/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders Ask Runtime phase, route, context, and escalation events semantically', () => {
+    const html = render([
+      ev(
+        'runtime.phase',
+        {
+          phase: 'accepted',
+          status: 'completed',
+          label: '已接收',
+          detail: '本轮请求已进入 Ask Runtime。'
+        },
+        { id: 'phase-accepted' }
+      ),
+      ev(
+        'runtime.route',
+        {
+          route: 'vault_qa',
+          confidence: 0.86,
+          source: 'rules',
+          label: '本地知识问答',
+          reason: '问题指向用户自己的笔记、项目、任务或知识库。'
+        },
+        { id: 'route-vault' }
+      ),
+      ev(
+        'runtime.context',
+        {
+          lane: 'retrieval',
+          status: 'completed',
+          label: '检索上下文已就绪',
+          detail: '检索上下文已进入本轮提示词。',
+          evidenceCount: 3,
+          sourceCount: 2,
+          tokenEstimate: 640
+        },
+        { id: 'context-retrieval' }
+      ),
+      ev(
+        'runtime.route_escalation',
+        {
+          from: 'direct_answer',
+          to: 'vault_qa',
+          reason: '短预算检索找到了本地证据。',
+          trigger: 'retrieval_evidence'
+        },
+        { id: 'route-escalation' }
+      )
+    ]);
+
+    expect(html).toContain('已接收');
+    expect(html).toContain('意图：本地知识问答');
+    expect(html).toContain('检索上下文已就绪');
+    expect(html).toContain('证据 3');
+    expect(html).toContain('路由升级：直接回答 → 本地知识问答');
+  });
+
   it('does not render approval controls when tool approval is unsupported', () => {
     const html = render([
       ev(

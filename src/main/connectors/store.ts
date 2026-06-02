@@ -16,6 +16,7 @@ import { ORBIT_DIR } from '@shared/constants';
 import { LOCAL_AI_SESSIONS_CONNECTOR_DISPLAY_NAME } from './local-ai-sessions';
 import { createDefaultConnectorPluginRegistry } from './registry';
 import type { ConnectorPluginRegistry } from './plugin';
+import { createConnectorCatalogStore, type ConnectorCatalogStore } from './catalog';
 
 interface ConnectorRegistryFile {
   version: 1;
@@ -26,7 +27,8 @@ interface ConnectorRegistryFile {
 export class ConnectorStore {
   constructor(
     private readonly vaultPath: string,
-    private readonly plugins: ConnectorPluginRegistry = createDefaultConnectorPluginRegistry(vaultPath)
+    private readonly plugins: ConnectorPluginRegistry = createDefaultConnectorPluginRegistry(vaultPath),
+    private readonly catalog: ConnectorCatalogStore = createConnectorCatalogStore(vaultPath)
   ) {}
 
   definitions(): ConnectorDefinition[] {
@@ -106,6 +108,7 @@ export class ConnectorStore {
     const removed = registry.connections.find((connection) => connection.id === connectionId) ?? null;
     registry.connections = registry.connections.filter((connection) => connection.id !== connectionId);
     await this.writeRegistry(registry);
+    await this.catalog.removeConnection(connectionId);
     return removed;
   }
 
@@ -127,28 +130,28 @@ export class ConnectorStore {
     const q = query.trim();
     if (!q) return [];
     const connections = (await this.list()).filter((connection) => connection.enabled && connection.status === 'connected');
-    const hits = await Promise.all(connections.map((connection) => this.searchConnection(connection, q, limit)));
-    return hits.flat().sort((a, b) => b.score - a.score || b.updated_at.localeCompare(a.updated_at)).slice(0, limit);
+    return this.catalog.search(q, connections.map((connection) => connection.id), limit);
   }
 
   async read(input: ConnectorReadInput): Promise<ConnectorDocumentContent | null> {
     const connection = await this.requireConnection(input.connection_id);
+    if (input.content_view === 'metadata' || input.content_view === 'safe_projection' || input.content_view === undefined) {
+      const cached = await this.catalog.readCachedContent(connection.id, input.doc_ref, input.content_view ?? 'safe_projection');
+      if (cached) return cached;
+    }
     return this.plugins.require(connection.connector_id).readDocument(connection, input.doc_ref, input.content_view);
+  }
+
+  async readCached(input: ConnectorReadInput): Promise<ConnectorDocumentContent | null> {
+    const connection = await this.requireConnection(input.connection_id);
+    return this.catalog.readCachedContent(connection.id, input.doc_ref, input.content_view ?? 'safe_projection');
   }
 
   async listDocuments(connectionId?: string): Promise<ConnectorDocumentContent['document'][]> {
     const connections = (await this.list()).filter((connection) =>
       connection.enabled && connection.status === 'connected' && (!connectionId || connection.id === connectionId)
     );
-    const docs = await Promise.all(connections.map(async (connection) => {
-      const plugin = this.plugins.require(connection.connector_id);
-      const documents = await plugin.listDocuments(connection).catch(() => []);
-      return documents.map((doc) => ({
-        ...doc,
-        evidence_kind: doc.evidence_kind ?? plugin.definition.evidence_kind ?? 'external_file'
-      }));
-    }));
-    return docs.flat();
+    return this.catalog.listDocuments(connections.map((connection) => connection.id));
   }
 
   async open(connectionId: string, docRef: string): Promise<void> {
@@ -164,29 +167,27 @@ export class ConnectorStore {
     return connection;
   }
 
-  private async searchConnection(connection: ConnectorConnection, query: string, limit: number): Promise<ConnectorSearchHit[]> {
-    const plugin = this.plugins.require(connection.connector_id);
-    if (plugin.search) return plugin.search(connection, query, limit);
-    const docs = await plugin.listDocuments(connection);
-    return docs
-      .filter((doc) => [doc.title, doc.excerpt].filter(Boolean).join('\n').toLowerCase().includes(query.toLowerCase()))
-      .slice(0, limit)
-      .map((doc) => ({
-        connection_id: connection.id,
-        connector_id: connection.connector_id,
-        doc_ref: doc.doc_ref,
-        title: doc.title,
-        excerpt: doc.excerpt ?? '',
-        score: doc.title.toLowerCase().includes(query.toLowerCase()) ? 2 : 1,
-        updated_at: doc.updated_at,
-        metadata: doc.metadata
-      }));
-  }
-
   private async scanConnection(connection: ConnectorConnection): Promise<ConnectorConnection> {
     const plugin = this.plugins.require(connection.connector_id);
     const config = await plugin.normalizeConfig(connection.config).catch(() => connection.config);
-    const docs = await plugin.listDocuments({ ...connection, config });
+    const normalizedConnection = { ...connection, config };
+    const docs = (await plugin.listDocuments(normalizedConnection)).map((doc) => ({
+      ...doc,
+      connection_id: connection.id,
+      connector_id: connection.connector_id,
+      evidence_kind: doc.evidence_kind ?? plugin.definition.evidence_kind ?? 'external_file'
+    }));
+    await this.catalog.replaceConnectionDocuments(
+      normalizedConnection,
+      docs,
+      async (doc) => {
+        if (normalizedConnection.privacy.index_level === 'metadata_only') {
+          return [doc.title, doc.excerpt, doc.canonical_ref].filter(Boolean).join('\n');
+        }
+        const content = await plugin.readDocument(normalizedConnection, doc.doc_ref, 'safe_projection');
+        return content?.content_markdown ?? doc.excerpt ?? doc.title;
+      }
+    );
     const now = new Date().toISOString();
     return {
       ...connection,

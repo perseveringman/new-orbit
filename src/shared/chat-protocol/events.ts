@@ -12,6 +12,14 @@
  * RuntimeEvent 同时通过 AppBus 以 `agent.run.event` 的 payload 发布。
  */
 
+import type {
+  AskContextLane,
+  AskIntentDecisionSource,
+  AskIntentRoute,
+  AskRunPhase,
+  AskRuntimeStatus
+} from '@shared/ask-runtime';
+
 export const RUNTIME_EVENT_KINDS = [
   // Core
   'runtime.message',
@@ -27,6 +35,10 @@ export const RUNTIME_EVENT_KINDS = [
   'runtime.plan_update',
   'runtime.partial_structured_output',
   // Orbit Extensions
+  'runtime.phase',
+  'runtime.route',
+  'runtime.context',
+  'runtime.route_escalation',
   'runtime.awaiting_user',
   'runtime.interrupt',
   'runtime.compact',
@@ -101,6 +113,51 @@ export interface RuntimePartialStructuredOutputPayload {
   partial: unknown;
 }
 
+export interface RuntimePhasePayload {
+  phase: AskRunPhase;
+  status: AskRuntimeStatus;
+  label: string;
+  detail?: string;
+  elapsedMs?: number;
+  targetMs?: number;
+  route?: AskIntentRoute;
+  lane?: AskContextLane;
+}
+
+export interface RuntimeRoutePayload {
+  route: AskIntentRoute;
+  confidence: number;
+  source: AskIntentDecisionSource;
+  label: string;
+  reason: string;
+  alternatives?: Array<{
+    route: AskIntentRoute;
+    confidence: number;
+    reason: string;
+  }>;
+}
+
+export interface RuntimeContextPayload {
+  lane: AskContextLane;
+  status: AskRuntimeStatus;
+  label: string;
+  detail?: string;
+  elapsedMs?: number;
+  targetMs?: number;
+  tokenEstimate?: number;
+  evidenceCount?: number;
+  sourceCount?: number;
+  artifactId?: string;
+  freshness?: 'fresh' | 'stale' | 'unknown';
+}
+
+export interface RuntimeRouteEscalationPayload {
+  from: AskIntentRoute;
+  to: AskIntentRoute;
+  reason: string;
+  trigger: 'retrieval_evidence' | 'tool_signal' | 'user_followup' | 'safety';
+}
+
 export interface RuntimeAwaitingUserPayload {
   kind?: string;
   hint?: string;
@@ -149,6 +206,10 @@ export interface RuntimeEventPayloadMap {
   'runtime.file_change': RuntimeFileChangePayload;
   'runtime.plan_update': RuntimePlanUpdatePayload;
   'runtime.partial_structured_output': RuntimePartialStructuredOutputPayload;
+  'runtime.phase': RuntimePhasePayload;
+  'runtime.route': RuntimeRoutePayload;
+  'runtime.context': RuntimeContextPayload;
+  'runtime.route_escalation': RuntimeRouteEscalationPayload;
   'runtime.awaiting_user': RuntimeAwaitingUserPayload;
   'runtime.interrupt': RuntimeInterruptPayload;
   'runtime.compact': RuntimeCompactPayload;

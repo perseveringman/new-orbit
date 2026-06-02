@@ -1,9 +1,7 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { IPC } from '@shared/ipc';
 import type { ConnectConnectorInput, ConnectorChangeEvent, ConnectorReadInput, UpdateConnectorInput } from '@shared/connectors';
-import { syncOrbitEvidenceSources } from '../evidence/providers';
-import { syncMemoryFromTruthLayer } from '../memory/source-sync';
-import { getSemanticRuntime } from '../semantic/ipc';
+import { syncRagDataPlane } from '../rag-data-plane';
 import { createConnectorStore } from './store';
 
 export function registerConnectorsIpc(getVaultPath: () => string | null): void {
@@ -70,18 +68,16 @@ export function registerConnectorsIpc(getVaultPath: () => string | null): void {
 }
 
 async function refreshConnectorIndexes(vaultPath: string, reason: string): Promise<void> {
-  await syncOrbitEvidenceSources(vaultPath, { includeActivities: false }).catch((error) => {
-    console.warn('[connectors] evidence sync failed', error);
-  });
-  await getSemanticRuntime(vaultPath).store.markAllStale(reason).catch((error) => {
-    console.warn('[connectors] semantic stale mark failed', error);
-  });
-  await syncMemoryFromTruthLayer(vaultPath, {
-    sourceKinds: ['external_file', 'external_ai_session'],
+  await syncRagDataPlane(vaultPath, {
+    reason,
+    includeActivities: false,
     includeExternalAISessions: false,
-    archiveMissingSources: reason === 'connector.removed'
+    rebuildSemantic: true,
+    syncMemory: true,
+    memorySourceKinds: ['external_file', 'external_ai_session'],
+    archiveMissingMemorySources: reason === 'connector.removed'
   }).catch((error) => {
-    console.warn('[connectors] memory source sync failed', error);
+    console.warn('[connectors] data plane sync failed', error);
   });
 }
 

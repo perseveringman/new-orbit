@@ -2,7 +2,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConnectorStore } from '../src/main/connectors/store';
+import { ConnectorPluginRegistry, type ConnectorPlugin } from '../src/main/connectors/plugin';
+import { ConnectorStore, createConnectorStore } from '../src/main/connectors/store';
 import { createOrbitEvidenceProvider, syncOrbitEvidenceSources } from '../src/main/evidence';
 import { updateExternalAISessionSettings } from '../src/main/evidence/external-ai-session-settings';
 import { syncMemoryFromTruthLayer } from '../src/main/memory/source-sync';
@@ -160,6 +161,96 @@ describe('ConnectorStore', () => {
     expect(connections[0]?.item_count).toBe(1);
     expect(connections[0]?.config['total_count']).toBe(1);
     expect(connections[0]?.config['limit']).toBe(10);
+  });
+
+  it('serves connector list/search/evidence/projection reads from catalog after scan', async () => {
+    let listCount = 0;
+    let readCount = 0;
+    let liveSearchCount = 0;
+    let fingerprint = 'v1';
+    let projection = 'deep cached safe projection';
+    const registry = new ConnectorPluginRegistry();
+    const plugin: ConnectorPlugin = {
+      definition: {
+        id: 'fake-docs',
+        display_name: 'Fake Docs',
+        description: 'Test connector',
+        category: 'knowledge',
+        capabilities: ['list', 'read', 'search', 'index'],
+        built_in: true,
+        config_schema: []
+      },
+      async normalizeConfig() {
+        return {};
+      },
+      async listDocuments(connection) {
+        listCount += 1;
+        return [{
+          connection_id: connection.id,
+          connector_id: connection.connector_id,
+          doc_ref: 'doc-1',
+          title: 'Catalog cached source',
+          canonical_ref: 'fake://doc-1',
+          updated_at: '2026-06-01T00:00:00.000Z',
+          fingerprint: { algorithm: 'provider-version', value: fingerprint },
+          excerpt: 'metadata excerpt'
+        }];
+      },
+      async readDocument(connection, docRef) {
+        readCount += 1;
+        return {
+          document: {
+            connection_id: connection.id,
+            connector_id: connection.connector_id,
+            doc_ref: docRef,
+            title: 'Catalog cached source',
+            canonical_ref: 'fake://doc-1',
+            updated_at: '2026-06-01T00:00:00.000Z',
+            fingerprint: { algorithm: 'provider-version', value: fingerprint },
+            excerpt: 'metadata excerpt'
+          },
+          content_markdown: projection
+        };
+      },
+      async search() {
+        liveSearchCount += 1;
+        return [];
+      }
+    };
+    registry.register(plugin);
+    const store = new ConnectorStore(vaultPath, registry);
+    const connection = await store.connect({ connector_id: 'fake-docs', config: {} });
+
+    expect(listCount).toBe(1);
+    expect(readCount).toBe(1);
+
+    const docs = await store.listDocuments(connection.id);
+    const hits = await store.search('deep cached', 5);
+    await syncOrbitEvidenceSources(vaultPath, { includeActivities: false });
+    const sourceId = evidenceSourceId('external_file', `connector:${connection.id}:doc-1`);
+    const provider = createOrbitEvidenceProvider(vaultPath);
+    const evidence = await provider.read(wholeSourceSelector(sourceId, 'safe_projection'));
+    const semanticDocs = await projectConnectorDocuments(vaultPath);
+
+    expect(docs).toHaveLength(1);
+    expect(hits[0]?.title).toBe('Catalog cached source');
+    expect(evidence.excerpts[0]?.text).toContain('deep cached safe projection');
+    expect(semanticDocs[0]?.content).toContain('deep cached safe projection');
+    expect(listCount).toBe(1);
+    expect(readCount).toBe(1);
+    expect(liveSearchCount).toBe(0);
+
+    await store.scan(connection.id);
+    expect(listCount).toBe(2);
+    expect(readCount).toBe(1);
+
+    fingerprint = 'v2';
+    projection = 'changed safe projection';
+    await store.scan(connection.id);
+    const changed = await store.readCached({ connection_id: connection.id, doc_ref: 'doc-1', content_view: 'safe_projection' });
+    expect(listCount).toBe(3);
+    expect(readCount).toBe(2);
+    expect(changed?.content_markdown).toContain('changed safe projection');
   });
 
   it('collapses legacy duplicate external AI session connections when reading the registry', async () => {

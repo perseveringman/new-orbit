@@ -56,7 +56,15 @@ export async function readConnectorEvidenceText(
   const connectionId = metadataString(source, 'connector_connection_id');
   const docRef = metadataString(source, 'doc_ref');
   if (!connectionId || !docRef) return '';
-  const read = await createConnectorStore(vaultPath).read({
+  const store = createConnectorStore(vaultPath);
+  const cached = await store.readCached({
+    connection_id: connectionId,
+    doc_ref: docRef,
+    content_view: contentView
+  });
+  if (cached) return cached.content_markdown;
+  if (contentView !== 'full') return [source.title, source.summary, source.canonical_ref].filter(Boolean).join('\n');
+  const read = await store.read({
     connection_id: connectionId,
     doc_ref: docRef,
     content_view: contentView

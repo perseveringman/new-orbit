@@ -59,7 +59,8 @@ import { registerAIConfigIpc } from './ai-config/ipc';
 import { shutdownEmbeddingProxy } from './ai-config/embedding-proxy';
 import { registerRuntimeSessionIpc } from './runtime-sessions/ipc';
 import { registerSynthesisIpc } from './synthesis/ipc';
-import { getSemanticRuntime, registerSemanticIpc } from './semantic/ipc';
+import { registerSemanticIpc } from './semantic/ipc';
+import { ensureInitialSemanticIndex } from './rag-data-plane';
 import { registerContextIpc } from './context/ipc';
 import { registerEvidenceIpc } from './evidence/ipc';
 import { registerMemoryIpc } from './memory/ipc';
@@ -187,7 +188,7 @@ async function attachVaultRuntime(vaultPath: string): Promise<void> {
   await ensureTerminalAgentRuntimeForVault(vaultPath);
   mobileInboundWatcher = await startMobileInboundWatcher(vaultPath);
   void ensureVectorStore(vaultPath);
-  void getSemanticRuntime(vaultPath).store.rebuildIndex().catch((err) => {
+  void ensureInitialSemanticIndex(vaultPath).catch((err) => {
     console.warn('[semantic] initial index failed', err);
   });
   void runWorktreeGc(vaultPath).catch(() => undefined);

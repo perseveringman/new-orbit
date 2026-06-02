@@ -152,6 +152,8 @@ export function SidebarAskPanel(): JSX.Element {
           onArtifactAction={(artifactId, actionId) => void handleArtifactAction(artifactId, actionId)}
           composerSourceSurface="sidebar_ask"
           welcomeMessage={`围绕 ${askContext.label} 提问，Orbit 会自动带上当前上下文。`}
+          messageMaxWidthClass="max-w-[70%]"
+          eventMaxWidthClass="max-w-[70%]"
         />
       </div>
     </div>

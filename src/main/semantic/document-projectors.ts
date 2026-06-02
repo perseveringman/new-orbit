@@ -218,7 +218,7 @@ export async function projectConnectorDocuments(vaultPath: string): Promise<Sema
   const store = createConnectorStore(vaultPath);
   const docs: SemanticDocument[] = [];
   for (const doc of await store.listDocuments().catch(() => [])) {
-    const content = await store.read({ connection_id: doc.connection_id, doc_ref: doc.doc_ref, content_view: 'safe_projection' });
+    const content = await store.readCached({ connection_id: doc.connection_id, doc_ref: doc.doc_ref, content_view: 'safe_projection' });
     const ref = `connector:${doc.connection_id}:${doc.doc_ref}`;
     const evidenceKind = doc.evidence_kind ?? 'external_file';
     docs.push({

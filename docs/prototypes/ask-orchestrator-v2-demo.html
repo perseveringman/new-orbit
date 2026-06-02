@@ -1,0 +1,1422 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbit Ask Orchestrator v2 Demo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d0c;
+      --surface: #121412;
+      --surface-2: #181b18;
+      --surface-3: #20241f;
+      --line: #2b302b;
+      --line-strong: #465046;
+      --text: #f2f4ef;
+      --muted: #a9b1a6;
+      --dim: #727c72;
+      --green: #7ddf9a;
+      --green-2: #2f9c63;
+      --cyan: #7cced8;
+      --amber: #f0be68;
+      --red: #ef837a;
+      --violet: #b9a6ff;
+      --chip: #1c211c;
+      --shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(35, 39, 34, 0.45), rgba(11, 13, 12, 0) 360px),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0, rgba(255, 255, 255, 0.025) 1px, transparent 1px, transparent 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0, rgba(255, 255, 255, 0.018) 1px, transparent 1px, transparent 72px),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 13, 12, 0.86);
+      backdrop-filter: blur(18px);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      border: 1px solid #435043;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(135deg, rgba(125, 223, 154, 0.16), rgba(124, 206, 216, 0.06)),
+        var(--surface);
+      color: var(--green);
+      font-weight: 750;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 720;
+      line-height: 1.2;
+    }
+
+    .brand p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 14px rgba(125, 223, 154, 0.7);
+    }
+
+    .replay-btn {
+      border: 1px solid var(--line-strong);
+      background: #ecf4e9;
+      color: #171b16;
+      height: 34px;
+      padding: 0 13px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 290px minmax(420px, 1fr) 390px;
+      gap: 1px;
+      background: var(--line);
+      min-height: calc(100vh - 64px);
+    }
+
+    .rail,
+    .chat,
+    .inspector {
+      background: rgba(12, 14, 12, 0.96);
+      min-width: 0;
+    }
+
+    .rail {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .section-label {
+      margin: 0 0 10px;
+      color: var(--dim);
+      font-size: 11px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .scenario-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .scenario-btn {
+      width: 100%;
+      text-align: left;
+      padding: 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: var(--surface);
+      cursor: pointer;
+      display: grid;
+      gap: 8px;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .scenario-btn:hover {
+      transform: translateY(-1px);
+      border-color: #536153;
+      background: #171a17;
+    }
+
+    .scenario-btn.active {
+      border-color: rgba(125, 223, 154, 0.75);
+      background: linear-gradient(180deg, rgba(125, 223, 154, 0.14), rgba(18, 20, 18, 0.95));
+    }
+
+    .scenario-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .scenario-route {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      height: 22px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .note-panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .note-panel strong {
+      color: var(--text);
+      font-weight: 720;
+    }
+
+    .architecture-thumb {
+      overflow: hidden;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: #0f1110;
+      box-shadow: var(--shadow);
+    }
+
+    .architecture-thumb img {
+      width: 100%;
+      display: block;
+    }
+
+    .chat {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      min-height: 0;
+    }
+
+    .run-header {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 12px;
+    }
+
+    .run-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .run-title h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 760;
+      line-height: 1.25;
+    }
+
+    .run-title p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .latency-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 10px;
+      min-height: 64px;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--dim);
+      font-size: 10px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 16px;
+      line-height: 1.1;
+    }
+
+    .phase-bar {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(18, 20, 18, 0.86);
+      overflow-x: auto;
+    }
+
+    .phase-track {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(100px, 1fr));
+      gap: 8px;
+      min-width: 760px;
+    }
+
+    .phase {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 9px 10px;
+      background: #101210;
+      min-height: 54px;
+      overflow: hidden;
+    }
+
+    .phase::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      background: transparent;
+    }
+
+    .phase.active {
+      border-color: rgba(124, 206, 216, 0.72);
+      background: rgba(124, 206, 216, 0.08);
+    }
+
+    .phase.active::before {
+      background: var(--cyan);
+    }
+
+    .phase.done {
+      border-color: rgba(125, 223, 154, 0.44);
+      background: rgba(125, 223, 154, 0.07);
+    }
+
+    .phase.done::before {
+      background: var(--green);
+    }
+
+    .phase.skipped {
+      opacity: 0.42;
+    }
+
+    .phase small {
+      display: block;
+      color: var(--dim);
+      font-size: 10px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .phase strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .messages {
+      min-height: 0;
+      overflow: auto;
+      padding: 22px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .bubble {
+      width: min(760px, 100%);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 15px;
+      background: var(--surface);
+      line-height: 1.68;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .bubble.user {
+      align-self: flex-end;
+      width: min(680px, 86%);
+      background: #edf4ea;
+      color: #151915;
+      border-color: #edf4ea;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .bubble.assistant {
+      align-self: flex-start;
+    }
+
+    .bubble .label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--dim);
+      font-size: 11px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .bubble.user .label {
+      color: #4e574d;
+    }
+
+    .typing-caret {
+      display: inline-block;
+      width: 7px;
+      height: 15px;
+      transform: translateY(2px);
+      margin-left: 2px;
+      background: var(--green);
+      animation: blink 900ms steps(2, start) infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 14px 20px 18px;
+      background: rgba(12, 14, 12, 0.96);
+    }
+
+    .composer-shell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: #111411;
+      padding: 10px;
+    }
+
+    .composer-shell input {
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      min-width: 0;
+    }
+
+    .composer-shell button {
+      height: 34px;
+      border: 1px solid #536153;
+      background: #1f281f;
+      border-radius: 8px;
+      padding: 0 12px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .inspector {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 0;
+    }
+
+    .inspector-head {
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .inspector-head h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 760;
+    }
+
+    .inspector-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .inspector-body {
+      overflow: auto;
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .panel-title {
+      padding: 12px 13px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-title h3 {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 760;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .panel-body {
+      padding: 13px;
+    }
+
+    .route-card {
+      display: grid;
+      gap: 9px;
+    }
+
+    .route-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .route-line strong {
+      color: var(--text);
+      font-weight: 720;
+      text-align: right;
+    }
+
+    .lane-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .lane {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 11px;
+      background: #101310;
+      display: grid;
+      gap: 9px;
+    }
+
+    .lane-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .lane-head strong {
+      font-size: 13px;
+    }
+
+    .lane-desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .meter {
+      height: 5px;
+      border-radius: 999px;
+      background: #252a25;
+      overflow: hidden;
+    }
+
+    .meter span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--green);
+      transition: width 500ms ease;
+    }
+
+    .lane.active {
+      border-color: rgba(124, 206, 216, 0.62);
+    }
+
+    .lane.active .meter span {
+      background: var(--cyan);
+      width: 62%;
+    }
+
+    .lane.done .meter span {
+      width: 100%;
+    }
+
+    .lane.queued .meter span {
+      width: 18%;
+      background: var(--amber);
+    }
+
+    .lane.skipped {
+      opacity: 0.48;
+    }
+
+    .tool-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .tool {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px;
+      background: #101310;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tool.active {
+      color: var(--text);
+      border-color: rgba(240, 190, 104, 0.64);
+      background: rgba(240, 190, 104, 0.08);
+    }
+
+    .tool.done {
+      color: var(--text);
+      border-color: rgba(125, 223, 154, 0.46);
+    }
+
+    .tool-code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+    }
+
+    .event-log {
+      max-height: 210px;
+      overflow: auto;
+      display: grid;
+      gap: 6px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .event-row {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 8px;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .event-row strong {
+      color: var(--cyan);
+      font-weight: 640;
+    }
+
+    .contract-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .contract-item {
+      display: grid;
+      grid-template-columns: 20px 1fr;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .contract-item span:first-child {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .architecture-band {
+      grid-column: 1 / -1;
+      background: #0d0f0d;
+      border-top: 1px solid var(--line);
+      padding: 28px;
+      display: grid;
+      grid-template-columns: minmax(320px, 0.95fr) minmax(420px, 1.35fr);
+      gap: 24px;
+    }
+
+    .architecture-copy h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .architecture-copy p {
+      margin: 12px 0 0;
+      color: var(--muted);
+      line-height: 1.75;
+      font-size: 14px;
+    }
+
+    .blueprint {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .blueprint-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .blueprint-node {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      min-height: 88px;
+      background: #101310;
+    }
+
+    .blueprint-node strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 7px;
+    }
+
+    .blueprint-node span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .blueprint-node.accent-green {
+      border-color: rgba(125, 223, 154, 0.44);
+    }
+
+    .blueprint-node.accent-cyan {
+      border-color: rgba(124, 206, 216, 0.48);
+    }
+
+    .blueprint-node.accent-amber {
+      border-color: rgba(240, 190, 104, 0.48);
+    }
+
+    @media (max-width: 1180px) {
+      .workspace {
+        grid-template-columns: 260px 1fr;
+      }
+
+      .inspector {
+        grid-column: 1 / -1;
+        min-height: 520px;
+      }
+
+      .architecture-band {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        align-items: flex-start;
+        height: auto;
+        padding: 14px;
+        gap: 12px;
+        flex-direction: column;
+      }
+
+      .top-actions {
+        width: 100%;
+      }
+
+      .status-pill {
+        flex: 1;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .rail,
+      .chat,
+      .inspector {
+        min-height: auto;
+      }
+
+      .latency-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .bubble.user {
+        width: 100%;
+      }
+
+      .blueprint-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">O</div>
+        <div>
+          <h1>Ask Orchestrator v2 交互原型</h1>
+          <p>事件驱动、上下文分层、可降级的随处问运行时</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <div class="status-pill"><span class="dot"></span><span id="globalStatus">等待场景播放</span></div>
+        <button class="replay-btn" id="replayButton" type="button">重播当前场景</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="rail">
+        <section>
+          <p class="section-label">核心问答场景</p>
+          <div class="scenario-list" id="scenarioList"></div>
+        </section>
+
+        <section class="note-panel">
+          <strong>设计原则</strong>
+          <br>
+          消息发送后立刻进入可见 run，不把 PMIL、连接器 live inventory、synthesis ensure 塞进首包之前。慢上下文用后台事件补齐，回答先语义化。
+        </section>
+
+        <section>
+          <p class="section-label">Image generation 架构图</p>
+          <div class="architecture-thumb">
+            <img src="assets/ask-orchestrator-v2-architecture.png" alt="Ask Orchestrator v2 generated architecture poster">
+          </div>
+        </section>
+      </aside>
+
+      <section class="chat" aria-label="Ask Anywhere demo chat">
+        <div class="run-header">
+          <div class="run-title-row">
+            <div class="run-title">
+              <h2 id="scenarioTitle">快速直答</h2>
+              <p id="scenarioSummary">无需工具，使用即时上下文直接回答。</p>
+            </div>
+            <span class="badge" id="routeBadge">direct</span>
+          </div>
+          <div class="latency-strip" id="metrics"></div>
+        </div>
+
+        <div class="phase-bar">
+          <div class="phase-track" id="phaseTrack"></div>
+        </div>
+
+        <div class="messages" id="messages"></div>
+
+        <div class="composer">
+          <div class="composer-shell">
+            <input id="composerInput" aria-label="demo prompt" value="" readonly>
+            <button id="sendButton" type="button">模拟发送</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="inspector">
+        <div class="inspector-head">
+          <h2>运行时检查器</h2>
+          <p>展示新架构里真正应该暴露给 UI 和 trace 的状态，而不是只显示“流式输出中”。</p>
+        </div>
+        <div class="inspector-body">
+          <section class="panel">
+            <div class="panel-title">
+              <h3>Route Decision</h3>
+              <span class="badge" id="routeType">direct</span>
+            </div>
+            <div class="panel-body">
+              <div class="route-card" id="routeCard"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h3>Context Lanes</h3>
+              <span class="badge">budgeted</span>
+            </div>
+            <div class="panel-body">
+              <div class="lane-list" id="laneList"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h3>Tool Plan</h3>
+              <span class="badge" id="toolCount">0 tools</span>
+            </div>
+            <div class="panel-body">
+              <div class="tool-list" id="toolList"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h3>Event Stream</h3>
+              <span class="badge">trace</span>
+            </div>
+            <div class="panel-body">
+              <div class="event-log" id="eventLog"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h3>Semantic Contract</h3>
+              <span class="badge">answer</span>
+            </div>
+            <div class="panel-body">
+              <div class="contract-list" id="contractList"></div>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <section class="architecture-band">
+        <div class="architecture-copy">
+          <h2>最终想做的不是“更会聊天”，而是一个 Ask Runtime。</h2>
+          <p>
+            这个原型把随处问拆成 RunController、Intent Router、Context Orchestrator、Runtime/Tool Loop、Synthesis Scheduler 和 Semantic Answer Layer。
+            它的关键体验目标是：用户一发送就有真实状态，简单问题不进重链路，复杂问题也不会用慢上下文阻塞首 token。
+          </p>
+        </div>
+        <div class="blueprint">
+          <div class="blueprint-row">
+            <div class="blueprint-node accent-green">
+              <strong>RunController</strong>
+              <span>创建 run、写 checkpoint、发 phase event、负责取消和恢复。</span>
+            </div>
+            <div class="blueprint-node accent-cyan">
+              <strong>Context Orchestrator</strong>
+              <span>Fast、Retrieval、Slow 三条 lane，按预算和 freshness 降级。</span>
+            </div>
+            <div class="blueprint-node accent-amber">
+              <strong>Semantic Answer</strong>
+              <span>先回答用户意图，再引用证据，隐藏 PMIL 内部术语。</span>
+            </div>
+          </div>
+          <div class="blueprint-row">
+            <div class="blueprint-node">
+              <strong>Intent Router</strong>
+              <span>direct、vault QA、connector inventory、research、action 分流。</span>
+            </div>
+            <div class="blueprint-node">
+              <strong>Tool Runtime</strong>
+              <span>只暴露本场景需要的工具，串行或并行按 policy 执行。</span>
+            </div>
+            <div class="blueprint-node">
+              <strong>Synthesis Scheduler</strong>
+              <span>慢总结和外部会话扫描后台跑，以 artifact 形式补入。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const phases = [
+      ["accepted", "run.accepted", "创建可追踪运行"],
+      ["intent", "intent.routed", "选择最小路径"],
+      ["fast", "context.fast", "即时上下文"],
+      ["retrieval", "context.retrieval", "快速检索"],
+      ["model", "model.stream", "模型回答"],
+      ["tools", "tools", "工具执行"],
+      ["final", "answer.final", "语义化完成"]
+    ];
+
+    const baseContract = [
+      "先回答用户真正的问题，不复述内部状态。",
+      "只在需要时引用证据，不展示 selector 或 PMIL 原始字段。",
+      "慢上下文完成后可以补充，不阻塞首个可读回答。",
+      "工具调用必须有理由、预算和 trace。"
+    ];
+
+    const scenarios = [
+      {
+        id: "direct",
+        title: "快速直答",
+        route: "direct_answer",
+        badge: "direct",
+        summary: "简单策略问题不进 PMIL ensure，不暴露工具，首 token 优先。",
+        question: "我现在只想知道：随处问首消息慢的问题，第一刀应该改哪里？",
+        answer: "第一刀不是继续加 timeout，而是把 send() 拆出 RunController：消息入库后立刻发 run.accepted，并把“准备上下文”和“模型流式回答”分成两个 UI 阶段。\n\n最小改动顺序是：\n1. 先加 phase event，让前端不再把 context 构建误显示成流式输出。\n2. 加 direct-answer router，简单问题走无工具、轻上下文路径。\n3. PMIL ensure 和 live inventory 改成后台 lane，只把缓存结果放进首包。\n\n这样用户会马上看到系统在做什么，模型也能更快开始输出。",
+        metrics: [["ack", "<100ms"], ["model start", "620ms"], ["first token", "760ms"], ["tools", "0"]],
+        routeInfo: {
+          "意图": "架构建议",
+          "路径": "direct_answer",
+          "上下文预算": "Fast lane only",
+          "降级策略": "Slow lane queued"
+        },
+        lanes: [
+          ["Fast Context", "done", "Vision 摘要、scope、最近 turns，目标 150ms 内。"],
+          ["Retrieval", "skipped", "无需查 vault，避免过度检索。"],
+          ["Slow Synthesis", "queued", "后台记录为架构讨论线索，不阻塞回答。"]
+        ],
+        tools: [],
+        phaseStates: { accepted: "done", intent: "done", fast: "done", retrieval: "skipped", model: "active", tools: "skipped", final: "waiting" },
+        events: [
+          ["0ms", "run.accepted"],
+          ["44ms", "intent.routed direct_answer"],
+          ["132ms", "context.fast.done"],
+          ["620ms", "model.started"],
+          ["760ms", "answer.delta"]
+        ]
+      },
+      {
+        id: "vault",
+        title: "Vault 语义问答",
+        route: "vault_qa",
+        badge: "retrieval",
+        summary: "需要个人知识时只读快速索引，PMIL synthesis 用 cache-first。",
+        question: "Orbit 里随处问为什么不应该直接同步调用 PMIL/连接器构建？",
+        answer: "因为随处问是 Layer 3 的交互入口，而 PMIL 和 synthesis 更接近 Layer 2 的知识编译层。把它们同步塞进首包，会让聊天体验被后台知识构建拖住。\n\n更合理的边界是：\n- Ask 首包只读取已有的 ContextPacket 缓存和轻量索引。\n- 如果证据不够，创建 interactive synthesis job，但不等待它完成。\n- 完成后的 ContextPacket 作为 Stage artifact 追加，并可触发“补充回答”。\n\n这样既保留 Orbit 的可追踪上下文，又不会让用户在空白流式状态里等 synthesis。",
+        metrics: [["ack", "<100ms"], ["fast ctx", "140ms"], ["retrieval", "820ms"], ["first token", "1.1s"]],
+        routeInfo: {
+          "意图": "本地知识问答",
+          "路径": "vault_qa",
+          "上下文预算": "Fast + Retrieval",
+          "降级策略": "PMIL ensure 只入队"
+        },
+        lanes: [
+          ["Fast Context", "done", "scope、Vision、最近对话，立即进 prompt。"],
+          ["Retrieval", "done", "读取 evidence index 和已存在 synthesis artifact。"],
+          ["Slow Synthesis", "queued", "缺失的 Personal QA / entity profile 入后台 job。"]
+        ],
+        tools: [
+          ["context.cache.lookup", "done"],
+          ["evidence.search", "done"]
+        ],
+        phaseStates: { accepted: "done", intent: "done", fast: "done", retrieval: "done", model: "active", tools: "done", final: "waiting" },
+        events: [
+          ["0ms", "run.accepted"],
+          ["52ms", "intent.routed vault_qa"],
+          ["142ms", "context.fast.done"],
+          ["820ms", "context.retrieval.done"],
+          ["1.1s", "model.started"],
+          ["1.2s", "answer.delta"]
+        ]
+      },
+      {
+        id: "connector",
+        title: "连接器统计",
+        route: "connector_inventory",
+        badge: "cache",
+        summary: "live inventory 不再扫盘阻塞，先用 TTL 缓存答，再后台刷新。",
+        question: "最近新建了哪些 AI 会话？为什么之前这个问题会一直卡着？",
+        answer: "我会先按当前缓存回答，并同时刷新连接器库存。\n\n之前会卡住，是因为随处问在主流程里直接扫本地 Claude/Codex/Amp 等历史目录。只要其中一个根目录很大、权限慢、解析慢，前端就会误以为模型在流式输出，但模型其实还没开始。\n\n新架构里这个问题会走 connector_inventory 路由：\n- 首包读取最近一次 inventory artifact。\n- 如果缓存过期，后台刷新并显示“正在更新”。\n- 刷新完成后追加差异摘要，而不是阻塞第一条回答。",
+        metrics: [["ack", "<100ms"], ["cached answer", "480ms"], ["refresh", "background"], ["first token", "710ms"]],
+        routeInfo: {
+          "意图": "连接器库存查询",
+          "路径": "connector_inventory",
+          "上下文预算": "Cache first",
+          "降级策略": "后台刷新 inventory"
+        },
+        lanes: [
+          ["Fast Context", "done", "连接器定义、上次同步时间、用户问题。"],
+          ["Retrieval", "done", "读取 inventory artifact，不同步 walk home 目录。"],
+          ["Slow Synthesis", "active", "刷新 local-ai-sessions inventory，完成后补充。"]
+        ],
+        tools: [
+          ["connector.inventory.cached", "done"],
+          ["connector.inventory.refresh", "active"]
+        ],
+        phaseStates: { accepted: "done", intent: "done", fast: "done", retrieval: "done", model: "active", tools: "active", final: "waiting" },
+        events: [
+          ["0ms", "run.accepted"],
+          ["48ms", "intent.routed connector_inventory"],
+          ["120ms", "inventory.cache.hit"],
+          ["260ms", "inventory.refresh.queued"],
+          ["710ms", "answer.delta"],
+          ["bg", "context.slow.attached later"]
+        ]
+      },
+      {
+        id: "research",
+        title: "外部调研",
+        route: "research_workflow",
+        badge: "web",
+        summary: "明确需要网络时才开 web tools，并把调研 synthesis 落为 artifact。",
+        question: "帮我调研当前 agent 编排最先进的架构，并对 Orbit 提建议。",
+        answer: "我会把这个问题拆成“先给研究框架，再产出可追踪 synthesis”。\n\n实时回答会先说明研究路径：对比 OpenAI Agents、Anthropic workflows、LangGraph、LlamaIndex Workflows、Google ADK，再回到 Orbit 的 RunController、Context Lanes 和 Tool Runtime。\n\n工具执行期间 UI 会显示正在搜索和读取哪些来源；最终回答引用来源。完整研究摘要会保存成 synthesis artifact，后续随处问可以直接读取，不必每次重新调研。",
+        metrics: [["ack", "<100ms"], ["plan", "350ms"], ["web tools", "visible"], ["artifact", "saved"]],
+        routeInfo: {
+          "意图": "当前资料调研",
+          "路径": "research_workflow",
+          "上下文预算": "Fast + Web",
+          "降级策略": "先框架，后完整报告"
+        },
+        lanes: [
+          ["Fast Context", "done", "Orbit 愿景、当前架构、用户目标。"],
+          ["Retrieval", "active", "Web search/fetch 作为显式工具，而不是隐式 prompt 构建。"],
+          ["Slow Synthesis", "queued", "生成 research synthesis artifact。"]
+        ],
+        tools: [
+          ["orbit_web_search", "active"],
+          ["orbit_web_fetch", "waiting"],
+          ["synthesis.save", "waiting"]
+        ],
+        phaseStates: { accepted: "done", intent: "done", fast: "done", retrieval: "active", model: "active", tools: "active", final: "waiting" },
+        events: [
+          ["0ms", "run.accepted"],
+          ["57ms", "intent.routed research_workflow"],
+          ["350ms", "research.plan.delta"],
+          ["620ms", "tool.started orbit_web_search"],
+          ["1.4s", "tool.result"],
+          ["1.7s", "answer.delta"]
+        ]
+      },
+      {
+        id: "action",
+        title: "执行动作",
+        route: "agent_action",
+        badge: "action",
+        summary: "需要写入 Orbit 时才进入工具循环，并把审批状态直接展示。",
+        question: "把“随处问 v2 编排运行时”提成一个任务，放进当前项目。",
+        answer: "我会创建一个待审批任务提案，而不是直接写入主看板。\n\n任务草案：\n标题：设计 Ask Orchestrator v2 编排运行时\n目标：拆分 RunController、Intent Router、Context Lanes、Synthesis Scheduler 和 Semantic Answer Layer\n验收：简单问题首 token < 1s；连接器 inventory 不阻塞首包；每个 run 有 phase trace。\n\n这个动作会进入 Inbox 审批。你确认后再落入项目任务，符合 Orbit 的 propose-approve 边界。",
+        metrics: [["ack", "<100ms"], ["route", "90ms"], ["tool", "1 call"], ["approval", "Inbox"]],
+        routeInfo: {
+          "意图": "Orbit 写入动作",
+          "路径": "agent_action",
+          "上下文预算": "Fast + scoped project",
+          "降级策略": "无审批不落库"
+        },
+        lanes: [
+          ["Fast Context", "done", "当前 project scope、任务模板、审批边界。"],
+          ["Retrieval", "done", "读取项目状态和相关开放问题。"],
+          ["Slow Synthesis", "skipped", "无需后台 synthesis。"]
+        ],
+        tools: [
+          ["orbit_project_overview", "done"],
+          ["orbit_task_propose", "active"]
+        ],
+        phaseStates: { accepted: "done", intent: "done", fast: "done", retrieval: "done", model: "active", tools: "active", final: "waiting" },
+        events: [
+          ["0ms", "run.accepted"],
+          ["51ms", "intent.routed agent_action"],
+          ["160ms", "project.context.done"],
+          ["760ms", "tool.started orbit_task_propose"],
+          ["1.0s", "approval.created"],
+          ["1.1s", "answer.delta"]
+        ]
+      }
+    ];
+
+    let activeScenario = 0;
+    let timers = [];
+
+    const el = {
+      scenarioList: document.getElementById("scenarioList"),
+      scenarioTitle: document.getElementById("scenarioTitle"),
+      scenarioSummary: document.getElementById("scenarioSummary"),
+      routeBadge: document.getElementById("routeBadge"),
+      routeType: document.getElementById("routeType"),
+      routeCard: document.getElementById("routeCard"),
+      metrics: document.getElementById("metrics"),
+      phaseTrack: document.getElementById("phaseTrack"),
+      messages: document.getElementById("messages"),
+      composerInput: document.getElementById("composerInput"),
+      sendButton: document.getElementById("sendButton"),
+      replayButton: document.getElementById("replayButton"),
+      laneList: document.getElementById("laneList"),
+      toolList: document.getElementById("toolList"),
+      toolCount: document.getElementById("toolCount"),
+      eventLog: document.getElementById("eventLog"),
+      contractList: document.getElementById("contractList"),
+      globalStatus: document.getElementById("globalStatus")
+    };
+
+    function clearTimers() {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers = [];
+    }
+
+    function schedule(fn, ms) {
+      const timer = setTimeout(fn, ms);
+      timers.push(timer);
+    }
+
+    function renderScenarioButtons() {
+      el.scenarioList.innerHTML = scenarios.map((scenario, index) => `
+        <button class="scenario-btn ${index === activeScenario ? "active" : ""}" type="button" data-index="${index}">
+          <span class="scenario-title">
+            <span>${scenario.title}</span>
+            <span class="badge">${scenario.badge}</span>
+          </span>
+          <span class="scenario-route">${scenario.summary}</span>
+        </button>
+      `).join("");
+
+      el.scenarioList.querySelectorAll("button").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeScenario = Number(button.dataset.index);
+          playScenario();
+        });
+      });
+    }
+
+    function renderMetrics(scenario) {
+      el.metrics.innerHTML = scenario.metrics.map(([label, value]) => `
+        <div class="metric">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `).join("");
+    }
+
+    function renderPhases(scenario, finalMode = false) {
+      el.phaseTrack.innerHTML = phases.map(([id, event, label]) => {
+        const state = finalMode && scenario.phaseStates[id] === "active" ? "done" : (scenario.phaseStates[id] || "waiting");
+        return `
+          <div class="phase ${state}" data-phase="${id}">
+            <small>${event}</small>
+            <strong>${label}</strong>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderRoute(scenario) {
+      el.routeCard.innerHTML = Object.entries(scenario.routeInfo).map(([label, value]) => `
+        <div class="route-line">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `).join("");
+    }
+
+    function renderLanes(scenario, finalMode = false) {
+      el.laneList.innerHTML = scenario.lanes.map(([name, state, desc]) => {
+        const visibleState = finalMode && state === "active" ? "done" : state;
+        return `
+          <div class="lane ${visibleState}">
+            <div class="lane-head">
+              <strong>${name}</strong>
+              <span class="badge">${visibleState}</span>
+            </div>
+            <div class="lane-desc">${desc}</div>
+            <div class="meter"><span></span></div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderTools(scenario, finalMode = false) {
+      el.toolCount.textContent = `${scenario.tools.length} tools`;
+      if (!scenario.tools.length) {
+        el.toolList.innerHTML = `<div class="tool"><span>本场景不暴露工具</span><span class="badge">clean</span></div>`;
+        return;
+      }
+      el.toolList.innerHTML = scenario.tools.map(([name, state]) => {
+        const visibleState = finalMode && (state === "active" || state === "waiting") ? "done" : state;
+        return `
+          <div class="tool ${visibleState}">
+            <span class="tool-code">${name}</span>
+            <span class="badge">${visibleState}</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderEvents(scenario, finalMode = false) {
+      const rows = finalMode ? [...scenario.events, ["done", "answer.final"]] : scenario.events;
+      el.eventLog.innerHTML = rows.map(([time, event]) => `
+        <div class="event-row">
+          <strong>${time}</strong>
+          <span>${event}</span>
+        </div>
+      `).join("");
+      el.eventLog.scrollTop = el.eventLog.scrollHeight;
+    }
+
+    function renderContract() {
+      el.contractList.innerHTML = baseContract.map((item) => `
+        <div class="contract-item">
+          <span>✓</span>
+          <span>${item}</span>
+        </div>
+      `).join("");
+    }
+
+    function renderMessages(scenario) {
+      el.messages.innerHTML = `
+        <div class="bubble user">
+          <span class="label">User</span>${scenario.question}
+        </div>
+        <div class="bubble assistant" id="assistantBubble">
+          <span class="label">Orbit</span><span id="answerText"></span><span class="typing-caret" id="caret"></span>
+        </div>
+      `;
+    }
+
+    function typeAnswer(text) {
+      const answer = document.getElementById("answerText");
+      const caret = document.getElementById("caret");
+      answer.textContent = "";
+      caret.style.display = "inline-block";
+      let index = 0;
+      const chunkSize = Math.max(1, Math.ceil(text.length / 90));
+      function step() {
+        index = Math.min(text.length, index + chunkSize);
+        answer.textContent = text.slice(0, index);
+        el.messages.scrollTop = el.messages.scrollHeight;
+        if (index < text.length) {
+          schedule(step, 22);
+        } else {
+          caret.style.display = "none";
+          finishScenario();
+        }
+      }
+      schedule(step, 300);
+    }
+
+    function animatePhase(scenario) {
+      const activeOrder = ["accepted", "intent", "fast", "retrieval", "model", "tools", "final"];
+      activeOrder.forEach((phaseId, index) => {
+        schedule(() => {
+          const phase = el.phaseTrack.querySelector(`[data-phase="${phaseId}"]`);
+          if (!phase || phase.classList.contains("skipped")) return;
+          phase.classList.remove("waiting");
+          phase.classList.add(index >= 4 ? "active" : "done");
+        }, index * 170);
+      });
+    }
+
+    function finishScenario() {
+      const scenario = scenarios[activeScenario];
+      renderPhases(scenario, true);
+      renderLanes(scenario, true);
+      renderTools(scenario, true);
+      renderEvents(scenario, true);
+      el.globalStatus.textContent = "回答完成，trace 已记录";
+    }
+
+    function playScenario() {
+      clearTimers();
+      const scenario = scenarios[activeScenario];
+      renderScenarioButtons();
+      el.scenarioTitle.textContent = scenario.title;
+      el.scenarioSummary.textContent = scenario.summary;
+      el.routeBadge.textContent = scenario.badge;
+      el.routeType.textContent = scenario.route;
+      el.composerInput.value = scenario.question;
+      el.globalStatus.textContent = "run.accepted，正在准备最小上下文";
+      renderMetrics(scenario);
+      renderPhases(scenario);
+      renderRoute(scenario);
+      renderLanes(scenario);
+      renderTools(scenario);
+      renderEvents(scenario);
+      renderContract();
+      renderMessages(scenario);
+      animatePhase(scenario);
+      schedule(() => {
+        el.globalStatus.textContent = "model.stream，真正的回答流开始";
+        typeAnswer(scenario.answer);
+      }, 900);
+    }
+
+    el.replayButton.addEventListener("click", playScenario);
+    el.sendButton.addEventListener("click", playScenario);
+
+    renderScenarioButtons();
+    playScenario();
+  </script>
+</body>
+</html>

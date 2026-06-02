@@ -6,6 +6,11 @@ import { readExternalAISessionSettings, updateExternalAISessionSettings } from '
 import { openEvidenceNavigation, resolveEvidenceNavigation } from './navigation';
 import { createEvidenceStore } from './store';
 import { createOrbitEvidenceProvider, syncOrbitEvidenceSources } from './providers';
+import { createEvidenceChunkIndexStore } from './chunk-index';
+import { eventReplayBus } from '../events/bus';
+
+let evidenceIndexerRegistered = false;
+const pendingEvidenceSyncs = new Map<string, NodeJS.Timeout>();
 
 export function registerEvidenceIpc(getVaultPath: () => string | null): void {
   const runtime = () => {
@@ -17,6 +22,8 @@ export function registerEvidenceIpc(getVaultPath: () => string | null): void {
       provider: createOrbitEvidenceProvider(vaultPath)
     };
   };
+
+  registerEvidenceIndexer(getVaultPath);
 
   ipcMain.handle(IPC.evidence.list, async (_event, filter: EvidenceSourceFilter = {}) =>
     runtime().store.list(filter)
@@ -43,11 +50,20 @@ export function registerEvidenceIpc(getVaultPath: () => string | null): void {
     async (
       _event,
       options: { includeExternalAISessions?: boolean; externalAISessionLimit?: number } = {}
-    ) =>
-      syncOrbitEvidenceSources(runtime().vaultPath, {
+    ) => {
+      const { vaultPath } = runtime();
+      const syncOptions = {
         includeExternalAISessions: options.includeExternalAISessions ?? true,
         externalAISessionLimit: options.externalAISessionLimit ?? 300
-      })
+      };
+      const sources = await syncOrbitEvidenceSources(vaultPath, syncOptions);
+      await createEvidenceChunkIndexStore(vaultPath).syncIncremental({
+        ...syncOptions,
+        includeActivities: false,
+        prefetchedSources: sources
+      });
+      return sources;
+    }
   );
 
   ipcMain.handle(IPC.evidence.externalSessionSettings, () =>
@@ -57,4 +73,41 @@ export function registerEvidenceIpc(getVaultPath: () => string | null): void {
   ipcMain.handle(IPC.evidence.updateExternalSessionSettings, (_event, patch: Partial<ExternalAISessionSettings>) =>
     updateExternalAISessionSettings(runtime().vaultPath, patch)
   );
+}
+
+function registerEvidenceIndexer(getVaultPath: () => string | null): void {
+  if (evidenceIndexerRegistered) return;
+  evidenceIndexerRegistered = true;
+  eventReplayBus.on('event', (event) => {
+    const vaultPath = getVaultPath();
+    if (!vaultPath || !shouldIndexEvent(event.type)) return;
+    scheduleEvidenceSync(vaultPath);
+  });
+}
+
+function scheduleEvidenceSync(vaultPath: string): void {
+  const existing = pendingEvidenceSyncs.get(vaultPath);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    pendingEvidenceSyncs.delete(vaultPath);
+    void createEvidenceChunkIndexStore(vaultPath)
+      .syncIncremental({ includeActivities: false })
+      .catch((error: unknown) => console.error('[evidence] background incremental sync failed', error));
+  }, 1500);
+  pendingEvidenceSyncs.set(vaultPath, timer);
+}
+
+function shouldIndexEvent(type: string): boolean {
+  return [
+    'note.',
+    'library.',
+    'resources.',
+    'resource.',
+    'project.',
+    'area.',
+    'conversation.',
+    'synthesis.artifact.',
+    'kb.',
+    'connector.'
+  ].some((prefix) => type.startsWith(prefix));
 }

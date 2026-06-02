@@ -9,6 +9,7 @@ import { searchWithContext } from './search-context';
 
 let current: { vaultPath: string; store: SemanticIndexStore } | null = null;
 let invalidatorRegistered = false;
+const pendingRebuilds = new Map<string, NodeJS.Timeout>();
 
 export function getSemanticRuntime(vaultPath: string): { store: SemanticIndexStore } {
   if (current?.vaultPath === vaultPath) return current;
@@ -49,9 +50,25 @@ function registerSemanticInvalidator(getVaultPath: () => string | null): void {
     void getSemanticRuntime(vaultPath)
       .store.markAllStale(event.type)
       .then(() => getSemanticRuntime(vaultPath).store.status())
-      .then((status) => broadcastSemantic({ type: 'semantic.index.stale', status }))
+      .then((status) => {
+        broadcastSemantic({ type: 'semantic.index.stale', status });
+        scheduleSemanticRebuild(vaultPath, event.type);
+      })
       .catch((error: unknown) => console.error('[semantic] failed to mark index stale', error));
   });
+}
+
+function scheduleSemanticRebuild(vaultPath: string, reason: string): void {
+  const existing = pendingRebuilds.get(vaultPath);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    pendingRebuilds.delete(vaultPath);
+    void getSemanticRuntime(vaultPath)
+      .store.rebuildIndex()
+      .then((status) => broadcastSemantic({ type: 'semantic.index.rebuilt', status }))
+      .catch((error: unknown) => console.error('[semantic] background rebuild failed', { reason, error }));
+  }, 1200);
+  pendingRebuilds.set(vaultPath, timer);
 }
 
 function shouldInvalidate(type: string): boolean {

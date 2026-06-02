@@ -105,7 +105,14 @@ export class SemanticIndexStore {
   async search(query: SearchQuery): Promise<{ results: SearchResult[]; total: number }> {
     const normalized = normalizeSearchQuery(query);
     const status = await this.status();
-    if (status.total_docs === 0 || status.stale_docs > 0) await this.rebuildIndex();
+    if (status.total_docs === 0 || status.stale_docs > 0) {
+      publishTraceableEvent({
+        source: 'synthesis',
+        type: 'semantic.search.index_stale',
+        summary: `Semantic search used existing index: ${normalized.text || '(empty query)'}`,
+        payload: { query: normalized, status }
+      });
+    }
     const docs = await this.loadIndexedDocuments();
     const results = await hybridSearch(docs, normalized, (text) => this.embedText(text));
     publishTraceableEvent({

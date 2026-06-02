@@ -41,6 +41,8 @@ export interface EvidenceIndexBuildOptions {
   includeExternalAISessions?: boolean;
   externalAISessionLimit?: number;
   externalAISessionRoots?: ExternalAISessionRoot[];
+  force?: boolean;
+  prefetchedSources?: EvidenceSource[];
 }
 
 interface ChunkBuildInput {
@@ -120,6 +122,68 @@ export class EvidenceChunkIndexStore {
     return index;
   }
 
+  async syncIncremental(options: EvidenceIndexBuildOptions = {}): Promise<EvidenceChunkIndexFile> {
+    const buildOptions = { ...this.defaultOptions, ...options };
+    const sources = await includeRegisteredExternalAISessions(
+      this.vaultPath,
+      buildOptions.prefetchedSources ?? await syncOrbitEvidenceSources(this.vaultPath, buildOptions)
+    );
+    const provider = createOrbitEvidenceProvider(this.vaultPath);
+    const current = await this.readIndex();
+    const embeddingProvider = await embeddingProviderInfo(this.vaultPath);
+    const providerChanged =
+      current.embedding_model !== embeddingProvider.model ||
+      current.embedding_dimensions !== embeddingProvider.dimensions;
+    const chunks: Record<string, EvidenceChunk> = { ...current.chunks };
+    const embeddings: Record<string, EvidenceChunkEmbedding> = providerChanged ? {} : { ...(current.chunk_embeddings ?? {}) };
+    const sourceFingerprints: Record<string, string> = {};
+    const indexableSources = sources.filter(isIndexableSource);
+    const liveSourceIds = new Set(indexableSources.map((source) => source.id));
+
+    for (const chunk of Object.values(chunks)) {
+      if (liveSourceIds.has(chunk.source_id)) continue;
+      delete chunks[chunk.id];
+      delete embeddings[chunk.id];
+    }
+
+    for (const source of indexableSources) {
+      sourceFingerprints[source.id] = source.fingerprint.value;
+      const existingChunks = Object.values(chunks).filter((chunk) => chunk.source_id === source.id);
+      const embeddingCurrent = !providerChanged && existingChunks.every((chunk) => {
+        const embedding = embeddings[chunk.id];
+        return embedding?.content_hash === chunk.content_hash &&
+          embedding.model === embeddingProvider.model &&
+          embedding.dimensions === embeddingProvider.dimensions;
+      });
+      const sourceUnchanged =
+        !buildOptions.force &&
+        current.source_fingerprints[source.id] === source.fingerprint.value &&
+        existingChunks.length > 0 &&
+        embeddingCurrent;
+      if (sourceUnchanged) continue;
+
+      removeSourceChunks(source.id, chunks, embeddings);
+      const contentView = contentViewForSource(source);
+      const inputs = await chunkInputsForSource(source, contentView, provider);
+      const nextChunks = buildChunksForSource(source, inputs);
+      const embeddingBuild = await buildChunkEmbeddings(this.vaultPath, nextChunks);
+      for (const chunk of nextChunks) chunks[chunk.id] = chunk;
+      Object.assign(embeddings, embeddingBuild.embeddings);
+    }
+
+    const index: EvidenceChunkIndexFile = {
+      version: 1,
+      chunks,
+      source_fingerprints: sourceFingerprints,
+      chunk_embeddings: embeddings,
+      embedding_model: embeddingProvider.model,
+      embedding_dimensions: embeddingProvider.dimensions,
+      updated_at: new Date().toISOString()
+    };
+    await this.writeIndex(index);
+    return index;
+  }
+
   async list(filter: EvidenceChunkFilter = {}): Promise<EvidenceChunk[]> {
     const index = await this.readOrRebuild();
     return filterChunks(Object.values(index.chunks), filter)
@@ -158,26 +222,7 @@ export class EvidenceChunkIndexStore {
   }
 
   private async readOrRebuild(): Promise<EvidenceChunkIndexFile> {
-    const current = await this.readIndex();
-    const sources = await includeRegisteredExternalAISessions(
-      this.vaultPath,
-      await syncOrbitEvidenceSources(this.vaultPath, {
-        ...this.defaultOptions,
-        includeActivities: false
-      })
-    );
-    const fingerprints = Object.fromEntries(
-      sources.filter(isIndexableSource).map((source) => [source.id, source.fingerprint.value])
-    );
-    const embeddingProvider = await embeddingProviderInfo(this.vaultPath);
-    const embeddingCurrent =
-      current.embedding_model === embeddingProvider.model &&
-      current.embedding_dimensions === embeddingProvider.dimensions &&
-      Object.keys(current.chunk_embeddings ?? {}).length === Object.keys(current.chunks).length;
-    if (Object.keys(current.chunks).length && sameFingerprintMap(current.source_fingerprints, fingerprints) && embeddingCurrent) {
-      return current;
-    }
-    return this.rebuild({ includeActivities: false });
+    return this.readIndex();
   }
 
   private async readIndex(): Promise<EvidenceChunkIndexFile> {
@@ -240,6 +285,43 @@ async function chunkInputsForSource(
       reason: 'chunk index'
     }
   }));
+}
+
+function buildChunksForSource(source: EvidenceSource, inputs: ChunkBuildInput[]): EvidenceChunk[] {
+  return inputs.map((input) => {
+    const contentHash = hash(input.text);
+    return {
+      id: `chunk:${source.id}:${input.ordinal}:${contentHash.slice(0, 12)}`,
+      source_id: source.id,
+      selector: input.selector,
+      title: input.title,
+      text: input.text,
+      ordinal: input.ordinal,
+      content_hash: contentHash,
+      updated_at: source.updated_at,
+      tokens: tokenize(input.text),
+      entities: extractEntities([source.title, input.text].join('\n')),
+      ...(source.scope_refs?.length ? { scope_refs: source.scope_refs } : {}),
+      metadata: {
+        source_kind: source.kind,
+        source_title: source.title,
+        source_ref: source.canonical_ref,
+        selector_kind: input.selector.kind
+      }
+    } satisfies EvidenceChunk;
+  });
+}
+
+function removeSourceChunks(
+  sourceId: string,
+  chunks: Record<string, EvidenceChunk>,
+  embeddings: Record<string, EvidenceChunkEmbedding>
+): void {
+  for (const chunk of Object.values(chunks)) {
+    if (chunk.source_id !== sourceId) continue;
+    delete chunks[chunk.id];
+    delete embeddings[chunk.id];
+  }
 }
 
 async function messageRangeChunkInputs(

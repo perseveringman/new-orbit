@@ -11,7 +11,7 @@ import type {
 import type { EvidenceSource, EvidenceSourceKind } from '@shared/evidence';
 import { wholeSourceSelector } from '@shared/evidence';
 import type { SynthesisSource, SynthesisSourceKind } from '@shared/synthesis';
-import { collectOrbitEvidenceSources, createOrbitEvidenceProvider } from '../evidence/providers';
+import { createOrbitEvidenceProvider, syncOrbitEvidenceSources } from '../evidence/providers';
 import { EXTERNAL_AI_SESSION_PROVIDER_ID, readExternalAISessionSourceText } from '../evidence/external-ai-sessions';
 import { readMemoryBackendConfig } from './backend-config';
 import { getActiveMemoryBackend } from './backend-registry';
@@ -79,7 +79,7 @@ export async function syncMemoryFromTruthLayer(
   let archived = 0;
   let memoryCount = 0;
 
-  const sources = (await collectOrbitEvidenceSources(vaultPath, {
+  const sources = (await syncOrbitEvidenceSources(vaultPath, {
     includeActivities: false,
     includeExternalAISessions: options.includeExternalAISessions ?? true,
     externalAISessionLimit: limit

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatAction, RuntimeEvent } from '@shared/chat-protocol';
 import type { ComposerDraft, RuntimeSelection } from '@shared/ai-composer';
+import { askContextLaneLabel, askIntentRouteLabel } from '@shared/ask-runtime';
 import { ChevronDown, ChevronUp, Maximize2, X } from 'lucide-react';
 import { usePara } from '../../store/para';
 import {
@@ -39,20 +40,16 @@ export function AskAnywherePopover({ open, onClose }: AskAnywherePopoverProps): 
   const [submitting, setSubmitting] = useState(false);
   const [selection, setSelection] = useState<RuntimeSelection>({});
   const runtimeCatalog = useRuntimeCatalog();
-  const {
-    activeId,
-    activeConversation,
-    events,
-    isLoading,
-    handleNew,
-    handleAction
-  } = useAskAnywhereSession({ enabled: visible });
+  const { activeId, activeConversation, events, isLoading, handleNew, handleAction } =
+    useAskAnywhereSession({ enabled: visible });
   const collectingMessages = hasPrompted || isLoading;
   const miniMessages = useMemo(() => {
     if (!collectingMessages) return [];
     let sourceEvents = eventOffset === null ? events : events.slice(eventOffset);
     if (!hasPrompted && activeConversation?.currentRunId) {
-      sourceEvents = sourceEvents.filter((event) => event.runId === activeConversation.currentRunId);
+      sourceEvents = sourceEvents.filter(
+        (event) => event.runId === activeConversation.currentRunId
+      );
     }
     return buildMiniMessages(sourceEvents);
   }, [activeConversation?.currentRunId, collectingMessages, eventOffset, events, hasPrompted]);
@@ -65,7 +62,9 @@ export function AskAnywherePopover({ open, onClose }: AskAnywherePopoverProps): 
 
   useEffect(() => {
     if (!visible) return;
-    setSelection(selectionFromConversation(activeConversation, runtimeCatalog.options.defaultSelection));
+    setSelection(
+      selectionFromConversation(activeConversation, runtimeCatalog.options.defaultSelection)
+    );
   }, [activeConversation, runtimeCatalog.options.defaultSelection, visible]);
 
   useEffect(() => {
@@ -174,21 +173,73 @@ function MiniAgentWindow({
 }): JSX.Element {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  const scrollFrameRef = useRef<number | null>(null);
+  const stickFrameRef = useRef<number | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const messageSignature = messages
-    .map((message) => `${message.id}:${message.text.length}:${message.at}`)
-    .join('|');
+  const latestMessage = messages.at(-1);
+  const messageSignature = latestMessage
+    ? `${messages.length}:${latestMessage.id}:${latestMessage.text.length}:${latestMessage.at}`
+    : 'empty';
+
+  const scrollToBottomNow = useCallback(() => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      scrollToBottomNow();
+      return;
+    }
+    if (scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      scrollToBottomNow();
+    });
+  }, [scrollToBottomNow]);
 
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [busy, expanded, messageSignature, messages.length]);
+    if (stickToBottomRef.current) scrollToBottom();
+  }, [busy, expanded, messageSignature, scrollToBottom]);
 
-  function handleScroll(): void {
+  const updateStickToBottomNow = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
     stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
-  }
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      updateStickToBottomNow();
+      return;
+    }
+    if (stickFrameRef.current !== null) return;
+    stickFrameRef.current = window.requestAnimationFrame(() => {
+      stickFrameRef.current = null;
+      updateStickToBottomNow();
+    });
+  }, [updateStickToBottomNow]);
+
+  useEffect(() => {
+    return () => {
+      if (
+        scrollFrameRef.current !== null &&
+        typeof window !== 'undefined' &&
+        typeof window.cancelAnimationFrame === 'function'
+      ) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+      if (
+        stickFrameRef.current !== null &&
+        typeof window !== 'undefined' &&
+        typeof window.cancelAnimationFrame === 'function'
+      ) {
+        window.cancelAnimationFrame(stickFrameRef.current);
+      }
+      scrollFrameRef.current = null;
+      stickFrameRef.current = null;
+    };
+  }, []);
 
   return (
     <div
@@ -214,11 +265,11 @@ function MiniAgentWindow({
         ref={scrollerRef}
         aria-live="polite"
         onScroll={handleScroll}
-        className="ask-anywhere-scrollarea h-full overflow-y-auto px-3 pb-3 pt-8"
+        className="ask-anywhere-scrollarea h-full overflow-y-auto overscroll-contain px-3 pb-3 pt-8"
       >
         <div className="space-y-2">
           {messages.length === 0 && busy ? (
-            <div className="ask-anywhere-mini-message-enter rounded-md bg-neutral-50/90 px-3 py-2 text-xs text-neutral-600 dark:bg-neutral-900/80 dark:text-neutral-300">
+            <div className="ask-anywhere-mini-message-enter w-full max-w-[70%] rounded-md bg-neutral-50/90 px-3 py-2 text-xs text-neutral-600 dark:bg-neutral-900/80 dark:text-neutral-300">
               <span className="mr-2 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
               正在启动智能体...
             </div>
@@ -253,6 +304,7 @@ function MiniAgentMessage({
     <div
       className={[
         'rounded-md px-3 py-2 transition duration-200',
+        'w-full max-w-[70%]',
         'ask-anywhere-mini-message-enter',
         faded ? 'opacity-70' : 'opacity-100',
         toneRowClassName(message.tone)
@@ -330,6 +382,60 @@ function buildMiniMessages(events: RuntimeEvent[]): MiniMessage[] {
         });
         break;
       }
+      case 'runtime.phase': {
+        const phase = event as RuntimeEvent<'runtime.phase'>;
+        pushMiniMessage(messages, {
+          id: event.id,
+          at: event.at,
+          label: '运行阶段',
+          text: [phase.payload.label, phase.payload.detail].filter(Boolean).join(' · '),
+          tone:
+            phase.payload.status === 'failed'
+              ? 'danger'
+              : phase.payload.status === 'completed'
+                ? 'success'
+                : 'active'
+        });
+        break;
+      }
+      case 'runtime.route': {
+        const route = event as RuntimeEvent<'runtime.route'>;
+        pushMiniMessage(messages, {
+          id: event.id,
+          at: event.at,
+          label: '意图判定',
+          text: `${route.payload.label || askIntentRouteLabel(route.payload.route)} · ${route.payload.reason}`,
+          tone: 'active'
+        });
+        break;
+      }
+      case 'runtime.context': {
+        const context = event as RuntimeEvent<'runtime.context'>;
+        pushMiniMessage(messages, {
+          id: event.id,
+          at: event.at,
+          label: askContextLaneLabel(context.payload.lane),
+          text: [context.payload.label, context.payload.detail].filter(Boolean).join(' · '),
+          tone:
+            context.payload.status === 'failed'
+              ? 'warning'
+              : context.payload.status === 'completed' || context.payload.status === 'attached'
+                ? 'success'
+                : 'active'
+        });
+        break;
+      }
+      case 'runtime.route_escalation': {
+        const route = event as RuntimeEvent<'runtime.route_escalation'>;
+        pushMiniMessage(messages, {
+          id: event.id,
+          at: event.at,
+          label: '路由升级',
+          text: `${askIntentRouteLabel(route.payload.from)} → ${askIntentRouteLabel(route.payload.to)} · ${route.payload.reason}`,
+          tone: 'warning'
+        });
+        break;
+      }
       case 'runtime.file_change': {
         const fileChange = event as RuntimeEvent<'runtime.file_change'>;
         pushMiniMessage(messages, {
@@ -367,12 +473,16 @@ function buildMiniMessages(events: RuntimeEvent[]): MiniMessage[] {
           done.payload.exitCode === undefined ||
           done.payload.exitCode === null ||
           done.payload.exitCode === 0;
+        const pendingTools = done.payload.reason === 'sdk_turn_pending_tools';
         pushMiniMessage(messages, {
           id: event.id,
           at: event.at,
-          label: ok ? '执行完成' : '执行结束',
-          text: done.payload.reason ?? (ok ? '本轮智能体已完成。' : `退出码 ${done.payload.exitCode}`),
-          tone: ok ? 'success' : 'danger'
+          label: pendingTools ? '工具结果处理中' : ok ? '执行完成' : '执行结束',
+          text: pendingTools
+            ? '模型已发起工具调用，Orbit 正在整理结果。'
+            : (done.payload.reason ??
+              (ok ? '本轮智能体已完成。' : `退出码 ${done.payload.exitCode}`)),
+          tone: pendingTools ? 'active' : ok ? 'success' : 'danger'
         });
         break;
       }
@@ -401,10 +511,7 @@ function appendRuntimeMessage(
   });
 }
 
-function appendMergedMessage(
-  messages: InternalMiniMessage[],
-  message: InternalMiniMessage
-): void {
+function appendMergedMessage(messages: InternalMiniMessage[], message: InternalMiniMessage): void {
   const text = message.mergeKey ? cleanupAgentText(message.text) : compactText(message.text);
   if (!text.trim()) return;
   const last = messages[messages.length - 1];

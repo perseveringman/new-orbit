@@ -183,8 +183,20 @@ export function useAskAnywhereSession(
     const off = window.orbit.chat.onRuntimeEvent((event) => {
       if (event.conversationId !== activeIdRef.current) return;
       setEvents((current) => [...current, event]);
-      if (event.kind === 'runtime.done' || event.kind === 'runtime.error') {
+      if (
+        isTerminalRuntimeEvent(event) ||
+        event.kind === 'runtime.error' ||
+        event.kind === 'runtime.interrupt'
+      ) {
         setIsLoading(false);
+        setSessions((current) =>
+          current.map((conversation) => {
+            if (conversation.id !== event.conversationId) return conversation;
+            const idleConversation = { ...conversation };
+            delete idleConversation.currentRunId;
+            return idleConversation;
+          })
+        );
         void reload();
         if (activeIdRef.current) {
           void window.orbit.stage.get(activeIdRef.current).then(setStage);
@@ -226,25 +238,28 @@ export function useAskAnywhereSession(
     };
   }, [enabled, reload]);
 
-  const handleNew = useCallback(async (input: { draft?: ComposerDraft } = {}) => {
-    const selection = input.draft?.selection;
-    const conv = await window.orbit.chat.createConversation({
-      anchor: {
-        kind: 'ask_anywhere_session',
-        refId: `ask-${scopeKey}-${Date.now()}`,
-        addedAt: new Date().toISOString()
-      },
-      scope: sessionScope,
-      title,
-      runtimeHint: runtimeHintFromDraft(input.draft) ?? 'claude',
-      ...(selection?.endpointId ? { runtimeEndpointHint: selection.endpointId } : {}),
-      ...(selection?.model ? { runtimeModelHint: selection.model } : {}),
-      ...(selection ? { runtimeSelection: selection } : {})
-    });
-    selectActiveId(conv.id);
-    await reload();
-    return conv;
-  }, [reload, sessionScope, scopeKey, selectActiveId, title]);
+  const handleNew = useCallback(
+    async (input: { draft?: ComposerDraft } = {}) => {
+      const selection = input.draft?.selection;
+      const conv = await window.orbit.chat.createConversation({
+        anchor: {
+          kind: 'ask_anywhere_session',
+          refId: `ask-${scopeKey}-${Date.now()}`,
+          addedAt: new Date().toISOString()
+        },
+        scope: sessionScope,
+        title,
+        runtimeHint: runtimeHintFromDraft(input.draft) ?? 'claude',
+        ...(selection?.endpointId ? { runtimeEndpointHint: selection.endpointId } : {}),
+        ...(selection?.model ? { runtimeModelHint: selection.model } : {}),
+        ...(selection ? { runtimeSelection: selection } : {})
+      });
+      selectActiveId(conv.id);
+      await reload();
+      return conv;
+    },
+    [reload, sessionScope, scopeKey, selectActiveId, title]
+  );
 
   const handleArchive = useCallback(
     async (id: string) => {
@@ -320,6 +335,11 @@ export function useAskAnywhereSession(
   };
 }
 
+function isTerminalRuntimeEvent(event: RuntimeEvent): boolean {
+  if (event.kind !== 'runtime.done') return false;
+  return (event as RuntimeEvent<'runtime.done'>).payload.reason !== 'sdk_turn_pending_tools';
+}
+
 async function pendingProposalEventsForConversation(
   conversationId: string
 ): Promise<RuntimeEvent<'runtime.awaiting_user'>[]> {
@@ -377,10 +397,7 @@ function proposalTitle(proposal: Proposal, payload: Record<string, unknown>): st
   return proposal.subject;
 }
 
-function hintForProposalStatus(
-  proposal: Proposal,
-  payload: Record<string, unknown>
-): string {
+function hintForProposalStatus(proposal: Proposal, payload: Record<string, unknown>): string {
   if (proposal.status === 'approved') return '已批准。Inbox 会自动更新。';
   if (proposal.status === 'rejected') return '已拒绝。Inbox 会自动更新。';
   if (proposal.status === 'dismissed') return '已忽略。Inbox 会自动更新。';

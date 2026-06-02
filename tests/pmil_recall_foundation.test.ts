@@ -54,6 +54,22 @@ describe('PMIL recall foundation', () => {
     expect(results[0].vector_score ?? 0).toBeGreaterThan(0);
   });
 
+  it('keeps evidence chunk search read-only until an explicit index sync', async () => {
+    await createNoteStore(vaultPath).create({
+      type: 'thought',
+      title: 'Explicit index sync',
+      body: 'Chunk retrieval should wait for the data plane sync.'
+    });
+    const store = createEvidenceChunkIndexStore(vaultPath);
+
+    expect(await store.search({ query: 'data plane sync', limit: 5 })).toEqual([]);
+
+    await store.syncIncremental({ includeActivities: false });
+    const results = await store.search({ query: 'data plane sync', limit: 5 });
+
+    expect(results[0]?.chunk.title).toBe('Explicit index sync');
+  });
+
   it('projects chunks into a deterministic graph for entity navigation', async () => {
     const note = await createNoteStore(vaultPath).create({
       type: 'thought',

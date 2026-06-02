@@ -12,11 +12,7 @@ import type {
 import type { RecallResult } from '@shared/memory';
 import type { ConversationStage } from '@shared/stage';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import {
-  patchFromSelection,
-  selectionFromConversation,
-  useRuntimeCatalog
-} from '../ai-composer';
+import { patchFromSelection, selectionFromConversation, useRuntimeCatalog } from '../ai-composer';
 import { ConversationHeader } from './ConversationHeader';
 import { RuntimeStatusBar } from './RuntimeStatusBar';
 import { MessageTimeline } from './MessageTimeline';
@@ -39,6 +35,9 @@ export function ConversationShell({
   onAction,
   onArtifactAction,
   actions,
+  contextSlot,
+  messageMaxWidthClass,
+  eventMaxWidthClass,
   composerSourceSurface = 'ask_full',
   welcomeMessage
 }: {
@@ -55,6 +54,9 @@ export function ConversationShell({
   onAction(action: ChatAction): void;
   onArtifactAction(artifactId: string, actionId: string): void;
   actions?: ReactNode;
+  contextSlot?: ReactNode;
+  messageMaxWidthClass?: string;
+  eventMaxWidthClass?: string;
   composerSourceSurface?: ComposerSourceSurface;
   welcomeMessage?: string;
 }): JSX.Element {
@@ -91,12 +93,11 @@ export function ConversationShell({
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }, [stage?.artifacts]);
   const renderMarkdownReferenceToken = useCallback(
-    (
-      token: { handle: string },
-      key: string,
-      event: RuntimeEvent<'runtime.message'>
-    ) => {
-      const selector = selectorForCitationHandle(token.handle, packetForEvent(citationPackets, event));
+    (token: { handle: string }, key: string, event: RuntimeEvent<'runtime.message'>) => {
+      const selector = selectorForCitationHandle(
+        token.handle,
+        packetForEvent(citationPackets, event)
+      );
       if (!selector) return null;
       return (
         <EvidenceReference
@@ -160,14 +161,16 @@ export function ConversationShell({
                 skill.effective &&
                 (skill.scopes.length === 0 || skill.scopes.includes(skillScope.kind))
             )
-            .map((skill): ComposerSkillOption => ({
-              id: skill.name,
-              label: skill.name,
-              description: skill.description,
-              source: skill.source,
-              disabled: Boolean(skill.disabledReason),
-              ...(skill.disabledReason ? { disabledReason: skill.disabledReason } : {})
-            }))
+            .map(
+              (skill): ComposerSkillOption => ({
+                id: skill.name,
+                label: skill.name,
+                description: skill.description,
+                source: skill.source,
+                disabled: Boolean(skill.disabledReason),
+                ...(skill.disabledReason ? { disabledReason: skill.disabledReason } : {})
+              })
+            )
         );
       })
       .catch(() => {
@@ -189,7 +192,8 @@ export function ConversationShell({
         onArchive={onArchive}
         actions={actions}
       />
-      <RuntimeStatusBar conversation={activeConversation} isLoading={isLoading} />
+      <RuntimeStatusBar conversation={activeConversation} events={events} isLoading={isLoading} />
+      {contextSlot}
       {activeConversation ? <MemoryRecallChips conversation={activeConversation} /> : null}
       {activeConversation ? <PMILContextChips stage={stage} /> : null}
       {activeId ? (
@@ -205,6 +209,8 @@ export function ConversationShell({
             isLoading={isLoading}
             onAction={onAction}
             welcomeMessage={welcomeMessage}
+            messageMaxWidthClass={messageMaxWidthClass}
+            eventMaxWidthClass={eventMaxWidthClass}
             composerOptions={composerOptions}
             composerSelection={composerSelection}
             composerSourceSurface={composerSourceSurface}
@@ -245,7 +251,10 @@ function packetForEvent(
   return selected ?? packets.at(-1)?.packet ?? null;
 }
 
-function selectorForCitationHandle(handle: string, packet: ContextPacket | null): EvidenceSelector | null {
+function selectorForCitationHandle(
+  handle: string,
+  packet: ContextPacket | null
+): EvidenceSelector | null {
   const match = /^E(\d+)$/i.exec(handle.trim());
   if (!match?.[1] || !packet) return null;
   const index = Number(match[1]) - 1;
